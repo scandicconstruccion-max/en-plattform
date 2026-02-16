@@ -57,6 +57,11 @@ import Bildedok from './pages/Bildedok';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Bestillinger from './pages/Bestillinger';
+import Chat from './pages/Chat';
+import Ressursplan from './pages/Ressursplan';
+import CRM from './pages/CRM';
+import Kalender from './pages/Kalender';
+import Innstillinger from './pages/Innstillinger';
 import __Layout from './Layout.jsx';
 
 
@@ -71,6 +76,11 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Bestillinger": Bestillinger,
+    "Chat": Chat,
+    "Ressursplan": Ressursplan,
+    "CRM": CRM,
+    "Kalender": Kalender,
+    "Innstillinger": Innstillinger,
 }
 
 export const pagesConfig = {
