@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -23,12 +24,16 @@ import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import ProjectSelector from '@/components/shared/ProjectSelector';
-import { AlertTriangle, Search, Calendar, User } from 'lucide-react';
+import SendEmailDialog from '@/components/shared/SendEmailDialog';
+import DeliveryStatus from '@/components/shared/DeliveryStatus';
+import { AlertTriangle, Search, Calendar, User, DollarSign, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
 export default function Avvik() {
   const [showDialog, setShowDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [selectedDeviation, setSelectedDeviation] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
@@ -41,7 +46,11 @@ export default function Avvik() {
     status: 'ny',
     assigned_to: '',
     due_date: '',
-    corrective_action: ''
+    corrective_action: '',
+    has_cost_consequence: false,
+    cost_amount: '',
+    cost_description: '',
+    cost_responsible: ''
   });
 
   const queryClient = useQueryClient();
@@ -82,18 +91,43 @@ export default function Avvik() {
       status: 'ny',
       assigned_to: '',
       due_date: '',
-      corrective_action: ''
+      corrective_action: '',
+      has_cost_consequence: false,
+      cost_amount: '',
+      cost_description: '',
+      cost_responsible: ''
     });
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    createMutation.mutate(formData);
+    createMutation.mutate({
+      ...formData,
+      cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null
+    });
   };
 
   const getProjectName = (projectId) => {
     const project = projects.find(p => p.id === projectId);
     return project?.name || 'Ukjent prosjekt';
+  };
+
+  const getProjectEmail = (projectId) => {
+    const project = projects.find(p => p.id === projectId);
+    return project?.client_email || '';
+  };
+
+  const handleSendEmail = (deviation) => {
+    setSelectedDeviation(deviation);
+    setShowEmailDialog(true);
+  };
+
+  const handleEmailSent = (updateData) => {
+    updateMutation.mutate({ 
+      id: selectedDeviation.id, 
+      data: updateData 
+    });
+    setSelectedDeviation(null);
   };
 
   const filteredDeviations = deviations.filter(d => {
@@ -107,6 +141,13 @@ export default function Avvik() {
     sikkerhet: 'Sikkerhet',
     kvalitet: 'Kvalitet',
     miljo: 'Miljø',
+    annet: 'Annet'
+  };
+
+  const costResponsibleLabels = {
+    byggherre: 'Byggherre',
+    entreprenor: 'Entreprenør',
+    underentreprenor: 'Underentreprenør',
     annet: 'Annet'
   };
 
@@ -221,32 +262,80 @@ export default function Avvik() {
                     )}
                   </div>
                 </div>
-                {deviation.status !== 'lukket' && (
-                  <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => updateMutation.mutate({ 
-                        id: deviation.id, 
-                        data: { status: 'under_behandling' } 
-                      })}
-                      disabled={deviation.status === 'under_behandling'}
-                      className="rounded-xl"
-                    >
-                      Under behandling
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => updateMutation.mutate({ 
-                        id: deviation.id, 
-                        data: { status: 'lukket', closed_date: new Date().toISOString().split('T')[0] } 
-                      })}
-                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      Lukk avvik
-                    </Button>
+
+                {/* Cost Consequence Section */}
+                {deviation.has_cost_consequence && (
+                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="h-5 w-5 text-amber-600" />
+                      <h4 className="font-medium text-amber-800">Kostnadskonsekvens</h4>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-amber-700">Beløp:</span>
+                        <span className="ml-2 font-semibold text-amber-900">
+                          {deviation.cost_amount?.toLocaleString('nb-NO')} kr
+                        </span>
+                      </div>
+                      {deviation.cost_responsible && (
+                        <div>
+                          <span className="text-amber-700">Ansvarlig:</span>
+                          <span className="ml-2 font-medium text-amber-900">
+                            {costResponsibleLabels[deviation.cost_responsible]}
+                          </span>
+                        </div>
+                      )}
+                      {deviation.cost_description && (
+                        <div className="sm:col-span-3">
+                          <span className="text-amber-700">Beskrivelse:</span>
+                          <span className="ml-2 text-amber-900">{deviation.cost_description}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {/* Delivery Status */}
+                <DeliveryStatus item={deviation} />
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSendEmail(deviation)}
+                    className="rounded-xl gap-2"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Send til kunde
+                  </Button>
+                  {deviation.status !== 'lukket' && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateMutation.mutate({ 
+                          id: deviation.id, 
+                          data: { status: 'under_behandling' } 
+                        })}
+                        disabled={deviation.status === 'under_behandling'}
+                        className="rounded-xl"
+                      >
+                        Under behandling
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => updateMutation.mutate({ 
+                          id: deviation.id, 
+                          data: { status: 'lukket', closed_date: new Date().toISOString().split('T')[0] } 
+                        })}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        Lukk avvik
+                      </Button>
+                    </>
+                  )}
+                </div>
               </Card>
             ))}
           </div>
@@ -255,7 +344,7 @@ export default function Avvik() {
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrer avvik</DialogTitle>
           </DialogHeader>
@@ -354,6 +443,65 @@ export default function Avvik() {
                 className="mt-1.5 rounded-xl"
               />
             </div>
+
+            {/* Cost Consequence Section */}
+            <div className="p-4 bg-slate-50 rounded-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-amber-600" />
+                  <Label className="font-medium">Kostnadskonsekvens</Label>
+                </div>
+                <Switch
+                  checked={formData.has_cost_consequence}
+                  onCheckedChange={(checked) => setFormData({...formData, has_cost_consequence: checked})}
+                />
+              </div>
+              
+              {formData.has_cost_consequence && (
+                <div className="space-y-4 pt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Beløp (NOK)</Label>
+                      <Input
+                        type="number"
+                        value={formData.cost_amount}
+                        onChange={(e) => setFormData({...formData, cost_amount: e.target.value})}
+                        placeholder="0"
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Ansvarlig part</Label>
+                      <Select 
+                        value={formData.cost_responsible} 
+                        onValueChange={(v) => setFormData({...formData, cost_responsible: v})}
+                      >
+                        <SelectTrigger className="mt-1.5 rounded-xl">
+                          <SelectValue placeholder="Velg..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="byggherre">Byggherre</SelectItem>
+                          <SelectItem value="entreprenor">Entreprenør</SelectItem>
+                          <SelectItem value="underentreprenor">Underentreprenør</SelectItem>
+                          <SelectItem value="annet">Annet</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Beskrivelse av kostnad</Label>
+                    <Textarea
+                      value={formData.cost_description}
+                      onChange={(e) => setFormData({...formData, cost_description: e.target.value})}
+                      placeholder="Hva er kostnaden knyttet til..."
+                      rows={2}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
@@ -369,6 +517,16 @@ export default function Avvik() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Send Email Dialog */}
+      <SendEmailDialog
+        open={showEmailDialog}
+        onOpenChange={setShowEmailDialog}
+        type="avvik"
+        item={selectedDeviation}
+        defaultEmail={selectedDeviation ? getProjectEmail(selectedDeviation.project_id) : ''}
+        onSent={handleEmailSent}
+      />
     </div>
   );
 }
