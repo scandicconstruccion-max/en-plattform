@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
@@ -27,7 +28,8 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/shared/StatCard';
 import {
   Building2, MapPin, Calendar, Users, Clock, AlertTriangle,
-  FileText, Camera, CheckSquare, Edit, Trash2
+  FileText, Camera, CheckSquare, Edit, Mail, Phone, User,
+  HardHat, Ruler, Wrench, Plus, Trash2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -88,11 +90,20 @@ export default function ProsjektDetaljer() {
       project_number: project.project_number || '',
       description: project.description || '',
       client_name: project.client_name || '',
+      client_contact: project.client_contact || '',
+      client_email: project.client_email || '',
+      client_phone: project.client_phone || '',
       address: project.address || '',
       start_date: project.start_date || '',
       end_date: project.end_date || '',
       status: project.status || 'planlagt',
-      budget: project.budget || ''
+      budget: project.budget || '',
+      project_manager_name: project.project_manager_name || '',
+      project_manager: project.project_manager || '',
+      project_manager_phone: project.project_manager_phone || '',
+      subcontractors: project.subcontractors || [],
+      architects: project.architects || [],
+      consultants: project.consultants || []
     });
     setShowEditDialog(true);
   };
@@ -102,6 +113,27 @@ export default function ProsjektDetaljer() {
     updateMutation.mutate({
       ...formData,
       budget: formData.budget ? parseFloat(formData.budget) : null
+    });
+  };
+
+  const addSubcontractor = () => {
+    setFormData({
+      ...formData,
+      subcontractors: [...formData.subcontractors, { name: '', trade: '', contact_person: '', phone: '', email: '' }]
+    });
+  };
+
+  const addArchitect = () => {
+    setFormData({
+      ...formData,
+      architects: [...formData.architects, { company: '', contact_person: '', phone: '', email: '' }]
+    });
+  };
+
+  const addConsultant = () => {
+    setFormData({
+      ...formData,
+      consultants: [...formData.consultants, { company: '', discipline: '', contact_person: '', phone: '', email: '' }]
     });
   };
 
@@ -135,7 +167,7 @@ export default function ProsjektDetaljer() {
         title={project.name}
         subtitle={project.project_number ? `#${project.project_number}` : null}
         showBack
-        backUrl={createPageUrl('Prosjekter')}
+        backUrl={createPageUrl('Dashboard')}
         actions={
           <Button variant="outline" onClick={handleEdit} className="rounded-xl gap-2">
             <Edit className="h-4 w-4" />
@@ -145,322 +177,718 @@ export default function ProsjektDetaljer() {
       />
 
       <div className="px-6 lg:px-8 py-6 space-y-6">
-        {/* Project Info */}
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Timer registrert"
+            value={totalHours.toFixed(1)}
+            icon={Clock}
+            iconColor="text-blue-600"
+            iconBg="bg-blue-100"
+          />
+          <StatCard
+            title="Åpne avvik"
+            value={openDeviations}
+            icon={AlertTriangle}
+            iconColor="text-amber-600"
+            iconBg="bg-amber-100"
+          />
+          <StatCard
+            title="Sjekklister"
+            value={checklists.length}
+            icon={CheckSquare}
+            iconColor="text-teal-600"
+            iconBg="bg-teal-100"
+          />
+          {project.budget && (
+            <StatCard
+              title="Budsjett"
+              value={`${(project.budget / 1000000).toFixed(1)}M`}
+              icon={FileText}
+              iconColor="text-emerald-600"
+              iconBg="bg-emerald-100"
+            />
+          )}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-6 border-0 shadow-sm lg:col-span-2">
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
+          {/* Main Info */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Project Details Card */}
+            <Card className="p-6 border-0 shadow-sm">
+              <div className="flex items-start gap-4 mb-6">
                 <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center">
                   <Building2 className="h-7 w-7 text-emerald-600" />
                 </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">{project.name}</h2>
-                  <StatusBadge status={project.status} className="mt-1" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-semibold text-slate-900">{project.name}</h2>
+                    <StatusBadge status={project.status} />
+                  </div>
+                  {project.description && (
+                    <p className="text-slate-600 mt-2">{project.description}</p>
+                  )}
                 </div>
               </div>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {project.client_name && (
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                  <Users className="h-5 w-5 text-slate-400" />
-                  <div>
-                    <p className="text-xs text-slate-500">Kunde</p>
-                    <p className="font-medium text-slate-900">{project.client_name}</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {project.address && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                    <MapPin className="h-5 w-5 text-slate-400" />
+                    <div>
+                      <p className="text-xs text-slate-500">Adresse</p>
+                      <p className="font-medium text-slate-900">{project.address}</p>
+                    </div>
                   </div>
-                </div>
-              )}
-              {project.address && (
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                  <MapPin className="h-5 w-5 text-slate-400" />
-                  <div>
-                    <p className="text-xs text-slate-500">Adresse</p>
-                    <p className="font-medium text-slate-900">{project.address}</p>
+                )}
+                {project.start_date && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                    <Calendar className="h-5 w-5 text-slate-400" />
+                    <div>
+                      <p className="text-xs text-slate-500">Periode</p>
+                      <p className="font-medium text-slate-900">
+                        {format(new Date(project.start_date), 'd. MMM yyyy', { locale: nb })}
+                        {project.end_date && ` - ${format(new Date(project.end_date), 'd. MMM yyyy', { locale: nb })}`}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-              {project.start_date && (
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                  <Calendar className="h-5 w-5 text-slate-400" />
-                  <div>
-                    <p className="text-xs text-slate-500">Startdato</p>
-                    <p className="font-medium text-slate-900">
-                      {format(new Date(project.start_date), 'd. MMMM yyyy', { locale: nb })}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {project.end_date && (
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                  <Calendar className="h-5 w-5 text-slate-400" />
-                  <div>
-                    <p className="text-xs text-slate-500">Sluttdato</p>
-                    <p className="font-medium text-slate-900">
-                      {format(new Date(project.end_date), 'd. MMMM yyyy', { locale: nb })}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {project.description && (
-              <div className="mt-6 pt-6 border-t border-slate-100">
-                <h3 className="font-medium text-slate-900 mb-2">Beskrivelse</h3>
-                <p className="text-slate-600">{project.description}</p>
+                )}
               </div>
-            )}
-          </Card>
+            </Card>
 
-          <div className="space-y-4">
-            <StatCard
-              title="Timer registrert"
-              value={totalHours.toFixed(1)}
-              icon={Clock}
-              iconColor="text-blue-600"
-              iconBg="bg-blue-100"
-            />
-            <StatCard
-              title="Åpne avvik"
-              value={openDeviations}
-              icon={AlertTriangle}
-              iconColor="text-amber-600"
-              iconBg="bg-amber-100"
-            />
-            {project.budget && (
-              <StatCard
-                title="Budsjett"
-                value={`${project.budget.toLocaleString('nb-NO')} kr`}
-                icon={FileText}
-                iconColor="text-emerald-600"
-                iconBg="bg-emerald-100"
-              />
-            )}
+            {/* Subcontractors, Architects, Consultants */}
+            <Card className="border-0 shadow-sm overflow-hidden">
+              <Tabs defaultValue="subcontractors" className="w-full">
+                <div className="border-b border-slate-200 px-6">
+                  <TabsList className="h-14 bg-transparent gap-4 -mb-px">
+                    <TabsTrigger 
+                      value="subcontractors" 
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
+                    >
+                      <HardHat className="h-4 w-4 mr-2" />
+                      Underentreprenører ({project.subcontractors?.length || 0})
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="architects"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
+                    >
+                      <Ruler className="h-4 w-4 mr-2" />
+                      Arkitekter ({project.architects?.length || 0})
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="consultants"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
+                    >
+                      <Wrench className="h-4 w-4 mr-2" />
+                      Rådgivere ({project.consultants?.length || 0})
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent value="subcontractors" className="p-6 m-0">
+                  {project.subcontractors?.length > 0 ? (
+                    <div className="space-y-3">
+                      {project.subcontractors.map((sub, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                          <div>
+                            <p className="font-medium text-slate-900">{sub.name}</p>
+                            <p className="text-sm text-slate-500">{sub.trade}</p>
+                            {sub.contact_person && (
+                              <p className="text-sm text-slate-600 mt-1">{sub.contact_person}</p>
+                            )}
+                          </div>
+                          <div className="text-right text-sm">
+                            {sub.phone && (
+                              <a href={`tel:${sub.phone}`} className="flex items-center gap-1 text-slate-600 hover:text-emerald-600">
+                                <Phone className="h-3 w-3" /> {sub.phone}
+                              </a>
+                            )}
+                            {sub.email && (
+                              <a href={`mailto:${sub.email}`} className="flex items-center gap-1 text-slate-600 hover:text-emerald-600">
+                                <Mail className="h-3 w-3" /> {sub.email}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      Ingen underentreprenører registrert
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="architects" className="p-6 m-0">
+                  {project.architects?.length > 0 ? (
+                    <div className="space-y-3">
+                      {project.architects.map((arch, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                          <div>
+                            <p className="font-medium text-slate-900">{arch.company}</p>
+                            {arch.contact_person && (
+                              <p className="text-sm text-slate-600">{arch.contact_person}</p>
+                            )}
+                          </div>
+                          <div className="text-right text-sm">
+                            {arch.phone && (
+                              <a href={`tel:${arch.phone}`} className="flex items-center gap-1 text-slate-600 hover:text-emerald-600">
+                                <Phone className="h-3 w-3" /> {arch.phone}
+                              </a>
+                            )}
+                            {arch.email && (
+                              <a href={`mailto:${arch.email}`} className="flex items-center gap-1 text-slate-600 hover:text-emerald-600">
+                                <Mail className="h-3 w-3" /> {arch.email}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      Ingen arkitekter registrert
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="consultants" className="p-6 m-0">
+                  {project.consultants?.length > 0 ? (
+                    <div className="space-y-3">
+                      {project.consultants.map((cons, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                          <div>
+                            <p className="font-medium text-slate-900">{cons.company}</p>
+                            <p className="text-sm text-slate-500">{cons.discipline}</p>
+                            {cons.contact_person && (
+                              <p className="text-sm text-slate-600 mt-1">{cons.contact_person}</p>
+                            )}
+                          </div>
+                          <div className="text-right text-sm">
+                            {cons.phone && (
+                              <a href={`tel:${cons.phone}`} className="flex items-center gap-1 text-slate-600 hover:text-emerald-600">
+                                <Phone className="h-3 w-3" /> {cons.phone}
+                              </a>
+                            )}
+                            {cons.email && (
+                              <a href={`mailto:${cons.email}`} className="flex items-center gap-1 text-slate-600 hover:text-emerald-600">
+                                <Mail className="h-3 w-3" /> {cons.email}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      Ingen rådgivende ingeniører registrert
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </Card>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Project Manager */}
+            <Card className="p-6 border-0 shadow-sm">
+              <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <User className="h-5 w-5 text-emerald-600" />
+                Prosjektleder
+              </h3>
+              {project.project_manager_name ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-slate-900">{project.project_manager_name}</p>
+                  {project.project_manager && (
+                    <a href={`mailto:${project.project_manager}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600">
+                      <Mail className="h-4 w-4" /> {project.project_manager}
+                    </a>
+                  )}
+                  {project.project_manager_phone && (
+                    <a href={`tel:${project.project_manager_phone}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600">
+                      <Phone className="h-4 w-4" /> {project.project_manager_phone}
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500 text-sm">Ingen prosjektleder tildelt</p>
+              )}
+            </Card>
+
+            {/* Customer Info */}
+            <Card className="p-6 border-0 shadow-sm">
+              <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-blue-600" />
+                Kundeinformasjon
+              </h3>
+              {project.client_name ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-slate-900">{project.client_name}</p>
+                  {project.client_contact && (
+                    <p className="text-sm text-slate-600 flex items-center gap-2">
+                      <User className="h-4 w-4 text-slate-400" /> {project.client_contact}
+                    </p>
+                  )}
+                  {project.client_email && (
+                    <a href={`mailto:${project.client_email}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600">
+                      <Mail className="h-4 w-4" /> {project.client_email}
+                    </a>
+                  )}
+                  {project.client_phone && (
+                    <a href={`tel:${project.client_phone}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600">
+                      <Phone className="h-4 w-4" /> {project.client_phone}
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500 text-sm">Ingen kundeinformasjon</p>
+              )}
+            </Card>
+
+            {/* Quick Links */}
+            <Card className="p-6 border-0 shadow-sm">
+              <h3 className="font-semibold text-slate-900 mb-4">Hurtiglenker</h3>
+              <div className="space-y-2">
+                <Link
+                  to={createPageUrl(`Avvik?project=${projectId}`)}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  <span className="text-slate-700">Avvik ({deviations.length})</span>
+                </Link>
+                <Link
+                  to={createPageUrl(`Bildedok?project=${projectId}`)}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  <Camera className="h-5 w-5 text-purple-600" />
+                  <span className="text-slate-700">Bilder ({images.length})</span>
+                </Link>
+                <Link
+                  to={createPageUrl(`Sjekklister?project=${projectId}`)}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  <CheckSquare className="h-5 w-5 text-teal-600" />
+                  <span className="text-slate-700">Sjekklister ({checklists.length})</span>
+                </Link>
+                <Link
+                  to={createPageUrl(`Timelister?project=${projectId}`)}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  <Clock className="h-5 w-5 text-blue-600" />
+                  <span className="text-slate-700">Timer ({totalHours.toFixed(1)}t)</span>
+                </Link>
+              </div>
+            </Card>
           </div>
         </div>
-
-        {/* Tabs */}
-        <Card className="border-0 shadow-sm overflow-hidden">
-          <Tabs defaultValue="deviations" className="w-full">
-            <div className="border-b border-slate-200 px-6">
-              <TabsList className="h-14 bg-transparent gap-4 -mb-px">
-                <TabsTrigger 
-                  value="deviations" 
-                  className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
-                >
-                  <AlertTriangle className="h-4 w-4 mr-2" />
-                  Avvik ({deviations.length})
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="timesheets"
-                  className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
-                >
-                  <Clock className="h-4 w-4 mr-2" />
-                  Timer ({timesheets.length})
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="images"
-                  className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  Bilder ({images.length})
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="checklists"
-                  className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
-                >
-                  <CheckSquare className="h-4 w-4 mr-2" />
-                  Sjekklister ({checklists.length})
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="deviations" className="p-6 m-0">
-              {deviations.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  Ingen avvik registrert for dette prosjektet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {deviations.map((deviation) => (
-                    <div key={deviation.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
-                      <div>
-                        <p className="font-medium text-slate-900">{deviation.title}</p>
-                        <p className="text-sm text-slate-500">{deviation.category}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={deviation.severity} />
-                        <StatusBadge status={deviation.status} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="timesheets" className="p-6 m-0">
-              {timesheets.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  Ingen timer registrert for dette prosjektet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {timesheets.map((timesheet) => (
-                    <div key={timesheet.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
-                      <div>
-                        <p className="font-medium text-slate-900">{timesheet.user_email}</p>
-                        <p className="text-sm text-slate-500">
-                          {timesheet.date && format(new Date(timesheet.date), 'd. MMM yyyy', { locale: nb })}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-slate-900">{timesheet.hours} timer</p>
-                        <StatusBadge status={timesheet.status} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="images" className="p-6 m-0">
-              {images.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  Ingen bilder lastet opp for dette prosjektet
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {images.map((image) => (
-                    <div key={image.id} className="aspect-square rounded-xl overflow-hidden bg-slate-100">
-                      <img 
-                        src={image.image_url} 
-                        alt={image.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="checklists" className="p-6 m-0">
-              {checklists.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  Ingen sjekklister opprettet for dette prosjektet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {checklists.map((checklist) => (
-                    <div key={checklist.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
-                      <div>
-                        <p className="font-medium text-slate-900">{checklist.title}</p>
-                        <p className="text-sm text-slate-500">{checklist.template_name}</p>
-                      </div>
-                      <StatusBadge status={checklist.status} />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </Card>
       </div>
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Rediger prosjekt</DialogTitle>
           </DialogHeader>
           {formData && (
-            <form onSubmit={handleUpdate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>Prosjektnavn *</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    required
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Prosjektnummer</Label>
-                  <Input
-                    value={formData.project_number}
-                    onChange={(e) => setFormData({...formData, project_number: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select 
-                    value={formData.status} 
-                    onValueChange={(v) => setFormData({...formData, status: v})}
-                  >
-                    <SelectTrigger className="mt-1.5 rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="planlagt">Planlagt</SelectItem>
-                      <SelectItem value="aktiv">Aktiv</SelectItem>
-                      <SelectItem value="pause">På pause</SelectItem>
-                      <SelectItem value="fullfort">Fullført</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2">
-                  <Label>Kunde</Label>
-                  <Input
-                    value={formData.client_name}
-                    onChange={(e) => setFormData({...formData, client_name: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Adresse</Label>
-                  <Input
-                    value={formData.address}
-                    onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Startdato</Label>
-                  <Input
-                    type="date"
-                    value={formData.start_date}
-                    onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Sluttdato</Label>
-                  <Input
-                    type="date"
-                    value={formData.end_date}
-                    onChange={(e) => setFormData({...formData, end_date: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Budsjett (NOK)</Label>
-                  <Input
-                    type="number"
-                    value={formData.budget}
-                    onChange={(e) => setFormData({...formData, budget: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Beskrivelse</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    rows={3}
-                    className="mt-1.5 rounded-xl"
-                  />
+            <form onSubmit={handleUpdate} className="space-y-6">
+              {/* Basic Info */}
+              <div>
+                <h4 className="font-medium text-slate-900 mb-3">Grunnleggende</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Label>Prosjektnavn *</Label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      required
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Prosjektnummer</Label>
+                    <Input
+                      value={formData.project_number}
+                      onChange={(e) => setFormData({...formData, project_number: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Select 
+                      value={formData.status} 
+                      onValueChange={(v) => setFormData({...formData, status: v})}
+                    >
+                      <SelectTrigger className="mt-1.5 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="planlagt">Planlagt</SelectItem>
+                        <SelectItem value="aktiv">Aktiv</SelectItem>
+                        <SelectItem value="pause">På pause</SelectItem>
+                        <SelectItem value="fullfort">Fullført</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Adresse</Label>
+                    <Input
+                      value={formData.address}
+                      onChange={(e) => setFormData({...formData, address: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Startdato</Label>
+                    <Input
+                      type="date"
+                      value={formData.start_date}
+                      onChange={(e) => setFormData({...formData, start_date: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Sluttdato</Label>
+                    <Input
+                      type="date"
+                      value={formData.end_date}
+                      onChange={(e) => setFormData({...formData, end_date: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Budsjett (NOK)</Label>
+                    <Input
+                      type="number"
+                      value={formData.budget}
+                      onChange={(e) => setFormData({...formData, budget: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Beskrivelse</Label>
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      rows={2}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Project Manager */}
+              <div>
+                <h4 className="font-medium text-slate-900 mb-3">Prosjektleder</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>Navn</Label>
+                    <Input
+                      value={formData.project_manager_name}
+                      onChange={(e) => setFormData({...formData, project_manager_name: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>E-post</Label>
+                    <Input
+                      type="email"
+                      value={formData.project_manager}
+                      onChange={(e) => setFormData({...formData, project_manager: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Telefon</Label>
+                    <Input
+                      value={formData.project_manager_phone}
+                      onChange={(e) => setFormData({...formData, project_manager_phone: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Customer */}
+              <div>
+                <h4 className="font-medium text-slate-900 mb-3">Kunde</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Kundenavn</Label>
+                    <Input
+                      value={formData.client_name}
+                      onChange={(e) => setFormData({...formData, client_name: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Kontaktperson</Label>
+                    <Input
+                      value={formData.client_contact}
+                      onChange={(e) => setFormData({...formData, client_contact: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>E-post</Label>
+                    <Input
+                      type="email"
+                      value={formData.client_email}
+                      onChange={(e) => setFormData({...formData, client_email: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Telefon</Label>
+                    <Input
+                      value={formData.client_phone}
+                      onChange={(e) => setFormData({...formData, client_phone: e.target.value})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Subcontractors */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-slate-900">Underentreprenører</h4>
+                  <Button type="button" variant="outline" size="sm" onClick={addSubcontractor} className="rounded-xl">
+                    <Plus className="h-4 w-4 mr-1" /> Legg til
+                  </Button>
+                </div>
+                {formData.subcontractors.map((sub, index) => (
+                  <div key={index} className="grid grid-cols-6 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
+                    <Input
+                      placeholder="Firma"
+                      value={sub.name}
+                      onChange={(e) => {
+                        const newSubs = [...formData.subcontractors];
+                        newSubs[index].name = e.target.value;
+                        setFormData({...formData, subcontractors: newSubs});
+                      }}
+                      className="col-span-2 rounded-lg"
+                    />
+                    <Input
+                      placeholder="Fag"
+                      value={sub.trade}
+                      onChange={(e) => {
+                        const newSubs = [...formData.subcontractors];
+                        newSubs[index].trade = e.target.value;
+                        setFormData({...formData, subcontractors: newSubs});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <Input
+                      placeholder="Kontakt"
+                      value={sub.contact_person}
+                      onChange={(e) => {
+                        const newSubs = [...formData.subcontractors];
+                        newSubs[index].contact_person = e.target.value;
+                        setFormData({...formData, subcontractors: newSubs});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <Input
+                      placeholder="Telefon"
+                      value={sub.phone}
+                      onChange={(e) => {
+                        const newSubs = [...formData.subcontractors];
+                        newSubs[index].phone = e.target.value;
+                        setFormData({...formData, subcontractors: newSubs});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <div className="flex gap-1">
+                      <Input
+                        placeholder="E-post"
+                        value={sub.email}
+                        onChange={(e) => {
+                          const newSubs = [...formData.subcontractors];
+                          newSubs[index].email = e.target.value;
+                          setFormData({...formData, subcontractors: newSubs});
+                        }}
+                        className="rounded-lg flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            subcontractors: formData.subcontractors.filter((_, i) => i !== index)
+                          });
+                        }}
+                        className="text-red-500 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              {/* Architects */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-slate-900">Arkitekter</h4>
+                  <Button type="button" variant="outline" size="sm" onClick={addArchitect} className="rounded-xl">
+                    <Plus className="h-4 w-4 mr-1" /> Legg til
+                  </Button>
+                </div>
+                {formData.architects.map((arch, index) => (
+                  <div key={index} className="grid grid-cols-5 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
+                    <Input
+                      placeholder="Firma"
+                      value={arch.company}
+                      onChange={(e) => {
+                        const newArchs = [...formData.architects];
+                        newArchs[index].company = e.target.value;
+                        setFormData({...formData, architects: newArchs});
+                      }}
+                      className="col-span-2 rounded-lg"
+                    />
+                    <Input
+                      placeholder="Kontakt"
+                      value={arch.contact_person}
+                      onChange={(e) => {
+                        const newArchs = [...formData.architects];
+                        newArchs[index].contact_person = e.target.value;
+                        setFormData({...formData, architects: newArchs});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <Input
+                      placeholder="Telefon"
+                      value={arch.phone}
+                      onChange={(e) => {
+                        const newArchs = [...formData.architects];
+                        newArchs[index].phone = e.target.value;
+                        setFormData({...formData, architects: newArchs});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <div className="flex gap-1">
+                      <Input
+                        placeholder="E-post"
+                        value={arch.email}
+                        onChange={(e) => {
+                          const newArchs = [...formData.architects];
+                          newArchs[index].email = e.target.value;
+                          setFormData({...formData, architects: newArchs});
+                        }}
+                        className="rounded-lg flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            architects: formData.architects.filter((_, i) => i !== index)
+                          });
+                        }}
+                        className="text-red-500 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              {/* Consultants */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-slate-900">Rådgivende ingeniører</h4>
+                  <Button type="button" variant="outline" size="sm" onClick={addConsultant} className="rounded-xl">
+                    <Plus className="h-4 w-4 mr-1" /> Legg til
+                  </Button>
+                </div>
+                {formData.consultants.map((cons, index) => (
+                  <div key={index} className="grid grid-cols-6 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
+                    <Input
+                      placeholder="Firma"
+                      value={cons.company}
+                      onChange={(e) => {
+                        const newCons = [...formData.consultants];
+                        newCons[index].company = e.target.value;
+                        setFormData({...formData, consultants: newCons});
+                      }}
+                      className="col-span-2 rounded-lg"
+                    />
+                    <Input
+                      placeholder="Fagområde"
+                      value={cons.discipline}
+                      onChange={(e) => {
+                        const newCons = [...formData.consultants];
+                        newCons[index].discipline = e.target.value;
+                        setFormData({...formData, consultants: newCons});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <Input
+                      placeholder="Kontakt"
+                      value={cons.contact_person}
+                      onChange={(e) => {
+                        const newCons = [...formData.consultants];
+                        newCons[index].contact_person = e.target.value;
+                        setFormData({...formData, consultants: newCons});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <Input
+                      placeholder="Telefon"
+                      value={cons.phone}
+                      onChange={(e) => {
+                        const newCons = [...formData.consultants];
+                        newCons[index].phone = e.target.value;
+                        setFormData({...formData, consultants: newCons});
+                      }}
+                      className="rounded-lg"
+                    />
+                    <div className="flex gap-1">
+                      <Input
+                        placeholder="E-post"
+                        value={cons.email}
+                        onChange={(e) => {
+                          const newCons = [...formData.consultants];
+                          newCons[index].email = e.target.value;
+                          setFormData({...formData, consultants: newCons});
+                        }}
+                        className="rounded-lg flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            consultants: formData.consultants.filter((_, i) => i !== index)
+                          });
+                        }}
+                        className="text-red-500 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)} className="rounded-xl">
                   Avbryt
