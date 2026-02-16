@@ -53,6 +53,10 @@ import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Avvik from './pages/Avvik';
 import Timelister from './pages/Timelister';
 import Endringsmeldinger from './pages/Endringsmeldinger';
+import Bildedok from './pages/Bildedok';
+import Sjekklister from './pages/Sjekklister';
+import Tilbud from './pages/Tilbud';
+import Bestillinger from './pages/Bestillinger';
 import __Layout from './Layout.jsx';
 
 
@@ -63,6 +67,10 @@ export const PAGES = {
     "Avvik": Avvik,
     "Timelister": Timelister,
     "Endringsmeldinger": Endringsmeldinger,
+    "Bildedok": Bildedok,
+    "Sjekklister": Sjekklister,
+    "Tilbud": Tilbud,
+    "Bestillinger": Bestillinger,
 }
 
 export const pagesConfig = {
