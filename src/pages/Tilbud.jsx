@@ -23,6 +23,8 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
+import SendEmailDialog from '@/components/shared/SendEmailDialog';
+import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -30,6 +32,7 @@ import { nb } from 'date-fns/locale';
 export default function Tilbud() {
   const [showDialog, setShowDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [search, setSearch] = useState('');
   const [formData, setFormData] = useState({
@@ -118,6 +121,19 @@ export default function Tilbud() {
       vat_amount: vat,
       status: 'utkast'
     });
+  };
+
+  const handleSendEmail = (quote) => {
+    setSelectedQuote(quote);
+    setShowEmailDialog(true);
+  };
+
+  const handleEmailSent = (updateData) => {
+    updateMutation.mutate({ 
+      id: selectedQuote.id, 
+      data: updateData 
+    });
+    setSelectedQuote(null);
   };
 
   const filteredQuotes = quotes.filter(q => {
@@ -210,45 +226,62 @@ export default function Tilbud() {
                     </p>
                   </div>
                 </div>
-                {quote.status === 'utkast' && (
-                  <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+
+                {/* Delivery Status */}
+                <DeliveryStatus item={quote} />
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSendEmail(quote);
+                    }}
+                    className="rounded-xl gap-2"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Send på e-post
+                  </Button>
+                  {quote.status === 'utkast' && (
                     <Button
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        updateMutation.mutate({ id: quote.id, data: { status: 'sendt' } });
+                        handleSendEmail(quote);
                       }}
                       className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
                     >
                       Send tilbud
                     </Button>
-                  </div>
-                )}
-                {quote.status === 'sendt' && (
-                  <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateMutation.mutate({ id: quote.id, data: { status: 'avvist' } });
-                      }}
-                      className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
-                    >
-                      Avvist
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateMutation.mutate({ id: quote.id, data: { status: 'godkjent' } });
-                      }}
-                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      Godkjent
-                    </Button>
-                  </div>
-                )}
+                  )}
+                  {quote.status === 'sendt' && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateMutation.mutate({ id: quote.id, data: { status: 'avvist' } });
+                        }}
+                        className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                      >
+                        Avvist
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateMutation.mutate({ id: quote.id, data: { status: 'godkjent' } });
+                        }}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        Godkjent
+                      </Button>
+                    </>
+                  )}
+                </div>
               </Card>
             ))}
           </div>
@@ -503,10 +536,23 @@ export default function Tilbud() {
                   <span className="font-bold w-32">{((selectedQuote.total_amount || 0) + (selectedQuote.vat_amount || 0)).toLocaleString('nb-NO')} kr</span>
                 </div>
               </div>
+
+              {/* Delivery Status */}
+              <DeliveryStatus item={selectedQuote} />
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Send Email Dialog */}
+      <SendEmailDialog
+        open={showEmailDialog}
+        onOpenChange={setShowEmailDialog}
+        type="tilbud"
+        item={selectedQuote}
+        defaultEmail={selectedQuote?.customer_email || ''}
+        onSent={handleEmailSent}
+      />
     </div>
   );
 }

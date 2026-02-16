@@ -23,12 +23,16 @@ import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import ProjectSelector from '@/components/shared/ProjectSelector';
-import { FileText, Search, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import SendEmailDialog from '@/components/shared/SendEmailDialog';
+import DeliveryStatus from '@/components/shared/DeliveryStatus';
+import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
 export default function Endringsmeldinger() {
   const [showDialog, setShowDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [selectedChange, setSelectedChange] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [formData, setFormData] = useState({
@@ -98,6 +102,24 @@ export default function Endringsmeldinger() {
   const getProjectName = (projectId) => {
     const project = projects.find(p => p.id === projectId);
     return project?.name || 'Ukjent prosjekt';
+  };
+
+  const getProjectEmail = (projectId) => {
+    const project = projects.find(p => p.id === projectId);
+    return project?.client_email || '';
+  };
+
+  const handleSendEmail = (change) => {
+    setSelectedChange(change);
+    setShowEmailDialog(true);
+  };
+
+  const handleEmailSent = (updateData) => {
+    updateMutation.mutate({ 
+      id: selectedChange.id, 
+      data: updateData 
+    });
+    setSelectedChange(null);
   };
 
   const filteredChanges = changes.filter(c => {
@@ -221,48 +243,59 @@ export default function Endringsmeldinger() {
                       <StatusBadge status={change.status} className="mt-2" />
                     </div>
                   </div>
-                  {change.status === 'utkast' && (
-                    <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+
+                  {/* Delivery Status */}
+                  <DeliveryStatus item={change} />
+
+                  {/* Actions */}
+                  <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSendEmail(change)}
+                      className="rounded-xl gap-2"
+                    >
+                      <Mail className="h-4 w-4" />
+                      Send til kunde
+                    </Button>
+                    {change.status === 'utkast' && (
                       <Button
                         size="sm"
-                        onClick={() => updateMutation.mutate({ 
-                          id: change.id, 
-                          data: { status: 'sendt' } 
-                        })}
+                        onClick={() => handleSendEmail(change)}
                         className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
                       >
                         Send til godkjenning
                       </Button>
-                    </div>
-                  )}
-                  {change.status === 'sendt' && (
-                    <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateMutation.mutate({ 
-                          id: change.id, 
-                          data: { status: 'avvist' } 
-                        })}
-                        className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        Avvis
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => updateMutation.mutate({ 
-                          id: change.id, 
-                          data: { 
-                            status: 'godkjent',
-                            approved_date: new Date().toISOString().split('T')[0]
-                          } 
-                        })}
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                      >
-                        Godkjenn
-                      </Button>
-                    </div>
-                  )}
+                    )}
+                    {change.status === 'sendt' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateMutation.mutate({ 
+                            id: change.id, 
+                            data: { status: 'avvist' } 
+                          })}
+                          className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          Avvis
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => updateMutation.mutate({ 
+                            id: change.id, 
+                            data: { 
+                              status: 'godkjent',
+                              approved_date: new Date().toISOString().split('T')[0]
+                            } 
+                          })}
+                          className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          Godkjenn
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </Card>
               );
             })}
@@ -348,6 +381,16 @@ export default function Endringsmeldinger() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Send Email Dialog */}
+      <SendEmailDialog
+        open={showEmailDialog}
+        onOpenChange={setShowEmailDialog}
+        type="endringsmelding"
+        item={selectedChange}
+        defaultEmail={selectedChange ? getProjectEmail(selectedChange.project_id) : ''}
+        onSent={handleEmailSent}
+      />
     </div>
   );
 }
