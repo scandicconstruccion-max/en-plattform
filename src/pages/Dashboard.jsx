@@ -1,0 +1,229 @@
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { Card } from '@/components/ui/card';
+import StatCard from '@/components/shared/StatCard';
+import StatusBadge from '@/components/shared/StatusBadge';
+import {
+  Building2, AlertTriangle, FileText, Clock, CheckSquare,
+  Calendar, ArrowRight, Users, TrendingUp
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { nb } from 'date-fns/locale';
+
+export default function Dashboard() {
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list('-created_date', 10),
+  });
+
+  const { data: deviations = [] } = useQuery({
+    queryKey: ['deviations'],
+    queryFn: () => base44.entities.Deviation.list('-created_date', 10),
+  });
+
+  const { data: timesheets = [] } = useQuery({
+    queryKey: ['timesheets'],
+    queryFn: () => base44.entities.Timesheet.list('-date', 50),
+  });
+
+  const { data: events = [] } = useQuery({
+    queryKey: ['events'],
+    queryFn: () => base44.entities.CalendarEvent.list('-start_time', 5),
+  });
+
+  const activeProjects = projects.filter(p => p.status === 'aktiv').length;
+  const openDeviations = deviations.filter(d => d.status !== 'lukket').length;
+  const totalHoursThisWeek = timesheets
+    .filter(t => {
+      const date = new Date(t.date);
+      const now = new Date();
+      const weekAgo = new Date(now.setDate(now.getDate() - 7));
+      return date >= weekAgo;
+    })
+    .reduce((sum, t) => sum + (t.hours || 0), 0);
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="px-6 lg:px-8 py-8">
+          <h1 className="text-2xl font-bold text-slate-900">
+            Velkommen tilbake, {user?.full_name?.split(' ')[0] || 'Bruker'}
+          </h1>
+          <p className="text-slate-500 mt-1">
+            {format(new Date(), "EEEE d. MMMM yyyy", { locale: nb })}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-6 lg:px-8 py-8 space-y-8">
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Aktive prosjekter"
+            value={activeProjects}
+            icon={Building2}
+            iconColor="text-emerald-600"
+            iconBg="bg-emerald-100"
+          />
+          <StatCard
+            title="Åpne avvik"
+            value={openDeviations}
+            icon={AlertTriangle}
+            iconColor="text-amber-600"
+            iconBg="bg-amber-100"
+          />
+          <StatCard
+            title="Timer denne uken"
+            value={totalHoursThisWeek.toFixed(1)}
+            icon={Clock}
+            iconColor="text-blue-600"
+            iconBg="bg-blue-100"
+          />
+          <StatCard
+            title="Totalt prosjekter"
+            value={projects.length}
+            icon={TrendingUp}
+            iconColor="text-purple-600"
+            iconBg="bg-purple-100"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Projects */}
+          <Card className="border-0 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-slate-900">Siste prosjekter</h2>
+                <Link 
+                  to={createPageUrl('Prosjekter')}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                >
+                  Se alle <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {projects.slice(0, 5).map((project) => (
+                <Link
+                  key={project.id}
+                  to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
+                  className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+                      <Building2 className="h-5 w-5 text-slate-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">{project.name}</p>
+                      <p className="text-sm text-slate-500">{project.client_name || 'Ingen kunde'}</p>
+                    </div>
+                  </div>
+                  <StatusBadge status={project.status} />
+                </Link>
+              ))}
+              {projects.length === 0 && (
+                <div className="p-8 text-center text-slate-500">
+                  Ingen prosjekter ennå
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Recent Deviations */}
+          <Card className="border-0 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-slate-900">Siste avvik</h2>
+                <Link 
+                  to={createPageUrl('Avvik')}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                >
+                  Se alle <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {deviations.slice(0, 5).map((deviation) => (
+                <div
+                  key={deviation.id}
+                  className="flex items-center justify-between p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                      <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">{deviation.title}</p>
+                      <p className="text-sm text-slate-500">
+                        {deviation.category ? deviation.category.charAt(0).toUpperCase() + deviation.category.slice(1) : 'Ukjent'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={deviation.severity} />
+                    <StatusBadge status={deviation.status} />
+                  </div>
+                </div>
+              ))}
+              {deviations.length === 0 && (
+                <div className="p-8 text-center text-slate-500">
+                  Ingen avvik registrert
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Upcoming Events */}
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-slate-900">Kommende hendelser</h2>
+              <Link 
+                to={createPageUrl('Kalender')}
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+              >
+                Se kalender <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {events.filter(e => new Date(e.start_time) >= new Date()).slice(0, 4).map((event) => (
+              <div key={event.id} className="flex items-center gap-4 p-4">
+                <div className="w-12 h-12 rounded-xl bg-blue-100 flex flex-col items-center justify-center">
+                  <span className="text-xs font-medium text-blue-600">
+                    {format(new Date(event.start_time), 'MMM', { locale: nb }).toUpperCase()}
+                  </span>
+                  <span className="text-lg font-bold text-blue-700">
+                    {format(new Date(event.start_time), 'd')}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-slate-900">{event.title}</p>
+                  <p className="text-sm text-slate-500">
+                    {format(new Date(event.start_time), 'HH:mm')} 
+                    {event.location && ` • ${event.location}`}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {events.filter(e => new Date(e.start_time) >= new Date()).length === 0 && (
+              <div className="p-8 text-center text-slate-500">
+                Ingen kommende hendelser
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
