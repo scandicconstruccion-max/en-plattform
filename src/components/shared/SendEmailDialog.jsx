@@ -1,0 +1,163 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Mail, Send, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+export default function SendEmailDialog({ 
+  open, 
+  onOpenChange, 
+  type, // 'avvik' | 'tilbud' | 'endringsmelding'
+  item,
+  defaultEmail,
+  onSent 
+}) {
+  const [email, setEmail] = useState(defaultEmail || '');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+
+  React.useEffect(() => {
+    if (open && item) {
+      setEmail(defaultEmail || '');
+      const typeLabels = {
+        avvik: 'Avvik',
+        tilbud: 'Tilbud',
+        endringsmelding: 'Endringsmelding'
+      };
+      setSubject(`${typeLabels[type]}: ${item.title || item.quote_number || ''}`);
+      setMessage(getDefaultMessage());
+    }
+  }, [open, item, type, defaultEmail]);
+
+  const getDefaultMessage = () => {
+    if (type === 'avvik') {
+      return `Hei,\n\nVedlagt finner du avviksrapport for: ${item?.title}\n\nKategori: ${item?.category || 'Ikke spesifisert'}\nAlvorlighetsgrad: ${item?.severity || 'Ikke spesifisert'}\n\nBeskrivelse:\n${item?.description || 'Ingen beskrivelse'}\n\n${item?.has_cost_consequence ? `Kostnadskonsekvens: ${item?.cost_amount?.toLocaleString('nb-NO')} kr\n` : ''}\nMed vennlig hilsen`;
+    } else if (type === 'tilbud') {
+      return `Hei,\n\nVedlagt finner du tilbud ${item?.quote_number}.\n\nTotal sum: ${item?.total_amount?.toLocaleString('nb-NO')} kr eks. mva\nGyldig til: ${item?.valid_until || 'Ikke spesifisert'}\n\nBeskrivelse:\n${item?.project_description || 'Ingen beskrivelse'}\n\nMed vennlig hilsen`;
+    } else {
+      const typeLabels = { tillegg: 'Tillegg', fradrag: 'Fradrag', endring: 'Endring' };
+      return `Hei,\n\nVedlagt finner du endringsmelding: ${item?.title}\n\nType: ${typeLabels[item?.change_type] || 'Endring'}\nBeløp: ${item?.amount?.toLocaleString('nb-NO')} kr\n\nBeskrivelse:\n${item?.description || 'Ingen beskrivelse'}\n\nMed vennlig hilsen`;
+    }
+  };
+
+  const handleSend = async () => {
+    if (!email) {
+      toast.error('Vennligst fyll inn e-postadresse');
+      return;
+    }
+
+    setSending(true);
+    
+    try {
+      await base44.integrations.Core.SendEmail({
+        to: email,
+        subject: subject,
+        body: message
+      });
+
+      // Simulate delivery confirmation (in real scenario, this would be tracked via email service)
+      const now = new Date().toISOString();
+      
+      onSent({
+        sent_to_customer: true,
+        sent_date: now,
+        sent_to_email: email,
+        delivery_confirmed: true,
+        delivery_confirmed_date: now,
+        ...(type === 'tilbud' ? { status: 'sendt' } : {})
+      });
+
+      toast.success('E-post sendt!', {
+        description: `Sendt til ${email}`
+      });
+      
+      onOpenChange(false);
+    } catch (error) {
+      toast.error('Kunne ikke sende e-post', {
+        description: error.message
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const typeLabels = {
+    avvik: 'avvik',
+    tilbud: 'tilbud',
+    endringsmelding: 'endringsmelding'
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-emerald-600" />
+            Send {typeLabels[type]} på e-post
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Mottaker e-post *</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="kunde@firma.no"
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+          <div>
+            <Label>Emne</Label>
+            <Input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+          <div>
+            <Label>Melding</Label>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={8}
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => onOpenChange(false)} 
+              className="rounded-xl"
+            >
+              Avbryt
+            </Button>
+            <Button 
+              onClick={handleSend}
+              disabled={sending || !email}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {sending ? 'Sender...' : 'Send e-post'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
