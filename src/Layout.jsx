@@ -7,8 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users, CalendarDays,
-  Building2, Settings, LogOut, Menu, X, ChevronDown
+  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -35,6 +36,8 @@ const moduleIcons = {
   prosjekter: Building2,
   crm: Users,
   kalender: CalendarDays,
+  ansatte: Users,
+  minbedrift: Building2,
 };
 
 const moduleLabels = {
@@ -51,6 +54,8 @@ const moduleLabels = {
   prosjekter: 'Prosjekter',
   crm: 'CRM',
   kalender: 'Kalender',
+  ansatte: 'Ansatte',
+  minbedrift: 'Min bedrift',
 };
 
 const modulePages = {
@@ -67,10 +72,13 @@ const modulePages = {
   prosjekter: 'Prosjekter',
   crm: 'CRM',
   kalender: 'Kalender',
+  ansatte: 'Ansatte',
+  minbedrift: 'MinBedrift',
 };
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,37 +135,57 @@ export default function Layout({ children, currentPageName }) {
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           <span className="font-semibold text-slate-900 dark:text-white">ByggeKS</span>
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-sm">
-              {user?.full_name?.charAt(0) || 'U'}
-            </AvatarFallback>
-          </Avatar>
+          <ProjectDropdown />
         </header>
+      )}
+
+      {/* Desktop Top Bar with Project Dropdown */}
+      {!isMobile && (
+        <div className={cn(
+          "fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 flex items-center justify-end px-6 transition-all duration-300",
+          sidebarCollapsed ? "left-16" : "left-64"
+        )}>
+          <ProjectDropdown />
+        </div>
       )}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 transition-transform duration-300",
-          isMobile ? "w-72" : "w-64",
+          "fixed top-0 left-0 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 transition-all duration-300",
+          isMobile ? "w-72" : sidebarCollapsed ? "w-16" : "w-64",
           isMobile && !sidebarOpen ? "-translate-x-full" : "translate-x-0",
           isMobile && "pt-16"
         )}
       >
         {/* Logo */}
         {!isMobile && (
-          <div className="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 dark:border-slate-800">
+            <div className={cn("flex items-center gap-3", sidebarCollapsed && "justify-center w-full")}>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
                 <Building2 className="h-5 w-5 text-white" />
               </div>
-              <span className="font-bold text-xl text-slate-900 dark:text-white">ByggeKS</span>
+              {!sidebarCollapsed && <span className="font-bold text-xl text-slate-900 dark:text-white">ByggeKS</span>}
             </div>
           </div>
         )}
 
+        {/* Collapse Button - Desktop only */}
+        {!isMobile && (
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-20 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors z-50"
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+            ) : (
+              <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+            )}
+          </button>
+        )}
+
         {/* Navigation */}
-        <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]">
+        <nav className={cn("p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]", sidebarCollapsed && "px-2")}>
           {activeModules.map((moduleKey) => {
             const Icon = moduleIcons[moduleKey] || LayoutDashboard;
             const label = moduleLabels[moduleKey] || moduleKey;
@@ -169,37 +197,46 @@ export default function Layout({ children, currentPageName }) {
                 key={moduleKey}
                 to={createPageUrl(page)}
                 onClick={() => isMobile && setSidebarOpen(false)}
+                title={sidebarCollapsed ? label : undefined}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all select-none",
+                  sidebarCollapsed && "justify-center px-2",
                   isActive
                     ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                 )}
               >
-                <Icon className={cn("h-5 w-5", isActive && "text-emerald-600 dark:text-emerald-400")} />
-                {label}
+                <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600 dark:text-emerald-400")} />
+                {!sidebarCollapsed && label}
               </Link>
             );
           })}
         </nav>
 
         {/* User Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className={cn("absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900", sidebarCollapsed && "p-2")}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors select-none">
-                <Avatar className="h-9 w-9">
+              <button className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors select-none",
+                sidebarCollapsed && "justify-center px-0"
+              )}>
+                <Avatar className="h-9 w-9 flex-shrink-0">
                   <AvatarFallback className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
                     {user?.full_name?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                    {user?.full_name || 'Bruker'}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
-                </div>
-                <ChevronDown className="h-4 w-4 text-slate-400" />
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                        {user?.full_name || 'Bruker'}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  </>
+                )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -229,7 +266,7 @@ export default function Layout({ children, currentPageName }) {
       <main
         className={cn(
           "transition-all duration-300",
-          isMobile ? "pt-16 pb-20" : "ml-64",
+          isMobile ? "pt-16 pb-20" : sidebarCollapsed ? "ml-16 pt-16" : "ml-64 pt-16",
           "pb-[env(safe-area-inset-bottom)]"
         )}
       >

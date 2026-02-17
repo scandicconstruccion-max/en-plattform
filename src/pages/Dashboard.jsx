@@ -60,25 +60,30 @@ export default function Dashboard() {
     .reduce((sum, t) => sum + (t.hours || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div className="px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                 Velkommen tilbake, {user?.full_name?.split(' ')[0] || 'Bruker'}
               </h1>
-              <p className="text-slate-500 mt-1">
+              <p className="text-slate-500 dark:text-slate-400 mt-1">
                 {format(new Date(), "EEEE d. MMMM yyyy", { locale: nb })}
               </p>
             </div>
-            <ProjectDropdown />
           </div>
         </div>
       </div>
 
       <div className="px-6 lg:px-8 py-8 space-y-8">
+        {/* Modules Grid */}
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Moduler</h2>
+          <ModuleGrid activeModules={activeModules} />
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
@@ -109,12 +114,6 @@ export default function Dashboard() {
             iconColor="text-purple-600"
             iconBg="bg-purple-100"
           />
-        </div>
-
-        {/* Modules Grid */}
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Moduler</h2>
-          <ModuleGrid activeModules={activeModules} />
         </div>
 
         {/* Bottom Section */}

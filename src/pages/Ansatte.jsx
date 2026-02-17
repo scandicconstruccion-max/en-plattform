@@ -1,0 +1,525 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import PageHeader from '@/components/shared/PageHeader';
+import EmptyState from '@/components/shared/EmptyState';
+import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Trash2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { nb } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+
+export default function Ansatte() {
+  const [showDialog, setShowDialog] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [search, setSearch] = useState('');
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    address: '',
+    postal_code: '',
+    city: '',
+    birth_date: '',
+    position: '',
+    department: '',
+    employment_type: 'fast',
+    start_date: '',
+    end_date: '',
+    hourly_rate: '',
+    monthly_salary: '',
+    bank_account: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    notes: '',
+    is_active: true
+  });
+
+  const queryClient = useQueryClient();
+
+  const { data: employees = [], isLoading } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list('-created_date'),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => base44.entities.Employee.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setShowDialog(false);
+      resetForm();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Employee.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setShowDialog(false);
+      setSelectedEmployee(null);
+      resetForm();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Employee.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+  });
+
+  const resetForm = () => {
+    setFormData({
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      address: '',
+      postal_code: '',
+      city: '',
+      birth_date: '',
+      position: '',
+      department: '',
+      employment_type: 'fast',
+      start_date: '',
+      end_date: '',
+      hourly_rate: '',
+      monthly_salary: '',
+      bank_account: '',
+      emergency_contact_name: '',
+      emergency_contact_phone: '',
+      notes: '',
+      is_active: true
+    });
+  };
+
+  const handleEdit = (employee) => {
+    setSelectedEmployee(employee);
+    setFormData({
+      first_name: employee.first_name || '',
+      last_name: employee.last_name || '',
+      email: employee.email || '',
+      phone: employee.phone || '',
+      address: employee.address || '',
+      postal_code: employee.postal_code || '',
+      city: employee.city || '',
+      birth_date: employee.birth_date || '',
+      position: employee.position || '',
+      department: employee.department || '',
+      employment_type: employee.employment_type || 'fast',
+      start_date: employee.start_date || '',
+      end_date: employee.end_date || '',
+      hourly_rate: employee.hourly_rate || '',
+      monthly_salary: employee.monthly_salary || '',
+      bank_account: employee.bank_account || '',
+      emergency_contact_name: employee.emergency_contact_name || '',
+      emergency_contact_phone: employee.emergency_contact_phone || '',
+      notes: employee.notes || '',
+      is_active: employee.is_active !== false
+    });
+    setShowDialog(true);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const data = {
+      ...formData,
+      hourly_rate: formData.hourly_rate ? parseFloat(formData.hourly_rate) : null,
+      monthly_salary: formData.monthly_salary ? parseFloat(formData.monthly_salary) : null
+    };
+
+    if (selectedEmployee) {
+      updateMutation.mutate({ id: selectedEmployee.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  const filteredEmployees = employees.filter(e => {
+    const fullName = `${e.first_name} ${e.last_name}`.toLowerCase();
+    return fullName.includes(search.toLowerCase()) ||
+           e.email?.toLowerCase().includes(search.toLowerCase()) ||
+           e.position?.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const employmentTypeLabels = {
+    fast: 'Fast ansatt',
+    midlertidig: 'Midlertidig',
+    vikar: 'Vikar',
+    laerling: 'Lærling',
+    deltid: 'Deltid'
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <PageHeader
+        title="Ansatte"
+        subtitle={`${employees.length} ansatte registrert`}
+        onAdd={() => {
+          resetForm();
+          setSelectedEmployee(null);
+          setShowDialog(true);
+        }}
+        addLabel="Ny ansatt"
+      />
+
+      <div className="px-6 lg:px-8 py-6">
+        {/* Search */}
+        <div className="relative max-w-md mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Søk etter ansatt..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 rounded-xl border-slate-200 dark:border-slate-700 dark:bg-slate-900"
+          />
+        </div>
+
+        {/* Employees List */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1,2,3].map(i => (
+              <Card key={i} className="p-6 animate-pulse">
+                <div className="h-16 bg-slate-200 dark:bg-slate-700 rounded mb-4" />
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
+              </Card>
+            ))}
+          </div>
+        ) : filteredEmployees.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="Ingen ansatte"
+            description="Registrer ansatte for å holde oversikt over teamet"
+            actionLabel="Registrer ansatt"
+            onAction={() => {
+              resetForm();
+              setSelectedEmployee(null);
+              setShowDialog(true);
+            }}
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredEmployees.map((employee) => (
+              <Card key={employee.id} className="p-6 border-0 shadow-sm dark:bg-slate-900">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-14 w-14">
+                      <AvatarFallback className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-lg">
+                        {employee.first_name?.charAt(0)}{employee.last_name?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="font-semibold text-slate-900 dark:text-white">
+                        {employee.first_name} {employee.last_name}
+                      </h3>
+                      {employee.position && (
+                        <p className="text-sm text-emerald-600 dark:text-emerald-400">{employee.position}</p>
+                      )}
+                      <span className={cn(
+                        "text-xs px-2 py-0.5 rounded-full mt-1 inline-block",
+                        employee.is_active !== false
+                          ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      )}>
+                        {employee.is_active !== false ? 'Aktiv' : 'Inaktiv'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEdit(employee)}
+                      className="h-8 w-8"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteMutation.mutate(employee.id)}
+                      className="h-8 w-8 text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2 text-sm">
+                  {employee.email && (
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                      <Mail className="h-4 w-4" />
+                      <a href={`mailto:${employee.email}`} className="hover:text-emerald-600">{employee.email}</a>
+                    </div>
+                  )}
+                  {employee.phone && (
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                      <Phone className="h-4 w-4" />
+                      <a href={`tel:${employee.phone}`} className="hover:text-emerald-600">{employee.phone}</a>
+                    </div>
+                  )}
+                  {employee.department && (
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                      <Briefcase className="h-4 w-4" />
+                      {employee.department}
+                    </div>
+                  )}
+                  {employee.start_date && (
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                      <Calendar className="h-4 w-4" />
+                      Ansatt fra {format(new Date(employee.start_date), 'd. MMM yyyy', { locale: nb })}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900">
+          <DialogHeader>
+            <DialogTitle>{selectedEmployee ? 'Rediger ansatt' : 'Registrer ansatt'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Personal Info */}
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Personalia</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Fornavn *</Label>
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                    required
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Etternavn *</Label>
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                    required
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>E-post *</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    required
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Telefon</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Fødselsdato</Label>
+                  <Input
+                    type="date"
+                    value={formData.birth_date}
+                    onChange={(e) => setFormData({...formData, birth_date: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address */}
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Adresse</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-3">
+                  <Label>Gateadresse</Label>
+                  <Input
+                    value={formData.address}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Postnummer</Label>
+                  <Input
+                    value={formData.postal_code}
+                    onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label>Sted</Label>
+                  <Input
+                    value={formData.city}
+                    onChange={(e) => setFormData({...formData, city: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Employment */}
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Ansettelsesforhold</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Stilling</Label>
+                  <Input
+                    value={formData.position}
+                    onChange={(e) => setFormData({...formData, position: e.target.value})}
+                    placeholder="f.eks. Prosjektleder"
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Avdeling</Label>
+                  <Input
+                    value={formData.department}
+                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Ansettelsestype</Label>
+                  <Select 
+                    value={formData.employment_type} 
+                    onValueChange={(v) => setFormData({...formData, employment_type: v})}
+                  >
+                    <SelectTrigger className="mt-1.5 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fast">Fast ansatt</SelectItem>
+                      <SelectItem value="midlertidig">Midlertidig</SelectItem>
+                      <SelectItem value="vikar">Vikar</SelectItem>
+                      <SelectItem value="laerling">Lærling</SelectItem>
+                      <SelectItem value="deltid">Deltid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Startdato</Label>
+                  <Input
+                    type="date"
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({...formData, start_date: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Salary */}
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Lønn</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Timepris (NOK)</Label>
+                  <Input
+                    type="number"
+                    value={formData.hourly_rate}
+                    onChange={(e) => setFormData({...formData, hourly_rate: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Månedslønn (NOK)</Label>
+                  <Input
+                    type="number"
+                    value={formData.monthly_salary}
+                    onChange={(e) => setFormData({...formData, monthly_salary: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label>Kontonummer</Label>
+                  <Input
+                    value={formData.bank_account}
+                    onChange={(e) => setFormData({...formData, bank_account: e.target.value})}
+                    placeholder="1234 56 78901"
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contact */}
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Nødkontakt</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Navn</Label>
+                  <Input
+                    value={formData.emergency_contact_name}
+                    onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Telefon</Label>
+                  <Input
+                    value={formData.emergency_contact_phone}
+                    onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label>Notater</Label>
+              <Textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                rows={3}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+                Avbryt
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              >
+                {createMutation.isPending || updateMutation.isPending ? 'Lagrer...' : selectedEmployee ? 'Oppdater' : 'Registrer'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
