@@ -47,40 +47,40 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import Dashboard from './pages/Dashboard';
-import Prosjekter from './pages/Prosjekter';
-import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Avvik from './pages/Avvik';
-import Timelister from './pages/Timelister';
-import Endringsmeldinger from './pages/Endringsmeldinger';
+import Bestillinger from './pages/Bestillinger';
 import Bildedok from './pages/Bildedok';
+import CRM from './pages/CRM';
+import Chat from './pages/Chat';
+import Dashboard from './pages/Dashboard';
+import Endringsmeldinger from './pages/Endringsmeldinger';
+import Innstillinger from './pages/Innstillinger';
+import Kalender from './pages/Kalender';
+import ProsjektDetaljer from './pages/ProsjektDetaljer';
+import Prosjekter from './pages/Prosjekter';
+import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
-import Bestillinger from './pages/Bestillinger';
-import Chat from './pages/Chat';
-import Ressursplan from './pages/Ressursplan';
-import CRM from './pages/CRM';
-import Kalender from './pages/Kalender';
-import Innstillinger from './pages/Innstillinger';
+import Timelister from './pages/Timelister';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Dashboard": Dashboard,
-    "Prosjekter": Prosjekter,
-    "ProsjektDetaljer": ProsjektDetaljer,
     "Avvik": Avvik,
-    "Timelister": Timelister,
-    "Endringsmeldinger": Endringsmeldinger,
+    "Bestillinger": Bestillinger,
     "Bildedok": Bildedok,
+    "CRM": CRM,
+    "Chat": Chat,
+    "Dashboard": Dashboard,
+    "Endringsmeldinger": Endringsmeldinger,
+    "Innstillinger": Innstillinger,
+    "Kalender": Kalender,
+    "ProsjektDetaljer": ProsjektDetaljer,
+    "Prosjekter": Prosjekter,
+    "Ressursplan": Ressursplan,
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
-    "Bestillinger": Bestillinger,
-    "Chat": Chat,
-    "Ressursplan": Ressursplan,
-    "CRM": CRM,
-    "Kalender": Kalender,
-    "Innstillinger": Innstillinger,
+    "Timelister": Timelister,
 }
 
 export const pagesConfig = {
