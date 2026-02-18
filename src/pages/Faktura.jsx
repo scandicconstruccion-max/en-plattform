@@ -19,11 +19,13 @@ import {
   DialogHeader,
   DialogTitle } from
 '@/components/ui/dialog';
-import { FileText, Plus, Search, Filter, Download, AlertCircle } from 'lucide-react';
+import { FileText, Plus, Search, Filter, Download, AlertCircle, Send, Mail } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
+import { formatAmount, formatNumber } from '../utils/formatNumber';
 
 export default function Faktura() {
   const [search, setSearch] = useState('');
@@ -31,6 +33,8 @@ export default function Faktura() {
   const [customerFilter, setCustomerFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [showBulkActions, setShowBulkActions] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: invoices = [] } = useQuery({
@@ -88,6 +92,45 @@ export default function Faktura() {
     reduce((sum, i) => sum + (i.total_amount || 0), 0)
   };
 
+  const toggleSelectInvoice = (invoiceId) => {
+    setSelectedInvoices(prev => 
+      prev.includes(invoiceId) 
+        ? prev.filter(id => id !== invoiceId)
+        : [...prev, invoiceId]
+    );
+  };
+
+  const selectableInvoices = filteredInvoices.filter(inv => 
+    inv.status === 'sendt' || inv.status === 'apnet' || inv.status === 'lastet_ned'
+  );
+
+  const handleBulkResend = async () => {
+    const invoicesToSend = invoices.filter(inv => selectedInvoices.includes(inv.id));
+    for (const invoice of invoicesToSend) {
+      try {
+        await base44.integrations.Core.SendEmail({
+          to: invoice.sent_to_email || invoice.customer_email,
+          subject: `Faktura ${invoice.invoice_number} - På nytt`,
+          body: `Hei,\n\nDette er en påminnelse om faktura ${invoice.invoice_number}.\n\nBeløp: ${formatAmount(invoice.total_amount)}\nForfallsdato: ${format(new Date(invoice.due_date), 'dd.MM.yyyy')}\nKID: ${invoice.kid_number}\n\nVennligst betal innen forfallsdato.\n\nMed vennlig hilsen`
+        });
+      } catch (error) {
+        console.error('Feil ved sending av faktura:', error);
+      }
+    }
+    toast.success(`${selectedInvoices.length} faktura(er) sendt på nytt`);
+    setSelectedInvoices([]);
+  };
+
+  const handleBulkDownload = () => {
+    toast.info('Last ned funksjonalitet kommer snart');
+    // TODO: Implement PDF generation and download
+  };
+
+  const handleBulkExternalSend = async () => {
+    toast.info('Send til ekstern part funksjonalitet kommer snart');
+    // TODO: Implement external party sending
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -97,11 +140,35 @@ export default function Faktura() {
             <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Fakturaer</h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">Håndter fakturering og betalinger</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {selectedInvoices.length > 0 && (
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleBulkResend}
+                  variant="outline"
+                  className="rounded-xl gap-2">
+                  <Send className="h-4 w-4" />
+                  Send på nytt ({selectedInvoices.length})
+                </Button>
+                <Button
+                  onClick={handleBulkDownload}
+                  variant="outline"
+                  className="rounded-xl gap-2">
+                  <Download className="h-4 w-4" />
+                  Last ned
+                </Button>
+                <Button
+                  onClick={handleBulkExternalSend}
+                  variant="outline"
+                  className="rounded-xl gap-2">
+                  <Mail className="h-4 w-4" />
+                  Send til ekstern
+                </Button>
+              </div>
+            )}
             <Button
               onClick={() => setShowCreateDialog(true)}
               className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
-
               <Plus className="h-4 w-4" />
               Ny faktura
             </Button>
@@ -138,7 +205,7 @@ export default function Faktura() {
             <CardContent className="p-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">Omsetning</p>
               <p className="text-2xl font-bold text-emerald-600">
-                {(stats.totalAmount / 1000).toFixed(0)} Kr.
+                {formatAmount(stats.totalAmount)}
               </p>
             </CardContent>
           </Card>
@@ -216,13 +283,24 @@ export default function Faktura() {
             invoice.status !== 'betalt' &&
             invoice.status !== 'kladd';
 
+            const canSelect = invoice.status === 'sendt' || invoice.status === 'apnet' || invoice.status === 'lastet_ned';
+            
             return (
-              <Link
-                key={invoice.id}
-                to={createPageUrl(`FakturaDetaljer?id=${invoice.id}`)}>
-
-                  <Card className="border-0 shadow-sm dark:bg-slate-900 hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
+              <Card key={invoice.id} className="border-0 shadow-sm dark:bg-slate-900 hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex gap-4">
+                    {canSelect && (
+                      <div className="flex items-center pt-2">
+                        <Checkbox
+                          checked={selectedInvoices.includes(invoice.id)}
+                          onCheckedChange={() => toggleSelectInvoice(invoice.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    )}
+                    <Link
+                      to={createPageUrl(`FakturaDetaljer?id=${invoice.id}`)}
+                      className="flex-1">
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center gap-3">
@@ -278,16 +356,17 @@ export default function Faktura() {
                         </div>
                         <div className="text-right">
                           <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                            {invoice.total_amount?.toLocaleString('nb-NO')} Kr.
+                            {formatAmount(invoice.total_amount)}
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            eks. mva: {invoice.amount_excluding_vat?.toLocaleString('nb-NO')} Kr.
+                            eks. mva: {formatAmount(invoice.amount_excluding_vat)}
                           </p>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>);
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>);
 
           })
           }

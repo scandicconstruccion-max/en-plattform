@@ -22,10 +22,12 @@ import {
   DialogTitle,
   DialogFooter } from
 '@/components/ui/dialog';
-import { ArrowLeft, Plus, Trash2, Send, FileText, Download, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Send, FileText, Download, CheckCircle, Eye, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import PageHeader from '@/components/shared/PageHeader';
+import InvoicePreview from '@/components/faktura/InvoicePreview';
+import { formatAmount } from '../utils/formatNumber';
 
 export default function FakturaDetaljer() {
   const navigate = useNavigate();
@@ -55,6 +57,7 @@ export default function FakturaDetaljer() {
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showOrderDialog, setShowOrderDialog] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [paymentData, setPaymentData] = useState({
     payment_date: format(new Date(), 'yyyy-MM-dd'),
@@ -154,7 +157,7 @@ export default function FakturaDetaljer() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (saveAsDraft = false) => {
       const totals = calculateTotals();
       const invoiceNumber = invoice?.invoice_number || (await generateInvoiceNumber());
       const kidNumber = invoice?.kid_number || generateKID();
@@ -163,6 +166,7 @@ export default function FakturaDetaljer() {
         ...formData,
         invoice_number: invoiceNumber,
         kid_number: kidNumber,
+        status: saveAsDraft ? 'kladd' : formData.status,
         ...totals
       };
 
@@ -226,7 +230,7 @@ Fakturadetaljer:
 - Fakturanummer: ${invoice.invoice_number}
 - Fakturadato: ${format(new Date(invoice.invoice_date), 'dd.MM.yyyy')}
 - Forfallsdato: ${format(new Date(invoice.due_date), 'dd.MM.yyyy')}
-- Beløp: ${invoice.total_amount?.toLocaleString('nb-NO')} Kr
+- Beløp: ${formatAmount(invoice.total_amount)}
 - KID-nummer: ${invoice.kid_number}
 
 Vennligst betal innen forfallsdato.
@@ -238,8 +242,13 @@ ${base44.auth.me().then((u) => u.full_name)}
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowSendDialog(false);
       toast.success('Faktura sendt');
+      // Automatisk tilbake til hovedsiden
+      setTimeout(() => {
+        navigate(createPageUrl('Faktura'));
+      }, 1000);
     }
   });
 
@@ -329,6 +338,28 @@ ${base44.auth.me().then((u) => u.full_name)}
       setShowOrderDialog(true);
     }
   }, [newType]);
+
+  const handlePreview = () => {
+    if (!formData.customer_name || lines.length === 0 || !lines[0].description) {
+      toast.error('Vennligst fyll ut fakturainformasjon og minst én linje');
+      return;
+    }
+    setShowPreviewDialog(true);
+  };
+
+  const handleSaveDraft = async () => {
+    if (!formData.customer_name) {
+      toast.error('Vennligst velg en kunde');
+      return;
+    }
+    await saveMutation.mutateAsync(true);
+  };
+
+  const handleClose = () => {
+    if (confirm('Er du sikker på at du vil lukke uten å lagre?')) {
+      navigate(createPageUrl('Faktura'));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 lg:p-8">
@@ -515,7 +546,7 @@ ${base44.auth.me().then((u) => u.full_name)}
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Sum: {(line.quantity * line.unit_price * (1 + line.vat_rate / 100)).toFixed(2)} Kr (inkl. mva)
+                    Sum: {formatAmount(line.quantity * line.unit_price * (1 + line.vat_rate / 100))} (inkl. mva)
                   </p>
                   {isEditable && lines.length > 1 &&
                 <Button
@@ -539,15 +570,15 @@ ${base44.auth.me().then((u) => u.full_name)}
             <div className="space-y-2">
               <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Sum eks. mva:</span>
-                <span className="font-semibold">{totals.amount_excluding_vat.toFixed(2)} Kr</span>
+                <span className="font-semibold">{formatAmount(totals.amount_excluding_vat)}</span>
               </div>
               <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>MVA:</span>
-                <span className="font-semibold">{totals.vat_amount.toFixed(2)} Kr</span>
+                <span className="font-semibold">{formatAmount(totals.vat_amount)}</span>
               </div>
               <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white pt-2 border-t">
                 <span>Totalt:</span>
-                <span>{totals.total_amount.toFixed(2)} Kr</span>
+                <span>{formatAmount(totals.total_amount)}</span>
               </div>
             </div>
           </CardContent>
@@ -555,21 +586,42 @@ ${base44.auth.me().then((u) => u.full_name)}
 
         {/* Actions */}
         <div className="flex flex-wrap gap-3">
-          {isEditable &&
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
-
-              {saveMutation.isPending ? 'Lagrer...' : 'Lagre faktura'}
-            </Button>
-          }
+          {isEditable && (
+            <>
+              <Button
+                onClick={() => saveMutation.mutate(false)}
+                disabled={saveMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+                {saveMutation.isPending ? 'Lagrer...' : 'Lagre faktura'}
+              </Button>
+              <Button
+                onClick={handlePreview}
+                variant="outline"
+                className="rounded-xl gap-2">
+                <Eye className="h-4 w-4" />
+                Forhåndsvis
+              </Button>
+              <Button
+                onClick={handleSaveDraft}
+                disabled={saveMutation.isPending}
+                variant="outline"
+                className="rounded-xl">
+                Lagre kladd
+              </Button>
+              <Button
+                onClick={handleClose}
+                variant="outline"
+                className="rounded-xl gap-2">
+                <X className="h-4 w-4" />
+                Lukk
+              </Button>
+            </>
+          )}
           {invoice && invoice.status === 'kladd' &&
           <Button
             onClick={() => setShowSendDialog(true)}
             variant="outline"
             className="rounded-xl gap-2">
-
               <Send className="h-4 w-4" />
               Send faktura
             </Button>
@@ -579,7 +631,6 @@ ${base44.auth.me().then((u) => u.full_name)}
             onClick={() => setShowPaymentDialog(true)}
             variant="outline"
             className="rounded-xl gap-2">
-
               <CheckCircle className="h-4 w-4" />
               Registrer betaling
             </Button>
@@ -592,29 +643,53 @@ ${base44.auth.me().then((u) => u.full_name)}
             <DialogHeader>
               <DialogTitle>Velg ordre</DialogTitle>
             </DialogHeader>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {orders.map((order) =>
-              <button
-                key={order.id}
-                onClick={() => importFromOrder(order)}
-                className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">
-                        {order.order_number}
-                      </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                        {order.customer_name} - {order.project_name}
+            {orders.length === 0 ? (
+              <div className="p-8 text-center">
+                <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
+                <p className="text-slate-500 dark:text-slate-400">Ingen tilgjengelige ordre</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {orders.map((order) =>
+                <button
+                  key={order.id}
+                  onClick={() => importFromOrder(order)}
+                  className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-white">
+                          {order.order_number}
+                        </p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          {order.customer_name} - {order.project_name}
+                        </p>
+                      </div>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {formatAmount(order.total_amount)}
                       </p>
                     </div>
-                    <p className="font-bold text-slate-900 dark:text-white">
-                      {order.total_amount?.toLocaleString('nb-NO')} Kr
-                    </p>
-                  </div>
-                </button>
-              )}
-            </div>
+                  </button>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview Dialog */}
+        <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-slate-900">
+            <DialogHeader>
+              <DialogTitle>Forhåndsvisning - Faktura</DialogTitle>
+            </DialogHeader>
+            <InvoicePreview
+              invoice={{
+                ...formData,
+                invoice_number: invoice?.invoice_number || 'PREVIEW',
+                kid_number: invoice?.kid_number || 'PREVIEW-KID'
+              }}
+              lines={lines}
+              totals={totals}
+            />
           </DialogContent>
         </Dialog>
 
