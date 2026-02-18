@@ -1,0 +1,330 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '../utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { FileText, Plus, Search, Filter, Download, AlertCircle } from 'lucide-react';
+import StatusBadge from '@/components/shared/StatusBadge';
+import { format } from 'date-fns';
+import { nb } from 'date-fns/locale';
+import { toast } from 'sonner';
+
+export default function Faktura() {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [customerFilter, setCustomerFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => base44.entities.Invoice.list('-invoice_date'),
+    initialData: [],
+  });
+
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => base44.entities.Customer.list(),
+    initialData: [],
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+    initialData: [],
+  });
+
+  const { data: orders = [] } = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => base44.entities.Order.filter({ status: 'godkjent' }),
+    initialData: [],
+  });
+
+  const filteredInvoices = invoices.filter((invoice) => {
+    const matchesSearch = 
+      invoice.invoice_number?.toLowerCase().includes(search.toLowerCase()) ||
+      invoice.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+      invoice.project_name?.toLowerCase().includes(search.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
+    const matchesCustomer = customerFilter === 'all' || invoice.customer_id === customerFilter;
+    
+    const isPaid = invoice.status === 'betalt';
+    const matchesPayment = 
+      paymentFilter === 'all' ||
+      (paymentFilter === 'betalt' && isPaid) ||
+      (paymentFilter === 'ikke_betalt' && !isPaid);
+
+    return matchesSearch && matchesStatus && matchesCustomer && matchesPayment;
+  });
+
+  const stats = {
+    total: invoices.length,
+    draft: invoices.filter(i => i.status === 'kladd').length,
+    unpaid: invoices.filter(i => i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert').length,
+    overdue: invoices.filter(i => {
+      if (i.status === 'betalt' || i.status === 'kladd') return false;
+      return new Date(i.due_date) < new Date();
+    }).length,
+    totalAmount: invoices
+      .filter(i => i.status !== 'kladd' && i.status !== 'kreditert')
+      .reduce((sum, i) => sum + (i.total_amount || 0), 0),
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Fakturaer</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Håndter fakturering og betalinger</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowCreateDialog(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Ny faktura
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Totalt</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.total}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Ukladd</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.draft}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Ubetalt</p>
+              <p className="text-2xl font-bold text-amber-600">{stats.unpaid}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Forfalt</p>
+              <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Omsetning</p>
+              <p className="text-2xl font-bold text-emerald-600">
+                {(stats.totalAmount / 1000).toFixed(0)} Kr.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters */}
+        <Card className="border-0 shadow-sm dark:bg-slate-900">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Søk faktura, kunde..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10 rounded-xl"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle statuser</SelectItem>
+                  <SelectItem value="kladd">Kladd</SelectItem>
+                  <SelectItem value="sendt">Sendt</SelectItem>
+                  <SelectItem value="mottatt">Mottatt</SelectItem>
+                  <SelectItem value="betalt">Betalt</SelectItem>
+                  <SelectItem value="forfalt">Forfalt</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Kunde" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle kunder</SelectItem>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Betaling" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle</SelectItem>
+                  <SelectItem value="betalt">Betalt</SelectItem>
+                  <SelectItem value="ikke_betalt">Ikke betalt</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Invoice List */}
+        <div className="space-y-3">
+          {filteredInvoices.length === 0 ? (
+            <Card className="border-0 shadow-sm dark:bg-slate-900">
+              <CardContent className="p-12 text-center">
+                <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                  Ingen fakturaer funnet
+                </h3>
+                <p className="text-slate-500 dark:text-slate-400">
+                  Opprett din første faktura for å komme i gang
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            filteredInvoices.map((invoice) => {
+              const isOverdue = new Date(invoice.due_date) < new Date() && 
+                invoice.status !== 'betalt' && 
+                invoice.status !== 'kladd';
+              
+              return (
+                <Link
+                  key={invoice.id}
+                  to={createPageUrl(`FakturaDetaljer?id=${invoice.id}`)}
+                >
+                  <Card className="border-0 shadow-sm dark:bg-slate-900 hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-slate-900 dark:text-white">
+                              {invoice.invoice_number || 'N/A'}
+                            </span>
+                            <StatusBadge status={invoice.status} />
+                            {isOverdue && (
+                              <span className="flex items-center gap-1 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                                <AlertCircle className="h-3 w-3" />
+                                Forfalt
+                              </span>
+                            )}
+                            {invoice.is_credit_note && (
+                              <span className="text-xs text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded">
+                                Kreditnota
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
+                            <div>
+                              <span className="text-slate-500 dark:text-slate-400">Kunde:</span>
+                              <p className="font-medium text-slate-900 dark:text-white">
+                                {invoice.customer_name}
+                              </p>
+                            </div>
+                            {invoice.project_name && (
+                              <div>
+                                <span className="text-slate-500 dark:text-slate-400">Prosjekt:</span>
+                                <p className="font-medium text-slate-900 dark:text-white">
+                                  {invoice.project_name}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-slate-500 dark:text-slate-400">Fakturadato:</span>
+                              <p className="font-medium text-slate-900 dark:text-white">
+                                {format(new Date(invoice.invoice_date), 'dd.MM.yyyy')}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 dark:text-slate-400">Forfallsdato:</span>
+                              <p className={`font-medium ${isOverdue ? 'text-red-600' : 'text-slate-900 dark:text-white'}`}>
+                                {format(new Date(invoice.due_date), 'dd.MM.yyyy')}
+                              </p>
+                            </div>
+                          </div>
+                          {invoice.kid_number && (
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              KID: {invoice.kid_number}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {invoice.total_amount?.toLocaleString('nb-NO')} Kr.
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            eks. mva: {invoice.amount_excluding_vat?.toLocaleString('nb-NO')} Kr.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })
+          )}
+        </div>
+
+        {/* Create Dialog */}
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogContent className="sm:max-w-md dark:bg-slate-900">
+            <DialogHeader>
+              <DialogTitle>Opprett ny faktura</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Link to={createPageUrl('FakturaDetaljer?new=manual')}>
+                <Button variant="outline" className="w-full justify-start h-auto py-4 rounded-xl">
+                  <div className="text-left">
+                    <p className="font-semibold">Manuell faktura</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Opprett faktura fra bunnen av
+                    </p>
+                  </div>
+                </Button>
+              </Link>
+              <Link to={createPageUrl('FakturaDetaljer?new=order')}>
+                <Button variant="outline" className="w-full justify-start h-auto py-4 rounded-xl">
+                  <div className="text-left">
+                    <p className="font-semibold">Fra ordre</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Fakturer en godkjent ordre
+                    </p>
+                  </div>
+                </Button>
+              </Link>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}
