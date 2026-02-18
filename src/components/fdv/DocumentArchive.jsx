@@ -11,28 +11,28 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+  DialogFooter } from
+'@/components/ui/dialog';
 import { FileText, Plus, Upload, Download, Trash2, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
 const categories = [
-  { value: 'produktdatablad', label: 'Produktdatablader' },
-  { value: 'monteringsanvisning', label: 'Monteringsanvisninger' },
-  { value: 'samsvarserklæring', label: 'Samsvarserklæringer' },
-  { value: 'garantibevis', label: 'Garantibevis' },
-  { value: 'brukermanual', label: 'Brukermanualer' },
-  { value: 'tegning', label: 'Tegninger' },
-  { value: 'sluttrapport', label: 'Sluttrapporter' },
-  { value: 'ferdigbilder', label: 'Ferdigbilder' },
-];
+{ value: 'produktdatablad', label: 'Produktdatablader' },
+{ value: 'monteringsanvisning', label: 'Monteringsanvisninger' },
+{ value: 'samsvarserklæring', label: 'Samsvarserklæringer' },
+{ value: 'garantibevis', label: 'Garantibevis' },
+{ value: 'brukermanual', label: 'Brukermanualer' },
+{ value: 'tegning', label: 'Tegninger' },
+{ value: 'sluttrapport', label: 'Sluttrapporter' },
+{ value: 'ferdigbilder', label: 'Ferdigbilder' }];
+
 
 export default function DocumentArchive({ fdvPackageId, projectId }) {
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -50,19 +50,19 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
   const { data: documents = [] } = useQuery({
     queryKey: ['fdvDocuments', fdvPackageId],
     queryFn: () => base44.entities.FDVDocument.filter({ fdv_package_id: fdvPackageId }),
-    enabled: !!fdvPackageId,
+    enabled: !!fdvPackageId
   });
 
   const { data: projectFiles = [] } = useQuery({
     queryKey: ['projectFiles', projectId],
     queryFn: () => base44.entities.ProjectFile.filter({ project_id: projectId }),
-    enabled: !!projectId && showImportDialog,
+    enabled: !!projectId && showImportDialog
   });
 
   const { data: images = [] } = useQuery({
     queryKey: ['images', projectId],
     queryFn: () => base44.entities.ImageDoc.filter({ project_id: projectId }),
-    enabled: !!projectId && showImportDialog,
+    enabled: !!projectId && showImportDialog
   });
 
   const uploadMutation = useMutation({
@@ -82,7 +82,7 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
       setShowUploadDialog(false);
       setFormData({ name: '', description: '', category: '', file: null });
       toast.success('Dokument lastet opp');
-    },
+    }
   });
 
   const importMutation = useMutation({
@@ -99,7 +99,7 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fdvDocuments', fdvPackageId] });
       toast.success('Dokument importert');
-    },
+    }
   });
 
   const deleteMutation = useMutation({
@@ -107,7 +107,7 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fdvDocuments', fdvPackageId] });
       toast.success('Dokument slettet');
-    },
+    }
   });
 
   const handleUpload = () => {
@@ -119,7 +119,7 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
   };
 
   const groupedDocs = categories.reduce((acc, cat) => {
-    acc[cat.value] = documents.filter(d => d.category === cat.value);
+    acc[cat.value] = documents.filter((d) => d.category === cat.value);
     return acc;
   }, {});
 
@@ -129,23 +129,23 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
         <Button
           variant="outline"
           onClick={() => setShowImportDialog(true)}
-          className="rounded-xl gap-2"
-        >
+          className="rounded-xl gap-2">
+
           <FolderOpen className="h-4 w-4" />
           Importer fra prosjekt
         </Button>
         <Button
           onClick={() => setShowUploadDialog(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-        >
+          className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+
           <Plus className="h-4 w-4" />
           Last opp dokument
         </Button>
       </div>
 
       {/* Categories */}
-      {categories.map(category => (
-        <Card key={category.value} className="border-0 shadow-sm dark:bg-slate-900">
+      {categories.map((category) =>
+      <Card key={category.value} className="border-0 shadow-sm dark:bg-slate-900">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-slate-500" />
@@ -154,53 +154,53 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
             </div>
           </div>
           <div className="p-4">
-            {groupedDocs[category.value]?.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+            {groupedDocs[category.value]?.length === 0 ?
+          <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
                 Ingen dokumenter
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {groupedDocs[category.value]?.map(doc => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800"
-                  >
+              </p> :
+
+          <div className="space-y-2">
+                {groupedDocs[category.value]?.map((doc) =>
+            <div
+              key={doc.id}
+              className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+
                     <div className="flex-1">
                       <p className="font-medium text-sm text-slate-900 dark:text-white">{doc.name}</p>
-                      {doc.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{doc.description}</p>
-                      )}
-                      {doc.source_type !== 'manual' && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 inline-block mt-1">
+                      {doc.description &&
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{doc.description}</p>
+                }
+                      {doc.source_type !== 'manual' &&
+                <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 inline-block mt-1">
                           Fra {doc.source_type === 'project_file' ? 'Prosjektfiler' : doc.source_type === 'image_doc' ? 'Bildedok' : 'Ordre'}
                         </span>
-                      )}
+                }
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => window.open(doc.file_url, '_blank')}
-                        className="rounded-lg"
-                      >
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => window.open(doc.file_url, '_blank')}
+                  className="rounded-lg">
+
                         <Download className="h-4 w-4" />
                       </Button>
                       <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteMutation.mutate(doc.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                      >
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => deleteMutation.mutate(doc.id)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
-                ))}
-              </div>
             )}
+              </div>
+          }
           </div>
         </Card>
-      ))}
+      )}
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
@@ -215,22 +215,22 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="mt-1.5 rounded-xl"
-                placeholder="Dokumentnavn"
-              />
+                placeholder="Dokumentnavn" />
+
             </div>
             <div>
               <Label>Kategori *</Label>
               <Select
                 value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value })}
-              >
+                onValueChange={(value) => setFormData({ ...formData, category: value })}>
+
                 <SelectTrigger className="mt-1.5 rounded-xl">
                   <SelectValue placeholder="Velg kategori" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                  ))}
+                  {categories.map((cat) =>
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -240,31 +240,31 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="mt-1.5 rounded-xl"
-                placeholder="Valgfri beskrivelse"
-              />
+                placeholder="Valgfri beskrivelse" />
+
             </div>
             <div>
               <Label>Fil *</Label>
               <Input
                 type="file"
                 onChange={(e) => setFormData({ ...formData, file: e.target.files[0] })}
-                className="mt-1.5 rounded-xl"
-              />
+                className="mt-1.5 rounded-xl" />
+
             </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setShowUploadDialog(false)}
-              className="rounded-xl"
-            >
+              className="rounded-xl">
+
               Avbryt
             </Button>
             <Button
               onClick={handleUpload}
               disabled={uploadMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               {uploadMutation.isPending ? 'Laster opp...' : 'Last opp'}
             </Button>
           </DialogFooter>
@@ -285,26 +285,26 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                   <SelectValue placeholder="Velg kategori" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                  ))}
+                  {categories.map((cat) =>
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
             <div className="max-h-96 overflow-y-auto space-y-2">
-              {projectFiles.length === 0 && images.length === 0 && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
+              {projectFiles.length === 0 && images.length === 0 &&
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
                   Ingen filer eller bilder funnet i prosjektet
                 </p>
-              )}
-              {projectFiles.length > 0 && (
-                <>
+              }
+              {projectFiles.length > 0 &&
+              <>
                   <div className="font-medium text-sm text-slate-900 dark:text-white mb-2">Prosjektfiler</div>
-                  {projectFiles.map(file => (
+                  {projectFiles.map((file) =>
                 <div
                   key={file.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800"
-                >
+                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+
                   <div className="flex-1">
                     <p className="font-medium text-sm">{file.name}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">{file.description}</p>
@@ -319,22 +319,22 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                       category: selectedCategory
                     })}
                     disabled={!selectedCategory}
-                    className="rounded-lg"
-                  >
+                    className="rounded-lg">
+
                     Importer
                   </Button>
                 </div>
-              ))}
+                )}
                 </>
-              )}
-              {images.length > 0 && (
-                <>
+              }
+              {images.length > 0 &&
+              <>
                   <div className="font-medium text-sm text-slate-900 dark:text-white mb-2 mt-4">Bildedokumentasjon</div>
-                  {images.map(img => (
+                  {images.map((img) =>
                 <div
                   key={img.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800"
-                >
+                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+
                   <div className="flex-1">
                     <p className="font-medium text-sm">{img.title}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">{img.description}</p>
@@ -348,19 +348,19 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                       sourceName: img.title,
                       category: selectedCategory
                     })}
-                    disabled={!selectedCategory}
-                    className="rounded-lg"
-                  >
+                    disabled={!selectedCategory} className="bg-blue-600 text-primary-foreground px-3 text-xs font-medium rounded-lg inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-8">
+
+
                     Importer
                   </Button>
                 </div>
-              ))}
+                )}
                 </>
-              )}
+              }
             </div>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
+    </div>);
+
 }
