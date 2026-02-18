@@ -31,7 +31,7 @@ const categories = [
 { value: 'brukermanual', label: 'Brukermanualer' },
 { value: 'tegning', label: 'Tegninger' },
 { value: 'sluttrapport', label: 'Sluttrapporter' },
-{ value: 'ferdigbilder', label: 'Ferdigbilder' }];
+{ value: 'ferdigbilder', label: 'Bilder' }];
 
 
 export default function DocumentArchive({ fdvPackageId, projectId }) {
