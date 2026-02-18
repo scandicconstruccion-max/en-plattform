@@ -47,6 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import Ansatte from './pages/Ansatte';
 import Avvik from './pages/Avvik';
 import Bestillinger from './pages/Bestillinger';
 import Bildedok from './pages/Bildedok';
@@ -56,18 +57,19 @@ import Dashboard from './pages/Dashboard';
 import Endringsmeldinger from './pages/Endringsmeldinger';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
+import MinBedrift from './pages/MinBedrift';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
 import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import Ansatte from './pages/Ansatte';
-import MinBedrift from './pages/MinBedrift';
+import Befaring from './pages/Befaring';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "Ansatte": Ansatte,
     "Avvik": Avvik,
     "Bestillinger": Bestillinger,
     "Bildedok": Bildedok,
@@ -77,14 +79,14 @@ export const PAGES = {
     "Endringsmeldinger": Endringsmeldinger,
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
+    "MinBedrift": MinBedrift,
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
     "Ressursplan": Ressursplan,
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "Ansatte": Ansatte,
-    "MinBedrift": MinBedrift,
+    "Befaring": Befaring,
 }
 
 export const pagesConfig = {

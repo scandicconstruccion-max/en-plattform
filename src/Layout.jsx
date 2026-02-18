@@ -25,6 +25,7 @@ import BottomNav from '@/components/navigation/BottomNav';
 const moduleIcons = {
   dashboard: LayoutDashboard,
   avvik: AlertTriangle,
+  befaring: CheckSquare,
   endringsmeldinger: FileText,
   timelister: Clock,
   bildedok: Camera,
@@ -43,6 +44,7 @@ const moduleIcons = {
 const moduleLabels = {
   dashboard: 'Dashboard',
   avvik: 'Avvik',
+  befaring: 'Befaring',
   endringsmeldinger: 'Endringsmeldinger',
   timelister: 'Timelister',
   bildedok: 'Bildedokumentasjon',
@@ -61,6 +63,7 @@ const moduleLabels = {
 const modulePages = {
   dashboard: 'Dashboard',
   avvik: 'Avvik',
+  befaring: 'Befaring',
   endringsmeldinger: 'Endringsmeldinger',
   timelister: 'Timelister',
   bildedok: 'Bildedok',
