@@ -9,7 +9,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import {
-  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar
+  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, DollarSign
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -40,6 +40,11 @@ export default function Dashboard() {
     queryFn: () => base44.entities.CalendarEvent.list('-start_time', 5),
   });
 
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => base44.entities.Invoice.list('-invoice_date', 50),
+  });
+
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
     queryFn: () => base44.entities.Company.list(),
@@ -58,6 +63,25 @@ export default function Dashboard() {
       return date >= weekAgo;
     })
     .reduce((sum, t) => sum + (t.hours || 0), 0);
+
+  const unpaidInvoices = invoices.filter(i => 
+    i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert'
+  ).length;
+  
+  const overdueInvoices = invoices.filter(i => {
+    if (i.status === 'betalt' || i.status === 'kladd') return false;
+    return new Date(i.due_date) < new Date();
+  }).length;
+
+  const monthlyRevenue = invoices
+    .filter(i => {
+      const invoiceDate = new Date(i.invoice_date);
+      const now = new Date();
+      return invoiceDate.getMonth() === now.getMonth() && 
+             invoiceDate.getFullYear() === now.getFullYear() &&
+             i.status !== 'kladd';
+    })
+    .reduce((sum, i) => sum + (i.total_amount || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -100,6 +124,37 @@ export default function Dashboard() {
             iconColor="text-amber-600"
             iconBg="bg-amber-100"
           />
+          <StatCard
+            title="Ubetalte fakturaer"
+            value={unpaidInvoices}
+            icon={FileText}
+            iconColor="text-blue-600"
+            iconBg="bg-blue-100"
+          />
+          <StatCard
+            title="Forfalte fakturaer"
+            value={overdueInvoices}
+            icon={AlertTriangle}
+            iconColor="text-red-600"
+            iconBg="bg-red-100"
+          />
+        </div>
+
+        {/* Financial Stats */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="border-0 shadow-sm dark:bg-slate-900 p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Omsetning denne måneden</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {(monthlyRevenue / 1000).toFixed(0)} Kr.
+                </p>
+              </div>
+            </div>
+          </Card>
           <StatCard
             title="Timer denne uken"
             value={totalHoursThisWeek.toFixed(1)}
