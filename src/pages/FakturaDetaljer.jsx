@@ -47,7 +47,10 @@ export default function FakturaDetaljer() {
     payment_terms_days: 30,
     due_date: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
     comment: '',
-    status: 'kladd'
+    status: 'kladd',
+    our_reference: '',
+    our_reference_name: '',
+    their_reference: ''
   });
 
   const [lines, setLines] = useState([
@@ -92,6 +95,11 @@ export default function FakturaDetaljer() {
     enabled: newType === 'order'
   });
 
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list()
+  });
+
   useEffect(() => {
     if (invoice) {
       setFormData({
@@ -105,7 +113,10 @@ export default function FakturaDetaljer() {
         payment_terms_days: invoice.payment_terms_days || 30,
         due_date: invoice.due_date || '',
         comment: invoice.comment || '',
-        status: invoice.status || 'kladd'
+        status: invoice.status || 'kladd',
+        our_reference: invoice.our_reference || '',
+        our_reference_name: invoice.our_reference_name || '',
+        their_reference: invoice.their_reference || ''
       });
     }
   }, [invoice]);
@@ -330,6 +341,32 @@ ${base44.auth.me().then((u) => u.full_name)}
     }
   };
 
+  const handleOurReferenceChange = (employeeId) => {
+    const employee = employees.find((e) => e.id === employeeId);
+    if (employee) {
+      setFormData({
+        ...formData,
+        our_reference: employee.id,
+        our_reference_name: `${employee.first_name} ${employee.last_name}`
+      });
+    }
+  };
+
+  const getProjectContacts = () => {
+    if (!formData.project_id) return [];
+    const project = projects.find((p) => p.id === formData.project_id);
+    if (!project) return [];
+    
+    const contacts = [];
+    if (project.client_contact) {
+      contacts.push({ name: project.client_contact, label: `${project.client_contact} (Kunde)` });
+    }
+    if (project.project_manager_name) {
+      contacts.push({ name: project.project_manager_name, label: `${project.project_manager_name} (Prosjektleder)` });
+    }
+    return contacts;
+  };
+
   const totals = calculateTotals();
   const isEditable = !invoice || invoice.status === 'kladd';
 
@@ -464,6 +501,55 @@ ${base44.auth.me().then((u) => u.full_name)}
 
                 </div>
               }
+              <div>
+                <Label>Vår referanse</Label>
+                <Select
+                  value={formData.our_reference}
+                  onValueChange={handleOurReferenceChange}
+                  disabled={!isEditable}>
+
+                  <SelectTrigger className="mt-1.5 rounded-xl">
+                    <SelectValue placeholder="Velg ansatt" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((employee) =>
+                    <SelectItem key={employee.id} value={employee.id}>
+                        {employee.first_name} {employee.last_name}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Deres referanse</Label>
+                {formData.project_id && getProjectContacts().length > 0 ? (
+                  <Select
+                    value={formData.their_reference}
+                    onValueChange={(value) => setFormData({ ...formData, their_reference: value })}
+                    disabled={!isEditable}>
+
+                    <SelectTrigger className="mt-1.5 rounded-xl">
+                      <SelectValue placeholder="Velg kontaktperson" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getProjectContacts().map((contact, idx) =>
+                      <SelectItem key={idx} value={contact.name}>
+                          {contact.label}
+                        </SelectItem>
+                      )}
+                      <SelectItem value="custom">Annet (skriv inn)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={formData.their_reference}
+                    onChange={(e) => setFormData({ ...formData, their_reference: e.target.value })}
+                    className="mt-1.5 rounded-xl"
+                    placeholder="Navn på kontaktperson"
+                    disabled={!isEditable} />
+
+                )}
+              </div>
             </div>
             <div>
               <Label>Kommentar</Label>
@@ -608,13 +694,11 @@ ${base44.auth.me().then((u) => u.full_name)}
               className="rounded-xl">
                 Lagre kladd
               </Button>
-              <Button
-              onClick={handleClose}
-              variant="outline" className="bg-blue-600 text-slate-50 px-4 py-2 text-sm font-medium rounded-xl inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input shadow-sm hover:bg-accent hover:text-accent-foreground h-9 gap-2">
-
-                <X className="h-4 w-4" />
+              <button
+                onClick={handleClose}
+                className="text-blue-600 hover:text-blue-700 font-medium px-4 py-2">
                 Lukk
-              </Button>
+              </button>
             </>
           }
           {invoice && invoice.status === 'kladd' &&
