@@ -24,7 +24,7 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import OrderForm from '@/components/ordre/OrderForm';
 import { 
   FileText, Search, Plus, Building2, Calendar, 
-  DollarSign, ChevronRight, Send, CheckCircle2, User
+  ChevronRight, Send, CheckCircle2, User
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -268,7 +268,7 @@ export default function Ordre() {
           <Card className="p-4 border-0 shadow-sm dark:bg-slate-900">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm font-bold text-purple-600 dark:text-purple-400">Kr.</span>
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -371,8 +371,7 @@ export default function Ordre() {
                           {format(new Date(order.due_date), 'd. MMM yyyy', { locale: nb })}
                         </span>
                       )}
-                      <span className="flex items-center gap-1">
-                        <DollarSign className="h-4 w-4" />
+                      <span className="flex items-center gap-1 font-semibold">
                         kr {order.total_amount?.toFixed(2) || '0.00'}
                       </span>
                     </div>
