@@ -217,7 +217,7 @@ export default function Ordre() {
               onClick={() => setShowSourceDialog(true)}
               className="rounded-xl gap-2"
             >
-              <Plus className="h-4 w-4" /> Fra Tilbud/Avvik/Endring
+              <Plus className="h-4 w-4" /> Hent Fra Tilbud/Avvik/Endring
             </Button>
             <Button 
               onClick={() => setShowCreateDialog(true)}
