@@ -27,7 +27,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import PageHeader from '@/components/shared/PageHeader';
 import InvoicePreview from '@/components/faktura/InvoicePreview';
-import { formatAmount } from '../lib/formatNumber';
+import { formatAmount } from '@/components/shared/formatNumber';
 
 export default function FakturaDetaljer() {
   const navigate = useNavigate();
