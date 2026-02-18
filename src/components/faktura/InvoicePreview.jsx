@@ -1,6 +1,6 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { formatAmount } from '../../utils/formatNumber';
+import { formatAmount } from '../../lib/formatNumber';
 
 export default function InvoicePreview({ invoice, lines, totals }) {
   return (
