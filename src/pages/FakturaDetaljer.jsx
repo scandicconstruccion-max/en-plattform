@@ -586,37 +586,37 @@ ${base44.auth.me().then((u) => u.full_name)}
 
         {/* Actions */}
         <div className="flex flex-wrap gap-3">
-          {isEditable && (
-            <>
+          {isEditable &&
+          <>
               <Button
-                onClick={() => saveMutation.mutate(false)}
-                disabled={saveMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+              onClick={() => saveMutation.mutate(false)}
+              disabled={saveMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
                 {saveMutation.isPending ? 'Lagrer...' : 'Lagre faktura'}
               </Button>
               <Button
-                onClick={handlePreview}
-                variant="outline"
-                className="rounded-xl gap-2">
+              onClick={handlePreview}
+              variant="outline"
+              className="rounded-xl gap-2">
                 <Eye className="h-4 w-4" />
                 Forhåndsvis
               </Button>
               <Button
-                onClick={handleSaveDraft}
-                disabled={saveMutation.isPending}
-                variant="outline"
-                className="rounded-xl">
+              onClick={handleSaveDraft}
+              disabled={saveMutation.isPending}
+              variant="outline"
+              className="rounded-xl">
                 Lagre kladd
               </Button>
               <Button
-                onClick={handleClose}
-                variant="outline"
-                className="rounded-xl gap-2">
+              onClick={handleClose}
+              variant="outline" className="bg-blue-600 text-slate-50 px-4 py-2 text-sm font-medium rounded-xl inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input shadow-sm hover:bg-accent hover:text-accent-foreground h-9 gap-2">
+
                 <X className="h-4 w-4" />
                 Lukk
               </Button>
             </>
-          )}
+          }
           {invoice && invoice.status === 'kladd' &&
           <Button
             onClick={() => setShowSendDialog(true)}
@@ -643,18 +643,18 @@ ${base44.auth.me().then((u) => u.full_name)}
             <DialogHeader>
               <DialogTitle>Velg ordre</DialogTitle>
             </DialogHeader>
-            {orders.length === 0 ? (
-              <div className="p-8 text-center">
+            {orders.length === 0 ?
+            <div className="p-8 text-center">
                 <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
                 <p className="text-slate-500 dark:text-slate-400">Ingen tilgjengelige ordre</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              </div> :
+
+            <div className="space-y-2 max-h-96 overflow-y-auto">
                 {orders.map((order) =>
-                <button
-                  key={order.id}
-                  onClick={() => importFromOrder(order)}
-                  className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+              <button
+                key={order.id}
+                onClick={() => importFromOrder(order)}
+                className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-white">
@@ -669,9 +669,9 @@ ${base44.auth.me().then((u) => u.full_name)}
                       </p>
                     </div>
                   </button>
-                )}
+              )}
               </div>
-            )}
+            }
           </DialogContent>
         </Dialog>
 
@@ -688,8 +688,8 @@ ${base44.auth.me().then((u) => u.full_name)}
                 kid_number: invoice?.kid_number || 'PREVIEW-KID'
               }}
               lines={lines}
-              totals={totals}
-            />
+              totals={totals} />
+
           </DialogContent>
         </Dialog>
 
