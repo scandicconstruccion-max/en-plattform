@@ -11,14 +11,14 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DialogTitle } from
+'@/components/ui/dialog';
 import { FileText, Plus, Search, Filter, Download, AlertCircle } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
 import { format } from 'date-fns';
@@ -36,56 +36,56 @@ export default function Faktura() {
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => base44.entities.Invoice.list('-invoice_date'),
-    initialData: [],
+    initialData: []
   });
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => base44.entities.Customer.list(),
-    initialData: [],
+    initialData: []
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
-    initialData: [],
+    initialData: []
   });
 
   const { data: orders = [] } = useQuery({
     queryKey: ['orders'],
     queryFn: () => base44.entities.Order.filter({ status: 'godkjent' }),
-    initialData: [],
+    initialData: []
   });
 
   const filteredInvoices = invoices.filter((invoice) => {
-    const matchesSearch = 
-      invoice.invoice_number?.toLowerCase().includes(search.toLowerCase()) ||
-      invoice.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-      invoice.project_name?.toLowerCase().includes(search.toLowerCase());
-    
+    const matchesSearch =
+    invoice.invoice_number?.toLowerCase().includes(search.toLowerCase()) ||
+    invoice.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+    invoice.project_name?.toLowerCase().includes(search.toLowerCase());
+
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesCustomer = customerFilter === 'all' || invoice.customer_id === customerFilter;
-    
+
     const isPaid = invoice.status === 'betalt';
-    const matchesPayment = 
-      paymentFilter === 'all' ||
-      (paymentFilter === 'betalt' && isPaid) ||
-      (paymentFilter === 'ikke_betalt' && !isPaid);
+    const matchesPayment =
+    paymentFilter === 'all' ||
+    paymentFilter === 'betalt' && isPaid ||
+    paymentFilter === 'ikke_betalt' && !isPaid;
 
     return matchesSearch && matchesStatus && matchesCustomer && matchesPayment;
   });
 
   const stats = {
     total: invoices.length,
-    draft: invoices.filter(i => i.status === 'kladd').length,
-    unpaid: invoices.filter(i => i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert').length,
-    overdue: invoices.filter(i => {
+    draft: invoices.filter((i) => i.status === 'kladd').length,
+    unpaid: invoices.filter((i) => i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert').length,
+    overdue: invoices.filter((i) => {
       if (i.status === 'betalt' || i.status === 'kladd') return false;
       return new Date(i.due_date) < new Date();
     }).length,
-    totalAmount: invoices
-      .filter(i => i.status !== 'kladd' && i.status !== 'kreditert')
-      .reduce((sum, i) => sum + (i.total_amount || 0), 0),
+    totalAmount: invoices.
+    filter((i) => i.status !== 'kladd' && i.status !== 'kreditert').
+    reduce((sum, i) => sum + (i.total_amount || 0), 0)
   };
 
   return (
@@ -100,8 +100,8 @@ export default function Faktura() {
           <div className="flex gap-2">
             <Button
               onClick={() => setShowCreateDialog(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+
               <Plus className="h-4 w-4" />
               Ny faktura
             </Button>
@@ -118,7 +118,7 @@ export default function Faktura() {
           </Card>
           <Card className="border-0 shadow-sm dark:bg-slate-900">
             <CardContent className="p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Ukladd</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Kladd</p>
               <p className="text-2xl font-bold text-blue-600">{stats.draft}</p>
             </CardContent>
           </Card>
@@ -154,8 +154,8 @@ export default function Faktura() {
                   placeholder="Søk faktura, kunde..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10 rounded-xl"
-                />
+                  className="pl-10 rounded-xl" />
+
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="rounded-xl">
@@ -175,11 +175,11 @@ export default function Faktura() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle kunder</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
+                  {customers.map((customer) =>
+                  <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
               <Select value={paymentFilter} onValueChange={setPaymentFilter}>
@@ -198,8 +198,8 @@ export default function Faktura() {
 
         {/* Invoice List */}
         <div className="space-y-3">
-          {filteredInvoices.length === 0 ? (
-            <Card className="border-0 shadow-sm dark:bg-slate-900">
+          {filteredInvoices.length === 0 ?
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
               <CardContent className="p-12 text-center">
                 <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
@@ -209,18 +209,18 @@ export default function Faktura() {
                   Opprett din første faktura for å komme i gang
                 </p>
               </CardContent>
-            </Card>
-          ) : (
-            filteredInvoices.map((invoice) => {
-              const isOverdue = new Date(invoice.due_date) < new Date() && 
-                invoice.status !== 'betalt' && 
-                invoice.status !== 'kladd';
-              
-              return (
-                <Link
-                  key={invoice.id}
-                  to={createPageUrl(`FakturaDetaljer?id=${invoice.id}`)}
-                >
+            </Card> :
+
+          filteredInvoices.map((invoice) => {
+            const isOverdue = new Date(invoice.due_date) < new Date() &&
+            invoice.status !== 'betalt' &&
+            invoice.status !== 'kladd';
+
+            return (
+              <Link
+                key={invoice.id}
+                to={createPageUrl(`FakturaDetaljer?id=${invoice.id}`)}>
+
                   <Card className="border-0 shadow-sm dark:bg-slate-900 hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -230,17 +230,17 @@ export default function Faktura() {
                               {invoice.invoice_number || 'N/A'}
                             </span>
                             <StatusBadge status={invoice.status} />
-                            {isOverdue && (
-                              <span className="flex items-center gap-1 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                            {isOverdue &&
+                          <span className="flex items-center gap-1 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
                                 <AlertCircle className="h-3 w-3" />
                                 Forfalt
                               </span>
-                            )}
-                            {invoice.is_credit_note && (
-                              <span className="text-xs text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded">
+                          }
+                            {invoice.is_credit_note &&
+                          <span className="text-xs text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded">
                                 Kreditnota
                               </span>
-                            )}
+                          }
                           </div>
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
                             <div>
@@ -249,14 +249,14 @@ export default function Faktura() {
                                 {invoice.customer_name}
                               </p>
                             </div>
-                            {invoice.project_name && (
-                              <div>
+                            {invoice.project_name &&
+                          <div>
                                 <span className="text-slate-500 dark:text-slate-400">Prosjekt:</span>
                                 <p className="font-medium text-slate-900 dark:text-white">
                                   {invoice.project_name}
                                 </p>
                               </div>
-                            )}
+                          }
                             <div>
                               <span className="text-slate-500 dark:text-slate-400">Fakturadato:</span>
                               <p className="font-medium text-slate-900 dark:text-white">
@@ -270,11 +270,11 @@ export default function Faktura() {
                               </p>
                             </div>
                           </div>
-                          {invoice.kid_number && (
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {invoice.kid_number &&
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
                               KID: {invoice.kid_number}
                             </div>
-                          )}
+                        }
                         </div>
                         <div className="text-right">
                           <p className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -287,10 +287,10 @@ export default function Faktura() {
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
-              );
-            })
-          )}
+                </Link>);
+
+          })
+          }
         </div>
 
         {/* Create Dialog */}
@@ -324,6 +324,6 @@ export default function Faktura() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
-  );
+    </div>);
+
 }
