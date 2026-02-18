@@ -20,6 +20,7 @@ const modules = [
   { key: 'sjekklister', name: 'Sjekklister', description: 'Kvalitetskontroll', icon: CheckSquare, color: 'teal', page: 'Sjekklister' },
   { key: 'tilbud', name: 'Tilbud', description: 'Tilbudsadministrasjon', icon: FileSpreadsheet, color: 'cyan', page: 'Tilbud' },
   { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', icon: FileText, color: 'indigo', page: 'Ordre' },
+  { key: 'fdv', name: 'FDV', description: 'Forvaltning, Drift og Vedlikehold', icon: FileText, color: 'rose', page: 'FDV' },
   { key: 'bestillinger', name: 'Bestillinger', description: 'Innkjøp og ordre', icon: ShoppingCart, color: 'orange', page: 'Bestillinger' },
   { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', icon: MessageSquare, color: 'pink', page: 'Chat' },
   { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning', icon: Users, color: 'violet', page: 'Ressursplan' },
