@@ -165,7 +165,6 @@ export default function Faktura() {
                   <SelectItem value="all">Alle statuser</SelectItem>
                   <SelectItem value="kladd">Kladd</SelectItem>
                   <SelectItem value="sendt">Sendt</SelectItem>
-                  <SelectItem value="mottatt">Mottatt</SelectItem>
                   <SelectItem value="betalt">Betalt</SelectItem>
                   <SelectItem value="forfalt">Forfalt</SelectItem>
                 </SelectContent>
