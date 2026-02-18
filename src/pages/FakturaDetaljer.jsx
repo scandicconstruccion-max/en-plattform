@@ -91,8 +91,7 @@ export default function FakturaDetaljer() {
 
   const { data: orders = [] } = useQuery({
     queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.filter({ status: 'godkjent' }),
-    enabled: newType === 'order'
+    queryFn: () => base44.entities.Order.filter({ status: 'godkjent' })
   });
 
   const { data: employees = [] } = useQuery({

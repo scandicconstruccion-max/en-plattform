@@ -59,6 +59,8 @@ import Dashboard from './pages/Dashboard';
 import Endringsmeldinger from './pages/Endringsmeldinger';
 import FDV from './pages/FDV';
 import FDVDetaljer from './pages/FDVDetaljer';
+import Faktura from './pages/Faktura';
+import FakturaDetaljer from './pages/FakturaDetaljer';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
 import MinBedrift from './pages/MinBedrift';
@@ -70,8 +72,6 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import Faktura from './pages/Faktura';
-import FakturaDetaljer from './pages/FakturaDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -88,6 +88,8 @@ export const PAGES = {
     "Endringsmeldinger": Endringsmeldinger,
     "FDV": FDV,
     "FDVDetaljer": FDVDetaljer,
+    "Faktura": Faktura,
+    "FakturaDetaljer": FakturaDetaljer,
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
     "MinBedrift": MinBedrift,
@@ -99,8 +101,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "Faktura": Faktura,
-    "FakturaDetaljer": FakturaDetaljer,
 }
 
 export const pagesConfig = {
