@@ -33,6 +33,7 @@ const moduleIcons = {
   sjekklister: CheckSquare,
   tilbud: FileSpreadsheet,
   ordre: FileText,
+  faktura: FileText,
   fdv: FileText,
   bestillinger: ShoppingCart,
   chat: MessageSquare,
@@ -55,6 +56,7 @@ const moduleLabels = {
   sjekklister: 'Sjekklister',
   tilbud: 'Tilbud',
   ordre: 'Ordre',
+  faktura: 'Faktura',
   fdv: 'FDV',
   bestillinger: 'Bestillinger',
   chat: 'Intern Chat',
@@ -77,6 +79,7 @@ const modulePages = {
   sjekklister: 'Sjekklister',
   tilbud: 'Tilbud',
   ordre: 'Ordre',
+  faktura: 'Faktura',
   fdv: 'FDV',
   bestillinger: 'Bestillinger',
   chat: 'Chat',
@@ -112,7 +115,7 @@ export default function Layout({ children, currentPageName }) {
   const allModules = [
     'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler', 
     'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister', 
-    'tilbud', 'ordre', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte', 
+    'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte', 
     'crm', 'kalender', 'minbedrift'
   ];
 
