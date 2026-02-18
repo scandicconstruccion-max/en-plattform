@@ -48,6 +48,7 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Ansatte from './pages/Ansatte';
+import ApproveOrder from './pages/ApproveOrder';
 import Avvik from './pages/Avvik';
 import Befaring from './pages/Befaring';
 import Bestillinger from './pages/Bestillinger';
@@ -59,6 +60,7 @@ import Endringsmeldinger from './pages/Endringsmeldinger';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
 import MinBedrift from './pages/MinBedrift';
+import Ordre from './pages/Ordre';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
 import Prosjektfiler from './pages/Prosjektfiler';
@@ -66,13 +68,12 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import Ordre from './pages/Ordre';
-import ApproveOrder from './pages/ApproveOrder';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Ansatte": Ansatte,
+    "ApproveOrder": ApproveOrder,
     "Avvik": Avvik,
     "Befaring": Befaring,
     "Bestillinger": Bestillinger,
@@ -84,6 +85,7 @@ export const PAGES = {
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
     "MinBedrift": MinBedrift,
+    "Ordre": Ordre,
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
     "Prosjektfiler": Prosjektfiler,
@@ -91,8 +93,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "Ordre": Ordre,
-    "ApproveOrder": ApproveOrder,
 }
 
 export const pagesConfig = {

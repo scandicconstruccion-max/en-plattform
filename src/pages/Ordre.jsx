@@ -21,6 +21,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
+import OrderForm from '@/components/ordre/OrderForm';
 import { 
   FileText, Search, Plus, Building2, Calendar, 
   DollarSign, ChevronRight, Send, CheckCircle2, User
@@ -65,6 +66,15 @@ export default function Ordre() {
   const { data: changes = [] } = useQuery({
     queryKey: ['changeNotifications'],
     queryFn: () => base44.entities.ChangeNotification.list('-created_date'),
+  });
+
+  const createOrderMutation = useMutation({
+    mutationFn: (data) => base44.entities.Order.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      setShowCreateDialog(false);
+      toast.success('Ordre opprettet');
+    },
   });
 
   const createFromSourceMutation = useMutation({
@@ -467,6 +477,13 @@ export default function Ordre() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Create Order Dialog */}
+      <OrderForm
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSubmit={(data) => createOrderMutation.mutate(data)}
+      />
 
       {/* Send Email Dialog */}
       {selectedOrder && (
