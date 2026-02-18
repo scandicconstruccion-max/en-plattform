@@ -38,7 +38,7 @@ export default function FDV() {
   const [selectedProject, setSelectedProject] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [customerFilter, setcustomerFilter] = useState('all');
+  const [customerFilter, setCustomerFilter] = useState('all');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
