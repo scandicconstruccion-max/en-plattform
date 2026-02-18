@@ -7,8 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users, CalendarDays,
-  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight
-} from 'lucide-react';
+  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight } from
+'lucide-react';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -17,8 +17,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  DropdownMenuTrigger } from
+'@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import BottomNav from '@/components/navigation/BottomNav';
 
@@ -39,7 +39,7 @@ const moduleIcons = {
   crm: Users,
   kalender: CalendarDays,
   ansatte: Users,
-  minbedrift: Building2,
+  minbedrift: Building2
 };
 
 const moduleLabels = {
@@ -59,7 +59,7 @@ const moduleLabels = {
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
-  minbedrift: 'Min bedrift',
+  minbedrift: 'Min bedrift'
 };
 
 const modulePages = {
@@ -79,7 +79,7 @@ const modulePages = {
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
-  minbedrift: 'MinBedrift',
+  minbedrift: 'MinBedrift'
 };
 
 export default function Layout({ children, currentPageName }) {
@@ -91,21 +91,21 @@ export default function Layout({ children, currentPageName }) {
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => base44.auth.me()
   });
 
   const { data: companies } = useQuery({
     queryKey: ['companies'],
     queryFn: () => base44.entities.Company.list(),
-    initialData: [],
+    initialData: []
   });
 
   const company = companies?.[0];
   const activeModules = company?.active_modules || [
-    'dashboard', 'avvik', 'endringsmeldinger', 'timelister', 'bildedok',
-    'sjekklister', 'tilbud', 'bestillinger', 'chat', 'ressursplan',
-    'prosjekter', 'crm', 'kalender'
-  ];
+  'dashboard', 'avvik', 'endringsmeldinger', 'timelister', 'bildedok',
+  'sjekklister', 'tilbud', 'bestillinger', 'chat', 'ressursplan',
+  'prosjekter', 'crm', 'kalender'];
+
 
   useEffect(() => {
     const handleResize = () => {
@@ -130,30 +130,30 @@ export default function Layout({ children, currentPageName }) {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Mobile Header */}
-      {isMobile && (
-        <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
+      {isMobile &&
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
           <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="select-none"
-          >
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)} className="text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-9 w-9 select-none">
+
+
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <span className="font-semibold text-slate-900 dark:text-white">ByggeKS</span>
+          <span className="font-semibold text-slate-900 dark:text-white">En Plattform</span>
           <ProjectDropdown />
         </header>
-      )}
+      }
 
       {/* Desktop Top Bar with Project Dropdown */}
-      {!isMobile && (
-        <div className={cn(
-          "fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 flex items-center justify-end px-6 transition-all duration-300",
-          sidebarCollapsed ? "left-16" : "left-64"
-        )}>
+      {!isMobile &&
+      <div className={cn(
+        "fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 flex items-center justify-end px-6 transition-all duration-300",
+        sidebarCollapsed ? "left-16" : "left-64"
+      )}>
           <ProjectDropdown />
         </div>
-      )}
+      }
 
       {/* Sidebar */}
       <aside
@@ -162,11 +162,11 @@ export default function Layout({ children, currentPageName }) {
           isMobile ? "w-72" : sidebarCollapsed ? "w-16" : "w-64",
           isMobile && !sidebarOpen ? "-translate-x-full" : "translate-x-0",
           isMobile && "pt-16"
-        )}
-      >
+        )}>
+
         {/* Logo */}
-        {!isMobile && (
-          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 dark:border-slate-800">
+        {!isMobile &&
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 dark:border-slate-800">
             <div className={cn("flex items-center gap-3", sidebarCollapsed && "justify-center w-full")}>
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
                 <Building2 className="h-5 w-5 text-white" />
@@ -174,21 +174,21 @@ export default function Layout({ children, currentPageName }) {
               {!sidebarCollapsed && <span className="font-bold text-xl text-slate-900 dark:text-white">ByggeKS</span>}
             </div>
           </div>
-        )}
+        }
 
         {/* Collapse Button - Desktop only */}
-        {!isMobile && (
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-20 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors z-50"
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-            ) : (
-              <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-            )}
+        {!isMobile &&
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="absolute -right-3 top-20 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors z-50">
+
+            {sidebarCollapsed ?
+          <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" /> :
+
+          <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+          }
           </button>
-        )}
+        }
 
         {/* Navigation */}
         <nav className={cn("p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]", sidebarCollapsed && "px-2")}>
@@ -207,15 +207,15 @@ export default function Layout({ children, currentPageName }) {
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all select-none",
                   sidebarCollapsed && "justify-center px-2",
-                  isActive
-                    ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                )}
-              >
+                  isActive ?
+                  "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" :
+                  "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                )}>
+
                 <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600 dark:text-emerald-400")} />
                 {!sidebarCollapsed && label}
-              </Link>
-            );
+              </Link>);
+
           })}
         </nav>
 
@@ -232,8 +232,8 @@ export default function Layout({ children, currentPageName }) {
                     {user?.full_name?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
-                {!sidebarCollapsed && (
-                  <>
+                {!sidebarCollapsed &&
+                <>
                     <div className="flex-1 text-left">
                       <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                         {user?.full_name || 'Bruker'}
@@ -242,7 +242,7 @@ export default function Layout({ children, currentPageName }) {
                     </div>
                     <ChevronDown className="h-4 w-4 text-slate-400" />
                   </>
-                )}
+                }
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -261,12 +261,12 @@ export default function Layout({ children, currentPageName }) {
       </aside>
 
       {/* Overlay for mobile */}
-      {isMobile && sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/20 dark:bg-black/50 z-30"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {isMobile && sidebarOpen &&
+      <div
+        className="fixed inset-0 bg-black/20 dark:bg-black/50 z-30"
+        onClick={() => setSidebarOpen(false)} />
+
+      }
 
       {/* Main Content */}
       <main
@@ -274,8 +274,8 @@ export default function Layout({ children, currentPageName }) {
           "transition-all duration-300",
           isMobile ? "pt-16 pb-20" : sidebarCollapsed ? "ml-16 pt-16" : "ml-64 pt-16",
           "pb-[env(safe-area-inset-bottom)]"
-        )}
-      >
+        )}>
+
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -283,8 +283,8 @@ export default function Layout({ children, currentPageName }) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="min-h-screen"
-          >
+            className="min-h-screen">
+
             {children}
           </motion.div>
         </AnimatePresence>
@@ -292,6 +292,6 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Bottom Navigation for Mobile */}
       {isMobile && <BottomNav currentPageName={currentPageName} />}
-    </div>
-  );
+    </div>);
+
 }
