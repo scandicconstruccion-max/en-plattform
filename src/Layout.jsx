@@ -101,10 +101,14 @@ export default function Layout({ children, currentPageName }) {
   });
 
   const company = companies?.[0];
-  const activeModules = company?.active_modules || [
-  'dashboard', 'avvik', 'endringsmeldinger', 'timelister', 'bildedok',
-  'sjekklister', 'tilbud', 'bestillinger', 'chat', 'ressursplan',
-  'prosjekter', 'crm', 'kalender'];
+  
+  // Show all modules in sidebar regardless of active modules
+  const allModules = [
+    'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler', 
+    'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister', 
+    'tilbud', 'bestillinger', 'chat', 'ressursplan', 'ansatte', 
+    'crm', 'kalender', 'minbedrift'
+  ];
 
 
   useEffect(() => {
@@ -138,7 +142,7 @@ export default function Layout({ children, currentPageName }) {
           onClick={() => setSidebarOpen(!sidebarOpen)} className="text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-9 w-9 select-none">
 
 
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {sidebarOpen ? <X className="h-7 w-7" /> : <Menu className="h-7 w-7" />}
           </Button>
           <span className="font-semibold text-slate-900 dark:text-white">En Plattform</span>
           <ProjectDropdown />
@@ -192,7 +196,7 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Navigation */}
         <nav className={cn("p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]", sidebarCollapsed && "px-2")}>
-          {activeModules.map((moduleKey) => {
+          {allModules.map((moduleKey) => {
             const Icon = moduleIcons[moduleKey] || LayoutDashboard;
             const label = moduleLabels[moduleKey] || moduleKey;
             const page = modulePages[moduleKey] || 'Dashboard';

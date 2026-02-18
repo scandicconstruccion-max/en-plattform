@@ -61,11 +61,11 @@ import Kalender from './pages/Kalender';
 import MinBedrift from './pages/MinBedrift';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
+import Prosjektfiler from './pages/Prosjektfiler';
 import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import Prosjektfiler from './pages/Prosjektfiler';
 import __Layout from './Layout.jsx';
 
 
@@ -84,11 +84,11 @@ export const PAGES = {
     "MinBedrift": MinBedrift,
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
+    "Prosjektfiler": Prosjektfiler,
     "Ressursplan": Ressursplan,
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "Prosjektfiler": Prosjektfiler,
 }
 
 export const pagesConfig = {
