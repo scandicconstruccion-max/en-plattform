@@ -28,13 +28,14 @@ export default function SendEmailDialog({
 
   React.useEffect(() => {
     if (open && item) {
-      setEmail(defaultEmail || '');
+      setEmail(defaultEmail || item.customer_email || item.sent_to_email || '');
       const typeLabels = {
         avvik: 'Avvik',
         tilbud: 'Tilbud',
-        endringsmelding: 'Endringsmelding'
+        endringsmelding: 'Endringsmelding',
+        ordre: 'Ordre'
       };
-      setSubject(`${typeLabels[type]}: ${item.title || item.quote_number || ''}`);
+      setSubject(`${typeLabels[type]}: ${item.title || item.quote_number || item.order_number || ''}`);
       setMessage(getDefaultMessage());
     }
   }, [open, item, type, defaultEmail]);
@@ -44,6 +45,9 @@ export default function SendEmailDialog({
       return `Hei,\n\nVedlagt finner du avviksrapport for: ${item?.title}\n\nKategori: ${item?.category || 'Ikke spesifisert'}\nAlvorlighetsgrad: ${item?.severity || 'Ikke spesifisert'}\n\nBeskrivelse:\n${item?.description || 'Ingen beskrivelse'}\n\n${item?.has_cost_consequence ? `Kostnadskonsekvens: ${item?.cost_amount?.toLocaleString('nb-NO')} kr\n` : ''}\nMed vennlig hilsen`;
     } else if (type === 'tilbud') {
       return `Hei,\n\nVedlagt finner du tilbud ${item?.quote_number}.\n\nTotal sum: ${item?.total_amount?.toLocaleString('nb-NO')} kr eks. mva\nGyldig til: ${item?.valid_until || 'Ikke spesifisert'}\n\nBeskrivelse:\n${item?.project_description || 'Ingen beskrivelse'}\n\nMed vennlig hilsen`;
+    } else if (type === 'ordre') {
+      const approvalUrl = `${window.location.origin}/approve-order/${item?.approval_token}`;
+      return `Hei,\n\nDu har mottatt en ny ordre:\n\nOrdrenummer: ${item?.order_number}\nBeskrivelse: ${item?.description || 'Ingen beskrivelse'}\nTotalbeløp: kr ${item?.total_amount?.toFixed(2) || '0.00'}\nForfall: ${item?.due_date || 'Ikke satt'}\n\nFor å godkjenne ordren, klikk på lenken nedenfor:\n${approvalUrl}\n\nMed vennlig hilsen`;
     } else {
       const typeLabels = { tillegg: 'Tillegg', fradrag: 'Fradrag', endring: 'Endring' };
       return `Hei,\n\nVedlagt finner du endringsmelding: ${item?.title}\n\nType: ${typeLabels[item?.change_type] || 'Endring'}\nBeløp: ${item?.amount?.toLocaleString('nb-NO')} kr\n\nBeskrivelse:\n${item?.description || 'Ingen beskrivelse'}\n\nMed vennlig hilsen`;
@@ -74,7 +78,7 @@ export default function SendEmailDialog({
         sent_to_email: email,
         delivery_confirmed: true,
         delivery_confirmed_date: now,
-        ...(type === 'tilbud' ? { status: 'sendt' } : {})
+        ...(type === 'tilbud' || type === 'ordre' ? { status: 'sendt' } : {})
       });
 
       toast.success('E-post sendt!', {
@@ -94,7 +98,8 @@ export default function SendEmailDialog({
   const typeLabels = {
     avvik: 'avvik',
     tilbud: 'tilbud',
-    endringsmelding: 'endringsmelding'
+    endringsmelding: 'endringsmelding',
+    ordre: 'ordre'
   };
 
   return (

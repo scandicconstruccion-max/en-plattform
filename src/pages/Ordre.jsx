@@ -155,22 +155,8 @@ export default function Ordre() {
     },
   });
 
-  const handleSendEmail = async (email) => {
-    const approvalUrl = `${window.location.origin}/approve-order/${selectedOrder.approval_token}`;
-    
-    await base44.integrations.Core.SendEmail({
-      to: email,
-      subject: `Ordre ${selectedOrder.order_number} - ${selectedOrder.customer_name}`,
-      body: `Hei,\n\nDu har mottatt en ny ordre:\n\nOrdrenummer: ${selectedOrder.order_number}\nBeskrivelse: ${selectedOrder.description || ''}\nTotalbeløp: kr ${selectedOrder.total_amount?.toFixed(2) || '0.00'}\nForfall: ${selectedOrder.due_date ? format(new Date(selectedOrder.due_date), 'd. MMMM yyyy', { locale: nb }) : 'Ikke satt'}\n\nFor å godkjenne ordren, klikk på lenken nedenfor:\n${approvalUrl}\n\nMed vennlig hilsen`
-    });
-
-    await base44.entities.Order.update(selectedOrder.id, {
-      sent_to_customer: true,
-      sent_date: new Date().toISOString(),
-      sent_to_email: email,
-      status: 'sendt'
-    });
-
+  const handleSendEmail = async (updateData) => {
+    await base44.entities.Order.update(selectedOrder.id, updateData);
     queryClient.invalidateQueries({ queryKey: ['orders'] });
   };
 
