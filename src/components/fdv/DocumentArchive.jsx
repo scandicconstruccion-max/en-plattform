@@ -292,8 +292,15 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
               </Select>
             </div>
             <div className="max-h-96 overflow-y-auto space-y-2">
-              <div className="font-medium text-sm text-slate-900 dark:text-white mb-2">Prosjektfiler</div>
-              {projectFiles.map(file => (
+              {projectFiles.length === 0 && images.length === 0 && (
+                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
+                  Ingen filer eller bilder funnet i prosjektet
+                </p>
+              )}
+              {projectFiles.length > 0 && (
+                <>
+                  <div className="font-medium text-sm text-slate-900 dark:text-white mb-2">Prosjektfiler</div>
+                  {projectFiles.map(file => (
                 <div
                   key={file.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800"
@@ -318,8 +325,12 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                   </Button>
                 </div>
               ))}
-              <div className="font-medium text-sm text-slate-900 dark:text-white mb-2 mt-4">Bildedokumentasjon</div>
-              {images.map(img => (
+                </>
+              )}
+              {images.length > 0 && (
+                <>
+                  <div className="font-medium text-sm text-slate-900 dark:text-white mb-2 mt-4">Bildedokumentasjon</div>
+                  {images.map(img => (
                 <div
                   key={img.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800"
@@ -344,6 +355,8 @@ export default function DocumentArchive({ fdvPackageId, projectId }) {
                   </Button>
                 </div>
               ))}
+                </>
+              )}
             </div>
           </div>
         </DialogContent>
