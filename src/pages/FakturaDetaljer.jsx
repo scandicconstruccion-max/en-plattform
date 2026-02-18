@@ -13,15 +13,15 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+  DialogFooter } from
+'@/components/ui/dialog';
 import { ArrowLeft, Plus, Trash2, Send, FileText, Download, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -45,12 +45,12 @@ export default function FakturaDetaljer() {
     payment_terms_days: 30,
     due_date: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
     comment: '',
-    status: 'kladd',
+    status: 'kladd'
   });
 
   const [lines, setLines] = useState([
-    { description: '', quantity: 1, unit: 'stk', unit_price: 0, vat_rate: 25 }
-  ]);
+  { description: '', quantity: 1, unit: 'stk', unit_price: 0, vat_rate: 25 }]
+  );
 
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -58,35 +58,35 @@ export default function FakturaDetaljer() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [paymentData, setPaymentData] = useState({
     payment_date: format(new Date(), 'yyyy-MM-dd'),
-    payment_reference: '',
+    payment_reference: ''
   });
 
   const { data: invoice } = useQuery({
     queryKey: ['invoice', invoiceId],
-    queryFn: () => base44.entities.Invoice.filter({ id: invoiceId }).then(res => res[0]),
-    enabled: !!invoiceId,
+    queryFn: () => base44.entities.Invoice.filter({ id: invoiceId }).then((res) => res[0]),
+    enabled: !!invoiceId
   });
 
   const { data: invoiceLines = [] } = useQuery({
     queryKey: ['invoiceLines', invoiceId],
     queryFn: () => base44.entities.InvoiceLine.filter({ invoice_id: invoiceId }),
-    enabled: !!invoiceId,
+    enabled: !!invoiceId
   });
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
-    queryFn: () => base44.entities.Customer.list(),
+    queryFn: () => base44.entities.Customer.list()
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list()
   });
 
   const { data: orders = [] } = useQuery({
     queryKey: ['orders'],
     queryFn: () => base44.entities.Order.filter({ status: 'godkjent' }),
-    enabled: newType === 'order',
+    enabled: newType === 'order'
   });
 
   useEffect(() => {
@@ -102,20 +102,20 @@ export default function FakturaDetaljer() {
         payment_terms_days: invoice.payment_terms_days || 30,
         due_date: invoice.due_date || '',
         comment: invoice.comment || '',
-        status: invoice.status || 'kladd',
+        status: invoice.status || 'kladd'
       });
     }
   }, [invoice]);
 
   useEffect(() => {
     if (invoiceLines.length > 0) {
-      setLines(invoiceLines.map(line => ({
+      setLines(invoiceLines.map((line) => ({
         id: line.id,
         description: line.description,
         quantity: line.quantity,
         unit: line.unit,
         unit_price: line.unit_price,
-        vat_rate: line.vat_rate,
+        vat_rate: line.vat_rate
       })));
     }
   }, [invoiceLines]);
@@ -124,7 +124,7 @@ export default function FakturaDetaljer() {
     let totalExclVat = 0;
     let totalVat = 0;
 
-    lines.forEach(line => {
+    lines.forEach((line) => {
       const lineTotal = line.quantity * line.unit_price;
       totalExclVat += lineTotal;
       totalVat += lineTotal * (line.vat_rate / 100);
@@ -133,7 +133,7 @@ export default function FakturaDetaljer() {
     return {
       amount_excluding_vat: totalExclVat,
       vat_amount: totalVat,
-      total_amount: totalExclVat + totalVat,
+      total_amount: totalExclVat + totalVat
     };
   };
 
@@ -145,25 +145,25 @@ export default function FakturaDetaljer() {
 
   const generateInvoiceNumber = async () => {
     const allInvoices = await base44.entities.Invoice.list();
-    const lastNumber = allInvoices.length > 0 ? 
-      Math.max(...allInvoices.map(inv => {
-        const num = parseInt(inv.invoice_number?.replace(/\D/g, '') || '0');
-        return isNaN(num) ? 0 : num;
-      })) : 0;
+    const lastNumber = allInvoices.length > 0 ?
+    Math.max(...allInvoices.map((inv) => {
+      const num = parseInt(inv.invoice_number?.replace(/\D/g, '') || '0');
+      return isNaN(num) ? 0 : num;
+    })) : 0;
     return `INV-${String(lastNumber + 1).padStart(5, '0')}`;
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const totals = calculateTotals();
-      const invoiceNumber = invoice?.invoice_number || await generateInvoiceNumber();
+      const invoiceNumber = invoice?.invoice_number || (await generateInvoiceNumber());
       const kidNumber = invoice?.kid_number || generateKID();
 
       const invoiceData = {
         ...formData,
         invoice_number: invoiceNumber,
         kid_number: kidNumber,
-        ...totals,
+        ...totals
       };
 
       let savedInvoice;
@@ -190,7 +190,7 @@ export default function FakturaDetaljer() {
           unit: line.unit,
           unit_price: line.unit_price,
           vat_rate: line.vat_rate,
-          line_total: lineTotal,
+          line_total: lineTotal
         });
       }
 
@@ -203,7 +203,7 @@ export default function FakturaDetaljer() {
       if (!invoiceId) {
         navigate(createPageUrl(`FakturaDetaljer?id=${savedInvoice.id}`));
       }
-    },
+    }
   });
 
   const sendMutation = useMutation({
@@ -211,7 +211,7 @@ export default function FakturaDetaljer() {
       await base44.entities.Invoice.update(invoiceId, {
         status: 'sendt',
         sent_date: new Date().toISOString(),
-        sent_to_email: email,
+        sent_to_email: email
       });
 
       await base44.integrations.Core.SendEmail({
@@ -232,15 +232,15 @@ Fakturadetaljer:
 Vennligst betal innen forfallsdato.
 
 Med vennlig hilsen,
-${base44.auth.me().then(u => u.full_name)}
-        `,
+${base44.auth.me().then((u) => u.full_name)}
+        `
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       setShowSendDialog(false);
       toast.success('Faktura sendt');
-    },
+    }
   });
 
   const markAsPaidMutation = useMutation({
@@ -248,19 +248,19 @@ ${base44.auth.me().then(u => u.full_name)}
       await base44.entities.Invoice.update(invoiceId, {
         status: 'betalt',
         paid_date: new Date(paymentData.payment_date).toISOString(),
-        payment_reference: paymentData.payment_reference,
+        payment_reference: paymentData.payment_reference
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       setShowPaymentDialog(false);
       toast.success('Faktura markert som betalt');
-    },
+    }
   });
 
   const importFromOrder = (order) => {
-    const selectedCustomer = customers.find(c => c.id === order.customer_id);
-    const selectedProject = projects.find(p => p.id === order.project_id);
+    const selectedCustomer = customers.find((c) => c.id === order.customer_id);
+    const selectedProject = projects.find((p) => p.id === order.project_id);
 
     setFormData({
       ...formData,
@@ -269,15 +269,15 @@ ${base44.auth.me().then(u => u.full_name)}
       customer_email: order.customer_email,
       project_id: selectedProject?.id || '',
       project_name: order.project_name,
-      order_id: order.id,
+      order_id: order.id
     });
 
-    setLines(order.items?.map(item => ({
+    setLines(order.items?.map((item) => ({
       description: item.description,
       quantity: item.quantity,
       unit: item.unit,
       unit_price: item.unit_price,
-      vat_rate: 25,
+      vat_rate: 25
     })) || []);
 
     setShowOrderDialog(false);
@@ -299,24 +299,24 @@ ${base44.auth.me().then(u => u.full_name)}
   };
 
   const handleCustomerChange = (customerId) => {
-    const customer = customers.find(c => c.id === customerId);
+    const customer = customers.find((c) => c.id === customerId);
     if (customer) {
       setFormData({
         ...formData,
         customer_id: customer.id,
         customer_name: customer.name,
-        customer_email: customer.email,
+        customer_email: customer.email
       });
     }
   };
 
   const handleProjectChange = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     if (project) {
       setFormData({
         ...formData,
         project_id: project.id,
-        project_name: project.name,
+        project_name: project.name
       });
     }
   };
@@ -336,8 +336,8 @@ ${base44.auth.me().then(u => u.full_name)}
         <PageHeader
           title={invoice ? `Faktura ${invoice.invoice_number}` : 'Ny faktura'}
           subtitle={invoice ? `Opprettet ${format(new Date(invoice.created_date), 'dd.MM.yyyy')}` : 'Opprett en ny faktura'}
-          backUrl={createPageUrl('Faktura')}
-        />
+          backUrl={createPageUrl('Faktura')} />
+
 
         {/* Invoice Info */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
@@ -351,17 +351,17 @@ ${base44.auth.me().then(u => u.full_name)}
                 <Select
                   value={formData.customer_id}
                   onValueChange={handleCustomerChange}
-                  disabled={!isEditable}
-                >
+                  disabled={!isEditable}>
+
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue placeholder="Velg kunde" />
                   </SelectTrigger>
                   <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
+                    {customers.map((customer) =>
+                    <SelectItem key={customer.id} value={customer.id}>
                         {customer.name}
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -370,17 +370,17 @@ ${base44.auth.me().then(u => u.full_name)}
                 <Select
                   value={formData.project_id}
                   onValueChange={handleProjectChange}
-                  disabled={!isEditable}
-                >
+                  disabled={!isEditable}>
+
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue placeholder="Velg prosjekt" />
                   </SelectTrigger>
                   <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
+                    {projects.map((project) =>
+                    <SelectItem key={project.id} value={project.id}>
                         {project.name}
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -391,8 +391,8 @@ ${base44.auth.me().then(u => u.full_name)}
                   value={formData.invoice_date}
                   onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
                   className="mt-1.5 rounded-xl"
-                  disabled={!isEditable}
-                />
+                  disabled={!isEditable} />
+
               </div>
               <div>
                 <Label>Betalingsvilkår (dager)</Label>
@@ -406,12 +406,12 @@ ${base44.auth.me().then(u => u.full_name)}
                     setFormData({
                       ...formData,
                       payment_terms_days: days,
-                      due_date: format(dueDate, 'yyyy-MM-dd'),
+                      due_date: format(dueDate, 'yyyy-MM-dd')
                     });
                   }}
                   className="mt-1.5 rounded-xl"
-                  disabled={!isEditable}
-                />
+                  disabled={!isEditable} />
+
               </div>
               <div>
                 <Label>Forfallsdato *</Label>
@@ -420,19 +420,19 @@ ${base44.auth.me().then(u => u.full_name)}
                   value={formData.due_date}
                   onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
                   className="mt-1.5 rounded-xl"
-                  disabled={!isEditable}
-                />
+                  disabled={!isEditable} />
+
               </div>
-              {invoice?.kid_number && (
-                <div>
+              {invoice?.kid_number &&
+              <div>
                   <Label>KID-nummer</Label>
                   <Input
-                    value={invoice.kid_number}
-                    className="mt-1.5 rounded-xl"
-                    disabled
-                  />
+                  value={invoice.kid_number}
+                  className="mt-1.5 rounded-xl"
+                  disabled />
+
                 </div>
-              )}
+              }
             </div>
             <div>
               <Label>Kommentar</Label>
@@ -441,8 +441,8 @@ ${base44.auth.me().then(u => u.full_name)}
                 onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
                 className="mt-1.5 rounded-xl"
                 placeholder="Valgfri kommentar til fakturaen"
-                disabled={!isEditable}
-              />
+                disabled={!isEditable} />
+
             </div>
           </CardContent>
         </Card>
@@ -452,55 +452,55 @@ ${base44.auth.me().then(u => u.full_name)}
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Fakturalinjer</CardTitle>
-              {isEditable && (
-                <Button onClick={addLine} size="sm" className="rounded-xl gap-2">
+              {isEditable &&
+              <Button onClick={addLine} size="sm" className="bg-green-600 text-primary-foreground px-3 text-xs font-medium rounded-xl inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-8 gap-2">
                   <Plus className="h-4 w-4" />
                   Legg til linje
                 </Button>
-              )}
+              }
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {lines.map((line, index) => (
-              <div key={index} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl space-y-3">
+            {lines.map((line, index) =>
+            <div key={index} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                   <div className="md:col-span-2">
                     <Label className="text-xs">Beskrivelse</Label>
                     <Input
-                      value={line.description}
-                      onChange={(e) => updateLine(index, 'description', e.target.value)}
-                      placeholder="Beskrivelse"
-                      className="mt-1 rounded-lg"
-                      disabled={!isEditable}
-                    />
+                    value={line.description}
+                    onChange={(e) => updateLine(index, 'description', e.target.value)}
+                    placeholder="Beskrivelse"
+                    className="mt-1 rounded-lg"
+                    disabled={!isEditable} />
+
                   </div>
                   <div>
                     <Label className="text-xs">Antall</Label>
                     <Input
-                      type="number"
-                      value={line.quantity}
-                      onChange={(e) => updateLine(index, 'quantity', parseFloat(e.target.value))}
-                      className="mt-1 rounded-lg"
-                      disabled={!isEditable}
-                    />
+                    type="number"
+                    value={line.quantity}
+                    onChange={(e) => updateLine(index, 'quantity', parseFloat(e.target.value))}
+                    className="mt-1 rounded-lg"
+                    disabled={!isEditable} />
+
                   </div>
                   <div>
                     <Label className="text-xs">Pris (eks. mva)</Label>
                     <Input
-                      type="number"
-                      value={line.unit_price}
-                      onChange={(e) => updateLine(index, 'unit_price', parseFloat(e.target.value))}
-                      className="mt-1 rounded-lg"
-                      disabled={!isEditable}
-                    />
+                    type="number"
+                    value={line.unit_price}
+                    onChange={(e) => updateLine(index, 'unit_price', parseFloat(e.target.value))}
+                    className="mt-1 rounded-lg"
+                    disabled={!isEditable} />
+
                   </div>
                   <div>
                     <Label className="text-xs">MVA %</Label>
                     <Select
-                      value={String(line.vat_rate)}
-                      onValueChange={(value) => updateLine(index, 'vat_rate', parseInt(value))}
-                      disabled={!isEditable}
-                    >
+                    value={String(line.vat_rate)}
+                    onValueChange={(value) => updateLine(index, 'vat_rate', parseInt(value))}
+                    disabled={!isEditable}>
+
                       <SelectTrigger className="mt-1 rounded-lg">
                         <SelectValue />
                       </SelectTrigger>
@@ -517,19 +517,19 @@ ${base44.auth.me().then(u => u.full_name)}
                   <p className="text-sm text-slate-600 dark:text-slate-400">
                     Sum: {(line.quantity * line.unit_price * (1 + line.vat_rate / 100)).toFixed(2)} Kr (inkl. mva)
                   </p>
-                  {isEditable && lines.length > 1 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeLine(index)}
-                      className="text-red-600 hover:text-red-700"
-                    >
+                  {isEditable && lines.length > 1 &&
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => removeLine(index)}
+                  className="text-red-600 hover:text-red-700">
+
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  )}
+                }
                 </div>
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
 
@@ -555,35 +555,35 @@ ${base44.auth.me().then(u => u.full_name)}
 
         {/* Actions */}
         <div className="flex flex-wrap gap-3">
-          {isEditable && (
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+          {isEditable &&
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               {saveMutation.isPending ? 'Lagrer...' : 'Lagre faktura'}
             </Button>
-          )}
-          {invoice && invoice.status === 'kladd' && (
-            <Button
-              onClick={() => setShowSendDialog(true)}
-              variant="outline"
-              className="rounded-xl gap-2"
-            >
+          }
+          {invoice && invoice.status === 'kladd' &&
+          <Button
+            onClick={() => setShowSendDialog(true)}
+            variant="outline"
+            className="rounded-xl gap-2">
+
               <Send className="h-4 w-4" />
               Send faktura
             </Button>
-          )}
-          {invoice && invoice.status !== 'kladd' && invoice.status !== 'betalt' && (
-            <Button
-              onClick={() => setShowPaymentDialog(true)}
-              variant="outline"
-              className="rounded-xl gap-2"
-            >
+          }
+          {invoice && invoice.status !== 'kladd' && invoice.status !== 'betalt' &&
+          <Button
+            onClick={() => setShowPaymentDialog(true)}
+            variant="outline"
+            className="rounded-xl gap-2">
+
               <CheckCircle className="h-4 w-4" />
               Registrer betaling
             </Button>
-          )}
+          }
         </div>
 
         {/* Order Selection Dialog */}
@@ -593,12 +593,12 @@ ${base44.auth.me().then(u => u.full_name)}
               <DialogTitle>Velg ordre</DialogTitle>
             </DialogHeader>
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {orders.map((order) => (
-                <button
-                  key={order.id}
-                  onClick={() => importFromOrder(order)}
-                  className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
+              {orders.map((order) =>
+              <button
+                key={order.id}
+                onClick={() => importFromOrder(order)}
+                className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-semibold text-slate-900 dark:text-white">
@@ -613,7 +613,7 @@ ${base44.auth.me().then(u => u.full_name)}
                     </p>
                   </div>
                 </button>
-              ))}
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -631,8 +631,8 @@ ${base44.auth.me().then(u => u.full_name)}
                   value={formData.customer_email}
                   onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
                   className="mt-1.5 rounded-xl"
-                  placeholder="kunde@example.com"
-                />
+                  placeholder="kunde@example.com" />
+
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 Faktura vil bli sendt som PDF til kundens e-postadresse.
@@ -642,15 +642,15 @@ ${base44.auth.me().then(u => u.full_name)}
               <Button
                 variant="outline"
                 onClick={() => setShowSendDialog(false)}
-                className="rounded-xl"
-              >
+                className="rounded-xl">
+
                 Avbryt
               </Button>
               <Button
                 onClick={() => sendMutation.mutate(formData.customer_email)}
                 disabled={sendMutation.isPending || !formData.customer_email}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
                 {sendMutation.isPending ? 'Sender...' : 'Send faktura'}
               </Button>
             </DialogFooter>
@@ -670,8 +670,8 @@ ${base44.auth.me().then(u => u.full_name)}
                   type="date"
                   value={paymentData.payment_date}
                   onChange={(e) => setPaymentData({ ...paymentData, payment_date: e.target.value })}
-                  className="mt-1.5 rounded-xl"
-                />
+                  className="mt-1.5 rounded-xl" />
+
               </div>
               <div>
                 <Label>Betalingsreferanse (valgfri)</Label>
@@ -679,29 +679,29 @@ ${base44.auth.me().then(u => u.full_name)}
                   value={paymentData.payment_reference}
                   onChange={(e) => setPaymentData({ ...paymentData, payment_reference: e.target.value })}
                   className="mt-1.5 rounded-xl"
-                  placeholder="Referansenummer fra bank"
-                />
+                  placeholder="Referansenummer fra bank" />
+
               </div>
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
                 onClick={() => setShowPaymentDialog(false)}
-                className="rounded-xl"
-              >
+                className="rounded-xl">
+
                 Avbryt
               </Button>
               <Button
                 onClick={() => markAsPaidMutation.mutate()}
                 disabled={markAsPaidMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
                 {markAsPaidMutation.isPending ? 'Registrerer...' : 'Registrer betaling'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-    </div>
-  );
+    </div>);
+
 }
