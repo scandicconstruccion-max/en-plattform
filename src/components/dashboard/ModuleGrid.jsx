@@ -20,6 +20,7 @@ const modules = [
   { key: 'sjekklister', name: 'Sjekklister', description: 'Kvalitetskontroll', icon: CheckSquare, color: 'teal', page: 'Sjekklister' },
   { key: 'tilbud', name: 'Tilbud', description: 'Tilbudsadministrasjon', icon: FileSpreadsheet, color: 'cyan', page: 'Tilbud' },
   { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', icon: FileText, color: 'indigo', page: 'Ordre' },
+  { key: 'faktura', name: 'Faktura', description: 'Fakturering og betalinger', icon: FileText, color: 'green', page: 'Faktura' },
   { key: 'fdv', name: 'FDV', description: 'Forvaltning, Drift og Vedlikehold', icon: FileText, color: 'rose', page: 'FDV' },
   { key: 'bestillinger', name: 'Bestillinger', description: 'Innkjøp og ordre', icon: ShoppingCart, color: 'orange', page: 'Bestillinger' },
   { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', icon: MessageSquare, color: 'pink', page: 'Chat' },
@@ -32,6 +33,7 @@ const modules = [
 
 const colorClasses = {
   emerald: { bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-600 dark:text-emerald-400', hover: 'group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/50' },
+  green: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-600 dark:text-green-400', hover: 'group-hover:bg-green-200 dark:group-hover:bg-green-900/50' },
   amber: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400', hover: 'group-hover:bg-amber-200 dark:group-hover:bg-amber-900/50' },
   blue: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400', hover: 'group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50' },
   indigo: { bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-600 dark:text-indigo-400', hover: 'group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/50' },
