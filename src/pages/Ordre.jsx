@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -407,7 +409,9 @@ export default function Ordre() {
                     />
                     <div 
                       className="flex-1 cursor-pointer"
-                      onClick={() => window.location.href = createPageUrl(`OrdreDetaljer?id=${order.id}`)}
+                      onClick={() => {
+                        window.location.href = createPageUrl(`OrdreDetaljer?id=${order.id}`);
+                      }}
                     >
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-slate-900 dark:text-white">
