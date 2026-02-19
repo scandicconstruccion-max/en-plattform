@@ -26,6 +26,7 @@ export default function OrderForm({ open, onOpenChange, onSubmit }) {
     customer_email: '',
     customer_phone: '',
     project_id: '',
+    our_reference: '',
     description: '',
     due_date: '',
     items: [{ description: '', quantity: 1, unit: 'stk', unit_price: 0, total: 0 }]
@@ -39,6 +40,11 @@ export default function OrderForm({ open, onOpenChange, onSubmit }) {
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => base44.entities.Customer.list('-created_date'),
+  });
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list('-created_date'),
   });
 
   const handleItemChange = (index, field, value) => {
@@ -143,6 +149,23 @@ export default function OrderForm({ open, onOpenChange, onSubmit }) {
               <SelectContent>
                 {projects.map(p => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Our Reference */}
+          <div>
+            <Label>Vår referanse</Label>
+            <Select value={formData.our_reference} onValueChange={(v) => setFormData({...formData, our_reference: v})}>
+              <SelectTrigger className="mt-1.5 rounded-xl">
+                <SelectValue placeholder="Velg ansatt" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map(e => (
+                  <SelectItem key={e.id} value={e.email}>
+                    {e.first_name} {e.last_name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
