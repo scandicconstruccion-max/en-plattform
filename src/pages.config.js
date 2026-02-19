@@ -49,6 +49,7 @@
  */
 import Ansatte from './pages/Ansatte';
 import ApproveOrder from './pages/ApproveOrder';
+import ApproveQuote from './pages/ApproveQuote';
 import Avvik from './pages/Avvik';
 import Befaring from './pages/Befaring';
 import Bestillinger from './pages/Bestillinger';
@@ -73,13 +74,13 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import ApproveQuote from './pages/ApproveQuote';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Ansatte": Ansatte,
     "ApproveOrder": ApproveOrder,
+    "ApproveQuote": ApproveQuote,
     "Avvik": Avvik,
     "Befaring": Befaring,
     "Bestillinger": Bestillinger,
@@ -104,7 +105,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "ApproveQuote": ApproveQuote,
 }
 
 export const pagesConfig = {
