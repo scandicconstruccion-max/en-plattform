@@ -134,7 +134,7 @@ export default function OrdreDetaljer() {
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`Ordre-${order.order_number}.pdf`);
+      pdf.save(`Ordre-${order.order_number || 'ny'}.pdf`);
       
       toast.success('PDF lastet ned');
     } catch (error) {
@@ -185,6 +185,14 @@ export default function OrdreDetaljer() {
         />
 
         <div id="order-content" className="space-y-6">
+        
+        {/* Order Header for PDF */}
+        <Card className="border-0 shadow-sm dark:bg-slate-900">
+          <CardContent className="p-6">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Ordre</h2>
+            <p className="text-slate-600 dark:text-slate-400">Ordrenummer: {order.order_number}</p>
+          </CardContent>
+        </Card>
 
         {/* Chronology Timeline */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
@@ -298,7 +306,7 @@ export default function OrdreDetaljer() {
                       className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
                     >
                       <CheckCircle className="h-4 w-4" />
-                      Marker som godkjent
+                      Marker som godkjent utenfor En Plattform
                     </Button>
                   </>
                 )}
