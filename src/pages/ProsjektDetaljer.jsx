@@ -26,6 +26,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/shared/StatCard';
+import ProjectKPISection from '@/components/project/ProjectKPISection';
 import {
   Building2, MapPin, Calendar, Users, Clock, AlertTriangle,
   FileText, Camera, CheckSquare, Edit, Mail, Phone, User,
@@ -74,6 +75,11 @@ export default function ProsjektDetaljer() {
     queryKey: ['projectImages', projectId],
     queryFn: () => base44.entities.ImageDoc.filter({ project_id: projectId }),
     enabled: !!projectId,
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
   });
 
   const updateMutation = useMutation({
@@ -177,6 +183,9 @@ export default function ProsjektDetaljer() {
       />
 
       <div className="px-6 lg:px-8 py-6 space-y-6">
+        {/* KPI Section */}
+        <ProjectKPISection projectId={projectId} userRole={user?.role} />
+
         {/* Stats Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
