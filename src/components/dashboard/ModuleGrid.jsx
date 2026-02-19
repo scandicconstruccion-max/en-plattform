@@ -49,6 +49,10 @@ const colorClasses = {
 };
 
 export default function ModuleGrid({ activeModules }) {
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
   const filteredModules = activeModules 
     ? modules.filter(m => activeModules.includes(m.key))
     : modules;

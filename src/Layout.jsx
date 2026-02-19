@@ -12,6 +12,7 @@ import {
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { hasModuleAccess, MODULES } from '@/components/shared/permissions';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,13 +112,15 @@ export default function Layout({ children, currentPageName }) {
 
   const company = companies?.[0];
   
-  // Show all modules in sidebar regardless of active modules
-  const allModules = [
+  // Filter modules based on user role
+  const allModulesList = [
     'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler', 
     'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister', 
     'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte', 
     'crm', 'kalender', 'minbedrift'
   ];
+  
+  const allModules = user ? allModulesList.filter(moduleKey => hasModuleAccess(user, moduleKey)) : allModulesList;
 
 
   useEffect(() => {

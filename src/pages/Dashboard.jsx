@@ -9,6 +9,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import KPISection from '@/components/dashboard/KPISection';
+import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
 import {
   Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText
 } from 'lucide-react';
@@ -52,9 +53,12 @@ export default function Dashboard() {
   });
 
   const company = companies?.[0];
-  const activeModules = company?.active_modules;
+  const activeModules = user ? getAvailableModules(user) : [];
+  
+  // Filter projects based on user access
+  const accessibleProjects = user ? filterProjectsByAccess(user, projects) : projects;
 
-  const activeProjects = projects.filter(p => p.status === 'aktiv').length;
+  const activeProjects = accessibleProjects.filter(p => p.status === 'aktiv').length;
   const openDeviations = deviations.filter(d => d.status !== 'lukket').length;
   const totalHoursThisWeek = timesheets
     .filter(t => {
@@ -103,8 +107,8 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 lg:px-8 py-8 space-y-8">
-        {/* KPI Section - Only for Admin */}
-        {user?.role === 'admin' && <KPISection />}
+        {/* KPI Section - Only for users with permission */}
+        {canViewKPI(user, 'company') && <KPISection />}
 
         {/* Modules Grid */}
         <div>
@@ -128,7 +132,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {projects.slice(0, 5).map((project) => (
+              {accessibleProjects.slice(0, 5).map((project) => (
                 <Link
                   key={project.id}
                   to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
@@ -146,9 +150,9 @@ export default function Dashboard() {
                   <StatusBadge status={project.status} />
                 </Link>
               ))}
-              {projects.length === 0 && (
+              {accessibleProjects.length === 0 && (
                 <div className="p-8 text-center text-slate-500">
-                  Ingen prosjekter ennå
+                  Ingen prosjekter tilgjengelig
                 </div>
               )}
             </div>
