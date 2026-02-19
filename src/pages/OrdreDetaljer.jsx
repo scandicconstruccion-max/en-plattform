@@ -303,10 +303,19 @@ export default function OrdreDetaljer() {
                     <Button
                       onClick={() => markAsApprovedMutation.mutate()}
                       disabled={markAsApprovedMutation.isPending}
-                      className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+                      variant="outline"
+                      className="rounded-xl gap-2"
                     >
                       <CheckCircle className="h-4 w-4" />
                       Marker som godkjent utenfor En Plattform
+                    </Button>
+                    <Button
+                      onClick={() => markAsApprovedMutation.mutate()}
+                      disabled={markAsApprovedMutation.isPending}
+                      className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Marker som godkjent
                     </Button>
                   </>
                 )}
