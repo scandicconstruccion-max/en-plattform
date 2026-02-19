@@ -293,6 +293,15 @@ export default function OrdreDetaljer() {
                 {order.status === 'sendt' && (
                   <>
                     <Button
+                      onClick={handleDownloadPDF}
+                      disabled={isDownloading}
+                      variant="outline"
+                      className="rounded-xl gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Last ned PDF
+                    </Button>
+                    <Button
                       onClick={() => setShowSendDialog(true)}
                       variant="outline"
                       className="rounded-xl gap-2"
