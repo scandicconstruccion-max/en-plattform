@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Send, CheckCircle, FileText, Clock, Download, Eye } from 'lucide-react';
+import { Send, CheckCircle, FileText, Clock, Download, Eye, X, Receipt } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -22,6 +24,7 @@ export default function OrdreDetaljer() {
   const orderId = urlParams.get('id');
 
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const { data: order } = useQuery({
     queryKey: ['order', orderId],
@@ -67,6 +70,80 @@ export default function OrdreDetaljer() {
     }
   });
 
+  const sendToInvoicingMutation = useMutation({
+    mutationFn: async () => {
+      const invoiceNumber = `INV-${Date.now()}`;
+      const invoiceDate = new Date().toISOString().split('T')[0];
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 30);
+
+      const invoice = await base44.entities.Invoice.create({
+        invoice_number: invoiceNumber,
+        customer_id: order.customer_id,
+        customer_name: order.customer_name,
+        customer_email: order.customer_email,
+        project_id: order.project_id,
+        project_name: order.project_name,
+        order_id: orderId,
+        order_number: order.order_number,
+        invoice_date: invoiceDate,
+        due_date: dueDate.toISOString().split('T')[0],
+        amount_excluding_vat: order.total_amount,
+        vat_amount: order.vat_amount || order.total_amount * 0.25,
+        total_amount: (order.total_amount || 0) + (order.vat_amount || order.total_amount * 0.25),
+        status: 'kladd'
+      });
+
+      if (order.items && order.items.length > 0) {
+        for (const item of order.items) {
+          await base44.entities.InvoiceLine.create({
+            invoice_id: invoice.id,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            vat_rate: 25,
+            line_total: item.total
+          });
+        }
+      }
+
+      await base44.entities.Order.update(orderId, {
+        invoice_sent_date: new Date().toISOString(),
+        invoice_id: invoice.id
+      });
+
+      return invoice;
+    },
+    onSuccess: (invoice) => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      toast.success('Ordre sendt til fakturering');
+      navigate(createPageUrl(`FakturaDetaljer?id=${invoice.id}`));
+    }
+  });
+
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      const element = document.getElementById('order-content');
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      pdf.save(`Ordre-${order.order_number}.pdf`);
+      
+      toast.success('PDF lastet ned');
+    } catch (error) {
+      toast.error('Kunne ikke laste ned PDF');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   if (!order) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 lg:p-8">
@@ -84,7 +161,99 @@ export default function OrdreDetaljer() {
           title={`Ordre ${order.order_number}`}
           subtitle={`Opprettet ${format(new Date(order.created_date), 'dd.MM.yyyy', { locale: nb })}`}
           backUrl={createPageUrl('Ordre')}
+          actions={
+            <div className="flex gap-2">
+              <Button
+                onClick={handleDownloadPDF}
+                disabled={isDownloading}
+                variant="outline"
+                className="rounded-xl gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Last ned PDF
+              </Button>
+              <Button
+                onClick={() => navigate(createPageUrl('Ordre'))}
+                variant="ghost"
+                className="rounded-xl gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              >
+                <X className="h-4 w-4" />
+                Lukk
+              </Button>
+            </div>
+          }
         />
+
+        <div id="order-content" className="space-y-6">
+
+        {/* Chronology Timeline */}
+        <Card className="border-0 shadow-sm dark:bg-slate-900">
+          <CardHeader>
+            <CardTitle>Kronologi</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">Ordre opprettet</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {format(new Date(order.created_date), 'd. MMMM yyyy HH:mm', { locale: nb })}
+                  </p>
+                </div>
+              </div>
+
+              {order.sent_date && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                    <Send className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white">Ordre sendt til kunde</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {format(new Date(order.sent_date), 'd. MMMM yyyy HH:mm', { locale: nb })}
+                    </p>
+                    {order.sent_to_email && (
+                      <p className="text-sm text-slate-400 dark:text-slate-500">
+                        Sendt til: {order.sent_to_email}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {order.approved_date && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white">Ordre godkjent</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {format(new Date(order.approved_date), 'd. MMMM yyyy HH:mm', { locale: nb })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {order.invoice_sent_date && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                    <Receipt className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white">Sendt til fakturering</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {format(new Date(order.invoice_sent_date), 'd. MMMM yyyy HH:mm', { locale: nb })}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Status */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
@@ -128,7 +297,28 @@ export default function OrdreDetaljer() {
                     </Button>
                   </>
                 )}
-                {order.status === 'godkjent' && (
+                {order.status === 'godkjent' && !order.invoice_sent_date && (
+                  <>
+                    <Button
+                      onClick={() => sendToInvoicingMutation.mutate()}
+                      disabled={sendToInvoicingMutation.isPending}
+                      className="bg-purple-600 hover:bg-purple-700 rounded-xl gap-2"
+                    >
+                      <Receipt className="h-4 w-4" />
+                      Send til fakturering
+                    </Button>
+                    <Button
+                      onClick={() => markAsCompletedMutation.mutate()}
+                      disabled={markAsCompletedMutation.isPending}
+                      variant="outline"
+                      className="rounded-xl gap-2"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Marker som utført
+                    </Button>
+                  </>
+                )}
+                {order.status === 'godkjent' && order.invoice_sent_date && (
                   <Button
                     onClick={() => markAsCompletedMutation.mutate()}
                     disabled={markAsCompletedMutation.isPending}
@@ -256,6 +446,7 @@ export default function OrdreDetaljer() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Send Email Dialog */}
