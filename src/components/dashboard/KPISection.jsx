@@ -14,11 +14,18 @@ export default function KPISection() {
     return saved ? JSON.parse(saved) : true;
   });
 
-  const [invoiceView, setInvoiceView] = useState('month'); // 'month' or 'year'
+  const [showYearToDate, setShowYearToDate] = useState(() => {
+    const saved = localStorage.getItem('kpi-invoice-view');
+    return saved ? JSON.parse(saved) : false;
+  });
 
   useEffect(() => {
     localStorage.setItem('kpi-section-expanded', JSON.stringify(isExpanded));
   }, [isExpanded]);
+
+  useEffect(() => {
+    localStorage.setItem('kpi-invoice-view', JSON.stringify(showYearToDate));
+  }, [showYearToDate]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -122,13 +129,13 @@ export default function KPISection() {
       status: 'neutral'
     },
     {
-      title: 'Fakturert denne måneden',
-      value: formatAmount(invoicedThisMonth),
-      subtitle: `Hittil i år: ${formatAmount(invoicedYearToDate)}`,
+      title: showYearToDate ? 'Fakturert hittil i år' : 'Fakturert denne måneden',
+      value: showYearToDate ? formatAmount(invoicedYearToDate) : formatAmount(invoicedThisMonth),
       icon: DollarSign,
       color: 'green',
       link: createPageUrl('Faktura'),
-      status: 'good'
+      status: 'good',
+      isToggleable: true
     },
     {
       title: 'Ikke forfalte faktura',
