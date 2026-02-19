@@ -219,7 +219,11 @@ export default function KPISection() {
                     <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
                   </div>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
-                    <kpi.icon className="h-6 w-6" />
+                    {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
+                      <span className="text-lg font-bold">Kr.</span>
+                    ) : (
+                      <kpi.icon className="h-6 w-6" />
+                    )}
                   </div>
                 </div>
               </Card>
