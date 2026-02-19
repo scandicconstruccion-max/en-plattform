@@ -232,31 +232,31 @@ export default function KPISection() {
               <Card className={`border shadow-sm p-5 hover:shadow-md transition-all cursor-pointer ${statusColors[kpi.status]}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{kpi.title}</p>
+                    <div className="flex items-center gap-1 mb-2">
+                      <p className="text-sm text-slate-600 dark:text-slate-400">{kpi.title}</p>
+                      {kpi.isInvoiceCard && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setInvoiceView(prev => prev === 'month' ? 'year' : 'month');
+                          }}
+                          className="toggle-invoice-view p-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors ml-1"
+                          title={invoiceView === 'month' ? 'Vis hittil i år' : 'Vis denne måneden'}
+                        >
+                          <ArrowRightLeft className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" />
+                        </button>
+                      )}
+                    </div>
                     <div className="flex items-baseline gap-2">
                       <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2 items-end">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
-                      {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
-                        <span className="text-lg font-bold">Kr.</span>
-                      ) : (
-                        <kpi.icon className="h-6 w-6" />
-                      )}
-                    </div>
-                    {kpi.isInvoiceCard && (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setInvoiceView(prev => prev === 'month' ? 'year' : 'month');
-                        }}
-                        className="toggle-invoice-view w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
-                        title={invoiceView === 'month' ? 'Vis hittil i år' : 'Vis denne måneden'}
-                      >
-                        <ArrowRightLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                      </button>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
+                    {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
+                      <span className="text-lg font-bold">Kr.</span>
+                    ) : (
+                      <kpi.icon className="h-6 w-6" />
                     )}
                   </div>
                 </div>
