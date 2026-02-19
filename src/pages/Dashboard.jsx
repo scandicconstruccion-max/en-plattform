@@ -9,7 +9,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import {
-  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, DollarSign
+  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -145,7 +145,7 @@ export default function Dashboard() {
           <Card className="border-0 shadow-sm dark:bg-slate-900 p-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">Kr.</span>
               </div>
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Omsetning denne måneden</p>
