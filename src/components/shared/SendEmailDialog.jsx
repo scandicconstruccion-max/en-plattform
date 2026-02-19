@@ -91,11 +91,11 @@ export default function SendEmailDialog({
         htmlBody = generateQuoteEmailHTML({ ...item, approval_token: approvalToken }, approvalUrl);
       }
 
-      // Send email with HTML body if available
+      // Send email with body (and html if available)
       await base44.integrations.Core.SendEmail({
         to: email,
         subject: subject,
-        html: htmlBody || message
+        body: htmlBody || message
       });
 
       const now = new Date().toISOString();
