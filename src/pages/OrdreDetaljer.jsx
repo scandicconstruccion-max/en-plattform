@@ -189,7 +189,7 @@ export default function OrdreDetaljer() {
         {/* Chronology Timeline */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
           <CardHeader>
-            <CardTitle>Kronologi</CardTitle>
+            <CardTitle>Aktivitetslogg</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -202,6 +202,11 @@ export default function OrdreDetaljer() {
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     {format(new Date(order.created_date), 'd. MMMM yyyy HH:mm', { locale: nb })}
                   </p>
+                  {order.created_by && (
+                    <p className="text-sm text-slate-400 dark:text-slate-500">
+                      Opprettet av: {order.created_by}
+                    </p>
+                  )}
                 </div>
               </div>
 
