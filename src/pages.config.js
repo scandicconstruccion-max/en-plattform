@@ -72,6 +72,7 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
+import OrdreDetaljer from './pages/OrdreDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -101,6 +102,7 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
+    "OrdreDetaljer": OrdreDetaljer,
 }
 
 export const pagesConfig = {

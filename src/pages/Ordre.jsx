@@ -24,8 +24,9 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import OrderForm from '@/components/ordre/OrderForm';
 import { 
   FileText, Search, Plus, Building2, Calendar, 
-  ChevronRight, Send, CheckCircle2, User
+  ChevronRight, Send, CheckCircle2, User, Download, Mail, Eye
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ export default function Ordre() {
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrders, setSelectedOrders] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -158,6 +160,45 @@ export default function Ordre() {
   const handleSendEmail = async (updateData) => {
     await base44.entities.Order.update(selectedOrder.id, updateData);
     queryClient.invalidateQueries({ queryKey: ['orders'] });
+    setShowEmailDialog(false);
+  };
+
+  const handleBulkSend = async () => {
+    for (const orderId of selectedOrders) {
+      const order = orders.find(o => o.id === orderId);
+      if (order && order.customer_email) {
+        await base44.integrations.Core.SendEmail({
+          to: order.customer_email,
+          subject: `Ordre ${order.order_number}`,
+          body: `Hei,\n\nVedlagt finner du ordre ${order.order_number}.\n\nMed vennlig hilsen`
+        });
+        await base44.entities.Order.update(orderId, {
+          sent_to_customer: true,
+          sent_date: new Date().toISOString(),
+          sent_to_email: order.customer_email,
+          status: 'sendt'
+        });
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+    setSelectedOrders([]);
+    toast.success(`${selectedOrders.length} ordre sendt`);
+  };
+
+  const toggleOrderSelection = (orderId) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrders.length === filteredOrders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(filteredOrders.map(o => o.id));
+    }
   };
 
   const getProjectName = (projectId) => {
@@ -198,6 +239,24 @@ export default function Ordre() {
         subtitle="Administrer ordre og arbeidsordre"
         actions={
           <div className="flex gap-2">
+            {selectedOrders.length > 0 && (
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={handleBulkSend}
+                  className="rounded-xl gap-2"
+                >
+                  <Send className="h-4 w-4" /> Send ({selectedOrders.length})
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => setSelectedOrders([])}
+                  className="rounded-xl"
+                >
+                  Avbryt
+                </Button>
+              </>
+            )}
             <Button 
               variant="outline"
               onClick={() => setShowSourceDialog(true)}
@@ -321,67 +380,96 @@ export default function Ordre() {
             onAction={() => setShowCreateDialog(true)}
           />
         ) : (
-          <div className="grid gap-4">
-            {filteredOrders.map((order) => (
-              <Card 
-                key={order.id} 
-                className="p-4 border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-slate-900 dark:text-white">
-                        {order.order_number}
-                      </h3>
-                      <StatusBadge status={order.status} />
-                      {order.source_type !== 'manual' && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                          Fra {order.source_type === 'quote' ? 'Tilbud' : order.source_type === 'deviation' ? 'Avvik' : 'Endring'}
+          <div className="space-y-4">
+            {/* Bulk Actions Header */}
+            {filteredOrders.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                <Checkbox
+                  checked={selectedOrders.length === filteredOrders.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-sm text-slate-600 dark:text-slate-400">
+                  {selectedOrders.length > 0 ? `${selectedOrders.length} valgt` : 'Velg alle'}
+                </span>
+              </div>
+            )}
+
+            <div className="grid gap-4">
+              {filteredOrders.map((order) => (
+                <Card 
+                  key={order.id} 
+                  className="p-4 border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900"
+                >
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedOrders.includes(order.id)}
+                      onCheckedChange={() => toggleOrderSelection(order.id)}
+                    />
+                    <div 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => window.location.href = createPageUrl(`OrdreDetaljer?id=${order.id}`)}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-semibold text-slate-900 dark:text-white">
+                          {order.order_number}
+                        </h3>
+                        <StatusBadge status={order.status} />
+                        {order.source_type !== 'manual' && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                            Fra {order.source_type === 'quote' ? 'Tilbud' : order.source_type === 'deviation' ? 'Avvik' : 'Endring'}
+                          </span>
+                        )}
+                        {order.sent_to_customer && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Sendt {format(new Date(order.sent_date), 'd. MMM HH:mm', { locale: nb })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <User className="h-4 w-4" />
+                          {order.customer_name}
                         </span>
-                      )}
+                        {order.project_id && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="h-4 w-4" />
+                            {getProjectName(order.project_id)}
+                          </span>
+                        )}
+                        {order.due_date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4" />
+                            {format(new Date(order.due_date), 'd. MMM yyyy', { locale: nb })}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 font-semibold">
+                          kr {order.total_amount?.toFixed(2) || '0.00'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <User className="h-4 w-4" />
-                        {order.customer_name}
-                      </span>
-                      {order.project_id && (
-                        <span className="flex items-center gap-1">
-                          <Building2 className="h-4 w-4" />
-                          {getProjectName(order.project_id)}
-                        </span>
+                    <div className="flex items-center gap-2">
+                      {(order.status === 'opprettet' || order.status === 'sendt') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedOrder(order);
+                            setShowEmailDialog(true);
+                          }}
+                          className="rounded-xl gap-1"
+                        >
+                          <Send className="h-4 w-4" />
+                          Send
+                        </Button>
                       )}
-                      {order.due_date && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {format(new Date(order.due_date), 'd. MMM yyyy', { locale: nb })}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1 font-semibold">
-                        kr {order.total_amount?.toFixed(2) || '0.00'}
-                      </span>
+                      <ChevronRight className="h-5 w-5 text-slate-400" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {(order.status === 'opprettet' || order.status === 'sendt') && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowEmailDialog(true);
-                        }}
-                        className="rounded-xl gap-1"
-                      >
-                        <Send className="h-4 w-4" />
-                        Send
-                      </Button>
-                    )}
-                    <ChevronRight className="h-5 w-5 text-slate-400" />
-                  </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              ))}
+            </div>
           </div>
         )}
       </div>
