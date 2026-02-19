@@ -66,6 +66,16 @@ export default function KPISection() {
     })
     .reduce((sum, i) => sum + (i.total_amount || 0), 0);
 
+  // 2b. Fakturert hittil i år
+  const invoicedYearToDate = invoices
+    .filter(i => {
+      if (!i.invoice_date) return false;
+      const invoiceDate = new Date(i.invoice_date);
+      return invoiceDate.getFullYear() === currentYear &&
+             i.status !== 'kladd';
+    })
+    .reduce((sum, i) => sum + (i.total_amount || 0), 0);
+
   // 3. Utestående faktura
   const outstandingInvoices = invoices
     .filter(i => i.status === 'sendt' || i.status === 'forfalt')
@@ -112,6 +122,7 @@ export default function KPISection() {
     {
       title: 'Fakturert denne måneden',
       value: formatAmount(invoicedThisMonth),
+      subtitle: `Hittil i år: ${formatAmount(invoicedYearToDate)}`,
       icon: DollarSign,
       color: 'green',
       link: createPageUrl('Faktura'),
@@ -217,6 +228,9 @@ export default function KPISection() {
                   <div className="flex-1">
                     <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{kpi.title}</p>
                     <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
+                    {kpi.subtitle && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{kpi.subtitle}</p>
+                    )}
                   </div>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
                     {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
