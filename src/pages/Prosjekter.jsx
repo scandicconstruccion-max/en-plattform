@@ -46,10 +46,18 @@ export default function Prosjekter() {
 
   const queryClient = useQueryClient();
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
+
+  const { data: allProjects = [], isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date'),
   });
+  
+  // Filter projects based on user access
+  const projects = user ? filterProjectsByAccess(user, allProjects) : allProjects;
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Project.create(data),

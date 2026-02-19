@@ -2,6 +2,9 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Card } from '@/components/ui/card';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { hasModuleAccess } from '@/components/shared/permissions';
 import {
   AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users,
@@ -53,9 +56,13 @@ export default function ModuleGrid({ activeModules }) {
     queryKey: ['currentUser'],
     queryFn: () => base44.auth.me()
   });
-  const filteredModules = activeModules 
-    ? modules.filter(m => activeModules.includes(m.key))
-    : modules;
+  
+  // Filter modules based on activeModules and user permissions
+  const filteredModules = modules.filter(m => {
+    const isActive = !activeModules || activeModules.includes(m.key);
+    const hasAccess = !user || hasModuleAccess(user, m.key);
+    return isActive && hasAccess;
+  });
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
