@@ -129,7 +129,7 @@ export default function KPISection() {
       status: 'good'
     },
     {
-      title: 'Utestående faktura',
+      title: 'Ikke forfalte faktura',
       value: formatAmount(outstandingInvoices),
       icon: FileText,
       color: 'amber',
