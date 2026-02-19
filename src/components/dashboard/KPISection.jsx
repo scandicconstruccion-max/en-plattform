@@ -10,8 +10,12 @@ import { formatAmount } from '@/components/shared/formatNumber';
 
 export default function KPISection() {
   const [isExpanded, setIsExpanded] = useState(() => {
-    const saved = localStorage.getItem('kpi-section-expanded');
-    return saved ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem('kpi-section-expanded');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
 
   const [invoiceView, setInvoiceView] = useState('month'); // 'month' or 'year'
