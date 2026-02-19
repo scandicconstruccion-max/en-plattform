@@ -14,11 +14,18 @@ export default function KPISection() {
     return saved ? JSON.parse(saved) : true;
   });
 
-  const [invoiceView, setInvoiceView] = useState('month'); // 'month' or 'year'
+  const [showYearToDate, setShowYearToDate] = useState(() => {
+    const saved = localStorage.getItem('kpi-invoice-view');
+    return saved ? JSON.parse(saved) : false;
+  });
 
   useEffect(() => {
     localStorage.setItem('kpi-section-expanded', JSON.stringify(isExpanded));
   }, [isExpanded]);
+
+  useEffect(() => {
+    localStorage.setItem('kpi-invoice-view', JSON.stringify(showYearToDate));
+  }, [showYearToDate]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -122,13 +129,13 @@ export default function KPISection() {
       status: 'neutral'
     },
     {
-      title: invoiceView === 'month' ? 'Fakturert denne måneden' : 'Fakturert hittil i år',
-      value: invoiceView === 'month' ? formatAmount(invoicedThisMonth) : formatAmount(invoicedYearToDate),
+      title: showYearToDate ? 'Fakturert hittil i år' : 'Fakturert denne måneden',
+      value: showYearToDate ? formatAmount(invoicedYearToDate) : formatAmount(invoicedThisMonth),
       icon: DollarSign,
       color: 'green',
       link: createPageUrl('Faktura'),
       status: 'good',
-      isInvoiceCard: true
+      isToggleable: true
     },
     {
       title: 'Ikke forfalte faktura',
@@ -228,13 +235,21 @@ export default function KPISection() {
               <Card className={`border shadow-sm p-5 hover:shadow-md transition-all cursor-pointer ${statusColors[kpi.status]}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{kpi.title}</p>
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
-                      {kpi.subtitle && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{kpi.subtitle}</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <p className="text-sm text-slate-600 dark:text-slate-400">{kpi.title}</p>
+                      {kpi.isToggleable && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setShowYearToDate(!showYearToDate);
+                          }}
+                          className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                        >
+                          <ArrowRightLeft className="h-3.5 w-3.5 text-slate-400" />
+                        </button>
                       )}
                     </div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
                   </div>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
                     {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
