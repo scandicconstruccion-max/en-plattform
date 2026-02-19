@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Mail, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { generateOrderEmailHTML, generateQuoteEmailHTML } from './generateEmailHTML';
 
 export default function SendEmailDialog({ 
   open, 
@@ -63,13 +64,40 @@ export default function SendEmailDialog({
     setSending(true);
     
     try {
+      let approvalToken = item?.approval_token;
+      
+      // Generate approval token if not exists and type is ordre or tilbud
+      if ((type === 'ordre' || type === 'tilbud') && !approvalToken) {
+        approvalToken = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Update the item with the approval token
+        if (type === 'ordre') {
+          await base44.entities.Order.update(item.id, { approval_token: approvalToken });
+        } else if (type === 'tilbud') {
+          await base44.entities.Quote.update(item.id, { approval_token: approvalToken });
+        }
+      }
+
+      // Generate approval URL
+      const approvalUrl = (type === 'ordre' || type === 'tilbud') 
+        ? `${window.location.origin}/${type === 'ordre' ? 'approve-order' : 'approve-quote'}?token=${approvalToken}`
+        : null;
+
+      // Generate HTML email for ordre and tilbud
+      let htmlBody = null;
+      if (type === 'ordre' && approvalUrl) {
+        htmlBody = generateOrderEmailHTML({ ...item, approval_token: approvalToken }, approvalUrl);
+      } else if (type === 'tilbud' && approvalUrl) {
+        htmlBody = generateQuoteEmailHTML({ ...item, approval_token: approvalToken }, approvalUrl);
+      }
+
+      // Send email with HTML body if available
       await base44.integrations.Core.SendEmail({
         to: email,
         subject: subject,
-        body: message
+        body: htmlBody || message
       });
 
-      // Simulate delivery confirmation (in real scenario, this would be tracked via email service)
       const now = new Date().toISOString();
       
       onSent({
@@ -78,6 +106,7 @@ export default function SendEmailDialog({
         sent_to_email: email,
         delivery_confirmed: true,
         delivery_confirmed_date: now,
+        ...(approvalToken ? { approval_token: approvalToken } : {}),
         ...(type === 'tilbud' || type === 'ordre' ? { status: 'sendt' } : {})
       });
 
