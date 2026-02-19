@@ -8,6 +8,7 @@ import StatCard from '@/components/shared/StatCard';
 import StatusBadge from '@/components/shared/StatusBadge';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
+import KPISection from '@/components/dashboard/KPISection';
 import {
   Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText
 } from 'lucide-react';
@@ -102,6 +103,9 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 lg:px-8 py-8 space-y-8">
+        {/* KPI Section - Only for Admin */}
+        {user?.role === 'admin' && <KPISection />}
+
         {/* Modules Grid */}
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Moduler</h2>
