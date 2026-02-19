@@ -227,10 +227,12 @@ export default function KPISection() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{kpi.title}</p>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
-                    {kpi.subtitle && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{kpi.subtitle}</p>
-                    )}
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-2xl font-bold text-slate-900 dark:text-white">{kpi.value}</p>
+                      {kpi.subtitle && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{kpi.subtitle}</p>
+                      )}
+                    </div>
                   </div>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
                     {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
