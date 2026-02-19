@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, Building2, DollarSign, AlertTriangle, Clock, FileText, TrendingUp, CheckCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Building2, DollarSign, AlertTriangle, Clock, FileText, TrendingUp, CheckCircle, ArrowRightLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { formatAmount } from '@/components/shared/formatNumber';
