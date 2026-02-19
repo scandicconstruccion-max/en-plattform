@@ -43,7 +43,8 @@ const moduleIcons = {
   crm: Users,
   kalender: CalendarDays,
   ansatte: Users,
-  minbedrift: Building2
+  minbedrift: Building2,
+  brukeradmin: UserCog
 };
 
 const moduleLabels = {
@@ -66,7 +67,8 @@ const moduleLabels = {
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
-  minbedrift: 'Min bedrift'
+  minbedrift: 'Min bedrift',
+  brukeradmin: 'Brukere'
 };
 
 const modulePages = {
@@ -89,7 +91,8 @@ const modulePages = {
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
-  minbedrift: 'MinBedrift'
+  minbedrift: 'MinBedrift',
+  brukeradmin: 'BrukerAdmin'
 };
 
 export default function Layout({ children, currentPageName }) {
@@ -117,7 +120,7 @@ export default function Layout({ children, currentPageName }) {
     'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler', 
     'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister', 
     'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte', 
-    'crm', 'kalender', 'minbedrift'
+    'crm', 'kalender', 'minbedrift', 'brukeradmin'
   ];
   
   const allModules = user ? allModulesList.filter(moduleKey => hasModuleAccess(user, moduleKey)) : allModulesList;

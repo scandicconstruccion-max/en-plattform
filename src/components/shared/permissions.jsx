@@ -28,7 +28,8 @@ export const MODULES = {
   CRM: 'crm',
   KALENDER: 'kalender',
   ANSATTE: 'ansatte',
-  MINBEDRIFT: 'minbedrift'
+  MINBEDRIFT: 'minbedrift',
+  BRUKERADMIN: 'brukeradmin'
 };
 
 // Definerer hvilke moduler hver rolle har tilgang til
@@ -51,7 +52,8 @@ const roleModuleAccess = {
     MODULES.BESTILLINGER,
     MODULES.CHAT,
     MODULES.RESSURSPLAN,
-    MODULES.KALENDER
+    MODULES.KALENDER,
+    MODULES.ANSATTE
   ],
   [ROLES.ANSATT]: [
     MODULES.DASHBOARD,
@@ -75,6 +77,12 @@ const roleModuleAccess = {
 // Sjekker om bruker har tilgang til en modul
 export function hasModuleAccess(user, moduleKey) {
   if (!user || !user.role) return false;
+  
+  // Sjekk tilpasset modultilgang først
+  if (user.custom_module_access && user.custom_module_access.length > 0) {
+    return user.custom_module_access.includes(moduleKey);
+  }
+  
   const userRole = user.role || ROLES.USER;
   const allowedModules = roleModuleAccess[userRole] || [];
   return allowedModules.includes(moduleKey);
