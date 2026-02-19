@@ -92,11 +92,19 @@ export default function SendEmailDialog({
       }
 
       // Send email with HTML body if available
-      await base44.integrations.Core.SendEmail({
-        to: email,
-        subject: subject,
-        body: htmlBody || message
-      });
+      if (htmlBody) {
+        await base44.integrations.Core.SendEmail({
+          to: email,
+          subject: subject,
+          html: htmlBody
+        });
+      } else {
+        await base44.integrations.Core.SendEmail({
+          to: email,
+          subject: subject,
+          body: message
+        });
+      }
 
       const now = new Date().toISOString();
       
