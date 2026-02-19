@@ -71,6 +71,14 @@ export default function KPISection() {
     .filter(i => i.status === 'sendt' || i.status === 'forfalt')
     .reduce((sum, i) => sum + (i.total_amount || 0), 0);
 
+  // 3b. Forfalte faktura
+  const overdueInvoices = invoices
+    .filter(i => {
+      if (i.status === 'betalt' || i.status === 'kladd') return false;
+      return i.due_date && new Date(i.due_date) < new Date();
+    })
+    .reduce((sum, i) => sum + (i.total_amount || 0), 0);
+
   // 4. Timer brukt vs kalkulert
   const projectsWithTimeOverrun = projects.filter(p => {
     const projectTimesheets = timesheets.filter(t => t.project_id === p.id);
@@ -116,6 +124,14 @@ export default function KPISection() {
       color: 'amber',
       link: createPageUrl('Faktura'),
       status: outstandingInvoices > 100000 ? 'warning' : 'neutral'
+    },
+    {
+      title: 'Forfalte faktura',
+      value: formatAmount(overdueInvoices),
+      icon: AlertTriangle,
+      color: 'red',
+      link: createPageUrl('Faktura'),
+      status: overdueInvoices > 0 ? 'bad' : 'good'
     },
     {
       title: 'Prosjekter over timebudsjett',

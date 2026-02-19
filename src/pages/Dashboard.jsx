@@ -112,69 +112,6 @@ export default function Dashboard() {
           <ModuleGrid activeModules={activeModules} />
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="Aktive prosjekter"
-            value={activeProjects}
-            icon={Building2}
-            iconColor="text-emerald-600"
-            iconBg="bg-emerald-100"
-          />
-          <StatCard
-            title="Åpne avvik"
-            value={openDeviations}
-            icon={AlertTriangle}
-            iconColor="text-amber-600"
-            iconBg="bg-amber-100"
-          />
-          <StatCard
-            title="Ubetalte fakturaer"
-            value={unpaidInvoices}
-            icon={FileText}
-            iconColor="text-blue-600"
-            iconBg="bg-blue-100"
-          />
-          <StatCard
-            title="Forfalte fakturaer"
-            value={overdueInvoices}
-            icon={AlertTriangle}
-            iconColor="text-red-600"
-            iconBg="bg-red-100"
-          />
-        </div>
-
-        {/* Financial Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="border-0 shadow-sm dark:bg-slate-900 p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">Kr.</span>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Omsetning denne måneden</p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {(monthlyRevenue / 1000).toFixed(0)} Kr.
-                </p>
-              </div>
-            </div>
-          </Card>
-          <StatCard
-            title="Timer denne uken"
-            value={totalHoursThisWeek.toFixed(1)}
-            icon={Clock}
-            iconColor="text-blue-600"
-            iconBg="bg-blue-100"
-          />
-          <StatCard
-            title="Totalt prosjekter"
-            value={projects.length}
-            icon={TrendingUp}
-            iconColor="text-purple-600"
-            iconBg="bg-purple-100"
-          />
-        </div>
-
         {/* Bottom Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Projects */}
