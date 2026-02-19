@@ -10,6 +10,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import EditUserPanel from '@/components/admin/EditUserPanel';
 import BulkEditDialog from '@/components/admin/BulkEditDialog';
 import UserAuditLogDialog from '@/components/admin/UserAuditLogDialog';
+import CreateUserDialog from '@/components/admin/CreateUserDialog';
 import { ROLE_LABELS } from '@/components/shared/permissions';
 import { 
   Users, Search, Edit, Trash2, Mail, History, CheckCircle2, XCircle,
@@ -42,6 +43,7 @@ export default function BrukerAdmin() {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
   const [auditLogUser, setAuditLogUser] = useState(null);
   const [deleteUserId, setDeleteUserId] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
@@ -150,6 +152,8 @@ export default function BrukerAdmin() {
         title="Brukeradministrasjon"
         subtitle={`${filteredUsers.length} ${filteredUsers.length === 1 ? 'bruker' : 'brukere'}`}
         icon={Users}
+        onAdd={() => setCreateUserOpen(true)}
+        addLabel="Ny bruker"
       />
 
       <div className="px-6 lg:px-8 py-8 space-y-6">
@@ -383,6 +387,17 @@ export default function BrukerAdmin() {
           </div>
         </Card>
       </div>
+
+      {/* Create User Dialog */}
+      <CreateUserDialog
+        open={createUserOpen}
+        onClose={() => setCreateUserOpen(false)}
+        onCreated={() => {
+          queryClient.invalidateQueries(['users']);
+          setCreateUserOpen(false);
+        }}
+        projects={projects}
+      />
 
       {/* Edit User Panel */}
       {editingUser && (
