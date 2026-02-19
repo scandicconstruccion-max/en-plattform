@@ -14,9 +14,18 @@ export default function KPISection() {
     return saved ? JSON.parse(saved) : true;
   });
 
+  const [showYearToDate, setShowYearToDate] = useState(() => {
+    const saved = localStorage.getItem('kpi-invoice-view');
+    return saved ? JSON.parse(saved) : false;
+  });
+
   useEffect(() => {
     localStorage.setItem('kpi-section-expanded', JSON.stringify(isExpanded));
   }, [isExpanded]);
+
+  useEffect(() => {
+    localStorage.setItem('kpi-invoice-view', JSON.stringify(showYearToDate));
+  }, [showYearToDate]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
