@@ -91,7 +91,7 @@ export default function FakturaDetaljer() {
 
   const { data: orders = [] } = useQuery({
     queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.filter({ status: 'godkjent' })
+    queryFn: () => base44.entities.Order.list()
   });
 
   const { data: employees = [] } = useQuery({
@@ -726,14 +726,17 @@ ${base44.auth.me().then((u) => u.full_name)}
             <DialogHeader>
               <DialogTitle>Velg ordre</DialogTitle>
             </DialogHeader>
-            {orders.length === 0 ?
+            {orders.length === 0 ? (
             <div className="p-8 text-center">
                 <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
                 <p className="text-slate-500 dark:text-slate-400">Ingen tilgjengelige ordre</p>
-              </div> :
-
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                  Ordre må være opprettet i ordre-modulen for å vises her
+                </p>
+              </div>
+            ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
-                {orders.map((order) =>
+                {orders.map((order) => (
               <button
                 key={order.id}
                 onClick={() => importFromOrder(order)}
@@ -744,17 +747,26 @@ ${base44.auth.me().then((u) => u.full_name)}
                           {order.order_number}
                         </p>
                         <p className="text-sm text-slate-600 dark:text-slate-400">
-                          {order.customer_name} - {order.project_name}
+                          {order.customer_name} - {order.project_name || 'Uten prosjekt'}
                         </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            order.status === 'godkjent' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' :
+                            order.status === 'sendt' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
+                            'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
                       </div>
                       <p className="font-bold text-slate-900 dark:text-white">
                         {formatAmount(order.total_amount)}
                       </p>
                     </div>
                   </button>
-              )}
+              ))}
               </div>
-            }
+            )}
           </DialogContent>
         </Dialog>
 
