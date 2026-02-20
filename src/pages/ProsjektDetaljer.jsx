@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/shared/StatCard';
 import ProjectKPISection from '@/components/project/ProjectKPISection';
+import GenerateFDVDialog from '@/components/project/GenerateFDVDialog';
 import {
   Building2, MapPin, Calendar, Users, Clock, AlertTriangle,
   FileText, Camera, CheckSquare, Edit, Mail, Phone, User,
@@ -40,9 +41,11 @@ export default function ProsjektDetaljer() {
   const projectId = urlParams.get('id');
   
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showFDVDialog, setShowFDVDialog] = useState(false);
   const [formData, setFormData] = useState(null);
   
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -167,6 +170,11 @@ export default function ProsjektDetaljer() {
   const totalHours = timesheets.reduce((sum, t) => sum + (t.hours || 0), 0);
   const openDeviations = deviations.filter(d => d.status !== 'lukket').length;
 
+  const handleFDVGenerated = (fdvId) => {
+    setShowFDVDialog(false);
+    navigate(createPageUrl('FDVDetaljer') + `?id=${fdvId}`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
@@ -175,9 +183,20 @@ export default function ProsjektDetaljer() {
         showBack
         backUrl={createPageUrl('Dashboard')}
         actions={
-          <Button variant="outline" onClick={handleEdit} className="rounded-xl gap-2">
-            <Edit className="h-4 w-4" />
-            Rediger
+          <div className="flex gap-2">
+            {project.status === 'fullfort' && (
+              <Button 
+                onClick={() => setShowFDVDialog(true)} 
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+                <FileText className="h-4 w-4" />
+                Generer FDV
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleEdit} className="rounded-xl gap-2">
+              <Edit className="h-4 w-4" />
+              Rediger
+            </Button>
+          </div>
           </Button>
         }
       />
