@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -20,12 +21,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Trash2 } from 'lucide-react';
+import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Trash2, DollarSign, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export default function Ansatte() {
   const [showDialog, setShowDialog] = useState(false);
@@ -47,6 +50,10 @@ export default function Ansatte() {
     end_date: '',
     hourly_rate: '',
     monthly_salary: '',
+    overtime_50_rate: '',
+    overtime_100_rate: '',
+    normal_hours_per_day: 8,
+    normal_hours_per_week: 40,
     bank_account: '',
     emergency_contact_name: '',
     emergency_contact_phone: '',
@@ -56,10 +63,18 @@ export default function Ansatte() {
 
   const queryClient = useQueryClient();
 
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
+
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ['employees'],
     queryFn: () => base44.entities.Employee.list('-created_date'),
   });
+
+  const isAdmin = user?.role === 'admin';
+  const canViewSalary = isAdmin;
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Employee.create(data),
@@ -104,6 +119,10 @@ export default function Ansatte() {
       end_date: '',
       hourly_rate: '',
       monthly_salary: '',
+      overtime_50_rate: '',
+      overtime_100_rate: '',
+      normal_hours_per_day: 8,
+      normal_hours_per_week: 40,
       bank_account: '',
       emergency_contact_name: '',
       emergency_contact_phone: '',
@@ -130,6 +149,10 @@ export default function Ansatte() {
       end_date: employee.end_date || '',
       hourly_rate: employee.hourly_rate || '',
       monthly_salary: employee.monthly_salary || '',
+      overtime_50_rate: employee.overtime_50_rate || '',
+      overtime_100_rate: employee.overtime_100_rate || '',
+      normal_hours_per_day: employee.normal_hours_per_day || 8,
+      normal_hours_per_week: employee.normal_hours_per_week || 40,
       bank_account: employee.bank_account || '',
       emergency_contact_name: employee.emergency_contact_name || '',
       emergency_contact_phone: employee.emergency_contact_phone || '',
@@ -141,11 +164,35 @@ export default function Ansatte() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    const hourlyRate = formData.hourly_rate ? parseFloat(formData.hourly_rate) : null;
+    const overtime50 = formData.overtime_50_rate ? parseFloat(formData.overtime_50_rate) : (hourlyRate ? hourlyRate * 1.5 : null);
+    const overtime100 = formData.overtime_100_rate ? parseFloat(formData.overtime_100_rate) : (hourlyRate ? hourlyRate * 2.0 : null);
+
     const data = {
       ...formData,
-      hourly_rate: formData.hourly_rate ? parseFloat(formData.hourly_rate) : null,
-      monthly_salary: formData.monthly_salary ? parseFloat(formData.monthly_salary) : null
+      hourly_rate: hourlyRate,
+      monthly_salary: formData.monthly_salary ? parseFloat(formData.monthly_salary) : null,
+      overtime_50_rate: overtime50,
+      overtime_100_rate: overtime100,
+      normal_hours_per_day: formData.normal_hours_per_day || 8,
+      normal_hours_per_week: formData.normal_hours_per_week || 40
     };
+
+    // Loggfør lønnsendring
+    if (selectedEmployee && hourlyRate && selectedEmployee.hourly_rate !== hourlyRate) {
+      const history = selectedEmployee.salary_change_history || [];
+      data.salary_change_history = [
+        ...history,
+        {
+          date: new Date().toISOString(),
+          old_hourly_rate: selectedEmployee.hourly_rate,
+          new_hourly_rate: hourlyRate,
+          changed_by: user?.email || 'unknown',
+          note: `Timelønn endret fra ${selectedEmployee.hourly_rate} kr til ${hourlyRate} kr`
+        }
+      ];
+    }
 
     if (selectedEmployee) {
       updateMutation.mutate({ id: selectedEmployee.id, data });
