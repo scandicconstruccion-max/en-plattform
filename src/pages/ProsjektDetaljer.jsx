@@ -51,6 +51,7 @@ export default function ProsjektDetaljer() {
   
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showFDVDialog, setShowFDVDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [formData, setFormData] = useState(null);
   
   const queryClient = useQueryClient();
