@@ -50,7 +50,10 @@ export default function TimesheetForm({
   const [formData, setFormData] = useState({
     project_id: '',
     project_name: '',
-    hours: '',
+    start_time: '',
+    end_time: '',
+    break_minutes: 30,
+    hours: 0,
     work_category: 'ordinært_arbeid',
     work_description: '',
     is_billable: true,
@@ -60,12 +63,37 @@ export default function TimesheetForm({
 
   const [uploading, setUploading] = useState(false);
 
+  // Calculate hours automatically
+  const calculateHours = (start, end, breakMinutes) => {
+    if (!start || !end) return 0;
+    
+    const [startHour, startMin] = start.split(':').map(Number);
+    const [endHour, endMin] = end.split(':').map(Number);
+    
+    const startTotalMinutes = startHour * 60 + startMin;
+    const endTotalMinutes = endHour * 60 + endMin;
+    
+    let totalMinutes = endTotalMinutes - startTotalMinutes;
+    
+    // Handle overnight shifts
+    if (totalMinutes < 0) {
+      totalMinutes += 24 * 60;
+    }
+    
+    totalMinutes -= (breakMinutes || 0);
+    
+    return Math.max(0, totalMinutes / 60);
+  };
+
   useEffect(() => {
     if (timesheet) {
       setFormData({
         project_id: timesheet.project_id,
         project_name: timesheet.project_name,
-        hours: timesheet.hours,
+        start_time: timesheet.start_time || '',
+        end_time: timesheet.end_time || '',
+        break_minutes: timesheet.break_minutes || 30,
+        hours: timesheet.hours || 0,
         work_category: timesheet.work_category,
         work_description: timesheet.work_description,
         is_billable: timesheet.is_billable,
@@ -76,7 +104,10 @@ export default function TimesheetForm({
       setFormData({
         project_id: copyFrom.project_id,
         project_name: copyFrom.project_name,
-        hours: copyFrom.hours,
+        start_time: copyFrom.start_time || '',
+        end_time: copyFrom.end_time || '',
+        break_minutes: copyFrom.break_minutes || 30,
+        hours: copyFrom.hours || 0,
         work_category: copyFrom.work_category,
         work_description: '',
         is_billable: copyFrom.is_billable,
@@ -87,7 +118,10 @@ export default function TimesheetForm({
       setFormData({
         project_id: '',
         project_name: '',
-        hours: '',
+        start_time: '',
+        end_time: '',
+        break_minutes: 30,
+        hours: 0,
         work_category: 'ordinært_arbeid',
         work_description: '',
         is_billable: true,
@@ -96,6 +130,14 @@ export default function TimesheetForm({
       });
     }
   }, [timesheet, copyFrom, open]);
+
+  // Auto-calculate hours when start_time, end_time, or break_minutes change
+  useEffect(() => {
+    const calculatedHours = calculateHours(formData.start_time, formData.end_time, formData.break_minutes);
+    if (calculatedHours !== formData.hours) {
+      setFormData(prev => ({ ...prev, hours: calculatedHours }));
+    }
+  }, [formData.start_time, formData.end_time, formData.break_minutes]);
 
   const saveMutation = useMutation({
     mutationFn: async (data) => {
@@ -143,8 +185,18 @@ export default function TimesheetForm({
       return;
     }
 
+    if (!formData.start_time || !formData.end_time) {
+      toast.error('Fyll inn start- og sluttidspunkt');
+      return;
+    }
+
     if (!formData.work_description || formData.work_description.length < 10) {
       toast.error('Arbeidsbeskrivelse må være minst 10 tegn');
+      return;
+    }
+
+    if (formData.hours <= 0) {
+      toast.error('Arbeidstimer må være større enn 0');
       return;
     }
 
@@ -153,7 +205,8 @@ export default function TimesheetForm({
     saveMutation.mutate({
       ...formData,
       project_name: selectedProject?.name || formData.project_name,
-      hours: parseFloat(formData.hours)
+      hours: formData.hours,
+      break_minutes: formData.break_minutes || 0
     });
   };
 
@@ -235,29 +288,56 @@ export default function TimesheetForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Timer *</Label>
+              <Label>Fra kl. *</Label>
               <Input
-                type="number"
-                step="0.5"
-                min="0"
-                max="24"
-                value={formData.hours}
-                onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                type="time"
+                value={formData.start_time}
+                onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Kjøring (km)</Label>
+              <Label>Til kl. *</Label>
+              <Input
+                type="time"
+                value={formData.end_time}
+                onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Pause (min)</Label>
               <Input
                 type="number"
                 min="0"
-                value={formData.mileage_km}
-                onChange={(e) => setFormData({ ...formData, mileage_km: parseFloat(e.target.value) || 0 })}
+                step="15"
+                value={formData.break_minutes}
+                onChange={(e) => setFormData({ ...formData, break_minutes: parseInt(e.target.value) || 0 })}
               />
             </div>
+          </div>
+
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-700">Totalt arbeidet:</span>
+              <span className="text-2xl font-bold text-emerald-600">
+                {formData.hours.toFixed(2)} timer
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Kjøring (km)</Label>
+            <Input
+              type="number"
+              min="0"
+              value={formData.mileage_km}
+              onChange={(e) => setFormData({ ...formData, mileage_km: parseFloat(e.target.value) || 0 })}
+            />
           </div>
 
           <div className="space-y-2">
