@@ -70,7 +70,6 @@ export default function FileUploadSection({
         if (!skipOptimization && file.type.startsWith('image/')) {
           try {
             fileToUpload = await optimizeImage(file);
-            toast.success(`Bilde optimalisert: ${file.name}`);
           } catch (error) {
             console.warn('Image optimization failed, uploading original', error);
           }
