@@ -441,123 +441,122 @@ export default function Tilbud() {
               <DialogTitle>Nytt tilbud</DialogTitle>
             </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Customer Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Kundenavn *</Label>
-                  <Input
-                    value={formData.customer_name}
-                    onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>E-post</Label>
-                  <Input
-                    type="email"
-                    value={formData.customer_email}
-                    onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Telefon</Label>
-                  <Input
-                    value={formData.customer_phone}
-                    onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Gyldig til</Label>
-                  <Input
-                    type="date"
-                    value={formData.valid_until}
-                    onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
-                  />
-                </div>
-              </div>
-
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Customer Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Prosjektbeskrivelse</Label>
-                <Textarea
-                  value={formData.project_description}
-                  onChange={(e) => setFormData({ ...formData, project_description: e.target.value })}
-                  rows={3}
+                <Label>Kundenavn *</Label>
+                <Input
+                  value={formData.customer_name}
+                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                  required
                 />
               </div>
-
-              {/* Items */}
-              <div className="space-y-3">
-                <Label>Linjer</Label>
-                {formData.items.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-4">
-                      <Input
-                        placeholder="Beskrivelse"
-                        value={item.description}
-                        onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Input
-                        type="number"
-                        placeholder="Antall"
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Input
-                        placeholder="Enhet"
-                        value={item.unit}
-                        onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-span-3">
-                      <Input
-                        type="number"
-                        placeholder="Enhetspris"
-                        value={item.unit_price}
-                        onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div className="col-span-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveItem(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleAddItem}
-                  className="w-full rounded-xl"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Legg til linje
-                </Button>
+              <div className="space-y-2">
+                <Label>E-post</Label>
+                <Input
+                  type="email"
+                  value={formData.customer_email}
+                  onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
+                />
               </div>
+              <div className="space-y-2">
+                <Label>Telefon</Label>
+                <Input
+                  value={formData.customer_phone}
+                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Gyldig til</Label>
+                <Input
+                  type="date"
+                  value={formData.valid_until}
+                  onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
+                />
+              </div>
+            </div>
 
-              {/* Totals */}
-              <div className="space-y-2 text-right">
-                <div className="flex justify-end gap-8">
-                  <span className="text-slate-600">Subtotal:</span>
-                  <span className="font-medium w-32">{calculateTotal(formData.items).toLocaleString('nb-NO')} kr</span>
+            <div className="space-y-2">
+              <Label>Prosjektbeskrivelse</Label>
+              <Textarea
+                value={formData.project_description}
+                onChange={(e) => setFormData({ ...formData, project_description: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            {/* Items */}
+            <div className="space-y-3">
+              <Label>Linjer</Label>
+              {formData.items.map((item, index) => (
+                <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-4">
+                    <Input
+                      placeholder="Beskrivelse"
+                      value={item.description}
+                      onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input
+                      type="number"
+                      placeholder="Antall"
+                      value={item.quantity}
+                      onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input
+                      placeholder="Enhet"
+                      value={item.unit}
+                      onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <Input
+                      type="number"
+                      placeholder="Enhetspris"
+                      value={item.unit_price}
+                      onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveItem(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-8">
-                  <span className="text-slate-600">MVA (25%):</span>
-                  <span className="font-medium w-32">{(calculateTotal(formData.items) * 0.25).toLocaleString('nb-NO')} kr</span>
-                </div>
-                <div className="flex justify-end gap-8 pt-2 border-t">
-                  <span className="font-semibold">Totalt ink. mva:</span>
-                  <span className="font-bold w-32">{(calculateTotal(formData.items) * 1.25).toLocaleString('nb-NO')} kr</span>
-                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAddItem}
+                className="w-full rounded-xl"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Legg til linje
+              </Button>
+            </div>
+
+            {/* Totals */}
+            <div className="space-y-2 text-right">
+              <div className="flex justify-end gap-8">
+                <span className="text-slate-600">Subtotal:</span>
+                <span className="font-medium w-32">{calculateTotal(formData.items).toLocaleString('nb-NO')} kr</span>
+              </div>
+              <div className="flex justify-end gap-8">
+                <span className="text-slate-600">MVA (25%):</span>
+                <span className="font-medium w-32">{(calculateTotal(formData.items) * 0.25).toLocaleString('nb-NO')} kr</span>
+              </div>
+              <div className="flex justify-end gap-8 pt-2 border-t">
+                <span className="font-semibold">Totalt ink. mva:</span>
+                <span className="font-bold w-32">{(calculateTotal(formData.items) * 1.25).toLocaleString('nb-NO')} kr</span>
               </div>
             </div>
 
