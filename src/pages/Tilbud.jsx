@@ -186,7 +186,8 @@ export default function Tilbud() {
       status: 'utkast',
       revision_number: formData.revision_number || 0,
       is_revision: formData.is_revision || false,
-      parent_quote_id: formData.parent_quote_id || null
+      parent_quote_id: formData.parent_quote_id || null,
+      attachment_urls: attachments.map(a => a.file_url).filter(Boolean)
     };
 
     createMutation.mutate(quoteData);
