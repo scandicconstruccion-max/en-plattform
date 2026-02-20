@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import { MessageSquare, Send, Hash, Users, Plus } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -140,11 +147,26 @@ export default function Chat() {
           {/* Chat Area */}
           <Card className="flex-1 border-0 shadow-sm flex flex-col overflow-hidden">
             {/* Channel Header */}
-            <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-              <Hash className="h-5 w-5 text-slate-400" />
-              <h2 className="font-semibold text-slate-900">
-                {defaultChannels.find(c => c.id === activeChannel)?.name || activeChannel}
-              </h2>
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Hash className="h-5 w-5 text-slate-400" />
+                <h2 className="font-semibold text-slate-900">
+                  {defaultChannels.find(c => c.id === activeChannel)?.name || activeChannel}
+                </h2>
+              </div>
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger className="w-48 rounded-xl">
+                  <SelectValue placeholder="Prosjekt" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle prosjekter</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Messages */}
