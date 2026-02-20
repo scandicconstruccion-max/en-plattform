@@ -298,6 +298,32 @@ export default function Prosjekter() {
                   className="mt-1.5 rounded-xl"
                 />
               </div>
+               <div className="col-span-2">
+                 <Label>Prosjektleder</Label>
+                 <Select 
+                   value={formData.project_manager} 
+                   onValueChange={(v) => {
+                     const emp = employees.find(e => e.email === v);
+                     setFormData({
+                       ...formData, 
+                       project_manager: v,
+                       project_manager_name: emp ? `${emp.first_name} ${emp.last_name}` : ''
+                     });
+                   }}
+                 >
+                   <SelectTrigger className="mt-1.5 rounded-xl">
+                     <SelectValue placeholder="Velg prosjektleder" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {employees.map((emp) => (
+                       <SelectItem key={emp.id} value={emp.email}>
+                         {emp.first_name} {emp.last_name}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
+               </div>
+
               <div className="col-span-2">
                 <Label>Beskrivelse</Label>
                 <Textarea
