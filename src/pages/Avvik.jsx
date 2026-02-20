@@ -203,11 +203,11 @@ export default function Avvik() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle prosjekter</SelectItem>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
+              {projects.map((project) =>
+              <SelectItem key={project.id} value={project.id}>
                   {project.name}
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -463,7 +463,7 @@ export default function Avvik() {
             <div className="p-4 bg-slate-50 rounded-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-amber-600" />
+                  
                   <Label className="font-medium">Kostnadskonsekvens</Label>
                 </div>
                 <Switch
