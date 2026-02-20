@@ -303,13 +303,13 @@ export default function Tilbud() {
 
                   <Download className="h-4 w-4" /> Last ned
                 </Button>
-                <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(true)}
-              className="rounded-xl gap-2 text-red-600 hover:text-red-700">
+                
 
-                  <Trash2 className="h-4 w-4" /> Slett
-                </Button>
+
+
+
+
+
                 <Button
               variant="outline"
               onClick={() => setSelectedQuotes([])}
@@ -798,22 +798,22 @@ export default function Tilbud() {
                     </Button>
                 }
                 </div>
-                {selectedQuote.status !== 'avvist' && selectedQuote.status !== 'utlopt' && (
-                  <Button
-                    onClick={() => {
-                      updateMutation.mutate({
-                        id: selectedQuote.id,
-                        data: { status: 'avvist' }
-                      });
-                      setShowDetailDialog(false);
-                      toast.success('Tilbud markert som ikke akseptert');
-                    }}
-                    variant="outline"
-                    className="w-full rounded-xl gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300">
+                {selectedQuote.status !== 'avvist' && selectedQuote.status !== 'utlopt' &&
+              <Button
+                onClick={() => {
+                  updateMutation.mutate({
+                    id: selectedQuote.id,
+                    data: { status: 'avvist' }
+                  });
+                  setShowDetailDialog(false);
+                  toast.success('Tilbud markert som ikke akseptert');
+                }}
+                variant="outline"
+                className="w-full rounded-xl gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300">
                     <X className="h-4 w-4" />
                     Marker som ikke akseptert
                   </Button>
-                )}
+              }
               </div>
             </div>
           }
