@@ -833,21 +833,6 @@ export default function Tilbud() {
     </div>
   );
 }
-                      <TableHead className="w-[15%]">Enhet</TableHead>
-                      <TableHead className="w-[15%]">Pris</TableHead>
-                      <TableHead className="w-[15%] text-right">Sum</TableHead>
-                      <TableHead className="w-[40px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {formData.items.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <Input
-                            value={item.description}
-                            onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                            placeholder="Beskrivelse"
-                            className="border-0 p-0 h-8 focus-visible:ring-0"
                           />
                         </TableCell>
                         <TableCell>
