@@ -651,6 +651,19 @@ ${base44.auth.me().then((u) => u.full_name)}
           </CardContent>
         </Card>
 
+        {/* File Upload Section */}
+        {isEditable && (
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-6">
+              <FileUploadSection
+                attachments={attachments}
+                onAttachmentsChange={setAttachments}
+                projectId={formData.project_id}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Totals */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
           <CardContent className="p-6">
