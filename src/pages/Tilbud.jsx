@@ -580,15 +580,21 @@ export default function Tilbud() {
 
             {/* Items */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-base font-semibold">Linjer</Label>
-                <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
-                  
-                  <span className="mx-24 pr-64 pl-4 text-center w-[16%]">Mengde</span>
-                  <span className="w-[16%] text-center">Enhet</span>
-                  <span className="w-[25%] text-right">Enhetspris</span>
-                  <span className="w-[10%]"></span>
+              <Label className="text-base font-semibold mb-2 block">Linjer</Label>
+              <div className="grid grid-cols-12 gap-2 mb-2">
+                <div className="col-span-4">
+                  <span className="text-xs font-medium text-slate-500">Beskrivelse</span>
                 </div>
+                <div className="col-span-2">
+                  <span className="text-xs font-medium text-slate-500">Mengde</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-xs font-medium text-slate-500">Enhet</span>
+                </div>
+                <div className="col-span-3">
+                  <span className="text-xs font-medium text-slate-500">Enhetspris</span>
+                </div>
+                <div className="col-span-1"></div>
               </div>
               {formData.items.map((item, index) =>
               <div key={index} className="grid grid-cols-12 gap-2 items-end">
