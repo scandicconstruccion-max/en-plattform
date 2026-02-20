@@ -51,6 +51,7 @@ import Ansatte from './pages/Ansatte';
 import ApproveOrder from './pages/ApproveOrder';
 import ApproveQuote from './pages/ApproveQuote';
 import Avvik from './pages/Avvik';
+import AvvikDetaljer from './pages/AvvikDetaljer';
 import Befaring from './pages/Befaring';
 import Bestillinger from './pages/Bestillinger';
 import Bildedok from './pages/Bildedok';
@@ -76,7 +77,7 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import AvvikDetaljer from './pages/AvvikDetaljer';
+import ApproveDeviation from './pages/ApproveDeviation';
 import __Layout from './Layout.jsx';
 
 
@@ -85,6 +86,7 @@ export const PAGES = {
     "ApproveOrder": ApproveOrder,
     "ApproveQuote": ApproveQuote,
     "Avvik": Avvik,
+    "AvvikDetaljer": AvvikDetaljer,
     "Befaring": Befaring,
     "Bestillinger": Bestillinger,
     "Bildedok": Bildedok,
@@ -110,7 +112,7 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "AvvikDetaljer": AvvikDetaljer,
+    "ApproveDeviation": ApproveDeviation,
 }
 
 export const pagesConfig = {
