@@ -933,6 +933,13 @@ export default function ProsjektDetaljer() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Generate FDV Dialog */}
+      <GenerateFDVDialog
+        open={showFDVDialog}
+        onClose={handleFDVGenerated}
+        project={project}
+      />
     </div>
   );
 }
