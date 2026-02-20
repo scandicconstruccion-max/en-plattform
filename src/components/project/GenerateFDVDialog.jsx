@@ -15,6 +15,7 @@ import {
 import { FileText, Download, CheckCircle2, Loader2, Archive } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { generateFDVPDF } from './FDVPDFGenerator';
 
 export default function GenerateFDVDialog({ open, onClose, project }) {
   const [generating, setGenerating] = useState(false);
