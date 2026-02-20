@@ -271,6 +271,13 @@ export default function AvvikDetaljer() {
                 />
               </div>
 
+              <FileUploadSection 
+                attachments={attachments}
+                onAttachmentsChange={setAttachments}
+                projectId={deviation.project_id}
+                moduleType="deviation"
+              />
+
               <div className="border-t pt-6 space-y-4">
                 <h3 className="font-semibold text-slate-900">Kostnadskonsekvensar</h3>
                 <div className="flex items-center gap-3">
