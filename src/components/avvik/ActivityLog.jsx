@@ -43,7 +43,7 @@ export default function ActivityLog({ activityLog = [] }) {
                   {actionLabels[activity.action] || activity.action}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {format(new Date(activity.timestamp), 'dd.MM.yyyy HH:mm', { locale: nbNO })}
+                  {format(new Date(activity.timestamp), 'dd.MM.yyyy HH:mm', { locale: nb })}
                 </span>
               </div>
               <div className="text-xs text-slate-600">
