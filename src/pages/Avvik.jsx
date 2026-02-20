@@ -26,6 +26,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
+import FileUploadSection from '@/components/shared/FileUploadSection';
 import { AlertTriangle, Search, Calendar, User, DollarSign, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -53,6 +54,7 @@ export default function Avvik() {
     cost_description: '',
     cost_responsible: ''
   });
+  const [attachments, setAttachments] = useState([]);
 
   const queryClient = useQueryClient();
 
@@ -98,13 +100,15 @@ export default function Avvik() {
       cost_description: '',
       cost_responsible: ''
     });
+    setAttachments([]);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     createMutation.mutate({
       ...formData,
-      cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null
+      cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
+      images: attachments.map(a => a.file_url).filter(Boolean)
     });
   };
 
@@ -458,6 +462,13 @@ export default function Avvik() {
                 className="mt-1.5 rounded-xl" />
 
             </div>
+
+            {/* File Upload Section */}
+            <FileUploadSection
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              projectId={formData.project_id}
+            />
 
             {/* Cost Consequence Section */}
             <div className="p-4 bg-slate-50 rounded-xl space-y-4">
