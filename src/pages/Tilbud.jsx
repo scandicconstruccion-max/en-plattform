@@ -832,12 +832,6 @@ export default function Tilbud() {
     </div>
   );
 }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={item.quantity}
                             onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                             className="border-0 p-0 h-8 focus-visible:ring-0 w-16"
                           />
