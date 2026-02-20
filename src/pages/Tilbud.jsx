@@ -44,7 +44,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
-import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit } from 'lucide-react';
+import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
