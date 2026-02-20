@@ -114,16 +114,16 @@ export default function Layout({ children, currentPageName }) {
   });
 
   const company = companies?.[0];
-  
+
   // Filter modules based on user role
   const allModulesList = [
-    'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler', 
-    'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister', 
-    'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte', 
-    'crm', 'kalender', 'minbedrift', 'brukeradmin'
-  ];
-  
-  const allModules = user ? allModulesList.filter(moduleKey => hasModuleAccess(user, moduleKey)) : allModulesList;
+  'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler',
+  'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister',
+  'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte',
+  'crm', 'kalender', 'minbedrift', 'brukeradmin'];
+
+
+  const allModules = user ? allModulesList.filter((moduleKey) => hasModuleAccess(user, moduleKey)) : allModulesList;
 
 
   useEffect(() => {
@@ -159,7 +159,7 @@ export default function Layout({ children, currentPageName }) {
 
             {sidebarOpen ? <X className="h-7 w-7" /> : <Menu className="h-7 w-7" />}
           </Button>
-          <span className="font-semibold text-slate-900 dark:text-white">En Plattform</span>
+          <span className="text-green-600 font-semibold dark:text-white">En Plattform</span>
           <ProjectDropdown />
         </header>
       }
@@ -187,15 +187,15 @@ export default function Layout({ children, currentPageName }) {
         {!isMobile &&
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 dark:border-slate-800">
             <div className={cn("flex items-center gap-3", sidebarCollapsed && "justify-center w-full")}>
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
-                <Building2 className="h-5 w-5 text-white" />
-              </div>
-              {!sidebarCollapsed && (
-                <div className="flex flex-col">
-                  <span className="font-bold text-xl text-slate-900 dark:text-white">En Plattform</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 italic">Av håndverkeren, for håndverkeren</span>
+              
+
+
+              {!sidebarCollapsed &&
+            <div className="flex flex-col">
+                  <span className="text-green-700 text-2xl font-bold dark:text-white">En Plattform</span>
+                  <span className="text-green-700 text-sm font-semibold dark:text-slate-400 italic">Av håndverkeren,            for håndverkeren</span>
                 </div>
-              )}
+            }
             </div>
           </div>
         }
