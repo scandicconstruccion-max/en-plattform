@@ -211,6 +211,19 @@ export default function FDV() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-48 rounded-xl dark:bg-slate-900 dark:border-slate-700">
+              <SelectValue placeholder="Prosjekt" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle prosjekter</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* List */}

@@ -21,6 +21,7 @@ const defaultChannels = [
 export default function Chat() {
   const [activeChannel, setActiveChannel] = useState('general');
   const [message, setMessage] = useState('');
+  const [projectFilter, setProjectFilter] = useState('all');
   const messagesEndRef = useRef(null);
 
   const queryClient = useQueryClient();
