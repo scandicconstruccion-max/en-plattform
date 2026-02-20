@@ -25,6 +25,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
+import FileUploadSection from '@/components/shared/FileUploadSection';
 import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -44,6 +45,7 @@ export default function Endringsmeldinger() {
     amount: '',
     status: 'utkast'
   });
+  const [attachments, setAttachments] = useState([]);
 
   const queryClient = useQueryClient();
 
