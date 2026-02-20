@@ -12,15 +12,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+  DialogFooter } from
+'@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,16 +29,16 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  AlertDialogTitle } from
+'@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  TableRow } from
+'@/components/ui/table';
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
@@ -74,17 +74,17 @@ export default function Tilbud() {
 
   const { data: quotes = [], isLoading } = useQuery({
     queryKey: ['quotes'],
-    queryFn: () => base44.entities.Quote.list('-created_date'),
+    queryFn: () => base44.entities.Quote.list('-created_date')
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list()
   });
 
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
-    queryFn: () => base44.entities.Company.list(),
+    queryFn: () => base44.entities.Company.list()
   });
 
   const company = companies?.[0];
@@ -95,14 +95,14 @@ export default function Tilbud() {
       queryClient.invalidateQueries({ queryKey: ['quotes'] });
       setShowDialog(false);
       resetForm();
-    },
+    }
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Quote.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotes'] });
-    },
+    }
   });
 
   const deleteMutation = useMutation({
@@ -158,18 +158,18 @@ export default function Tilbud() {
   };
 
   const calculateTotal = (items) => {
-    return items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const total = calculateTotal(formData.items);
     const vat = total * 0.25;
-    
+
     const quoteData = {
       ...formData,
       quote_number: formData.quote_number || `T-${Date.now().toString().slice(-6)}`,
-      items: formData.items.map(item => ({
+      items: formData.items.map((item) => ({
         ...item,
         total: item.quantity * item.unit_price
       })),
@@ -180,7 +180,7 @@ export default function Tilbud() {
       is_revision: formData.is_revision || false,
       parent_quote_id: formData.parent_quote_id || null
     };
-    
+
     createMutation.mutate(quoteData);
   };
 
@@ -190,33 +190,33 @@ export default function Tilbud() {
   };
 
   const handleEmailSent = (updateData) => {
-    updateMutation.mutate({ 
-      id: selectedQuote.id, 
-      data: updateData 
+    updateMutation.mutate({
+      id: selectedQuote.id,
+      data: updateData
     });
     setSelectedQuote(null);
   };
 
   const activeQuotes = useMemo(() => {
-    return quotes.filter(q => q.status !== 'avvist' && q.status !== 'utlopt');
+    return quotes.filter((q) => q.status !== 'avvist' && q.status !== 'utlopt');
   }, [quotes]);
 
   const rejectedQuotes = useMemo(() => {
-    return quotes.filter(q => q.status === 'avvist' || q.status === 'utlopt');
+    return quotes.filter((q) => q.status === 'avvist' || q.status === 'utlopt');
   }, [quotes]);
 
   const filteredQuotes = useMemo(() => {
-    return activeQuotes.filter(q => {
+    return activeQuotes.filter((q) => {
       const matchesSearch = q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-             q.quote_number?.toLowerCase().includes(search.toLowerCase());
+      q.quote_number?.toLowerCase().includes(search.toLowerCase());
       const matchesProject = projectFilter === 'all' || q.project_id === projectFilter;
       return matchesSearch && matchesProject;
     });
   }, [activeQuotes, search, projectFilter]);
 
   const toggleSelectQuote = (quoteId) => {
-    setSelectedQuotes(prev =>
-      prev.includes(quoteId) ? prev.filter(id => id !== quoteId) : [...prev, quoteId]
+    setSelectedQuotes((prev) =>
+    prev.includes(quoteId) ? prev.filter((id) => id !== quoteId) : [...prev, quoteId]
     );
   };
 
@@ -224,12 +224,12 @@ export default function Tilbud() {
     if (selectedQuotes.length === filteredQuotes.length) {
       setSelectedQuotes([]);
     } else {
-      setSelectedQuotes(filteredQuotes.map(q => q.id));
+      setSelectedQuotes(filteredQuotes.map((q) => q.id));
     }
   };
 
   const handleBulkSend = async () => {
-    const quotesToSend = quotes.filter(q => selectedQuotes.includes(q.id));
+    const quotesToSend = quotes.filter((q) => selectedQuotes.includes(q.id));
     for (const quote of quotesToSend) {
       handleSendEmail(quote);
     }
@@ -238,7 +238,7 @@ export default function Tilbud() {
   };
 
   const handleBulkDownload = async () => {
-    const quotesToDownload = quotes.filter(q => selectedQuotes.includes(q.id));
+    const quotesToDownload = quotes.filter((q) => selectedQuotes.includes(q.id));
     for (const quote of quotesToDownload) {
       await generatePDF(quote);
     }
@@ -256,10 +256,10 @@ export default function Tilbud() {
 
   const handleReviseQuote = async (quote) => {
     const newRevisionNumber = (quote.revision_number || 0) + 1;
-    const baseQuoteNumber = quote.parent_quote_id ? 
-      quotes.find(q => q.id === quote.parent_quote_id)?.quote_number : 
-      quote.quote_number;
-    
+    const baseQuoteNumber = quote.parent_quote_id ?
+    quotes.find((q) => q.id === quote.parent_quote_id)?.quote_number :
+    quote.quote_number;
+
     const revisedQuote = {
       ...formData,
       quote_number: baseQuoteNumber,
@@ -274,7 +274,7 @@ export default function Tilbud() {
       is_revision: true,
       status: 'utkast'
     };
-    
+
     setFormData(revisedQuote);
     setShowDialog(true);
     toast.info(`Oppretter revisjon ${newRevisionNumber}`);
@@ -286,51 +286,51 @@ export default function Tilbud() {
         title="Tilbud"
         subtitle={`${activeQuotes.length} aktive tilbud${rejectedQuotes.length > 0 ? ` • ${rejectedQuotes.length} ikke akseptert` : ''}`}
         actions={
-          <div className="flex gap-2">
-            {selectedQuotes.length > 0 && (
-              <>
-                <Button 
-                  variant="outline"
-                  onClick={handleBulkSend}
-                  className="rounded-xl gap-2"
-                >
+        <div className="flex gap-2">
+            {selectedQuotes.length > 0 &&
+          <>
+                <Button
+              variant="outline"
+              onClick={handleBulkSend}
+              className="rounded-xl gap-2">
+
                   <Send className="h-4 w-4" /> Send ({selectedQuotes.length})
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={handleBulkDownload}
-                  className="rounded-xl gap-2"
-                >
+                <Button
+              variant="outline"
+              onClick={handleBulkDownload}
+              className="rounded-xl gap-2">
+
                   <Download className="h-4 w-4" /> Last ned
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  className="rounded-xl gap-2 text-red-600 hover:text-red-700"
-                >
+                <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="rounded-xl gap-2 text-red-600 hover:text-red-700">
+
                   <Trash2 className="h-4 w-4" /> Slett
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => setSelectedQuotes([])}
-                  className="rounded-xl"
-                >
+                <Button
+              variant="outline"
+              onClick={() => setSelectedQuotes([])}
+              className="rounded-xl">
+
                   Avbryt
                 </Button>
               </>
-            )}
-            <Button 
-              onClick={() => {
-                resetForm();
-                setShowDialog(true);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-            >
+          }
+            <Button
+            onClick={() => {
+              resetForm();
+              setShowDialog(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+
               <Plus className="h-4 w-4" /> Nytt tilbud
             </Button>
           </div>
-        }
-      />
+        } />
+
 
       <div className="px-6 lg:px-8 py-6">
         {/* Filters */}
@@ -341,8 +341,8 @@ export default function Tilbud() {
               placeholder="Søk etter tilbud..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 rounded-xl border-slate-200"
-            />
+              className="pl-10 rounded-xl border-slate-200" />
+
           </div>
           <Select value={projectFilter} onValueChange={setProjectFilter}>
             <SelectTrigger className="w-full sm:w-48 rounded-xl">
@@ -350,65 +350,65 @@ export default function Tilbud() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle prosjekter</SelectItem>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
+              {projects.map((project) =>
+              <SelectItem key={project.id} value={project.id}>
                   {project.name}
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
         </div>
 
         {/* Quotes List */}
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1,2,3].map(i => (
-              <Card key={i} className="p-6 animate-pulse">
+        {isLoading ?
+        <div className="space-y-4">
+            {[1, 2, 3].map((i) =>
+          <Card key={i} className="p-6 animate-pulse">
                 <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
                 <div className="h-4 bg-slate-200 rounded w-1/2" />
               </Card>
-            ))}
-          </div>
-        ) : filteredQuotes.length === 0 ? (
-          <EmptyState
-            icon={FileSpreadsheet}
-            title="Ingen tilbud"
-            description="Opprett tilbud til dine kunder"
-            actionLabel="Nytt tilbud"
-            onAction={() => {
-              resetForm();
-              setShowDialog(true);
-            }}
-          />
-        ) : (
-          <>
+          )}
+          </div> :
+        filteredQuotes.length === 0 ?
+        <EmptyState
+          icon={FileSpreadsheet}
+          title="Ingen tilbud"
+          description="Opprett tilbud til dine kunder"
+          actionLabel="Nytt tilbud"
+          onAction={() => {
+            resetForm();
+            setShowDialog(true);
+          }} /> :
+
+
+        <>
             <div className="space-y-4">
               {/* Bulk Select Header */}
-              {filteredQuotes.length > 0 && (
-                <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-slate-200">
+              {filteredQuotes.length > 0 &&
+            <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-slate-200">
                   <Checkbox
-                    checked={selectedQuotes.length === filteredQuotes.length}
-                  onCheckedChange={toggleSelectAll}
-                />
+                checked={selectedQuotes.length === filteredQuotes.length}
+                onCheckedChange={toggleSelectAll} />
+
                 <span className="text-sm text-slate-600">
                   {selectedQuotes.length > 0 ? `${selectedQuotes.length} valgt` : 'Velg alle'}
                 </span>
               </div>
-            )}
+            }
 
             <div className="grid gap-4">
-              {filteredQuotes.map((quote) => (
-                <Card
-                  key={quote.id}
-                  className="p-4 border-0 shadow-sm hover:shadow-md transition-all"
-                >
+              {filteredQuotes.map((quote) =>
+              <Card
+                key={quote.id}
+                className="p-4 border-0 shadow-sm hover:shadow-md transition-all">
+
                   <div className="flex items-start gap-4">
                     {/* Checkbox */}
                     <div className="pt-1">
                       <Checkbox
-                        checked={selectedQuotes.includes(quote.id)}
-                        onCheckedChange={() => toggleSelectQuote(quote.id)}
-                      />
+                      checked={selectedQuotes.includes(quote.id)}
+                      onCheckedChange={() => toggleSelectQuote(quote.id)} />
+
                     </div>
 
                     {/* Icon */}
@@ -417,13 +417,13 @@ export default function Tilbud() {
                     </div>
 
                     {/* Content */}
-                    <div 
-                      className="flex-1 cursor-pointer"
-                      onClick={() => {
-                        setSelectedQuote(quote);
-                        setShowDetailDialog(true);
-                      }}
-                    >
+                    <div
+                    className="flex-1 cursor-pointer"
+                    onClick={() => {
+                      setSelectedQuote(quote);
+                      setShowDetailDialog(true);
+                    }}>
+
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -432,11 +432,11 @@ export default function Tilbud() {
                               {quote.revision_number > 0 && `-REV${quote.revision_number}`}
                             </h3>
                             <StatusBadge status={quote.status || (quote.sent_to_customer ? 'sendt' : 'utkast')} />
-                            {quote.is_revision && (
-                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            {quote.is_revision &&
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
                                 Revisjon
                               </span>
-                            )}
+                          }
                           </div>
                           <p className="text-sm text-slate-600 mt-0.5">{quote.customer_name}</p>
                           <p className="text-xs text-slate-500 mt-1">
@@ -457,16 +457,16 @@ export default function Tilbud() {
                     </div>
                   </div>
                 </Card>
-              ))}
+              )}
             </div>
 
             {/* Rejected/Expired Quotes Section */}
-            {rejectedQuotes.length > 0 && (
-              <Card className="border-0 shadow-sm mt-8">
+            {rejectedQuotes.length > 0 &&
+            <Card className="border-0 shadow-sm mt-8">
                 <button
-                  onClick={() => setShowRejectedQuotes(!showRejectedQuotes)}
-                  className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-xl"
-                >
+                onClick={() => setShowRejectedQuotes(!showRejectedQuotes)}
+                className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-xl">
+
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
                       <FileSpreadsheet className="h-5 w-5 text-slate-400" />
@@ -476,24 +476,24 @@ export default function Tilbud() {
                       <p className="text-sm text-slate-500">{rejectedQuotes.length} tilbud</p>
                     </div>
                   </div>
-                  {showRejectedQuotes ? (
-                    <ChevronUp className="h-5 w-5 text-slate-400" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-slate-400" />
-                  )}
+                  {showRejectedQuotes ?
+                <ChevronUp className="h-5 w-5 text-slate-400" /> :
+
+                <ChevronDown className="h-5 w-5 text-slate-400" />
+                }
                 </button>
 
-                {showRejectedQuotes && (
-                  <div className="p-4 pt-0 space-y-2">
-                    {rejectedQuotes.map((quote) => (
-                      <div
-                        key={quote.id}
-                        className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
-                        onClick={() => {
-                          setSelectedQuote(quote);
-                          setShowDetailDialog(true);
-                        }}
-                      >
+                {showRejectedQuotes &&
+              <div className="p-4 pt-0 space-y-2">
+                    {rejectedQuotes.map((quote) =>
+                <div
+                  key={quote.id}
+                  className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                  onClick={() => {
+                    setSelectedQuote(quote);
+                    setShowDetailDialog(true);
+                  }}>
+
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
@@ -516,14 +516,14 @@ export default function Tilbud() {
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
                 )}
+                  </div>
+              }
               </Card>
-            )}
+            }
             </div>
           </>
-        )}
+        }
       </div>
 
       {/* Create Dialog */}
@@ -541,31 +541,31 @@ export default function Tilbud() {
                 <Input
                   value={formData.customer_name}
                   onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  required
-                />
+                  required />
+
               </div>
               <div className="space-y-2">
                 <Label>E-post</Label>
                 <Input
                   type="email"
                   value={formData.customer_email}
-                  onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
-                />
+                  onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })} />
+
               </div>
               <div className="space-y-2">
                 <Label>Telefon</Label>
                 <Input
                   value={formData.customer_phone}
-                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                />
+                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })} />
+
               </div>
               <div className="space-y-2">
                 <Label>Gyldig til</Label>
                 <Input
                   type="date"
                   value={formData.valid_until}
-                  onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
-                />
+                  onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })} />
+
               </div>
             </div>
 
@@ -574,8 +574,8 @@ export default function Tilbud() {
               <Textarea
                 value={formData.project_description}
                 onChange={(e) => setFormData({ ...formData, project_description: e.target.value })}
-                rows={3}
-              />
+                rows={3} />
+
             </div>
 
             {/* Items */}
@@ -583,35 +583,35 @@ export default function Tilbud() {
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-base font-semibold">Linjer</Label>
                 <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
-                  <span className="w-[33%] text-left">Linje</span>
-                  <span className="w-[16%] text-center">Mengde</span>
+                  
+                  <span className="mx-24 pr-64 pl-4 text-center w-[16%]">Mengde</span>
                   <span className="w-[16%] text-center">Enhet</span>
                   <span className="w-[25%] text-right">Enhetspris</span>
                   <span className="w-[10%]"></span>
                 </div>
               </div>
-              {formData.items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-end">
+              {formData.items.map((item, index) =>
+              <div key={index} className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-4">
                     <Input
-                      placeholder="Beskrivelse"
-                      value={item.description}
-                      onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                    />
+                    placeholder="Beskrivelse"
+                    value={item.description}
+                    onChange={(e) => handleItemChange(index, 'description', e.target.value)} />
+
                   </div>
                   <div className="col-span-2">
                     <Input
-                      type="number"
-                      placeholder="Mengde"
-                      value={item.quantity}
-                      onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))}
-                    />
+                    type="number"
+                    placeholder="Mengde"
+                    value={item.quantity}
+                    onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))} />
+
                   </div>
                   <div className="col-span-2">
                     <Select
-                      value={item.unit}
-                      onValueChange={(value) => handleItemChange(index, 'unit', value)}
-                    >
+                    value={item.unit}
+                    onValueChange={(value) => handleItemChange(index, 'unit', value)}>
+
                       <SelectTrigger>
                         <SelectValue placeholder="Enhet" />
                       </SelectTrigger>
@@ -625,31 +625,31 @@ export default function Tilbud() {
                   </div>
                   <div className="col-span-3">
                     <Input
-                      type="number"
-                      placeholder="Pris"
-                      value={item.unit_price}
-                      onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))}
-                    />
+                    type="number"
+                    placeholder="Pris"
+                    value={item.unit_price}
+                    onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))} />
+
                   </div>
                   <div className="col-span-1">
                     <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveItem(index)}
-                      disabled={formData.items.length === 1}
-                    >
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveItem(index)}
+                    disabled={formData.items.length === 1}>
+
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
-              ))}
+              )}
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleAddItem}
-                className="w-full rounded-xl"
-              >
+                className="w-full rounded-xl">
+
                 <Plus className="h-4 w-4 mr-2" />
                 Legg til linje
               </Button>
@@ -675,11 +675,11 @@ export default function Tilbud() {
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
                 {createMutation.isPending ? 'Lagrer...' : 'Opprett tilbud'}
               </Button>
             </div>
@@ -693,34 +693,34 @@ export default function Tilbud() {
           <DialogHeader>
             <DialogTitle>Tilbud #{selectedQuote?.quote_number}</DialogTitle>
           </DialogHeader>
-          {selectedQuote && (
-            <div className="space-y-6">
+          {selectedQuote &&
+          <div className="space-y-6">
               {/* Customer Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-slate-400" />
                   <span>{selectedQuote.customer_name}</span>
                 </div>
-                {selectedQuote.customer_email && (
-                  <div className="flex items-center gap-2">
+                {selectedQuote.customer_email &&
+              <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-slate-400" />
                     <span>{selectedQuote.customer_email}</span>
                   </div>
-                )}
-                {selectedQuote.customer_phone && (
-                  <div className="flex items-center gap-2">
+              }
+                {selectedQuote.customer_phone &&
+              <div className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-slate-400" />
                     <span>{selectedQuote.customer_phone}</span>
                   </div>
-                )}
+              }
               </div>
 
-              {selectedQuote.project_description && (
-                <div>
+              {selectedQuote.project_description &&
+            <div>
                   <h4 className="font-medium mb-2">Prosjekt</h4>
                   <p className="text-slate-600">{selectedQuote.project_description}</p>
                 </div>
-              )}
+            }
 
               {/* Items Table */}
               <Table>
@@ -733,14 +733,14 @@ export default function Tilbud() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selectedQuote.items?.map((item, idx) => (
-                    <TableRow key={idx}>
+                  {selectedQuote.items?.map((item, idx) =>
+                <TableRow key={idx}>
                       <TableCell>{item.description}</TableCell>
                       <TableCell className="text-center">{item.quantity} {item.unit}</TableCell>
                       <TableCell className="text-right">{item.unit_price.toLocaleString('nb-NO')} kr</TableCell>
                       <TableCell className="text-right">{(item.quantity * item.unit_price).toLocaleString('nb-NO')} kr</TableCell>
                     </TableRow>
-                  ))}
+                )}
                 </TableBody>
               </Table>
 
@@ -766,33 +766,33 @@ export default function Tilbud() {
               {/* Actions */}
               <div className="flex gap-2 pt-4 border-t">
                 <Button
-                  onClick={() => generatePDF(selectedQuote)}
-                  className="flex-1 rounded-xl gap-2"
-                  variant="outline"
-                >
+                onClick={() => generatePDF(selectedQuote)}
+                className="flex-1 rounded-xl gap-2"
+                variant="outline">
+
                   <Download className="h-4 w-4" />
                   Last ned PDF
                 </Button>
                 <Button
-                  onClick={() => handleReviseQuote(selectedQuote)}
-                  className="flex-1 rounded-xl gap-2"
-                  variant="outline"
-                >
+                onClick={() => handleReviseQuote(selectedQuote)}
+                className="flex-1 rounded-xl gap-2"
+                variant="outline">
+
                   <FileEdit className="h-4 w-4" />
                   Opprett revisjon
                 </Button>
-                {!selectedQuote.sent_to_customer && (
-                  <Button
-                    onClick={() => handleSendEmail(selectedQuote)}
-                    className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700"
-                  >
+                {!selectedQuote.sent_to_customer &&
+              <Button
+                onClick={() => handleSendEmail(selectedQuote)}
+                className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
+
                     <Send className="h-4 w-4" />
                     Send
                   </Button>
-                )}
+              }
               </div>
             </div>
-          )}
+          }
         </DialogContent>
       </Dialog>
 
@@ -803,8 +803,8 @@ export default function Tilbud() {
         type="tilbud"
         item={selectedQuote}
         defaultEmail={selectedQuote?.customer_email || ''}
-        onSent={handleEmailSent}
-      />
+        onSent={handleEmailSent} />
+
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -820,13 +820,13 @@ export default function Tilbud() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
+              className="bg-red-600 hover:bg-red-700">
+
               Slett
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
+    </div>);
+
 }
