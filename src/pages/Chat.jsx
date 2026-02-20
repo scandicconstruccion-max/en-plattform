@@ -42,6 +42,11 @@ export default function Chat() {
     queryFn: () => base44.entities.User.list(),
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+  });
+
   const sendMutation = useMutation({
     mutationFn: (data) => base44.entities.ChatMessage.create(data),
     onSuccess: () => {
