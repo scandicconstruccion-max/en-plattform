@@ -467,6 +467,62 @@ export default function FileUploadSection({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Camera Options Dialog (Mobile) */}
+      <Dialog open={showCameraOptions} onOpenChange={setShowCameraOptions}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Legg til bilde</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full gap-2 justify-start"
+              onClick={() => {
+                cameraInputRef.current?.click();
+                setShowCameraOptions(false);
+              }}>
+              <Camera className="h-5 w-5" />
+              Ta bilde nå
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full gap-2 justify-start"
+              onClick={() => {
+                galleryInputRef.current?.click();
+                setShowCameraOptions(false);
+              }}>
+              <Image className="h-5 w-5" />
+              Velg fra galleri
+            </Button>
+            {projectId && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 justify-start"
+                onClick={() => {
+                  setShowCameraOptions(false);
+                  setShowImageDialog(true);
+                }}>
+                <FolderOpen className="h-5 w-5" />
+                Hent fra bildedokumentasjon
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Editor */}
+      {editingImage && (
+        <ImageEditor
+          imageUrl={editingImage.file_url}
+          onSave={handleImageEditSave}
+          onCancel={() => setEditingImage(null)}
+          open={!!editingImage}
+        />
+      )}
     </div>
   );
 }

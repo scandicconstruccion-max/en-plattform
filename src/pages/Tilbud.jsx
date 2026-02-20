@@ -715,6 +715,7 @@ export default function Tilbud() {
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               projectId={null}
+              moduleType="quote"
             />
 
             {/* Totals */}

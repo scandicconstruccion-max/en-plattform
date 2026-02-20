@@ -391,6 +391,7 @@ export default function Endringsmeldinger() {
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               projectId={formData.project_id}
+              moduleType="change"
             />
 
             <div className="flex justify-end gap-3 pt-4">

@@ -468,6 +468,7 @@ export default function Avvik() {
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               projectId={formData.project_id}
+              moduleType="deviation"
             />
 
             {/* Cost Consequence Section */}

@@ -659,6 +659,7 @@ ${base44.auth.me().then((u) => u.full_name)}
                 attachments={attachments}
                 onAttachmentsChange={setAttachments}
                 projectId={formData.project_id}
+                moduleType="invoice"
               />
             </CardContent>
           </Card>
