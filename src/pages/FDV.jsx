@@ -39,6 +39,7 @@ export default function FDV() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [customerFilter, setCustomerFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -82,9 +83,10 @@ export default function FDV() {
         pkg.customer_name?.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === 'all' || pkg.status === statusFilter;
       const matchesCustomer = customerFilter === 'all' || pkg.customer_name === customerFilter;
-      return matchesSearch && matchesStatus && matchesCustomer;
+      const matchesProject = projectFilter === 'all' || pkg.project_id === projectFilter;
+      return matchesSearch && matchesStatus && matchesCustomer && matchesProject;
     });
-  }, [fdvPackages, search, statusFilter, customerFilter]);
+  }, [fdvPackages, search, statusFilter, customerFilter, projectFilter]);
 
   const uniqueCustomers = [...new Set(fdvPackages.map(p => p.customer_name).filter(Boolean))];
 
