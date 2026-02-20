@@ -770,32 +770,50 @@ export default function Tilbud() {
               <DeliveryStatus item={selectedQuote} />
 
               {/* Actions */}
-              <div className="flex gap-2 pt-4 border-t">
-                <Button
-                onClick={() => generatePDF(selectedQuote)}
-                className="flex-1 rounded-xl gap-2"
-                variant="outline">
+              <div className="flex flex-col gap-2 pt-4 border-t">
+                <div className="flex gap-2">
+                  <Button
+                  onClick={() => generatePDF(selectedQuote)}
+                  className="flex-1 rounded-xl gap-2"
+                  variant="outline">
 
-                  <Download className="h-4 w-4" />
-                  Last ned PDF
-                </Button>
-                <Button
-                onClick={() => handleReviseQuote(selectedQuote)}
-                className="flex-1 rounded-xl gap-2"
-                variant="outline">
-
-                  <FileEdit className="h-4 w-4" />
-                  Opprett revisjon
-                </Button>
-                {!selectedQuote.sent_to_customer &&
-              <Button
-                onClick={() => handleSendEmail(selectedQuote)}
-                className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
-
-                    <Send className="h-4 w-4" />
-                    Send
+                    <Download className="h-4 w-4" />
+                    Last ned PDF
                   </Button>
-              }
+                  <Button
+                  onClick={() => handleReviseQuote(selectedQuote)}
+                  className="flex-1 rounded-xl gap-2"
+                  variant="outline">
+
+                    <FileEdit className="h-4 w-4" />
+                    Opprett revisjon
+                  </Button>
+                  {!selectedQuote.sent_to_customer &&
+                <Button
+                  onClick={() => handleSendEmail(selectedQuote)}
+                  className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
+
+                      <Send className="h-4 w-4" />
+                      Send
+                    </Button>
+                }
+                </div>
+                {selectedQuote.status !== 'avvist' && selectedQuote.status !== 'utlopt' && (
+                  <Button
+                    onClick={() => {
+                      updateMutation.mutate({
+                        id: selectedQuote.id,
+                        data: { status: 'avvist' }
+                      });
+                      setShowDetailDialog(false);
+                      toast.success('Tilbud markert som ikke akseptert');
+                    }}
+                    variant="outline"
+                    className="w-full rounded-xl gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300">
+                    <X className="h-4 w-4" />
+                    Marker som ikke akseptert
+                  </Button>
+                )}
               </div>
             </div>
           }
