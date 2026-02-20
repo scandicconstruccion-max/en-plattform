@@ -92,13 +92,15 @@ export default function Endringsmeldinger() {
       amount: '',
       status: 'utkast'
     });
+    setAttachments([]);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     createMutation.mutate({
       ...formData,
-      amount: formData.amount ? parseFloat(formData.amount) : null
+      amount: formData.amount ? parseFloat(formData.amount) : null,
+      attachment_urls: attachments.map(a => a.file_url).filter(Boolean)
     });
   };
 
