@@ -418,9 +418,17 @@ export default function Tilbud() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-slate-900">#{quote.quote_number}</h3>
-                            <StatusBadge status={quote.status} />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-slate-900">
+                              #{quote.quote_number}
+                              {quote.revision_number > 0 && `-REV${quote.revision_number}`}
+                            </h3>
+                            <StatusBadge status={quote.status || (quote.sent_to_customer ? 'sendt' : 'utkast')} />
+                            {quote.is_revision && (
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                                Revisjon
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-slate-600 mt-0.5">{quote.customer_name}</p>
                           <p className="text-xs text-slate-500 mt-1">
@@ -501,7 +509,16 @@ export default function Tilbud() {
 
             {/* Items */}
             <div className="space-y-3">
-              <Label>Linjer</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-base font-semibold">Linjer</Label>
+                <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
+                  <span className="w-[33%] text-left">Linje</span>
+                  <span className="w-[16%] text-center">Mengde</span>
+                  <span className="w-[16%] text-center">Enhet</span>
+                  <span className="w-[25%] text-right">Enhetspris</span>
+                  <span className="w-[10%]"></span>
+                </div>
+              </div>
               {formData.items.map((item, index) => (
                 <div key={index} className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-4">
@@ -514,22 +531,31 @@ export default function Tilbud() {
                   <div className="col-span-2">
                     <Input
                       type="number"
-                      placeholder="Antall"
+                      placeholder="Mengde"
                       value={item.quantity}
                       onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))}
                     />
                   </div>
                   <div className="col-span-2">
-                    <Input
-                      placeholder="Enhet"
+                    <Select
                       value={item.unit}
-                      onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                    />
+                      onValueChange={(value) => handleItemChange(index, 'unit', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Enhet" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="stk">stk</SelectItem>
+                        <SelectItem value="m²">m²</SelectItem>
+                        <SelectItem value="LM">LM</SelectItem>
+                        <SelectItem value="RS">RS</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-3">
                     <Input
                       type="number"
-                      placeholder="Enhetspris"
+                      placeholder="Pris"
                       value={item.unit_price}
                       onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))}
                     />
@@ -540,6 +566,7 @@ export default function Tilbud() {
                       variant="ghost"
                       size="icon"
                       onClick={() => handleRemoveItem(index)}
+                      disabled={formData.items.length === 1}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
