@@ -844,14 +844,30 @@ export default function Tilbud() {
                 }
                 </div>
 
-                {/* Accept Quote Button */}
+                {/* Accept/Reject Quote Buttons */}
                 {selectedQuote.sent_to_customer && selectedQuote.status === 'sendt' &&
-              <Button
-                onClick={() => handleAcceptQuote(selectedQuote)}
-                className="w-full rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
-                    <CheckCircle className="h-4 w-4" />
-                    Aksepter tilbud
-                  </Button>
+              <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleAcceptQuote(selectedQuote)}
+                      className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
+                      <CheckCircle className="h-4 w-4" />
+                      Tilbud akseptert
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        updateMutation.mutate({
+                          id: selectedQuote.id,
+                          data: { status: 'avvist' }
+                        });
+                        setShowDetailDialog(false);
+                        toast.success('Tilbud markert som ikke akseptert');
+                      }}
+                      variant="outline"
+                      className="flex-1 rounded-xl gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300">
+                      <X className="h-4 w-4" />
+                      Marker som ikke akseptert
+                    </Button>
+                  </div>
               }
 
                 {/* Send to Order Button */}
@@ -861,24 +877,6 @@ export default function Tilbud() {
                 className="w-full rounded-xl gap-2 bg-blue-600 hover:bg-blue-700">
                     <FileText className="h-4 w-4" />
                     Send til ordre
-                  </Button>
-              }
-
-                {/* Reject Quote Button */}
-                {selectedQuote.status !== 'avvist' && selectedQuote.status !== 'utlopt' && selectedQuote.status !== 'godkjent' &&
-              <Button
-                onClick={() => {
-                  updateMutation.mutate({
-                    id: selectedQuote.id,
-                    data: { status: 'avvist' }
-                  });
-                  setShowDetailDialog(false);
-                  toast.success('Tilbud markert som ikke akseptert');
-                }}
-                variant="outline"
-                className="w-full rounded-xl gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300">
-                    <X className="h-4 w-4" />
-                    Marker som ikke akseptert
                   </Button>
               }
               </div>
