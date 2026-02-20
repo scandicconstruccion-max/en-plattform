@@ -544,40 +544,114 @@ export default function Tilbud() {
                 </Button>
               </div>
 
-      {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+              {/* Totals */}
+              <div className="space-y-2 text-right">
+                <div className="flex justify-end gap-8">
+                  <span className="text-slate-600">Subtotal:</span>
+                  <span className="font-medium w-32">{calculateTotal(formData.items).toLocaleString('nb-NO')} kr</span>
+                </div>
+                <div className="flex justify-end gap-8">
+                  <span className="text-slate-600">MVA (25%):</span>
+                  <span className="font-medium w-32">{(calculateTotal(formData.items) * 0.25).toLocaleString('nb-NO')} kr</span>
+                </div>
+                <div className="flex justify-end gap-8 pt-2 border-t">
+                  <span className="font-semibold">Totalt ink. mva:</span>
+                  <span className="font-bold w-32">{(calculateTotal(formData.items) * 1.25).toLocaleString('nb-NO')} kr</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+                Avbryt
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={createMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              >
+                {createMutation.isPending ? 'Lagrer...' : 'Opprett tilbud'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Nytt tilbud</DialogTitle>
+            <DialogTitle>Tilbud #{selectedQuote?.quote_number}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Customer Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 sm:col-span-1">
-                <Label>Tilbudsnummer</Label>
-                <Input
-                  value={formData.quote_number}
-                  onChange={(e) => setFormData({...formData, quote_number: e.target.value})}
-                  className="mt-1.5 rounded-xl"
-                />
+          {selectedQuote && (
+            <div className="space-y-6">
+              {/* Customer Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-slate-400" />
+                  <span>{selectedQuote.customer_name}</span>
+                </div>
+                {selectedQuote.customer_email && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-slate-400" />
+                    <span>{selectedQuote.customer_email}</span>
+                  </div>
+                )}
+                {selectedQuote.customer_phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-slate-400" />
+                    <span>{selectedQuote.customer_phone}</span>
+                  </div>
+                )}
               </div>
-              <div className="col-span-2 sm:col-span-1">
-                <Label>Gyldig til</Label>
-                <Input
-                  type="date"
-                  value={formData.valid_until}
-                  onChange={(e) => setFormData({...formData, valid_until: e.target.value})}
-                  className="mt-1.5 rounded-xl"
-                />
+
+              {selectedQuote.project_description && (
+                <div>
+                  <h4 className="font-medium mb-2">Prosjekt</h4>
+                  <p className="text-slate-600">{selectedQuote.project_description}</p>
+                </div>
+              )}
+
+              {/* Items Table */}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Beskrivelse</TableHead>
+                    <TableHead className="text-center">Antall</TableHead>
+                    <TableHead className="text-right">Enhetspris</TableHead>
+                    <TableHead className="text-right">Totalt</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedQuote.items?.map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>{item.description}</TableCell>
+                      <TableCell className="text-center">{item.quantity} {item.unit}</TableCell>
+                      <TableCell className="text-right">{item.unit_price.toLocaleString('nb-NO')} kr</TableCell>
+                      <TableCell className="text-right">{(item.quantity * item.unit_price).toLocaleString('nb-NO')} kr</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Totals */}
+              <div className="space-y-2 text-right">
+                <div className="flex justify-end gap-8">
+                  <span className="text-slate-600">Subtotal:</span>
+                  <span className="font-medium w-32">{(selectedQuote.total_amount || 0).toLocaleString('nb-NO')} kr</span>
+                </div>
+                <div className="flex justify-end gap-8">
+                  <span className="text-slate-600">MVA (25%):</span>
+                  <span className="font-medium w-32">{(selectedQuote.vat_amount || 0).toLocaleString('nb-NO')} kr</span>
+                </div>
+                <div className="flex justify-end gap-8 pt-2 border-t">
+                  <span className="font-semibold">Totalt ink. mva:</span>
+                  <span className="font-bold w-32">{((selectedQuote.total_amount || 0) + (selectedQuote.vat_amount || 0)).toLocaleString('nb-NO')} kr</span>
+                </div>
               </div>
-              <div className="col-span-2">
-                <Label>Kundenavn *</Label>
-                <Input
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({...formData, customer_name: e.target.value})}
-                  placeholder="Firma eller privatperson"
-                  required
-                  className="mt-1.5 rounded-xl"
+
+              {/* Delivery Status */}
+              <DeliveryStatus item={selectedQuote} />
                 />
               </div>
               <div>
