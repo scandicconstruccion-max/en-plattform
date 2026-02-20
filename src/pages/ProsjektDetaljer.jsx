@@ -103,6 +103,14 @@ export default function ProsjektDetaljer() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => base44.entities.Project.delete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      navigate(createPageUrl('Prosjekter'));
+    },
+  });
+
   const handleEdit = () => {
     setFormData({
       name: project.name || '',
