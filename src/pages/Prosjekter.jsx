@@ -62,6 +62,12 @@ export default function Prosjekter() {
   // Filter projects based on user access
   const projects = user ? filterProjectsByAccess(user, allProjects) : allProjects;
 
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list(),
+    enabled: showDialog
+  });
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Project.create(data),
     onSuccess: () => {
