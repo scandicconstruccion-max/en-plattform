@@ -503,7 +503,15 @@ export default function AvvikDetaljer() {
             {/* Cost Information */}
             {deviation.has_cost_consequence && (
               <Card className="p-6 border-0 shadow-sm">
-                <h3 className="font-semibold text-slate-900 mb-4">Kostnadskonsekvensar</h3>
+                <div className="flex items-start justify-between mb-4">
+                  <h3 className="font-semibold text-slate-900">Kostnadskonsekvensar</h3>
+                  {deviation.customer_approved && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Godkjent av kunde
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <div>
                     <div className="text-sm text-slate-600 mb-1">Kostnad</div>
