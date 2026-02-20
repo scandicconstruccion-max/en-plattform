@@ -216,7 +216,7 @@ export default function Faktura() {
         {/* Filters */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
@@ -249,6 +249,19 @@ export default function Faktura() {
                       {customer.name}
                     </SelectItem>
                   )}
+                </SelectContent>
+              </Select>
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Prosjekt" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle prosjekter</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={paymentFilter} onValueChange={setPaymentFilter}>
