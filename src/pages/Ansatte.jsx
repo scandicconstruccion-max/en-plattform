@@ -349,10 +349,18 @@ export default function Ansatte() {
           <DialogHeader>
             <DialogTitle>{selectedEmployee ? 'Rediger ansatt' : 'Registrer ansatt'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Personal Info */}
-            <div>
-              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Personalia</h4>
+          <form onSubmit={handleSubmit}>
+            <Tabs defaultValue="personal" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="personal">Personalia</TabsTrigger>
+                <TabsTrigger value="employment">Ansettelse</TabsTrigger>
+                {canViewSalary && <TabsTrigger value="salary">Lønnsinnstillinger</TabsTrigger>}
+              </TabsList>
+
+              <TabsContent value="personal" className="space-y-6 mt-6">
+                {/* Personal Info */}
+                <div>
+                  <h4 className="font-medium text-slate-900 dark:text-white mb-3">Personalia</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Fornavn *</Label>
@@ -399,12 +407,12 @@ export default function Ansatte() {
                     className="mt-1.5 rounded-xl"
                   />
                 </div>
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            {/* Address */}
-            <div>
-              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Adresse</h4>
+                {/* Address */}
+                <div>
+                  <h4 className="font-medium text-slate-900 dark:text-white mb-3">Adresse</h4>
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-3">
                   <Label>Gateadresse</Label>
@@ -429,13 +437,37 @@ export default function Ansatte() {
                     onChange={(e) => setFormData({...formData, city: e.target.value})}
                     className="mt-1.5 rounded-xl"
                   />
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Employment */}
-            <div>
-              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Ansettelsesforhold</h4>
+                {/* Emergency Contact */}
+                <div>
+                  <h4 className="font-medium text-slate-900 dark:text-white mb-3">Nødkontakt</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Navn</Label>
+                      <Input
+                        value={formData.emergency_contact_name}
+                        onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Telefon</Label>
+                      <Input
+                        value={formData.emergency_contact_phone}
+                        onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="employment" className="space-y-6 mt-6">
+                {/* Employment */}
+                <div>
+                  <h4 className="font-medium text-slate-900 dark:text-white mb-3">Ansettelsesforhold</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Stilling</Label>
@@ -480,79 +512,174 @@ export default function Ansatte() {
                     onChange={(e) => setFormData({...formData, start_date: e.target.value})}
                     className="mt-1.5 rounded-xl"
                   />
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Salary */}
-            <div>
-              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Lønn</h4>
-              <div className="grid grid-cols-2 gap-4">
+                {/* Bank Info */}
                 <div>
-                  <Label>Timepris (NOK)</Label>
-                  <Input
-                    type="number"
-                    value={formData.hourly_rate}
-                    onChange={(e) => setFormData({...formData, hourly_rate: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
+                  <h4 className="font-medium text-slate-900 dark:text-white mb-3">Bankinformasjon</h4>
+                  <div>
+                    <Label>Kontonummer</Label>
+                    <Input
+                      value={formData.bank_account}
+                      onChange={(e) => setFormData({...formData, bank_account: e.target.value})}
+                      placeholder="1234 56 78901"
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Månedslønn (NOK)</Label>
-                  <Input
-                    type="number"
-                    value={formData.monthly_salary}
-                    onChange={(e) => setFormData({...formData, monthly_salary: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Kontonummer</Label>
-                  <Input
-                    value={formData.bank_account}
-                    onChange={(e) => setFormData({...formData, bank_account: e.target.value})}
-                    placeholder="1234 56 78901"
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
 
-            {/* Emergency Contact */}
-            <div>
-              <h4 className="font-medium text-slate-900 dark:text-white mb-3">Nødkontakt</h4>
-              <div className="grid grid-cols-2 gap-4">
+                {/* Notes */}
                 <div>
-                  <Label>Navn</Label>
-                  <Input
-                    value={formData.emergency_contact_name}
-                    onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})}
+                  <Label>Notater</Label>
+                  <Textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                    rows={3}
                     className="mt-1.5 rounded-xl"
                   />
                 </div>
-                <div>
-                  <Label>Telefon</Label>
-                  <Input
-                    value={formData.emergency_contact_phone}
-                    onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
+              </TabsContent>
 
-            {/* Notes */}
-            <div>
-              <Label>Notater</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                rows={3}
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
+              {canViewSalary && (
+                <TabsContent value="salary" className="space-y-6 mt-6">
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                    <Lock className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-900">Begrenset tilgang</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        Kun administratorer kan se og redigere lønnsinnstillinger
+                      </p>
+                    </div>
+                  </div>
 
-            <div className="flex justify-end gap-3 pt-4">
+                  {/* Salary Info */}
+                  <div>
+                    <h4 className="font-medium text-slate-900 dark:text-white mb-3">Lønnsinformasjon</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Timelønn (kr) *</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.hourly_rate}
+                          onChange={(e) => {
+                            const rate = parseFloat(e.target.value);
+                            setFormData({
+                              ...formData, 
+                              hourly_rate: e.target.value,
+                              overtime_50_rate: rate ? (rate * 1.5).toFixed(2) : '',
+                              overtime_100_rate: rate ? (rate * 2.0).toFixed(2) : ''
+                            });
+                          }}
+                          className="mt-1.5 rounded-xl"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Grunnlag for overtidsberegning</p>
+                      </div>
+                      <div>
+                        <Label>Månedslønn (kr)</Label>
+                        <Input
+                          type="number"
+                          value={formData.monthly_salary}
+                          onChange={(e) => setFormData({...formData, monthly_salary: e.target.value})}
+                          className="mt-1.5 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Overtime Rates */}
+                  <div>
+                    <h4 className="font-medium text-slate-900 dark:text-white mb-3">Overtidssatser</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Overtid 50% (kr)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.overtime_50_rate}
+                          onChange={(e) => setFormData({...formData, overtime_50_rate: e.target.value})}
+                          className="mt-1.5 rounded-xl"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Standard: {formData.hourly_rate ? (parseFloat(formData.hourly_rate) * 1.5).toFixed(2) : '0'} kr
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Overtid 100% (kr)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.overtime_100_rate}
+                          onChange={(e) => setFormData({...formData, overtime_100_rate: e.target.value})}
+                          className="mt-1.5 rounded-xl"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Standard: {formData.hourly_rate ? (parseFloat(formData.hourly_rate) * 2.0).toFixed(2) : '0'} kr
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Normal Working Hours */}
+                  <div>
+                    <h4 className="font-medium text-slate-900 dark:text-white mb-3">Arbeidstid</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Normal arbeidstid per dag (timer)</Label>
+                        <Input
+                          type="number"
+                          step="0.5"
+                          value={formData.normal_hours_per_day}
+                          onChange={(e) => setFormData({...formData, normal_hours_per_day: parseFloat(e.target.value)})}
+                          className="mt-1.5 rounded-xl"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Timer over dette regnes som overtid</p>
+                      </div>
+                      <div>
+                        <Label>Normal arbeidstid per uke (timer)</Label>
+                        <Input
+                          type="number"
+                          step="0.5"
+                          value={formData.normal_hours_per_week}
+                          onChange={(e) => setFormData({...formData, normal_hours_per_week: parseFloat(e.target.value)})}
+                          className="mt-1.5 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Salary History */}
+                  {selectedEmployee?.salary_change_history && selectedEmployee.salary_change_history.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-slate-900 dark:text-white mb-3">Endringshistorikk</h4>
+                      <div className="space-y-2">
+                        {selectedEmployee.salary_change_history.slice().reverse().map((change, idx) => (
+                          <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {change.old_hourly_rate} kr → {change.new_hourly_rate} kr
+                              </span>
+                              <Badge variant="secondary" className="text-xs">
+                                {format(new Date(change.date), 'd. MMM yyyy', { locale: nb })}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                              Endret av: {change.changed_by}
+                            </p>
+                            {change.note && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{change.note}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+              )}
+            </Tabs>
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
               </Button>

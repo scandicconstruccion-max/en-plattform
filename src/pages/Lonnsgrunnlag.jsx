@@ -77,25 +77,35 @@ export default function Lonnsgrunnlag() {
 
       periodTimesheets.forEach(t => {
         if (!employeeMap.has(t.employee_id)) {
+          const employee = employees.find(e => e.id === t.employee_id);
           employeeMap.set(t.employee_id, {
             employee_id: t.employee_id,
             employee_name: t.employee_name,
             regular_hours: 0,
             overtime_50_hours: 0,
             overtime_100_hours: 0,
-            hourly_rate: 0,
+            hourly_rate: employee?.hourly_rate || 0,
+            overtime_50_rate: employee?.overtime_50_rate || (employee?.hourly_rate ? employee.hourly_rate * 1.5 : 0),
+            overtime_100_rate: employee?.overtime_100_rate || (employee?.hourly_rate ? employee.hourly_rate * 2.0 : 0),
+            normal_hours_per_day: employee?.normal_hours_per_day || 8,
             gross_amount: 0,
             project_breakdown: []
           });
         }
 
         const emp = employeeMap.get(t.employee_id);
+        const normalHours = emp.normal_hours_per_day;
         
-        // Beregn overtid
-        if (t.hours > 9) {
-          emp.overtime_50_hours += Math.min(t.hours - 9, 2);
-          emp.overtime_100_hours += Math.max(t.hours - 11, 0);
-          emp.regular_hours += Math.min(t.hours, 9);
+        // Beregn overtid basert på ansattes normale arbeidstid
+        if (t.hours > normalHours) {
+          const overtimeHours = t.hours - normalHours;
+          if (overtimeHours <= 2) {
+            emp.overtime_50_hours += overtimeHours;
+          } else {
+            emp.overtime_50_hours += 2;
+            emp.overtime_100_hours += overtimeHours - 2;
+          }
+          emp.regular_hours += normalHours;
         } else {
           emp.regular_hours += t.hours;
         }
@@ -113,16 +123,12 @@ export default function Lonnsgrunnlag() {
         }
       });
 
-      // Beregn lønn
+      // Beregn lønn med faktiske satser
       for (const emp of employeeMap.values()) {
-        const employee = employees.find(e => e.id === emp.employee_id);
-        const hourlyRate = employee?.hourly_rate || 0;
-        emp.hourly_rate = hourlyRate;
-        
         emp.gross_amount = 
-          (emp.regular_hours * hourlyRate) +
-          (emp.overtime_50_hours * hourlyRate * 1.5) +
-          (emp.overtime_100_hours * hourlyRate * 2);
+          (emp.regular_hours * emp.hourly_rate) +
+          (emp.overtime_50_hours * emp.overtime_50_rate) +
+          (emp.overtime_100_hours * emp.overtime_100_rate);
 
         employeeSummaries.push(emp);
       }
