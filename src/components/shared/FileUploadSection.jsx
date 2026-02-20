@@ -11,23 +11,35 @@ import {
   DialogFooter
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Upload, File, Image, X, Camera, FolderOpen, Search } from 'lucide-react';
+import { Upload, File, Image, X, Camera, FolderOpen, Search, Edit3, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import ImageEditor from './ImageEditor';
+import { optimizeImage, extractImageMetadata, getGPSLocation } from './imageOptimizer';
 
 export default function FileUploadSection({ 
   attachments = [], 
   onAttachmentsChange, 
   projectId = null,
+  moduleType = null, // 'quote', 'invoice', 'deviation', 'change'
   className 
 }) {
   const [uploading, setUploading] = useState(false);
   const [showFileDialog, setShowFileDialog] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
+  const [showCameraOptions, setShowCameraOptions] = useState(false);
   const [fileSearch, setFileSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
+  const [editingImage, setEditingImage] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+
+  // Get current user
+  React.useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
 
   // Fetch project files
   const { data: projectFiles = [] } = useQuery({
@@ -43,24 +55,53 @@ export default function FileUploadSection({
     enabled: !!projectId && showImageDialog
   });
 
-  const handleFileUpload = async (files) => {
+  const handleFileUpload = async (files, skipOptimization = false) => {
     if (!files || files.length === 0) return;
 
     setUploading(true);
     try {
+      // Get GPS location for images
+      const gpsLocation = await getGPSLocation();
+
       const uploadPromises = Array.from(files).map(async (file) => {
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        let fileToUpload = file;
+        
+        // Optimize images
+        if (!skipOptimization && file.type.startsWith('image/')) {
+          try {
+            fileToUpload = await optimizeImage(file);
+            toast.success(`Bilde optimalisert: ${file.name}`);
+          } catch (error) {
+            console.warn('Image optimization failed, uploading original', error);
+          }
+        }
+
+        const metadata = await extractImageMetadata(fileToUpload);
+        const { file_url } = await base44.integrations.Core.UploadFile({ file: fileToUpload });
+        
         return {
           name: file.name,
           file_url,
           type: file.type.includes('image') ? 'image' : 'document',
-          size: file.size
+          size: fileToUpload.size,
+          original_size: file.size,
+          uploaded_by: currentUser?.email,
+          uploaded_by_name: currentUser?.full_name,
+          uploaded_at: new Date().toISOString(),
+          project_id: projectId,
+          module_type: moduleType,
+          gps_location: gpsLocation,
+          metadata
         };
       });
 
       const uploadedFiles = await Promise.all(uploadPromises);
       onAttachmentsChange([...attachments, ...uploadedFiles]);
-      toast.success(`${uploadedFiles.length} fil(er) lastet opp`);
+      
+      const savedSize = uploadedFiles.reduce((acc, f) => acc + (f.original_size - f.size), 0);
+      const savedMB = (savedSize / 1024 / 1024).toFixed(1);
+      
+      toast.success(`${uploadedFiles.length} fil(er) lastet opp${savedSize > 0 ? ` (spart ${savedMB} MB)` : ''}`);
     } catch (error) {
       toast.error('Feil ved opplastning av filer');
       console.error(error);
