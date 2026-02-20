@@ -363,91 +363,170 @@ export default function Tilbud() {
           />
         ) : (
           <div className="space-y-4">
-            {filteredQuotes.map((quote) => (
-              <Card
-                key={quote.id}
-                className="p-6 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all"
-                onClick={() => {
-                  setSelectedQuote(quote);
-                  setShowDetailDialog(true);
-                }}
-              >
-                <div className="flex items-start justify-between">
+            {/* Bulk Select Header */}
+            {filteredQuotes.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-slate-200">
+                <Checkbox
+                  checked={selectedQuotes.length === filteredQuotes.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-sm text-slate-600">
+                  {selectedQuotes.length > 0 ? `${selectedQuotes.length} valgt` : 'Velg alle'}
+                </span>
+              </div>
+            )}
+
+            <div className="grid gap-4">
+              {filteredQuotes.map((quote) => (
+                <Card
+                  key={quote.id}
+                  className="p-4 border-0 shadow-sm hover:shadow-md transition-all"
+                >
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                      <FileSpreadsheet className="h-6 w-6 text-blue-600" />
+                    {/* Checkbox */}
+                    <div className="pt-1">
+                      <Checkbox
+                        checked={selectedQuotes.includes(quote.id)}
+                        onCheckedChange={() => toggleSelectQuote(quote.id)}
+                      />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">#{quote.quote_number}</h3>
-                        <StatusBadge status={quote.status} />
-                      </div>
-                      <p className="text-slate-600 mt-1">{quote.customer_name}</p>
-                      {quote.project_description && (
-                        <p className="text-sm text-slate-500 mt-1 line-clamp-1">{quote.project_description}</p>
-                      )}
-                      <p className="text-sm text-slate-500 mt-2">
-                        {quote.created_date && format(new Date(quote.created_date), 'd. MMM yyyy', { locale: nb })}
-                        {quote.valid_until && ` • Gyldig til ${format(new Date(quote.valid_until), 'd. MMM', { locale: nb })}`}
-                      </p>
+
+                    {/* Icon */}
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <FileSpreadsheet className="h-5 w-5 text-blue-600" />
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-slate-900">
-                      {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      eks. mva
-                    </p>
-                  </div>
-                </div>
 
-                {/* Delivery Status */}
-                <DeliveryStatus item={quote} />
-
-                {/* Actions */}
-                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSendEmail(quote);
-                    }}
-                    className="rounded-xl gap-2"
-                  >
-                    <Mail className="h-4 w-4" />
-                    Send på e-post
-                  </Button>
-                  {quote.status === 'utkast' && (
-                    <Button
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSendEmail(quote);
+                    {/* Content */}
+                    <div 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => {
+                        setSelectedQuote(quote);
+                        setShowDetailDialog(true);
                       }}
-                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
                     >
-                      Send tilbud
-                    </Button>
-                  )}
-                  {quote.status === 'sendt' && (
-                    <>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-slate-900">#{quote.quote_number}</h3>
+                            <StatusBadge status={quote.status} />
+                          </div>
+                          <p className="text-sm text-slate-600 mt-0.5">{quote.customer_name}</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {quote.created_date && format(new Date(quote.created_date), 'd. MMM yyyy', { locale: nb })}
+                            {quote.valid_until && ` • Gyldig til ${format(new Date(quote.valid_until), 'd. MMM', { locale: nb })}`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-slate-900">
+                            {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
+                          </p>
+                          <p className="text-xs text-slate-500">eks. mva</p>
+                        </div>
+                      </div>
+
+                      {/* Delivery Status */}
+                      <DeliveryStatus item={quote} />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Create Dialog */}
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Nytt tilbud</DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Customer Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Kundenavn *</Label>
+                  <Input
+                    value={formData.customer_name}
+                    onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>E-post</Label>
+                  <Input
+                    type="email"
+                    value={formData.customer_email}
+                    onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefon</Label>
+                  <Input
+                    value={formData.customer_phone}
+                    onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Gyldig til</Label>
+                  <Input
+                    type="date"
+                    value={formData.valid_until}
+                    onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Prosjektbeskrivelse</Label>
+                <Textarea
+                  value={formData.project_description}
+                  onChange={(e) => setFormData({ ...formData, project_description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+
+              {/* Items */}
+              <div className="space-y-3">
+                <Label>Linjer</Label>
+                {formData.items.map((item, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-4">
+                      <Input
+                        placeholder="Beskrivelse"
+                        value={item.description}
+                        onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Input
+                        type="number"
+                        placeholder="Antall"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Input
+                        placeholder="Enhet"
+                        value={item.unit}
+                        onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <Input
+                        type="number"
+                        placeholder="Enhetspris"
+                        value={item.unit_price}
+                        onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="col-span-1">
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateMutation.mutate({ id: quote.id, data: { status: 'avvist' } });
-                        }}
-                        className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        Avvist
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveItem(index)}
                           updateMutation.mutate({ id: quote.id, data: { status: 'godkjent' } });
                         }}
                         className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
