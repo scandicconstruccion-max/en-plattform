@@ -165,16 +165,23 @@ export default function Tilbud() {
     e.preventDefault();
     const total = calculateTotal(formData.items);
     const vat = total * 0.25;
-    createMutation.mutate({
+    
+    const quoteData = {
       ...formData,
+      quote_number: formData.quote_number || `T-${Date.now().toString().slice(-6)}`,
       items: formData.items.map(item => ({
         ...item,
         total: item.quantity * item.unit_price
       })),
       total_amount: total,
       vat_amount: vat,
-      status: 'utkast'
-    });
+      status: 'utkast',
+      revision_number: formData.revision_number || 0,
+      is_revision: formData.is_revision || false,
+      parent_quote_id: formData.parent_quote_id || null
+    };
+    
+    createMutation.mutate(quoteData);
   };
 
   const handleSendEmail = (quote) => {
@@ -277,7 +284,7 @@ export default function Tilbud() {
     <div className="min-h-screen bg-slate-50">
       <PageHeader
         title="Tilbud"
-        subtitle={`${quotes.length} tilbud totalt`}
+        subtitle={`${activeQuotes.length} aktive tilbud${rejectedQuotes.length > 0 ? ` • ${rejectedQuotes.length} ikke akseptert` : ''}`}
         actions={
           <div className="flex gap-2">
             {selectedQuotes.length > 0 && (
@@ -452,7 +459,69 @@ export default function Tilbud() {
                 </Card>
               ))}
             </div>
-          </div>
+
+            {/* Rejected/Expired Quotes Section */}
+            {rejectedQuotes.length > 0 && (
+              <Card className="border-0 shadow-sm mt-8">
+                <button
+                  onClick={() => setShowRejectedQuotes(!showRejectedQuotes)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+                      <FileSpreadsheet className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="font-semibold text-slate-900">Ikke aksepterte tilbud</h3>
+                      <p className="text-sm text-slate-500">{rejectedQuotes.length} tilbud</p>
+                    </div>
+                  </div>
+                  {showRejectedQuotes ? (
+                    <ChevronUp className="h-5 w-5 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-slate-400" />
+                  )}
+                </button>
+
+                {showRejectedQuotes && (
+                  <div className="p-4 pt-0 space-y-2">
+                    {rejectedQuotes.map((quote) => (
+                      <div
+                        key={quote.id}
+                        className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          setSelectedQuote(quote);
+                          setShowDetailDialog(true);
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-slate-900">
+                                #{quote.quote_number}
+                                {quote.revision_number > 0 && `-REV${quote.revision_number}`}
+                              </h4>
+                              <StatusBadge status={quote.status} />
+                            </div>
+                            <p className="text-sm text-slate-600 mt-1">{quote.customer_name}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {quote.created_date && format(new Date(quote.created_date), 'd. MMM yyyy', { locale: nb })}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-slate-900">
+                              {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
+                            </p>
+                            <p className="text-xs text-slate-500">eks. mva</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
+          </>
         )}
       </div>
 
