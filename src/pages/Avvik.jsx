@@ -239,7 +239,8 @@ export default function Avvik() {
 
         <div className="space-y-4">
             {filteredDeviations.map((deviation) =>
-          <Card key={deviation.id} className="p-6 border-0 shadow-sm">
+          <Link key={deviation.id} to={createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+            <Card className="p-6 border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
