@@ -11,15 +11,15 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DialogTitle } from
+'@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
@@ -57,12 +57,12 @@ export default function Avvik() {
 
   const { data: deviations = [], isLoading } = useQuery({
     queryKey: ['deviations'],
-    queryFn: () => base44.entities.Deviation.list('-created_date'),
+    queryFn: () => base44.entities.Deviation.list('-created_date')
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list()
   });
 
   const createMutation = useMutation({
@@ -71,14 +71,14 @@ export default function Avvik() {
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
       setShowDialog(false);
       resetForm();
-    },
+    }
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Deviation.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
-    },
+    }
   });
 
   const resetForm = () => {
@@ -108,12 +108,12 @@ export default function Avvik() {
   };
 
   const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     return project?.name || 'Ukjent prosjekt';
   };
 
   const getProjectEmail = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     return project?.client_email || '';
   };
 
@@ -123,14 +123,14 @@ export default function Avvik() {
   };
 
   const handleEmailSent = (updateData) => {
-    updateMutation.mutate({ 
-      id: selectedDeviation.id, 
-      data: updateData 
+    updateMutation.mutate({
+      id: selectedDeviation.id,
+      data: updateData
     });
     setSelectedDeviation(null);
   };
 
-  const filteredDeviations = deviations.filter(d => {
+  const filteredDeviations = deviations.filter((d) => {
     const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
     const matchesSeverity = severityFilter === 'all' || d.severity === severityFilter;
@@ -157,8 +157,8 @@ export default function Avvik() {
         title="Avvik"
         subtitle={`${deviations.length} avvik registrert`}
         onAdd={() => setShowDialog(true)}
-        addLabel="Nytt avvik"
-      />
+        addLabel="Nytt avvik" />
+
 
       <div className="px-6 lg:px-8 py-6">
         {/* Filters */}
@@ -169,8 +169,8 @@ export default function Avvik() {
               placeholder="Søk etter avvik..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 rounded-xl border-slate-200"
-            />
+              className="pl-10 rounded-xl border-slate-200" />
+
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full sm:w-40 rounded-xl">
@@ -198,76 +198,76 @@ export default function Avvik() {
         </div>
 
         {/* Deviations List */}
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1,2,3].map(i => (
-              <Card key={i} className="p-6 animate-pulse">
+        {isLoading ?
+        <div className="space-y-4">
+            {[1, 2, 3].map((i) =>
+          <Card key={i} className="p-6 animate-pulse">
                 <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
                 <div className="h-4 bg-slate-200 rounded w-1/2" />
               </Card>
-            ))}
-          </div>
-        ) : filteredDeviations.length === 0 ? (
-          <EmptyState
-            icon={AlertTriangle}
-            title="Ingen avvik"
-            description={search ? "Ingen avvik matcher søket ditt" : "Registrer avvik for å holde oversikt over kvalitetsproblemer"}
-            actionLabel="Registrer avvik"
-            onAction={() => setShowDialog(true)}
-          />
-        ) : (
-          <div className="space-y-4">
-            {filteredDeviations.map((deviation) => (
-              <Card key={deviation.id} className="p-6 border-0 shadow-sm">
+          )}
+          </div> :
+        filteredDeviations.length === 0 ?
+        <EmptyState
+          icon={AlertTriangle}
+          title="Ingen avvik"
+          description={search ? "Ingen avvik matcher søket ditt" : "Registrer avvik for å holde oversikt over kvalitetsproblemer"}
+          actionLabel="Registrer avvik"
+          onAction={() => setShowDialog(true)} /> :
+
+
+        <div className="space-y-4">
+            {filteredDeviations.map((deviation) =>
+          <Card key={deviation.id} className="p-6 border-0 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      deviation.severity === 'kritisk' ? 'bg-red-100' :
-                      deviation.severity === 'hoy' ? 'bg-orange-100' :
-                      deviation.severity === 'middels' ? 'bg-amber-100' : 'bg-slate-100'
-                    }`}>
+                deviation.severity === 'kritisk' ? 'bg-red-100' :
+                deviation.severity === 'hoy' ? 'bg-orange-100' :
+                deviation.severity === 'middels' ? 'bg-amber-100' : 'bg-slate-100'}`
+                }>
                       <AlertTriangle className={`h-6 w-6 ${
-                        deviation.severity === 'kritisk' ? 'text-red-600' :
-                        deviation.severity === 'hoy' ? 'text-orange-600' :
-                        deviation.severity === 'middels' ? 'text-amber-600' : 'text-slate-600'
-                      }`} />
+                  deviation.severity === 'kritisk' ? 'text-red-600' :
+                  deviation.severity === 'hoy' ? 'text-orange-600' :
+                  deviation.severity === 'middels' ? 'text-amber-600' : 'text-slate-600'}`
+                  } />
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-900">{deviation.title}</h3>
                       <p className="text-sm text-slate-500 mt-1">{getProjectName(deviation.project_id)}</p>
-                      {deviation.description && (
-                        <p className="text-slate-600 mt-2 line-clamp-2">{deviation.description}</p>
-                      )}
+                      {deviation.description &&
+                  <p className="text-slate-600 mt-2 line-clamp-2">{deviation.description}</p>
+                  }
                       <div className="flex items-center gap-4 mt-3 text-sm text-slate-500">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
                           {deviation.created_date && format(new Date(deviation.created_date), 'd. MMM yyyy', { locale: nb })}
                         </span>
-                        {deviation.assigned_to && (
-                          <span className="flex items-center gap-1">
+                        {deviation.assigned_to &&
+                    <span className="flex items-center gap-1">
                             <User className="h-4 w-4" />
                             {deviation.assigned_to}
                           </span>
-                        )}
+                    }
                       </div>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <StatusBadge status={deviation.severity} />
                     <StatusBadge status={deviation.status} />
-                    {deviation.category && (
-                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                    {deviation.category &&
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
                         {categoryLabels[deviation.category]}
                       </span>
-                    )}
+                }
                   </div>
                 </div>
 
                 {/* Cost Consequence Section */}
-                {deviation.has_cost_consequence && (
-                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                {deviation.has_cost_consequence &&
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="h-5 w-5 text-amber-600" />
+                      
                       <h4 className="font-medium text-amber-800">Kostnadskonsekvens</h4>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
@@ -277,23 +277,23 @@ export default function Avvik() {
                           {deviation.cost_amount?.toLocaleString('nb-NO')} kr
                         </span>
                       </div>
-                      {deviation.cost_responsible && (
-                        <div>
+                      {deviation.cost_responsible &&
+                <div>
                           <span className="text-amber-700">Ansvarlig:</span>
                           <span className="ml-2 font-medium text-amber-900">
                             {costResponsibleLabels[deviation.cost_responsible]}
                           </span>
                         </div>
-                      )}
-                      {deviation.cost_description && (
-                        <div className="sm:col-span-3">
+                }
+                      {deviation.cost_description &&
+                <div className="sm:col-span-3">
                           <span className="text-amber-700">Beskrivelse:</span>
                           <span className="ml-2 text-amber-900">{deviation.cost_description}</span>
                         </div>
-                      )}
+                }
                     </div>
                   </div>
-                )}
+            }
 
                 {/* Delivery Status */}
                 <DeliveryStatus item={deviation} />
@@ -301,45 +301,45 @@ export default function Avvik() {
                 {/* Actions */}
                 <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSendEmail(deviation)}
-                    className="rounded-xl gap-2"
-                  >
+                variant="outline"
+                size="sm"
+                onClick={() => handleSendEmail(deviation)}
+                className="rounded-xl gap-2">
+
                     <Mail className="h-4 w-4" />
                     Send til kunde
                   </Button>
-                  {deviation.status !== 'lukket' && (
-                    <>
+                  {deviation.status !== 'lukket' &&
+              <>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateMutation.mutate({ 
-                          id: deviation.id, 
-                          data: { status: 'under_behandling' } 
-                        })}
-                        disabled={deviation.status === 'under_behandling'}
-                        className="rounded-xl"
-                      >
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateMutation.mutate({
+                    id: deviation.id,
+                    data: { status: 'under_behandling' }
+                  })}
+                  disabled={deviation.status === 'under_behandling'}
+                  className="rounded-xl">
+
                         Under behandling
                       </Button>
                       <Button
-                        size="sm"
-                        onClick={() => updateMutation.mutate({ 
-                          id: deviation.id, 
-                          data: { status: 'lukket', closed_date: new Date().toISOString().split('T')[0] } 
-                        })}
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                      >
+                  size="sm"
+                  onClick={() => updateMutation.mutate({
+                    id: deviation.id,
+                    data: { status: 'lukket', closed_date: new Date().toISOString().split('T')[0] }
+                  })}
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
+
                         Lukk avvik
                       </Button>
                     </>
-                  )}
+              }
                 </div>
               </Card>
-            ))}
+          )}
           </div>
-        )}
+        }
       </div>
 
       {/* Create Dialog */}
@@ -353,27 +353,27 @@ export default function Avvik() {
               <Label>Tittel *</Label>
               <Input
                 value={formData.title}
-                onChange={(e) => setFormData({...formData, title: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Kort beskrivelse av avviket"
                 required
-                className="mt-1.5 rounded-xl"
-              />
+                className="mt-1.5 rounded-xl" />
+
             </div>
             <div>
               <Label>Prosjekt *</Label>
               <ProjectSelector
                 value={formData.project_id}
-                onChange={(v) => setFormData({...formData, project_id: v})}
-                className="mt-1.5 rounded-xl"
-              />
+                onChange={(v) => setFormData({ ...formData, project_id: v })}
+                className="mt-1.5 rounded-xl" />
+
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Kategori</Label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(v) => setFormData({...formData, category: v})}
-                >
+                <Select
+                  value={formData.category}
+                  onValueChange={(v) => setFormData({ ...formData, category: v })}>
+
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
@@ -387,10 +387,10 @@ export default function Avvik() {
               </div>
               <div>
                 <Label>Alvorlighetsgrad</Label>
-                <Select 
-                  value={formData.severity} 
-                  onValueChange={(v) => setFormData({...formData, severity: v})}
-                >
+                <Select
+                  value={formData.severity}
+                  onValueChange={(v) => setFormData({ ...formData, severity: v })}>
+
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
@@ -407,41 +407,41 @@ export default function Avvik() {
               <Label>Beskrivelse</Label>
               <Textarea
                 value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Detaljert beskrivelse av avviket..."
                 rows={3}
-                className="mt-1.5 rounded-xl"
-              />
+                className="mt-1.5 rounded-xl" />
+
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Ansvarlig</Label>
                 <Input
                   value={formData.assigned_to}
-                  onChange={(e) => setFormData({...formData, assigned_to: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   placeholder="E-post"
-                  className="mt-1.5 rounded-xl"
-                />
+                  className="mt-1.5 rounded-xl" />
+
               </div>
               <div>
                 <Label>Frist</Label>
                 <Input
                   type="date"
                   value={formData.due_date}
-                  onChange={(e) => setFormData({...formData, due_date: e.target.value})}
-                  className="mt-1.5 rounded-xl"
-                />
+                  onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                  className="mt-1.5 rounded-xl" />
+
               </div>
             </div>
             <div>
               <Label>Korrigerende tiltak</Label>
               <Textarea
                 value={formData.corrective_action}
-                onChange={(e) => setFormData({...formData, corrective_action: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, corrective_action: e.target.value })}
                 placeholder="Beskrivelse av tiltak..."
                 rows={2}
-                className="mt-1.5 rounded-xl"
-              />
+                className="mt-1.5 rounded-xl" />
+
             </div>
 
             {/* Cost Consequence Section */}
@@ -453,29 +453,29 @@ export default function Avvik() {
                 </div>
                 <Switch
                   checked={formData.has_cost_consequence}
-                  onCheckedChange={(checked) => setFormData({...formData, has_cost_consequence: checked})}
-                />
+                  onCheckedChange={(checked) => setFormData({ ...formData, has_cost_consequence: checked })} />
+
               </div>
               
-              {formData.has_cost_consequence && (
-                <div className="space-y-4 pt-2">
+              {formData.has_cost_consequence &&
+              <div className="space-y-4 pt-2">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>Beløp (NOK)</Label>
                       <Input
-                        type="number"
-                        value={formData.cost_amount}
-                        onChange={(e) => setFormData({...formData, cost_amount: e.target.value})}
-                        placeholder="0"
-                        className="mt-1.5 rounded-xl"
-                      />
+                      type="number"
+                      value={formData.cost_amount}
+                      onChange={(e) => setFormData({ ...formData, cost_amount: e.target.value })}
+                      placeholder="0"
+                      className="mt-1.5 rounded-xl" />
+
                     </div>
                     <div>
                       <Label>Ansvarlig part</Label>
-                      <Select 
-                        value={formData.cost_responsible} 
-                        onValueChange={(v) => setFormData({...formData, cost_responsible: v})}
-                      >
+                      <Select
+                      value={formData.cost_responsible}
+                      onValueChange={(v) => setFormData({ ...formData, cost_responsible: v })}>
+
                         <SelectTrigger className="mt-1.5 rounded-xl">
                           <SelectValue placeholder="Velg..." />
                         </SelectTrigger>
@@ -491,26 +491,26 @@ export default function Avvik() {
                   <div>
                     <Label>Beskrivelse av kostnad</Label>
                     <Textarea
-                      value={formData.cost_description}
-                      onChange={(e) => setFormData({...formData, cost_description: e.target.value})}
-                      placeholder="Hva er kostnaden knyttet til..."
-                      rows={2}
-                      className="mt-1.5 rounded-xl"
-                    />
+                    value={formData.cost_description}
+                    onChange={(e) => setFormData({ ...formData, cost_description: e.target.value })}
+                    placeholder="Hva er kostnaden knyttet til..."
+                    rows={2}
+                    className="mt-1.5 rounded-xl" />
+
                   </div>
                 </div>
-              )}
+              }
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
                 {createMutation.isPending ? 'Lagrer...' : 'Registrer avvik'}
               </Button>
             </div>
@@ -525,8 +525,8 @@ export default function Avvik() {
         type="avvik"
         item={selectedDeviation}
         defaultEmail={selectedDeviation ? getProjectEmail(selectedDeviation.project_id) : ''}
-        onSent={handleEmailSent}
-      />
-    </div>
-  );
+        onSent={handleEmailSent} />
+
+    </div>);
+
 }
