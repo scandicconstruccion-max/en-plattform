@@ -374,12 +374,13 @@ export default function Tilbud() {
             }}
           />
         ) : (
-          <div className="space-y-4">
-            {/* Bulk Select Header */}
-            {filteredQuotes.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-slate-200">
-                <Checkbox
-                  checked={selectedQuotes.length === filteredQuotes.length}
+          <>
+            <div className="space-y-4">
+              {/* Bulk Select Header */}
+              {filteredQuotes.length > 0 && (
+                <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-slate-200">
+                  <Checkbox
+                    checked={selectedQuotes.length === filteredQuotes.length}
                   onCheckedChange={toggleSelectAll}
                 />
                 <span className="text-sm text-slate-600">
@@ -691,6 +692,35 @@ export default function Tilbud() {
 
               {/* Delivery Status */}
               <DeliveryStatus item={selectedQuote} />
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-4 border-t">
+                <Button
+                  onClick={() => generatePDF(selectedQuote)}
+                  className="flex-1 rounded-xl gap-2"
+                  variant="outline"
+                >
+                  <Download className="h-4 w-4" />
+                  Last ned PDF
+                </Button>
+                <Button
+                  onClick={() => handleReviseQuote(selectedQuote)}
+                  className="flex-1 rounded-xl gap-2"
+                  variant="outline"
+                >
+                  <FileEdit className="h-4 w-4" />
+                  Opprett revisjon
+                </Button>
+                {!selectedQuote.sent_to_customer && (
+                  <Button
+                    onClick={() => handleSendEmail(selectedQuote)}
+                    className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <Send className="h-4 w-4" />
+                    Send
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
