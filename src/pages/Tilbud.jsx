@@ -521,6 +521,7 @@ export default function Tilbud() {
                 )}
               </Card>
             )}
+            </div>
           </>
         )}
       </div>
