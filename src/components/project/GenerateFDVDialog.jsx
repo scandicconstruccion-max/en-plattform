@@ -105,6 +105,10 @@ export default function GenerateFDVDialog({ open, onClose, project }) {
             : changes)
         : [];
 
+      // Get version number (count existing FDV packages + 1)
+      const existingFDVs = await base44.entities.FDVPackage.filter({ project_id: project.id });
+      const version = existingFDVs.length + 1;
+
       // Create FDV Package
       const fdvPackage = await createFDVMutation.mutateAsync({
         project_id: project.id,
@@ -112,7 +116,7 @@ export default function GenerateFDVDialog({ open, onClose, project }) {
         customer_name: project.client_name,
         customer_email: project.client_email,
         status: 'klar_for_overlevering',
-        description: `Automatisk generert FDV-dokumentasjon for ${project.name}`,
+        description: `Automatisk generert FDV-dokumentasjon for ${project.name} (Versjon ${version})`,
         delivery_date: new Date().toISOString(),
         approval_token: `fdv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       });
@@ -166,6 +170,24 @@ export default function GenerateFDVDialog({ open, onClose, project }) {
         ...deviationDocPromises
       ]);
 
+      // Generate PDF with branding
+      if (options.format === 'pdf') {
+        toast.info('Genererer PDF med merkevare...', { duration: 2000 });
+        
+        const pdf = await generateFDVPDF({
+          project,
+          company,
+          images: selectedImages,
+          documents: projectFiles,
+          deviations: selectedDeviations,
+          changes: selectedChanges,
+          currentUser,
+          version
+        });
+
+        pdf.save(`FDV_${project.name}_v${version}.pdf`);
+      }
+
       // Log the generation
       await base44.analytics.track({
         eventName: 'fdv_generated',
@@ -177,12 +199,12 @@ export default function GenerateFDVDialog({ open, onClose, project }) {
           changes_count: selectedChanges.length,
           format: options.format,
           generated_by: currentUser.email,
-          version: 1
+          version
         }
       });
 
       toast.success('FDV-dokumentasjon generert!', {
-        description: `${selectedImages.length} bilder, ${projectFiles.length} dokumenter inkludert`,
+        description: `Versjon ${version} - ${selectedImages.length} bilder, ${projectFiles.length} dokumenter`,
         duration: 5000
       });
 
