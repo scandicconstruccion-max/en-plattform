@@ -580,19 +580,19 @@ export default function Tilbud() {
 
             {/* Items */}
             <div className="space-y-3">
-              <Label className="text-base font-semibold mb-2 block">Linjer</Label>
+              
               <div className="grid grid-cols-12 gap-2 mb-2">
                 <div className="col-span-4">
-                  <span className="text-xs font-medium text-slate-500">Beskrivelse</span>
+                  <span className="text-slate-900 text-base font-semibold">Beskrivelse</span>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-xs font-medium text-slate-500">Mengde</span>
+                  <span className="text-slate-900 text-base font-semibold">Mengde</span>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-xs font-medium text-slate-500">Enhet</span>
+                  <span className="text-slate-900 text-base font-semibold">Enhet</span>
                 </div>
-                <div className="col-span-3">
-                  <span className="text-xs font-medium text-slate-500">Enhetspris</span>
+                <div className="text-slate-900 col-span-3">
+                  <span className="text-slate-900 text-base font-semibold">Enhetspris</span>
                 </div>
                 <div className="col-span-1"></div>
               </div>
