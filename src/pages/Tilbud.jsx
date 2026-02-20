@@ -44,6 +44,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
+import FileUploadSection from '@/components/shared/FileUploadSection';
 import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit, X, CheckCircle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -69,6 +70,7 @@ export default function Tilbud() {
     items: [{ description: '', quantity: 1, unit: 'stk', unit_price: 0 }],
     valid_until: ''
   });
+  const [attachments, setAttachments] = useState([]);
 
   const queryClient = useQueryClient();
 
