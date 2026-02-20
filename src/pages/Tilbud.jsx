@@ -337,15 +337,30 @@ export default function Tilbud() {
       />
 
       <div className="px-6 lg:px-8 py-6">
-        {/* Search */}
-        <div className="relative max-w-md mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Søk etter tilbud..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 rounded-xl border-slate-200"
-          />
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Søk etter tilbud..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 rounded-xl border-slate-200"
+            />
+          </div>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+              <SelectValue placeholder="Prosjekt" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle prosjekter</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Quotes List */}
