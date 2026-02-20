@@ -70,6 +70,7 @@ export default function Faktura() {
 
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesCustomer = customerFilter === 'all' || invoice.customer_id === customerFilter;
+    const matchesProject = projectFilter === 'all' || invoice.project_id === projectFilter;
 
     const isPaid = invoice.status === 'betalt';
     const matchesPayment =
@@ -77,7 +78,7 @@ export default function Faktura() {
     paymentFilter === 'betalt' && isPaid ||
     paymentFilter === 'ikke_betalt' && !isPaid;
 
-    return matchesSearch && matchesStatus && matchesCustomer && matchesPayment;
+    return matchesSearch && matchesStatus && matchesCustomer && matchesPayment && matchesProject;
   });
 
   const stats = {
