@@ -359,6 +359,7 @@ export default function Avvik() {
               }
                 </div>
               </Card>
+            </Link>
           )}
           </div>
         }
