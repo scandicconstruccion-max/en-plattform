@@ -321,7 +321,7 @@ export default function Avvik() {
                 <DeliveryStatus item={deviation} />
 
                 {/* Actions */}
-                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100" onClick={(e) => e.preventDefault()}>
                   <Button
                 variant="outline"
                 size="sm"
