@@ -146,10 +146,52 @@ export default function FileUploadSection({
       file_url: image.image_url,
       type: 'image',
       source: 'image_docs',
-      source_id: image.id
+      source_id: image.id,
+      uploaded_at: image.created_date,
+      uploaded_by: image.created_by
     };
     onAttachmentsChange([...attachments, newAttachment]);
     toast.success('Bilde lagt til');
+  };
+
+  const handleImageEdit = (attachment) => {
+    setEditingImage(attachment);
+  };
+
+  const handleImageEditSave = async (blob) => {
+    setUploading(true);
+    try {
+      // Upload edited image
+      const file = new File([blob], `edited_${editingImage.name}`, { type: 'image/jpeg' });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      
+      // Add as new attachment with reference to original
+      const newAttachment = {
+        name: `Redigert: ${editingImage.name}`,
+        file_url,
+        type: 'image',
+        size: blob.size,
+        uploaded_by: currentUser?.email,
+        uploaded_by_name: currentUser?.full_name,
+        uploaded_at: new Date().toISOString(),
+        edited_from: editingImage.file_url,
+        project_id: projectId,
+        module_type: moduleType
+      };
+      
+      onAttachmentsChange([...attachments, newAttachment]);
+      setEditingImage(null);
+      toast.success('Redigert bilde lagret');
+    } catch (error) {
+      toast.error('Feil ved lagring av redigert bilde');
+      console.error(error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const openCameraOptions = () => {
+    setShowCameraOptions(true);
   };
 
   const filteredFiles = projectFiles.filter(f => 
@@ -203,11 +245,11 @@ export default function FileUploadSection({
         <Button
           type="button"
           variant="outline"
-          className="w-full gap-2 sm:hidden"
-          onClick={() => cameraInputRef.current?.click()}
+          className="w-full gap-2 lg:hidden"
+          onClick={openCameraOptions}
           disabled={uploading}>
           <Camera className="h-4 w-4" />
-          Ta bilde
+          Legg til bilde
         </Button>
       </div>
 
@@ -226,6 +268,15 @@ export default function FileUploadSection({
         type="file"
         accept="image/*"
         capture="environment"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        multiple
         onChange={handleFileSelect}
         className="hidden"
       />
@@ -270,15 +321,33 @@ export default function FileUploadSection({
                     </p>
                   )}
                 </div>
-                {attachment.file_url && (
-                  <a
-                    href={attachment.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:underline flex-shrink-0">
-                    Forhåndsvis
-                  </a>
-                )}
+                <div className="flex gap-1 flex-shrink-0">
+                  {attachment.type === 'image' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleImageEdit(attachment)}
+                      className="h-8 w-8"
+                      title="Rediger bilde">
+                      <Edit3 className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {attachment.file_url && (
+                    <a
+                      href={attachment.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline px-2 py-1">
+                      Vis
+                    </a>
+                  )}
+                  {attachment.gps_location && (
+                    <div className="text-xs text-green-600 flex items-center gap-1" title={`GPS: ${attachment.gps_location.latitude.toFixed(6)}, ${attachment.gps_location.longitude.toFixed(6)}`}>
+                      <MapPin className="h-3 w-3" />
+                    </div>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
