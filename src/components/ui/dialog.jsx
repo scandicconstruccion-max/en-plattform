@@ -35,7 +35,7 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
         className
       )}
       {...props}>
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         {children}
       </div>
       <DialogPrimitive.Close
