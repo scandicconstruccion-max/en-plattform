@@ -9,7 +9,6 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import KPISection from '@/components/dashboard/KPISection';
-import BrandBanner from '@/components/branding/BrandBanner';
 import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
 import {
   Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText
@@ -108,9 +107,6 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 lg:px-8 py-8 space-y-8">
-        {/* Brand Banner */}
-        <BrandBanner />
-
         {/* KPI Section - Only for users with permission */}
         {canViewKPI(user, 'company') && <KPISection />}
 
