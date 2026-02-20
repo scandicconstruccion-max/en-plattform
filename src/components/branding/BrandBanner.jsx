@@ -43,68 +43,55 @@ export default function BrandBanner() {
 
   return (
     <div className={cn(
-      "relative bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl shadow-lg overflow-hidden transition-all duration-300 mb-6",
-      isMinimized ? "h-16" : "h-auto"
+      "relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden transition-all duration-300 mb-6",
+      isMinimized ? "h-14" : "h-auto"
     )}>
-      {/* Background pattern */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0" style={{
-          backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,.1) 10px, rgba(255,255,255,.1) 20px)'
-        }} />
-      </div>
-
-      <div className="relative z-10 p-6">
+      <div className="relative z-10 p-4">
         {/* Action buttons */}
-        <div className="absolute top-3 right-3 flex gap-2">
+        <div className="absolute top-3 right-3 flex gap-1">
           <Button
             variant="ghost"
             size="icon"
             onClick={handleMinimize}
-            className="h-8 w-8 text-white hover:bg-white/20 rounded-full"
+            className="h-7 w-7 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
-            <Minimize2 className="h-4 w-4" />
+            <Minimize2 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={handleClose}
-            className="h-8 w-8 text-white hover:bg-white/20 rounded-full"
+            className="h-7 w-7 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </Button>
         </div>
 
         <div className={cn(
-          "flex items-center gap-6 transition-all duration-300",
+          "flex items-center gap-4 transition-all duration-300",
           isMinimized && "opacity-0 h-0 overflow-hidden"
         )}>
           {/* Icon */}
           <div className="flex-shrink-0">
-            <div className="w-24 h-24 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-              <PuzzleHouseIcon className="w-16 h-16 text-white" />
-            </div>
+            <PuzzleHouseIcon className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
           </div>
 
           {/* Content */}
           <div className="flex-1">
-            <h2 className="text-3xl font-bold text-white mb-2">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
               Velkommen til ditt KS-system
             </h2>
-            <p className="text-xl text-white/90 font-medium italic">
+            <p className="text-sm text-slate-600 dark:text-slate-400 italic">
               Av håndverkeren, for håndverkeren
-            </p>
-            <p className="text-sm text-white/80 mt-3 max-w-2xl">
-              Et komplett system laget av håndverkere som forstår dine behov. 
-              Administrer prosjekter, timer, faktura og dokumentasjon på én plattform.
             </p>
           </div>
         </div>
 
         {/* Minimized state */}
         {isMinimized && (
-          <div className="flex items-center gap-4">
-            <PuzzleHouseIcon className="w-8 h-8 text-white" />
-            <p className="text-white font-medium italic">
+          <div className="flex items-center gap-3">
+            <PuzzleHouseIcon className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            <p className="text-sm text-slate-600 dark:text-slate-400 italic">
               Av håndverkeren, for håndverkeren
             </p>
           </div>

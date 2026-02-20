@@ -18,8 +18,8 @@ export default function BrandTooltip({ children, content }) {
           <div className="space-y-2">
             <p className="text-sm">{content}</p>
             <div className="flex items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-              <PuzzleHouseIcon className="w-3 h-3 text-emerald-600" />
-              <p className="text-xs text-slate-500 italic">
+              <PuzzleHouseIcon className="w-3 h-3 text-slate-400" />
+              <p className="text-xs text-slate-400 italic">
                 Laget med tanke på håndverkeren
               </p>
             </div>
