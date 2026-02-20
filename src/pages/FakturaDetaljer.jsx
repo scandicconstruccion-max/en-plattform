@@ -27,6 +27,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import PageHeader from '@/components/shared/PageHeader';
 import InvoicePreview from '@/components/faktura/InvoicePreview';
+import FileUploadSection from '@/components/shared/FileUploadSection';
 import { formatAmount } from '@/components/shared/formatNumber';
 
 export default function FakturaDetaljer() {
@@ -56,6 +57,7 @@ export default function FakturaDetaljer() {
   const [lines, setLines] = useState([
   { description: '', quantity: 1, unit: 'stk', unit_price: 0, vat_rate: 25 }]
   );
+  const [attachments, setAttachments] = useState([]);
 
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
