@@ -807,6 +807,28 @@ export default function Tilbud() {
         defaultEmail={selectedQuote?.customer_email || ''}
         onSent={handleEmailSent}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bekreft sletting</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette {selectedQuotes.length} {selectedQuotes.length === 1 ? 'tilbud' : 'tilbud'}? 
+              Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Slett
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
