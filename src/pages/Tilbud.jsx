@@ -44,7 +44,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
-import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit, X } from 'lucide-react';
+import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit, X, CheckCircle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -88,6 +88,11 @@ export default function Tilbud() {
   });
 
   const company = companies?.[0];
+
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Quote.create(data),
@@ -195,6 +200,46 @@ export default function Tilbud() {
       data: updateData
     });
     setSelectedQuote(null);
+  };
+
+  const handleAcceptQuote = async (quote) => {
+    updateMutation.mutate({
+      id: quote.id,
+      data: {
+        status: 'godkjent',
+        approved_date: new Date().toISOString(),
+        approved_by_email: user?.email
+      }
+    });
+    toast.success('Tilbud akseptert');
+  };
+
+  const handleSendToOrder = async (quote) => {
+    try {
+      const orderData = {
+        customer_name: quote.customer_name,
+        customer_email: quote.customer_email,
+        customer_phone: quote.customer_phone,
+        project_id: quote.project_id,
+        project_name: projects.find((p) => p.id === quote.project_id)?.name || '',
+        our_reference: user?.email,
+        description: quote.project_description,
+        items: quote.items,
+        total_amount: quote.total_amount,
+        vat_amount: quote.vat_amount,
+        status: 'opprettet',
+        source_type: 'quote',
+        source_id: quote.id,
+        order_number: `O-${Date.now().toString().slice(-6)}`
+      };
+
+      await base44.entities.Order.create(orderData);
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Ordre opprettet fra tilbud');
+      setShowDetailDialog(false);
+    } catch (error) {
+      toast.error('Kunne ikke opprette ordre');
+    }
   };
 
   const activeQuotes = useMemo(() => {
@@ -798,7 +843,29 @@ export default function Tilbud() {
                     </Button>
                 }
                 </div>
-                {selectedQuote.status !== 'avvist' && selectedQuote.status !== 'utlopt' &&
+
+                {/* Accept Quote Button */}
+                {selectedQuote.sent_to_customer && selectedQuote.status === 'sendt' &&
+              <Button
+                onClick={() => handleAcceptQuote(selectedQuote)}
+                className="w-full rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
+                    <CheckCircle className="h-4 w-4" />
+                    Aksepter tilbud
+                  </Button>
+              }
+
+                {/* Send to Order Button */}
+                {selectedQuote.status === 'godkjent' &&
+              <Button
+                onClick={() => handleSendToOrder(selectedQuote)}
+                className="w-full rounded-xl gap-2 bg-blue-600 hover:bg-blue-700">
+                    <FileText className="h-4 w-4" />
+                    Send til ordre
+                  </Button>
+              }
+
+                {/* Reject Quote Button */}
+                {selectedQuote.status !== 'avvist' && selectedQuote.status !== 'utlopt' && selectedQuote.status !== 'godkjent' &&
               <Button
                 onClick={() => {
                   updateMutation.mutate({
