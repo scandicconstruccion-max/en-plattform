@@ -1,355 +1,282 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/shared/PageHeader';
-import StatusBadge from '@/components/shared/StatusBadge';
-import EmptyState from '@/components/shared/EmptyState';
-import ProjectSelector from '@/components/shared/ProjectSelector';
-import StatCard from '@/components/shared/StatCard';
-import { Clock, Calendar, Building2 } from 'lucide-react';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, isSameDay } from 'date-fns';
+import WeekView from '@/components/timelister/WeekView';
+import { ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, Send } from 'lucide-react';
+import { format, startOfWeek, addWeeks, getWeek, getYear } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Timelister() {
-  const [showDialog, setShowDialog] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [formData, setFormData] = useState({
-    project_id: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    hours: '',
-    overtime_hours: '',
-    work_type: 'normal',
-    description: ''
-  });
-
+  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => base44.auth.me()
   });
 
+  const { data: employee } = useQuery({
+    queryKey: ['currentEmployee', user?.email],
+    queryFn: async () => {
+      const employees = await base44.entities.Employee.filter({ email: user.email });
+      return employees[0];
+    },
+    enabled: !!user
+  });
+
+  const weekNumber = getWeek(currentWeekStart, { weekStartsOn: 1, firstWeekContainsDate: 4 });
+  const year = getYear(currentWeekStart);
+
   const { data: timesheets = [], isLoading } = useQuery({
-    queryKey: ['timesheets'],
-    queryFn: () => base44.entities.Timesheet.list('-date'),
+    queryKey: ['timesheets', employee?.id, weekNumber, year],
+    queryFn: () => base44.entities.Timesheet.filter({
+      employee_id: employee.id,
+      week_number: weekNumber,
+      year: year
+    }),
+    enabled: !!employee
   });
 
   const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Timesheet.create({
-      ...data,
-      user_email: user?.email
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['timesheets'] });
-      setShowDialog(false);
-      resetForm();
+    queryKey: ['assignedProjects', user?.email],
+    queryFn: async () => {
+      const allProjects = await base44.entities.Project.list();
+      return allProjects.filter(p => 
+        p.assigned_users?.includes(user.email) || 
+        p.project_manager === user.email
+      );
     },
+    enabled: !!user
   });
 
-  const resetForm = () => {
-    setFormData({
-      project_id: '',
-      date: format(new Date(), 'yyyy-MM-dd'),
-      hours: '',
-      overtime_hours: '',
-      work_type: 'normal',
-      description: ''
-    });
-  };
+  const submitWeekMutation = useMutation({
+    mutationFn: async () => {
+      const draftTimesheets = timesheets.filter(t => t.status === 'kladd');
+      
+      if (draftTimesheets.length === 0) {
+        throw new Error('Ingen kladd-timer å sende inn');
+      }
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    createMutation.mutate({
-      ...formData,
-      hours: parseFloat(formData.hours),
-      overtime_hours: formData.overtime_hours ? parseFloat(formData.overtime_hours) : 0
-    });
-  };
+      const updates = draftTimesheets.map(t =>
+        base44.entities.Timesheet.update(t.id, {
+          status: 'sendt_inn',
+          submitted_date: new Date().toISOString()
+        })
+      );
 
-  const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
-    return project?.name || 'Ukjent prosjekt';
-  };
-
-  // Week navigation
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
-
-  // Calculate stats
-  const myTimesheets = timesheets.filter(t => t.user_email === user?.email);
-  const thisWeekTimesheets = myTimesheets.filter(t => {
-    const date = new Date(t.date);
-    return date >= weekStart && date <= weekEnd;
+      await Promise.all(updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['timesheets']);
+      toast.success('Uke sendt inn for godkjenning');
+      setShowSubmitDialog(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Kunne ikke sende inn uke');
+    }
   });
-  const totalHoursThisWeek = thisWeekTimesheets.reduce((sum, t) => sum + (t.hours || 0), 0);
-  const totalOvertimeThisWeek = thisWeekTimesheets.reduce((sum, t) => sum + (t.overtime_hours || 0), 0);
 
-  const getHoursForDay = (date) => {
-    return myTimesheets
-      .filter(t => isSameDay(new Date(t.date), date))
-      .reduce((sum, t) => sum + (t.hours || 0), 0);
+  const weekStats = useMemo(() => {
+    const stats = {
+      total: 0,
+      kladd: 0,
+      sendt_inn: 0,
+      godkjent: 0,
+      avvist: 0
+    };
+
+    timesheets.forEach(t => {
+      stats.total += t.hours;
+      stats[t.status] = (stats[t.status] || 0) + 1;
+    });
+
+    return stats;
+  }, [timesheets]);
+
+  const canSubmitWeek = useMemo(() => {
+    const draftTimesheets = timesheets.filter(t => t.status === 'kladd');
+    return draftTimesheets.length > 0 && draftTimesheets.every(t => 
+      t.work_description && t.work_description.length >= 10
+    );
+  }, [timesheets]);
+
+  const goToPreviousWeek = () => {
+    setCurrentWeekStart(addWeeks(currentWeekStart, -1));
   };
+
+  const goToNextWeek = () => {
+    setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+  };
+
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  };
+
+  if (!employee) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="p-8 text-center">
+          <p className="text-slate-600">Du må være registrert som ansatt for å bruke timelister</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
-        title="Timelister"
-        subtitle="Registrer og følg opp arbeidstimer"
-        onAdd={() => setShowDialog(true)}
-        addLabel="Registrer timer"
+        title="Mine timer"
+        subtitle={`Uke ${weekNumber}, ${year}`}
       />
 
       <div className="px-6 lg:px-8 py-6 space-y-6">
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard
-            title="Timer denne uken"
-            value={totalHoursThisWeek.toFixed(1)}
-            icon={Clock}
-            iconColor="text-blue-600"
-            iconBg="bg-blue-100"
-          />
-          <StatCard
-            title="Overtid denne uken"
-            value={totalOvertimeThisWeek.toFixed(1)}
-            icon={Clock}
-            iconColor="text-amber-600"
-            iconBg="bg-amber-100"
-          />
-          <StatCard
-            title="Totalt timer"
-            value={myTimesheets.reduce((sum, t) => sum + (t.hours || 0), 0).toFixed(1)}
-            icon={Clock}
-            iconColor="text-emerald-600"
-            iconBg="bg-emerald-100"
-          />
+        {/* Week Navigation */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <Button variant="outline" onClick={goToPreviousWeek} className="rounded-xl">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-sm text-slate-600">Uke {weekNumber}</p>
+                <p className="font-semibold text-slate-900">
+                  {format(currentWeekStart, 'd. MMM', { locale: nb })} - {format(addWeeks(currentWeekStart, 1), 'd. MMM yyyy', { locale: nb })}
+                </p>
+              </div>
+              <Button variant="outline" onClick={goToCurrentWeek} size="sm" className="rounded-xl">
+                I dag
+              </Button>
+            </div>
+
+            <Button variant="outline" onClick={goToNextWeek} className="rounded-xl">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </Card>
+
+        {/* Week Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-slate-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{weekStats.total}</p>
+                <p className="text-xs text-slate-600">Timer totalt</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary">{weekStats.kladd}</Badge>
+              <p className="text-xs text-slate-600">Kladd</p>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">{weekStats.sendt_inn}</Badge>
+              <p className="text-xs text-slate-600">Sendt inn</p>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                {weekStats.godkjent}
+              </Badge>
+              <p className="text-xs text-slate-600">Godkjent</p>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+                <XCircle className="h-3 w-3 mr-1" />
+                {weekStats.avvist}
+              </Badge>
+              <p className="text-xs text-slate-600">Avvist</p>
+            </div>
+          </Card>
         </div>
 
         {/* Week View */}
-        <Card className="border-0 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-semibold text-slate-900">Ukeoversikt</h2>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 7)))}
-                className="rounded-xl"
-              >
-                ← Forrige
-              </Button>
-              <span className="text-sm text-slate-600 px-3">
-                Uke {format(selectedDate, 'w', { locale: nb })} - {format(selectedDate, 'yyyy')}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 7)))}
-                className="rounded-xl"
-              >
-                Neste →
-              </Button>
-            </div>
-          </div>
+        <WeekView
+          weekStart={currentWeekStart}
+          weekNumber={weekNumber}
+          year={year}
+          employee={employee}
+          timesheets={timesheets}
+          projects={projects}
+          isLoading={isLoading}
+        />
 
-          <div className="grid grid-cols-7 gap-2">
-            {weekDays.map((day) => {
-              const hours = getHoursForDay(day);
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={`p-4 rounded-xl text-center cursor-pointer transition-all ${
-                    isToday(day) 
-                      ? 'bg-emerald-100 border-2 border-emerald-500' 
-                      : 'bg-slate-50 hover:bg-slate-100'
-                  }`}
-                  onClick={() => {
-                    setFormData({ ...formData, date: format(day, 'yyyy-MM-dd') });
-                    setShowDialog(true);
-                  }}
-                >
-                  <p className="text-xs text-slate-500 uppercase">
-                    {format(day, 'EEE', { locale: nb })}
-                  </p>
-                  <p className={`text-lg font-semibold mt-1 ${isToday(day) ? 'text-emerald-700' : 'text-slate-900'}`}>
-                    {format(day, 'd')}
-                  </p>
-                  <p className={`text-sm mt-2 font-medium ${hours > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
-                    {hours > 0 ? `${hours}t` : '-'}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        {/* Recent Timesheets */}
-        <Card className="border-0 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-100">
-            <h2 className="font-semibold text-slate-900">Siste registreringer</h2>
-          </div>
-          {isLoading ? (
-            <div className="p-6 animate-pulse space-y-4">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-16 bg-slate-100 rounded-xl" />
-              ))}
+        {/* Submit Week */}
+        {weekStats.kladd > 0 && (
+          <Card className="p-4 bg-emerald-50 border-emerald-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-emerald-900">Klar til å sende inn?</p>
+                <p className="text-sm text-emerald-700">
+                  {weekStats.kladd} {weekStats.kladd === 1 ? 'timeføring' : 'timeføringer'} venter på innsending
+                </p>
+              </div>
+              <Button
+                onClick={() => setShowSubmitDialog(true)}
+                disabled={!canSubmitWeek}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Send inn uke
+              </Button>
             </div>
-          ) : myTimesheets.length === 0 ? (
-            <EmptyState
-              icon={Clock}
-              title="Ingen timer registrert"
-              description="Kom i gang ved å registrere dine første timer"
-              actionLabel="Registrer timer"
-              onAction={() => setShowDialog(true)}
-            />
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {myTimesheets.slice(0, 10).map((timesheet) => (
-                <div key={timesheet.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                      <Clock className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-slate-900">{getProjectName(timesheet.project_id)}</p>
-                      <p className="text-sm text-slate-500">
-                        {timesheet.date && format(new Date(timesheet.date), 'EEEE d. MMMM', { locale: nb })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-slate-900">{timesheet.hours} timer</p>
-                    {timesheet.overtime_hours > 0 && (
-                      <p className="text-sm text-amber-600">+{timesheet.overtime_hours} overtid</p>
-                    )}
-                    <StatusBadge status={timesheet.status} className="mt-1" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+          </Card>
+        )}
       </div>
 
-      {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Registrer timer</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label>Prosjekt *</Label>
-              <ProjectSelector
-                value={formData.project_id}
-                onChange={(v) => setFormData({...formData, project_id: v})}
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div>
-              <Label>Dato *</Label>
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({...formData, date: e.target.value})}
-                required
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Timer *</Label>
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="24"
-                  value={formData.hours}
-                  onChange={(e) => setFormData({...formData, hours: e.target.value})}
-                  placeholder="7.5"
-                  required
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-              <div>
-                <Label>Overtid</Label>
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={formData.overtime_hours}
-                  onChange={(e) => setFormData({...formData, overtime_hours: e.target.value})}
-                  placeholder="0"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Type arbeid</Label>
-              <Select 
-                value={formData.work_type} 
-                onValueChange={(v) => setFormData({...formData, work_type: v})}
-              >
-                <SelectTrigger className="mt-1.5 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="overtid">Overtid</SelectItem>
-                  <SelectItem value="helg">Helg</SelectItem>
-                  <SelectItem value="helligdag">Helligdag</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Beskrivelse</Label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                placeholder="Hva jobbet du med?"
-                rows={2}
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {createMutation.isPending ? 'Lagrer...' : 'Registrer'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Submit Confirmation Dialog */}
+      <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send inn uke {weekNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dette vil sende alle kladd-timer til godkjenning. Du kan ikke redigere timene etter innsending.
+              <br /><br />
+              <strong>Totalt: {weekStats.total} timer</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => submitWeekMutation.mutate()}
+              disabled={submitWeekMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {submitWeekMutation.isPending ? 'Sender inn...' : 'Send inn'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
