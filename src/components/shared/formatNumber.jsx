@@ -4,7 +4,7 @@ export const formatNumber = (number) => {
   return Math.round(number).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 };
 
-// Formaterer beløp med "Kr" suffix
+// Formaterer beløp med "Kr." suffix
 export const formatAmount = (amount) => {
-  return `${formatNumber(amount)} Kr`;
+  return `${formatNumber(amount)} Kr.`;
 };
