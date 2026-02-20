@@ -87,7 +87,9 @@ export default function Prosjekter() {
       start_date: '',
       end_date: '',
       status: 'planlagt',
-      budget: ''
+      budget: '',
+      project_manager: '',
+      project_manager_name: ''
     });
   };
 
