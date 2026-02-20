@@ -361,82 +361,83 @@ export default function Ansatte() {
                 {/* Personal Info */}
                 <div>
                   <h4 className="font-medium text-slate-900 dark:text-white mb-3">Personalia</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Fornavn *</Label>
-                  <Input
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({...formData, first_name: e.target.value})}
-                    required
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Etternavn *</Label>
-                  <Input
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({...formData, last_name: e.target.value})}
-                    required
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>E-post *</Label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    required
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Telefon</Label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Fødselsdato</Label>
-                  <Input
-                    type="date"
-                    value={formData.birth_date}
-                    onChange={(e) => setFormData({...formData, birth_date: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Fornavn *</Label>
+                      <Input
+                        value={formData.first_name}
+                        onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                        required
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Etternavn *</Label>
+                      <Input
+                        value={formData.last_name}
+                        onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                        required
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>E-post *</Label>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        required
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Telefon</Label>
+                      <Input
+                        value={formData.phone}
+                        onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Fødselsdato</Label>
+                      <Input
+                        type="date"
+                        value={formData.birth_date}
+                        onChange={(e) => setFormData({...formData, birth_date: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Address */}
                 <div>
                   <h4 className="font-medium text-slate-900 dark:text-white mb-3">Adresse</h4>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-3">
-                  <Label>Gateadresse</Label>
-                  <Input
-                    value={formData.address}
-                    onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Postnummer</Label>
-                  <Input
-                    value={formData.postal_code}
-                    onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Sted</Label>
-                  <Input
-                    value={formData.city}
-                    onChange={(e) => setFormData({...formData, city: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-3">
+                      <Label>Gateadresse</Label>
+                      <Input
+                        value={formData.address}
+                        onChange={(e) => setFormData({...formData, address: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Postnummer</Label>
+                      <Input
+                        value={formData.postal_code}
+                        onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Sted</Label>
+                      <Input
+                        value={formData.city}
+                        onChange={(e) => setFormData({...formData, city: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
                   </div>
                 </div>
 
