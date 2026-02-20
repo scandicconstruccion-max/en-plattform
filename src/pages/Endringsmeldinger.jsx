@@ -35,6 +35,7 @@ export default function Endringsmeldinger() {
   const [selectedChange, setSelectedChange] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -125,7 +126,8 @@ export default function Endringsmeldinger() {
   const filteredChanges = changes.filter(c => {
     const matchesSearch = c.title?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesProject = projectFilter === 'all' || c.project_id === projectFilter;
+    return matchesSearch && matchesStatus && matchesProject;
   });
 
   const changeTypeIcons = {
@@ -177,6 +179,19 @@ export default function Endringsmeldinger() {
               <SelectItem value="sendt">Sendt</SelectItem>
               <SelectItem value="godkjent">Godkjent</SelectItem>
               <SelectItem value="avvist">Avvist</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+              <SelectValue placeholder="Prosjekt" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle prosjekter</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -37,6 +37,7 @@ export default function Avvik() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -134,7 +135,8 @@ export default function Avvik() {
     const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
     const matchesSeverity = severityFilter === 'all' || d.severity === severityFilter;
-    return matchesSearch && matchesStatus && matchesSeverity;
+    const matchesProject = projectFilter === 'all' || d.project_id === projectFilter;
+    return matchesSearch && matchesStatus && matchesSeverity && matchesProject;
   });
 
   const categoryLabels = {
@@ -193,6 +195,19 @@ export default function Avvik() {
               <SelectItem value="middels">Middels</SelectItem>
               <SelectItem value="hoy">Høy</SelectItem>
               <SelectItem value="kritisk">Kritisk</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+              <SelectValue placeholder="Prosjekt" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle prosjekter</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

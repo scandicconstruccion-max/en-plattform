@@ -52,6 +52,7 @@ export default function Tilbud() {
   const [selectedQuotes, setSelectedQuotes] = useState([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [formData, setFormData] = useState({
     quote_number: '',
     customer_name: '',
@@ -67,6 +68,11 @@ export default function Tilbud() {
   const { data: quotes = [], isLoading } = useQuery({
     queryKey: ['quotes'],
     queryFn: () => base44.entities.Quote.list('-created_date'),
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
   });
 
   const createMutation = useMutation({
@@ -172,10 +178,12 @@ export default function Tilbud() {
 
   const filteredQuotes = useMemo(() => {
     return quotes.filter(q => {
-      return q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+      const matchesSearch = q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
              q.quote_number?.toLowerCase().includes(search.toLowerCase());
+      const matchesProject = projectFilter === 'all' || q.project_id === projectFilter;
+      return matchesSearch && matchesProject;
     });
-  }, [quotes, search]);
+  }, [quotes, search, projectFilter]);
 
   const toggleSelectQuote = (quoteId) => {
     setSelectedQuotes(prev =>
