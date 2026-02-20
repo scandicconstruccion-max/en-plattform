@@ -469,50 +469,51 @@ export default function Ansatte() {
                 {/* Employment */}
                 <div>
                   <h4 className="font-medium text-slate-900 dark:text-white mb-3">Ansettelsesforhold</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Stilling</Label>
-                  <Input
-                    value={formData.position}
-                    onChange={(e) => setFormData({...formData, position: e.target.value})}
-                    placeholder="f.eks. Prosjektleder"
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Avdeling</Label>
-                  <Input
-                    value={formData.department}
-                    onChange={(e) => setFormData({...formData, department: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Ansettelsestype</Label>
-                  <Select 
-                    value={formData.employment_type} 
-                    onValueChange={(v) => setFormData({...formData, employment_type: v})}
-                  >
-                    <SelectTrigger className="mt-1.5 rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fast">Fast ansatt</SelectItem>
-                      <SelectItem value="midlertidig">Midlertidig</SelectItem>
-                      <SelectItem value="vikar">Vikar</SelectItem>
-                      <SelectItem value="laerling">Lærling</SelectItem>
-                      <SelectItem value="deltid">Deltid</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Startdato</Label>
-                  <Input
-                    type="date"
-                    value={formData.start_date}
-                    onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Stilling</Label>
+                      <Input
+                        value={formData.position}
+                        onChange={(e) => setFormData({...formData, position: e.target.value})}
+                        placeholder="f.eks. Prosjektleder"
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Avdeling</Label>
+                      <Input
+                        value={formData.department}
+                        onChange={(e) => setFormData({...formData, department: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <Label>Ansettelsestype</Label>
+                      <Select 
+                        value={formData.employment_type} 
+                        onValueChange={(v) => setFormData({...formData, employment_type: v})}
+                      >
+                        <SelectTrigger className="mt-1.5 rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fast">Fast ansatt</SelectItem>
+                          <SelectItem value="midlertidig">Midlertidig</SelectItem>
+                          <SelectItem value="vikar">Vikar</SelectItem>
+                          <SelectItem value="laerling">Lærling</SelectItem>
+                          <SelectItem value="deltid">Deltid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Startdato</Label>
+                      <Input
+                        type="date"
+                        value={formData.start_date}
+                        onChange={(e) => setFormData({...formData, start_date: e.target.value})}
+                        className="mt-1.5 rounded-xl"
+                      />
+                    </div>
                   </div>
                 </div>
 
