@@ -139,6 +139,7 @@ export default function Tilbud() {
       items: [{ description: '', quantity: 1, unit: 'stk', unit_price: 0 }],
       valid_until: ''
     });
+    setAttachments([]);
   };
 
   const handleAddItem = () => {
