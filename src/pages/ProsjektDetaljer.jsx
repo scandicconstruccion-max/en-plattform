@@ -197,7 +197,6 @@ export default function ProsjektDetaljer() {
               Rediger
             </Button>
           </div>
-          </Button>
         }
       />
 
