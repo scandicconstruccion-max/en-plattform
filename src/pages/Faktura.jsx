@@ -32,6 +32,7 @@ export default function Faktura() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [customerFilter, setCustomerFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [showBulkActions, setShowBulkActions] = useState(false);
