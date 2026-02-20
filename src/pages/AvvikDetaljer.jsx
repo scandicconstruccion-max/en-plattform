@@ -656,6 +656,23 @@ export default function AvvikDetaljer() {
         }}
         onSent={handleEmailSent}
       />
+
+       <SendAvvikDialog
+         deviation={deviation}
+         isOpen={showSendAvvikDialog}
+         onClose={() => setShowSendAvvikDialog(false)}
+         onSent={() => {
+           queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
+           queryClient.invalidateQueries({ queryKey: ['deviations'] });
+         }}
+       />
+
+       {deviation.activity_log && deviation.activity_log.length > 0 && (
+         <Card className="p-6 border-0 shadow-sm">
+           <ActivityLog activityLog={deviation.activity_log} />
+         </Card>
+       )}
+
     </div>
   );
 }
