@@ -245,7 +245,7 @@ export default function KPISection() {
                     </div>
                   </div>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColors[kpi.color]}`}>
-                    {kpi.title.includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
+                    {kpi.title.toLowerCase().includes('faktur') || kpi.title.includes('endringsmeldinger') ? (
                       <span className="text-lg font-bold">Kr.</span>
                     ) : (
                       <kpi.icon className="h-6 w-6" />
