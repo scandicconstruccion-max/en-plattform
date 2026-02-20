@@ -710,6 +710,13 @@ export default function Tilbud() {
               </Button>
             </div>
 
+            {/* File Upload Section */}
+            <FileUploadSection
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              projectId={null}
+            />
+
             {/* Totals */}
             <div className="space-y-2 text-right">
               <div className="flex justify-end gap-8">
