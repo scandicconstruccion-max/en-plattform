@@ -190,7 +190,12 @@ export default function Layout({ children, currentPageName }) {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
                 <Building2 className="h-5 w-5 text-white" />
               </div>
-              {!sidebarCollapsed && <span className="font-bold text-xl text-slate-900 dark:text-white">En Plattform</span>}
+              {!sidebarCollapsed && (
+                <div className="flex flex-col">
+                  <span className="font-bold text-xl text-slate-900 dark:text-white">En Plattform</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 italic">Av håndverkeren, for håndverkeren</span>
+                </div>
+              )}
             </div>
           </div>
         }
