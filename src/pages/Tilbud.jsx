@@ -310,13 +310,13 @@ export default function Tilbud() {
 
 
 
-                <Button
-              variant="outline"
-              onClick={() => setSelectedQuotes([])}
-              className="rounded-xl">
+                
 
-                  Avbryt
-                </Button>
+
+
+
+
+
               </>
           }
             <Button
