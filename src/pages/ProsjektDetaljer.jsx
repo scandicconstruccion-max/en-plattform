@@ -964,6 +964,29 @@ export default function ProsjektDetaljer() {
         onClose={handleFDVGenerated}
         project={project}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent className="rounded-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600">Slett prosjekt</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-700">
+              Prosjektet "{project.name}" og all tilknyttet informasjon vil bli permanent slettet. 
+              Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-3">
+            <AlertDialogCancel className="rounded-xl">Avbryt</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 rounded-xl"
+            >
+              {deleteMutation.isPending ? 'Sletter...' : 'Slett prosjekt'}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
