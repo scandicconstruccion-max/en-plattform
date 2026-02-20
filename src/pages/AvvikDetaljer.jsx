@@ -34,6 +34,8 @@ export default function AvvikDetaljer() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showSendAvvikDialog, setShowSendAvvikDialog] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
