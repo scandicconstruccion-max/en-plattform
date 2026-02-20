@@ -361,7 +361,7 @@ export default function Avvik() {
               </Card>
             </Link>
           )}
-          </div>
+        </div>
         }
       </div>
 
