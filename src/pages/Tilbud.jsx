@@ -527,20 +527,22 @@ export default function Tilbud() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveItem(index)}
-                          updateMutation.mutate({ id: quote.id, data: { status: 'godkjent' } });
-                        }}
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
                       >
-                        Godkjent
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    </>
-                  )}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddItem}
+                  className="w-full rounded-xl"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Legg til linje
+                </Button>
+              </div>
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
