@@ -122,6 +122,83 @@ export default function AvvikDetaljer() {
     updateMutation.mutate(updateData);
   };
 
+  const handleCloseDeviation = async () => {
+    if (!deviation.customer_approved) {
+      toast.error('Avvik må godkjennes av kunde før lukking');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const user = await base44.auth.me();
+      const newActivityLog = deviation.activity_log || [];
+      
+      newActivityLog.push({
+        action: 'lukket',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: 'Avvik markert som utført'
+      });
+
+      // Create invoice automatically
+      const invoiceData = {
+        customer_name: getProjectName(deviation.project_id),
+        customer_email: getProjectEmail(deviation.project_id),
+        project_id: deviation.project_id,
+        project_name: getProjectName(deviation.project_id),
+        invoice_date: format(new Date(), 'yyyy-MM-dd'),
+        due_date: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+        amount_excluding_vat: deviation.cost_amount || 0,
+        vat_amount: Math.round((deviation.cost_amount || 0) * 0.25 * 100) / 100,
+        total_amount: Math.round((deviation.cost_amount || 0) * 1.25 * 100) / 100,
+        status: 'kladd',
+        our_reference: user.email,
+        our_reference_name: user.full_name,
+        comment: `Automatisk opprettet fra avvik: ${deviation.title}`
+      };
+
+      const newInvoice = await base44.entities.Invoice.create(invoiceData);
+
+      // Update deviation with invoice reference
+      await base44.entities.Deviation.update(deviationId, {
+        status: 'lukket',
+        closed_date: new Date().toISOString(),
+        invoice_id: newInvoice.id,
+        activity_log: newActivityLog
+      });
+
+      newActivityLog.push({
+        action: 'faktura_opprettet',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: `Faktura opprettet automatisk (ID: ${newInvoice.id})`
+      });
+
+      // Send notification to project manager
+      const project = await base44.entities.Project.read(deviation.project_id);
+      if (project.project_manager) {
+        await base44.integrations.Core.SendEmail({
+          to: project.project_manager,
+          subject: `Avvik lukket og faktura opprettet: ${deviation.title}`,
+          body: `Avvik "${deviation.title}" har blitt lukket og en faktura har blitt opprettet automatisk.\n\nBeløp: ${invoiceData.total_amount} Kr (inkl. MVA)\n\nDu kan finne fakturaen i Faktura-modulen.`,
+          from_name: 'Avvik-system'
+        });
+      }
+
+      toast.success('Avvik lukket og faktura opprettet');
+      queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
+      queryClient.invalidateQueries({ queryKey: ['deviations'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (error) {
+      console.error('Feil ved lukking av avvik:', error);
+      toast.error('Feil ved lukking av avvik');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50">
