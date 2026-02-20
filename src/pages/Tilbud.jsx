@@ -433,9 +433,10 @@ export default function Tilbud() {
             </div>
           </div>
         )}
+      </div>
 
-        {/* Create Dialog */}
-        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      {/* Create Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Nytt tilbud</DialogTitle>
