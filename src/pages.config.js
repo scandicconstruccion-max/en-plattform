@@ -54,6 +54,7 @@ import Avvik from './pages/Avvik';
 import Befaring from './pages/Befaring';
 import Bestillinger from './pages/Bestillinger';
 import Bildedok from './pages/Bildedok';
+import BrukerAdmin from './pages/BrukerAdmin';
 import CRM from './pages/CRM';
 import Chat from './pages/Chat';
 import Dashboard from './pages/Dashboard';
@@ -74,7 +75,6 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import BrukerAdmin from './pages/BrukerAdmin';
 import __Layout from './Layout.jsx';
 
 
@@ -86,6 +86,7 @@ export const PAGES = {
     "Befaring": Befaring,
     "Bestillinger": Bestillinger,
     "Bildedok": Bildedok,
+    "BrukerAdmin": BrukerAdmin,
     "CRM": CRM,
     "Chat": Chat,
     "Dashboard": Dashboard,
@@ -106,7 +107,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "BrukerAdmin": BrukerAdmin,
 }
 
 export const pagesConfig = {
