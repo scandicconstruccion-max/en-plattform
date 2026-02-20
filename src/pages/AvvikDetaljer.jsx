@@ -247,13 +247,36 @@ export default function AvvikDetaljer() {
         showBack
         backUrl={createPageUrl('Avvik')}
         actions={
-          <Button
-            onClick={handleSendEmail}
-            variant="outline"
-            className="rounded-xl gap-2">
-            <Mail className="h-4 w-4" />
-            Send til kunde
-          </Button>
+          <div className="flex gap-2">
+            {deviation.has_cost_consequence && !deviation.sent_to_customer && (
+              <Button
+                onClick={() => setShowSendAvvikDialog(true)}
+                variant="default"
+                className="rounded-xl gap-2">
+                <Mail className="h-4 w-4" />
+                Send til kunde
+              </Button>
+            )}
+            {deviation.customer_approved && !deviation.invoice_id && (
+              <Button
+                onClick={handleCloseDeviation}
+                disabled={isProcessing}
+                className="rounded-xl gap-2 bg-green-600 hover:bg-green-700">
+                {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+                <FileText className="h-4 w-4" />
+                Lukk & opprett faktura
+              </Button>
+            )}
+            {deviation.invoice_id && (
+              <Button
+                onClick={() => navigate(createPageUrl('Faktura?invoiceId=' + deviation.invoice_id))}
+                variant="outline"
+                className="rounded-xl gap-2">
+                <FileText className="h-4 w-4" />
+                Se faktura
+              </Button>
+            )}
+          </div>
         }
       />
 
