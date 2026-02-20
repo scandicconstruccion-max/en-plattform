@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
@@ -6,12 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -25,15 +37,20 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
-import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone } from 'lucide-react';
+import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { toast } from 'sonner';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export default function Tilbud() {
   const [showDialog, setShowDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState(null);
+  const [selectedQuotes, setSelectedQuotes] = useState([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [formData, setFormData] = useState({
     quote_number: '',
@@ -66,6 +83,23 @@ export default function Tilbud() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotes'] });
     },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids) => {
+      for (const id of ids) {
+        await base44.entities.Quote.delete(id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+      setSelectedQuotes([]);
+      setDeleteDialogOpen(false);
+      toast.success('Tilbud slettet');
+    },
+    onError: () => {
+      toast.error('Kunne ikke slette tilbud');
+    }
   });
 
   const resetForm = () => {
@@ -136,21 +170,162 @@ export default function Tilbud() {
     setSelectedQuote(null);
   };
 
-  const filteredQuotes = quotes.filter(q => {
-    return q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-           q.quote_number?.toLowerCase().includes(search.toLowerCase());
-  });
+  const filteredQuotes = useMemo(() => {
+    return quotes.filter(q => {
+      return q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+             q.quote_number?.toLowerCase().includes(search.toLowerCase());
+    });
+  }, [quotes, search]);
+
+  const toggleSelectQuote = (quoteId) => {
+    setSelectedQuotes(prev =>
+      prev.includes(quoteId) ? prev.filter(id => id !== quoteId) : [...prev, quoteId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedQuotes.length === filteredQuotes.length) {
+      setSelectedQuotes([]);
+    } else {
+      setSelectedQuotes(filteredQuotes.map(q => q.id));
+    }
+  };
+
+  const handleBulkSend = async () => {
+    const quotesToSend = quotes.filter(q => selectedQuotes.includes(q.id));
+    for (const quote of quotesToSend) {
+      handleSendEmail(quote);
+    }
+    toast.success(`Sender ${quotesToSend.length} tilbud`);
+    setSelectedQuotes([]);
+  };
+
+  const handleBulkDownload = async () => {
+    const quotesToDownload = quotes.filter(q => selectedQuotes.includes(q.id));
+    for (const quote of quotesToDownload) {
+      await generatePDF(quote);
+    }
+    toast.success(`Lastet ned ${quotesToDownload.length} tilbud`);
+  };
+
+  const handleDelete = () => {
+    deleteMutation.mutate(selectedQuotes);
+  };
+
+  const generatePDF = async (quote) => {
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <div style="padding: 40px; font-family: Arial, sans-serif;">
+        <h1 style="color: #1e293b; margin-bottom: 10px;">Tilbud #${quote.quote_number}</h1>
+        <p style="color: #64748b; margin-bottom: 30px;">${format(new Date(), 'd. MMMM yyyy', { locale: nb })}</p>
+        
+        <div style="margin-bottom: 30px;">
+          <h3 style="color: #1e293b; margin-bottom: 10px;">Kunde</h3>
+          <p>${quote.customer_name}</p>
+          ${quote.customer_email ? `<p>${quote.customer_email}</p>` : ''}
+          ${quote.customer_phone ? `<p>${quote.customer_phone}</p>` : ''}
+        </div>
+
+        ${quote.project_description ? `
+          <div style="margin-bottom: 30px;">
+            <h3 style="color: #1e293b; margin-bottom: 10px;">Prosjekt</h3>
+            <p>${quote.project_description}</p>
+          </div>
+        ` : ''}
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <thead>
+            <tr style="background: #f1f5f9;">
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Beskrivelse</th>
+              <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Antall</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Enhetspris</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Totalt</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${quote.items?.map(item => `
+              <tr>
+                <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${item.description}</td>
+                <td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${item.quantity} ${item.unit}</td>
+                <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">${item.unit_price.toLocaleString('nb-NO')} kr</td>
+                <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">${(item.quantity * item.unit_price).toLocaleString('nb-NO')} kr</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="text-align: right; margin-bottom: 10px;">
+          <p><strong>Subtotal:</strong> ${(quote.total_amount || 0).toLocaleString('nb-NO')} kr</p>
+          <p><strong>MVA (25%):</strong> ${(quote.vat_amount || 0).toLocaleString('nb-NO')} kr</p>
+          <p style="font-size: 20px; color: #1e293b;"><strong>Totalt:</strong> ${((quote.total_amount || 0) + (quote.vat_amount || 0)).toLocaleString('nb-NO')} kr</p>
+        </div>
+
+        ${quote.valid_until ? `<p style="color: #64748b; margin-top: 30px;">Gyldig til ${format(new Date(quote.valid_until), 'd. MMMM yyyy', { locale: nb })}</p>` : ''}
+      </div>
+    `;
+    
+    document.body.appendChild(element);
+    const canvas = await html2canvas(element);
+    document.body.removeChild(element);
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const imgWidth = 210;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+    pdf.save(`tilbud-${quote.quote_number}.pdf`);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
         title="Tilbud"
         subtitle={`${quotes.length} tilbud totalt`}
-        onAdd={() => {
-          resetForm();
-          setShowDialog(true);
-        }}
-        addLabel="Nytt tilbud"
+        actions={
+          <div className="flex gap-2">
+            {selectedQuotes.length > 0 && (
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={handleBulkSend}
+                  className="rounded-xl gap-2"
+                >
+                  <Send className="h-4 w-4" /> Send ({selectedQuotes.length})
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={handleBulkDownload}
+                  className="rounded-xl gap-2"
+                >
+                  <Download className="h-4 w-4" /> Last ned
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="rounded-xl gap-2 text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4" /> Slett
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => setSelectedQuotes([])}
+                  className="rounded-xl"
+                >
+                  Avbryt
+                </Button>
+              </>
+            )}
+            <Button 
+              onClick={() => {
+                resetForm();
+                setShowDialog(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+            >
+              <Plus className="h-4 w-4" /> Nytt tilbud
+            </Button>
+          </div>
+        }
       />
 
       <div className="px-6 lg:px-8 py-6">
