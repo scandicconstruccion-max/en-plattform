@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { nbNO } from 'date-fns/locale';
+import { nb } from 'date-fns/locale';
 import { CheckCircle2, Send, FileCheck, XCircle, Lock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
