@@ -67,6 +67,8 @@ export default function Avvik() {
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showBulkEmailDialog, setShowBulkEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [newStatus, setNewStatus] = useState('');
   const [selectedDeviation, setSelectedDeviation] = useState(null);
   const [selectedDeviations, setSelectedDeviations] = useState([]);
   const [commentText, setCommentText] = useState('');
@@ -333,6 +335,42 @@ export default function Avvik() {
     deleteMutation.mutate(selectedDeviations);
   };
 
+  const handleBulkStatusChange = async () => {
+    if (!newStatus) return;
+    
+    try {
+      const user = await base44.auth.me();
+      
+      for (const deviationId of selectedDeviations) {
+        const deviation = deviations.find(d => d.id === deviationId);
+        if (deviation) {
+          const newActivityLog = deviation.activity_log || [];
+          newActivityLog.push({
+            action: 'status_endret',
+            timestamp: new Date().toISOString(),
+            user_email: user.email,
+            user_name: user.full_name,
+            details: `Status endret til ${getStatusLabel(newStatus)}`
+          });
+
+          await updateMutation.mutateAsync({
+            id: deviationId,
+            data: {
+              status: newStatus,
+              activity_log: newActivityLog
+            }
+          });
+        }
+      }
+      
+      setSelectedDeviations([]);
+      setShowStatusDialog(false);
+      setNewStatus('');
+    } catch (error) {
+      console.error('Feil ved endring av status:', error);
+    }
+  };
+
   const filteredDeviations = deviations.filter((d) => {
     const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase()) || 
                           d.description?.toLowerCase().includes(search.toLowerCase());
@@ -414,6 +452,14 @@ export default function Avvik() {
         actions={
           selectedDeviations.length > 0 && (
             <div className="flex gap-2">
+              <Button
+                onClick={() => setShowStatusDialog(true)}
+                variant="outline"
+                className="rounded-xl gap-2"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Endre status
+              </Button>
               <Button
                 onClick={() => setShowBulkEmailDialog(true)}
                 variant="outline"
@@ -1109,6 +1155,70 @@ export default function Avvik() {
               className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
             >
               Send
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status Change Dialog */}
+      <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Endre status ({selectedDeviations.length} avvik)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Ny status</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue placeholder="Velg status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="opprettet">
+                    <div className="flex items-center gap-2">
+                      <span>🔴</span>
+                      <span>Ikke startet</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="sendt_kunde">
+                    <div className="flex items-center gap-2">
+                      <span>🔵</span>
+                      <span>Sendt til kunde</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="godkjent_kunde">
+                    <div className="flex items-center gap-2">
+                      <span>🟡</span>
+                      <span>Pågående</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="utfort">
+                    <div className="flex items-center gap-2">
+                      <span>🟢</span>
+                      <span>Utført</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowStatusDialog(false);
+                setNewStatus('');
+              }}
+              className="rounded-xl"
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleBulkStatusChange}
+              disabled={!newStatus || updateMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {updateMutation.isPending ? 'Endrer...' : 'Endre status'}
             </Button>
           </div>
         </DialogContent>
