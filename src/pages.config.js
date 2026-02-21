@@ -48,6 +48,7 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Ansatte from './pages/Ansatte';
+import ApproveDeviation from './pages/ApproveDeviation';
 import ApproveOrder from './pages/ApproveOrder';
 import ApproveQuote from './pages/ApproveQuote';
 import Avvik from './pages/Avvik';
@@ -77,12 +78,12 @@ import Ressursplan from './pages/Ressursplan';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import ApproveDeviation from './pages/ApproveDeviation';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Ansatte": Ansatte,
+    "ApproveDeviation": ApproveDeviation,
     "ApproveOrder": ApproveOrder,
     "ApproveQuote": ApproveQuote,
     "Avvik": Avvik,
@@ -112,7 +113,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "ApproveDeviation": ApproveDeviation,
 }
 
 export const pagesConfig = {

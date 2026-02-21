@@ -41,7 +41,7 @@ export default function AvvikDetaljer() {
     description: '',
     category: 'annet',
     severity: 'middels',
-    status: 'ny',
+    status: 'opprettet',
     assigned_to: '',
     due_date: '',
     corrective_action: '',
@@ -122,29 +122,47 @@ export default function AvvikDetaljer() {
     updateMutation.mutate(updateData);
   };
 
-  const handleCloseDeviation = async () => {
-    if (!deviation.customer_approved) {
-      toast.error('Avvik må godkjennes av kunde før lukking');
-      return;
-    }
-
+  const handleMarkAsCompleted = async () => {
     setIsProcessing(true);
     try {
       const user = await base44.auth.me();
       const newActivityLog = deviation.activity_log || [];
       
       newActivityLog.push({
-        action: 'lukket',
+        action: 'markert_utfort',
         timestamp: new Date().toISOString(),
         user_email: user.email,
         user_name: user.full_name,
         details: 'Avvik markert som utført'
       });
 
-      // Create invoice automatically
+      await base44.entities.Deviation.update(deviationId, {
+        status: 'utfort',
+        completed_date: new Date().toISOString(),
+        activity_log: newActivityLog
+      });
+
+      toast.success('Avvik markert som utført');
+      queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
+      queryClient.invalidateQueries({ queryKey: ['deviations'] });
+    } catch (error) {
+      console.error('Feil ved markering som utført:', error);
+      toast.error('Kunne ikke markere som utført');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSendToInvoicing = async () => {
+    setIsProcessing(true);
+    try {
+      const user = await base44.auth.me();
+      const project = projects.find((p) => p.id === deviation.project_id);
+      
+      // Create invoice
       const invoiceData = {
-        customer_name: getProjectName(deviation.project_id),
-        customer_email: getProjectEmail(deviation.project_id),
+        customer_name: project?.client_name || getProjectName(deviation.project_id),
+        customer_email: project?.client_email || getProjectEmail(deviation.project_id),
         project_id: deviation.project_id,
         project_name: getProjectName(deviation.project_id),
         invoice_date: format(new Date(), 'yyyy-MM-dd'),
@@ -155,45 +173,51 @@ export default function AvvikDetaljer() {
         status: 'kladd',
         our_reference: user.email,
         our_reference_name: user.full_name,
-        comment: `Automatisk opprettet fra avvik: ${deviation.title}`
+        comment: `Opprettet fra avvik: ${deviation.title}\n\n${deviation.cost_description || ''}`
       };
 
       const newInvoice = await base44.entities.Invoice.create(invoiceData);
 
-      // Update deviation with invoice reference
-      await base44.entities.Deviation.update(deviationId, {
-        status: 'lukket',
-        closed_date: new Date().toISOString(),
+      // Create invoice line
+      await base44.entities.InvoiceLine.create({
         invoice_id: newInvoice.id,
-        activity_log: newActivityLog
+        description: deviation.cost_description || deviation.title,
+        quantity: 1,
+        unit: 'stk',
+        unit_price: deviation.cost_amount || 0,
+        line_total: deviation.cost_amount || 0
       });
 
+      // Update deviation
+      const newActivityLog = deviation.activity_log || [];
       newActivityLog.push({
-        action: 'faktura_opprettet',
+        action: 'sendt_fakturering',
         timestamp: new Date().toISOString(),
         user_email: user.email,
         user_name: user.full_name,
-        details: `Faktura opprettet automatisk (ID: ${newInvoice.id})`
+        details: `Faktura opprettet (ID: ${newInvoice.id})`
       });
 
-      // Send notification to project manager
-      const project = await base44.entities.Project.read(deviation.project_id);
-      if (project.project_manager) {
-        await base44.integrations.Core.SendEmail({
-          to: project.project_manager,
-          subject: `Avvik lukket og faktura opprettet: ${deviation.title}`,
-          body: `Avvik "${deviation.title}" har blitt lukket og en faktura har blitt opprettet automatisk.\n\nBeløp: ${invoiceData.total_amount} Kr (inkl. MVA)\n\nDu kan finne fakturaen i Faktura-modulen.`,
-          from_name: 'Avvik-system'
-        });
-      }
+      await base44.entities.Deviation.update(deviationId, {
+        status: 'fakturert',
+        invoice_id: newInvoice.id,
+        invoiced_date: new Date().toISOString(),
+        activity_log: newActivityLog
+      });
 
-      toast.success('Avvik lukket og faktura opprettet');
+      toast.success('Faktura opprettet – se faktura', {
+        action: {
+          label: 'Se faktura',
+          onClick: () => navigate(createPageUrl('FakturaDetaljer') + '?id=' + newInvoice.id)
+        }
+      });
+
       queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     } catch (error) {
-      console.error('Feil ved lukking av avvik:', error);
-      toast.error('Feil ved lukking av avvik');
+      console.error('Feil ved opprettelse av faktura:', error);
+      toast.error('Kunne ikke opprette faktura');
     } finally {
       setIsProcessing(false);
     }
@@ -257,19 +281,29 @@ export default function AvvikDetaljer() {
                 Send til kunde
               </Button>
             )}
-            {deviation.customer_approved && !deviation.invoice_id && (
+            {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
               <Button
-                onClick={handleCloseDeviation}
+                onClick={handleMarkAsCompleted}
+                disabled={isProcessing}
+                className="rounded-xl gap-2 bg-blue-600 hover:bg-blue-700">
+                {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+                <CheckCircle2 className="h-4 w-4" />
+                Marker som utført
+              </Button>
+            )}
+            {deviation.status === 'utfort' && deviation.has_cost_consequence && !deviation.invoice_id && (
+              <Button
+                onClick={handleSendToInvoicing}
                 disabled={isProcessing}
                 className="rounded-xl gap-2 bg-green-600 hover:bg-green-700">
                 {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
                 <FileText className="h-4 w-4" />
-                Lukk & opprett faktura
+                Send til fakturering
               </Button>
             )}
             {deviation.invoice_id && (
               <Button
-                onClick={() => navigate(createPageUrl('Faktura?invoiceId=' + deviation.invoice_id))}
+                onClick={() => navigate(createPageUrl('FakturaDetaljer') + '?id=' + deviation.invoice_id)}
                 variant="outline"
                 className="rounded-xl gap-2">
                 <FileText className="h-4 w-4" />
@@ -346,9 +380,11 @@ export default function AvvikDetaljer() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ny">Ny</SelectItem>
-                      <SelectItem value="under_behandling">Under behandling</SelectItem>
-                      <SelectItem value="lukket">Lukket</SelectItem>
+                     <SelectItem value="opprettet">Opprettet</SelectItem>
+                     <SelectItem value="sendt_kunde">Sendt kunde</SelectItem>
+                     <SelectItem value="godkjent_kunde">Godkjent av kunde</SelectItem>
+                     <SelectItem value="utfort">Utført</SelectItem>
+                     <SelectItem value="fakturert">Fakturert</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
