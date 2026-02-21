@@ -205,7 +205,8 @@ export default function AvvikDetaljer() {
         activity_log: newActivityLog
       });
 
-      toast.success('Faktura opprettet – se faktura', {
+      toast.success('Flott 👌 Avviket ligger nå klart i fakturamodulen.', {
+        duration: 5000,
         action: {
           label: 'Se faktura',
           onClick: () => navigate(createPageUrl('FakturaDetaljer') + '?id=' + newInvoice.id)
