@@ -133,7 +133,7 @@ export default function Avvik() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (ids) => Promise.all(ids.map(id => base44.entities.Deviation.delete(id))),
+    mutationFn: (ids) => Promise.all(ids.map((id) => base44.entities.Deviation.delete(id))),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
       setSelectedDeviations([]);
@@ -165,7 +165,7 @@ export default function Avvik() {
     createMutation.mutate({
       ...formData,
       cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
-      images: attachments.map(a => a.file_url).filter(Boolean)
+      images: attachments.map((a) => a.file_url).filter(Boolean)
     });
   };
 
@@ -197,11 +197,11 @@ export default function Avvik() {
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     try {
       const user = await base44.auth.me();
       const newActivityLog = deviation.activity_log || [];
-      
+
       newActivityLog.push({
         action: 'markert_utfort',
         timestamp: new Date().toISOString(),
@@ -229,7 +229,7 @@ export default function Avvik() {
     try {
       const user = await base44.auth.me();
       const newActivityLog = selectedDeviation.activity_log || [];
-      
+
       newActivityLog.push({
         action: 'kommentar',
         timestamp: new Date().toISOString(),
@@ -259,7 +259,7 @@ export default function Avvik() {
     try {
       const user = await base44.auth.me();
       const newActivityLog = selectedDeviation.activity_log || [];
-      
+
       newActivityLog.push({
         action: 'dokument_lastet_opp',
         timestamp: new Date().toISOString(),
@@ -268,7 +268,7 @@ export default function Avvik() {
         details: `${uploadAttachments.length} dokument(er) lastet opp`
       });
 
-      const updatedImages = [...(selectedDeviation.images || []), ...uploadAttachments.map(a => a.file_url)];
+      const updatedImages = [...(selectedDeviation.images || []), ...uploadAttachments.map((a) => a.file_url)];
 
       await updateMutation.mutateAsync({
         id: selectedDeviation.id,
@@ -290,13 +290,13 @@ export default function Avvik() {
     if (selectedDeviations.length === filteredDeviations.length) {
       setSelectedDeviations([]);
     } else {
-      setSelectedDeviations(filteredDeviations.map(d => d.id));
+      setSelectedDeviations(filteredDeviations.map((d) => d.id));
     }
   };
 
   const toggleSelectDeviation = (id) => {
-    setSelectedDeviations(prev => 
-      prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
+    setSelectedDeviations((prev) =>
+    prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
     );
   };
 
@@ -308,7 +308,7 @@ export default function Avvik() {
 
     try {
       for (const deviationId of selectedDeviations) {
-        const deviation = deviations.find(d => d.id === deviationId);
+        const deviation = deviations.find((d) => d.id === deviationId);
         if (deviation) {
           await base44.integrations.Core.SendEmail({
             to: bulkEmailRecipient,
@@ -337,12 +337,12 @@ export default function Avvik() {
 
   const handleBulkStatusChange = async () => {
     if (!newStatus) return;
-    
+
     try {
       const user = await base44.auth.me();
-      
+
       for (const deviationId of selectedDeviations) {
-        const deviation = deviations.find(d => d.id === deviationId);
+        const deviation = deviations.find((d) => d.id === deviationId);
         if (deviation) {
           const newActivityLog = deviation.activity_log || [];
           newActivityLog.push({
@@ -362,7 +362,7 @@ export default function Avvik() {
           });
         }
       }
-      
+
       setSelectedDeviations([]);
       setShowStatusDialog(false);
       setNewStatus('');
@@ -372,8 +372,8 @@ export default function Avvik() {
   };
 
   const filteredDeviations = deviations.filter((d) => {
-    const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase()) || 
-                          d.description?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase()) ||
+    d.description?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
     const matchesSeverity = severityFilter === 'all' || d.severity === severityFilter;
     const matchesProject = projectFilter === 'all' || d.project_id === projectFilter;
@@ -381,7 +381,7 @@ export default function Avvik() {
     return matchesSearch && matchesStatus && matchesSeverity && matchesProject && matchesAssigned;
   }).sort((a, b) => {
     let compareValue = 0;
-    
+
     if (sortBy === 'created_date') {
       compareValue = new Date(a.created_date) - new Date(b.created_date);
     } else if (sortBy === 'status') {
@@ -389,7 +389,7 @@ export default function Avvik() {
     } else if (sortBy === 'title') {
       compareValue = (a.title || '').localeCompare(b.title || '');
     }
-    
+
     return sortOrder === 'asc' ? compareValue : -compareValue;
   });
 
@@ -409,38 +409,38 @@ export default function Avvik() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'sendt_kunde': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'utfort': return 'bg-green-100 text-green-700 border-green-200';
-      case 'godkjent_kunde': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'opprettet': return 'bg-red-100 text-red-700 border-red-200';
-      case 'fakturert': return 'bg-purple-100 text-purple-700 border-purple-200';
-      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'sendt_kunde':return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'utfort':return 'bg-green-100 text-green-700 border-green-200';
+      case 'godkjent_kunde':return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'opprettet':return 'bg-red-100 text-red-700 border-red-200';
+      case 'fakturert':return 'bg-purple-100 text-purple-700 border-purple-200';
+      default:return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'sendt_kunde': return '🔵';
-      case 'utfort': return '🟢';
-      case 'godkjent_kunde': return '🟡';
-      case 'opprettet': return '🔴';
-      case 'fakturert': return '🟣';
-      default: return '⚪';
+      case 'sendt_kunde':return '🔵';
+      case 'utfort':return '🟢';
+      case 'godkjent_kunde':return '🟡';
+      case 'opprettet':return '🔴';
+      case 'fakturert':return '🟣';
+      default:return '⚪';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'opprettet': return 'Ikke startet';
-      case 'sendt_kunde': return 'Sendt til kunde';
-      case 'godkjent_kunde': return 'Pågående';
-      case 'utfort': return 'Utført';
-      case 'fakturert': return 'Fakturert';
-      default: return status;
+      case 'opprettet':return 'Ikke startet';
+      case 'sendt_kunde':return 'Sendt til kunde';
+      case 'godkjent_kunde':return 'Pågående';
+      case 'utfort':return 'Utført';
+      case 'fakturert':return 'Fakturert';
+      default:return status;
     }
   };
 
-  const uniqueAssignees = [...new Set(deviations.map(d => d.assigned_to).filter(Boolean))];
+  const uniqueAssignees = [...new Set(deviations.map((d) => d.assigned_to).filter(Boolean))];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -450,51 +450,51 @@ export default function Avvik() {
         onAdd={() => setShowDialog(true)}
         addLabel="Nytt avvik"
         actions={
-          selectedDeviations.length > 0 && (
-            <div className="flex gap-2">
+        selectedDeviations.length > 0 &&
+        <div className="flex gap-2">
               <Button
-                onClick={() => setShowStatusDialog(true)}
-                variant="outline"
-                className="rounded-xl gap-2"
-              >
+            onClick={() => setShowStatusDialog(true)}
+            variant="outline"
+            className="rounded-xl gap-2">
+
                 <CheckCircle2 className="h-4 w-4" />
                 Endre status
               </Button>
               <Button
-                onClick={() => setShowBulkEmailDialog(true)}
-                variant="outline"
-                className="rounded-xl gap-2"
-              >
+            onClick={() => setShowBulkEmailDialog(true)}
+            variant="outline"
+            className="rounded-xl gap-2">
+
                 <Send className="h-4 w-4" />
                 Send ({selectedDeviations.length})
               </Button>
               <Button
-                onClick={handleBulkDownload}
-                variant="outline"
-                className="rounded-xl gap-2"
-              >
+            onClick={handleBulkDownload}
+            variant="outline"
+            className="rounded-xl gap-2">
+
                 <Download className="h-4 w-4" />
                 Last ned PDF
               </Button>
               <Button
-                onClick={() => setShowDeleteDialog(true)}
-                variant="destructive"
-                className="rounded-xl gap-2"
-              >
+            onClick={() => setShowDeleteDialog(true)}
+            variant="destructive"
+            className="rounded-xl gap-2">
+
                 <Trash2 className="h-4 w-4" />
                 Slett ({selectedDeviations.length})
               </Button>
               <Button
-                onClick={() => setSelectedDeviations([])}
-                variant="outline"
-                className="rounded-xl"
-              >
+            onClick={() => setSelectedDeviations([])}
+            variant="outline"
+            className="rounded-xl">
+
                 Avbryt
               </Button>
             </div>
-          )
-        }
-      />
+
+        } />
+
 
 
       <div className="px-6 lg:px-8 py-6">
@@ -550,25 +550,25 @@ export default function Avvik() {
         </div>
 
         {/* Deviations List */}
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="p-6 animate-pulse border-0 shadow-sm">
+        {isLoading ?
+        <div className="space-y-4">
+            {[1, 2, 3].map((i) =>
+          <Card key={i} className="p-6 animate-pulse border-0 shadow-sm">
                 <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
                 <div className="h-4 bg-slate-200 rounded w-1/2" />
               </Card>
-            ))}
-          </div>
-        ) : filteredDeviations.length === 0 ? (
-          <EmptyState
-            icon={AlertTriangle}
-            title="Ingen avvik"
-            description={search ? "Ingen avvik matcher søket ditt" : "Registrer avvik for å holde oversikt over kvalitetsproblemer"}
-            actionLabel="Registrer avvik"
-            onAction={() => setShowDialog(true)}
-          />
-        ) : (
-          <>
+          )}
+          </div> :
+        filteredDeviations.length === 0 ?
+        <EmptyState
+          icon={AlertTriangle}
+          title="Ingen avvik"
+          description={search ? "Ingen avvik matcher søket ditt" : "Registrer avvik for å holde oversikt over kvalitetsproblemer"}
+          actionLabel="Registrer avvik"
+          onAction={() => setShowDialog(true)} /> :
+
+
+        <>
             {/* Desktop Table View */}
             <div className="hidden lg:block">
               <Card className="border-0 shadow-sm overflow-hidden">
@@ -577,15 +577,15 @@ export default function Avvik() {
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
                       <TableHead className="w-12">
                         <Checkbox
-                          checked={selectedDeviations.length === filteredDeviations.length && filteredDeviations.length > 0}
-                          onCheckedChange={toggleSelectAll}
-                        />
+                        checked={selectedDeviations.length === filteredDeviations.length && filteredDeviations.length > 0}
+                        onCheckedChange={toggleSelectAll} />
+
                       </TableHead>
                       <TableHead>
                         <button onClick={() => {
-                          setSortBy('title');
-                          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        }}>
+                        setSortBy('title');
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      }}>
                           Beskrivelse
                         </button>
                       </TableHead>
@@ -593,17 +593,17 @@ export default function Avvik() {
                       <TableHead>Kunde</TableHead>
                       <TableHead>
                         <button onClick={() => {
-                          setSortBy('status');
-                          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        }}>
+                        setSortBy('status');
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      }}>
                           Status
                         </button>
                       </TableHead>
                       <TableHead>
                         <button onClick={() => {
-                          setSortBy('created_date');
-                          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        }}>
+                        setSortBy('created_date');
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      }}>
                           Dato opprettet
                         </button>
                       </TableHead>
@@ -612,25 +612,25 @@ export default function Avvik() {
                   </TableHeader>
                   <TableBody>
                     {filteredDeviations.map((deviation) => {
-                      const project = projects.find(p => p.id === deviation.project_id);
-                      const isExpanded = expandedRow === deviation.id;
-                      return (
-                        <React.Fragment key={deviation.id}>
+                    const project = projects.find((p) => p.id === deviation.project_id);
+                    const isExpanded = expandedRow === deviation.id;
+                    return (
+                      <React.Fragment key={deviation.id}>
                           <TableRow className="cursor-pointer hover:bg-slate-50">
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <Checkbox
-                                checked={selectedDeviations.includes(deviation.id)}
-                                onCheckedChange={() => toggleSelectDeviation(deviation.id)}
-                              />
+                              checked={selectedDeviations.includes(deviation.id)}
+                              onCheckedChange={() => toggleSelectDeviation(deviation.id)} />
+
                             </TableCell>
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
                               <div className="flex items-center gap-2">
                                 <span className="text-lg">{getStatusIcon(deviation.status)}</span>
                                 <div>
                                   <div className="font-medium text-slate-900">{deviation.title}</div>
-                                  {deviation.description && (
-                                    <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
-                                  )}
+                                  {deviation.description &&
+                                <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
+                                }
                                 </div>
                               </div>
                             </TableCell>
@@ -653,11 +653,11 @@ export default function Avvik() {
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-2">
                                 <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setExpandedRow(isExpanded ? null : deviation.id)}
-                                  className="h-8 w-8 p-0"
-                                >
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setExpandedRow(isExpanded ? null : deviation.id)}
+                                className="h-8 w-8 p-0">
+
                                   {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                 </Button>
                                 <DropdownMenu>
@@ -671,23 +671,23 @@ export default function Avvik() {
                                       <Eye className="h-4 w-4 mr-2" />
                                       Se detaljer
                                     </DropdownMenuItem>
-                                    {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
-                                      <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
+                                    {deviation.customer_approved && deviation.status === 'godkjent_kunde' &&
+                                  <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
                                         <CheckCircle2 className="h-4 w-4 mr-2" />
                                         Marker som utført
                                       </DropdownMenuItem>
-                                    )}
+                                  }
                                     <DropdownMenuItem onClick={() => {
-                                      setSelectedDeviation(deviation);
-                                      setShowCommentDialog(true);
-                                    }}>
+                                    setSelectedDeviation(deviation);
+                                    setShowCommentDialog(true);
+                                  }}>
                                       <MessageSquare className="h-4 w-4 mr-2" />
                                       Legg til kommentar
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => {
-                                      setSelectedDeviation(deviation);
-                                      setShowUploadDialog(true);
-                                    }}>
+                                    setSelectedDeviation(deviation);
+                                    setShowUploadDialog(true);
+                                  }}>
                                       <Upload className="h-4 w-4 mr-2" />
                                       Last opp dokument
                                     </DropdownMenuItem>
@@ -696,8 +696,8 @@ export default function Avvik() {
                               </div>
                             </TableCell>
                           </TableRow>
-                          {isExpanded && (
-                            <TableRow>
+                          {isExpanded &&
+                        <TableRow>
                               <TableCell colSpan={7} className="bg-slate-50 p-4">
                                 <div className="grid grid-cols-2 gap-4 text-sm">
                                   <div>
@@ -723,10 +723,10 @@ export default function Avvik() {
                                 </div>
                               </TableCell>
                             </TableRow>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+                        }
+                        </React.Fragment>);
+
+                  })}
                   </TableBody>
                 </Table>
               </Card>
@@ -735,15 +735,15 @@ export default function Avvik() {
             {/* Mobile Card View */}
             <div className="lg:hidden space-y-4">
               {filteredDeviations.map((deviation) => {
-                const project = projects.find(p => p.id === deviation.project_id);
-                const isExpanded = expandedRow === deviation.id;
-                return (
-                  <Card key={deviation.id} className="p-4 border-0 shadow-sm">
+              const project = projects.find((p) => p.id === deviation.project_id);
+              const isExpanded = expandedRow === deviation.id;
+              return (
+                <Card key={deviation.id} className="p-4 border-0 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
                       <Checkbox
-                        checked={selectedDeviations.includes(deviation.id)}
-                        onCheckedChange={() => toggleSelectDeviation(deviation.id)}
-                      />
+                      checked={selectedDeviations.includes(deviation.id)}
+                      onCheckedChange={() => toggleSelectDeviation(deviation.id)} />
+
                       <div className="flex-1" onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
                         <div className="flex items-start gap-2 mb-2">
                           <span className="text-lg">{getStatusIcon(deviation.status)}</span>
@@ -763,14 +763,14 @@ export default function Avvik() {
                       </div>
                       <div className="flex flex-col gap-2">
                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedRow(isExpanded ? null : deviation.id);
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedRow(isExpanded ? null : deviation.id);
+                        }}
+                        className="h-8 w-8 p-0">
+
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </Button>
                         <DropdownMenu>
@@ -784,23 +784,23 @@ export default function Avvik() {
                               <Eye className="h-4 w-4 mr-2" />
                               Se detaljer
                             </DropdownMenuItem>
-                            {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
-                              <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
+                            {deviation.customer_approved && deviation.status === 'godkjent_kunde' &&
+                          <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
                                 <CheckCircle2 className="h-4 w-4 mr-2" />
                                 Marker som utført
                               </DropdownMenuItem>
-                            )}
+                          }
                             <DropdownMenuItem onClick={() => {
-                              setSelectedDeviation(deviation);
-                              setShowCommentDialog(true);
-                            }}>
+                            setSelectedDeviation(deviation);
+                            setShowCommentDialog(true);
+                          }}>
                               <MessageSquare className="h-4 w-4 mr-2" />
                               Legg til kommentar
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
-                              setSelectedDeviation(deviation);
-                              setShowUploadDialog(true);
-                            }}>
+                            setSelectedDeviation(deviation);
+                            setShowUploadDialog(true);
+                          }}>
                               <Upload className="h-4 w-4 mr-2" />
                               Last opp dokument
                             </DropdownMenuItem>
@@ -808,8 +808,8 @@ export default function Avvik() {
                         </DropdownMenu>
                       </div>
                     </div>
-                    {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-sm">
+                    {isExpanded &&
+                  <div className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-sm">
                         <div>
                           <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
                           <span className="ml-2 text-slate-600">
@@ -831,13 +831,13 @@ export default function Avvik() {
                           <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
                         </div>
                       </div>
-                    )}
-                  </Card>
-                );
-              })}
+                  }
+                  </Card>);
+
+            })}
             </div>
           </>
-        )}
+        }
       </div>
 
       {/* Create Dialog */}
@@ -921,11 +921,11 @@ export default function Avvik() {
                     <SelectValue placeholder="Velg ansatt" />
                   </SelectTrigger>
                   <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.email}>
+                    {employees.map((employee) =>
+                    <SelectItem key={employee.id} value={employee.email}>
                         {employee.first_name} {employee.last_name}
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -955,8 +955,8 @@ export default function Avvik() {
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               projectId={formData.project_id}
-              moduleType="deviation"
-            />
+              moduleType="deviation" />
+
 
             {/* Cost Consequence Section */}
             <div className="p-4 bg-slate-50 rounded-xl space-y-4">
@@ -1039,8 +1039,8 @@ export default function Avvik() {
         type="avvik"
         item={selectedDeviation}
         defaultEmail={selectedDeviation ? getProjectEmail(selectedDeviation.project_id) : ''}
-        onSent={handleEmailSent}
-      />
+        onSent={handleEmailSent} />
+
 
       {/* Comment Dialog */}
       <Dialog open={showCommentDialog} onOpenChange={setShowCommentDialog}>
@@ -1054,8 +1054,8 @@ export default function Avvik() {
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               rows={4}
-              className="rounded-xl"
-            />
+              className="rounded-xl" />
+
           </div>
           <div className="flex justify-end gap-3">
             <Button
@@ -1065,15 +1065,15 @@ export default function Avvik() {
                 setCommentText('');
                 setSelectedDeviation(null);
               }}
-              className="rounded-xl"
-            >
+              className="rounded-xl">
+
               Avbryt
             </Button>
             <Button
               onClick={handleAddComment}
               disabled={!commentText.trim() || updateMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               {updateMutation.isPending ? 'Lagrer...' : 'Lagre kommentar'}
             </Button>
           </div>
@@ -1091,8 +1091,8 @@ export default function Avvik() {
               attachments={uploadAttachments}
               onAttachmentsChange={setUploadAttachments}
               projectId={selectedDeviation?.project_id}
-              moduleType="deviation"
-            />
+              moduleType="deviation" />
+
           </div>
           <div className="flex justify-end gap-3">
             <Button
@@ -1102,15 +1102,15 @@ export default function Avvik() {
                 setUploadAttachments([]);
                 setSelectedDeviation(null);
               }}
-              className="rounded-xl"
-            >
+              className="rounded-xl">
+
               Avbryt
             </Button>
             <Button
               onClick={handleUploadDocuments}
               disabled={uploadAttachments.length === 0 || updateMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               {updateMutation.isPending ? 'Laster opp...' : 'Last opp'}
             </Button>
           </div>
@@ -1131,8 +1131,8 @@ export default function Avvik() {
                 placeholder="mottaker@example.com"
                 value={bulkEmailRecipient}
                 onChange={(e) => setBulkEmailRecipient(e.target.value)}
-                className="mt-1.5 rounded-xl"
-              />
+                className="mt-1.5 rounded-xl" />
+
             </div>
             <p className="text-sm text-slate-600">
               {selectedDeviations.length} avvik vil bli sendt til denne e-postadressen.
@@ -1145,15 +1145,15 @@ export default function Avvik() {
                 setShowBulkEmailDialog(false);
                 setBulkEmailRecipient('');
               }}
-              className="rounded-xl"
-            >
+              className="rounded-xl">
+
               Avbryt
             </Button>
             <Button
               onClick={handleBulkEmail}
               disabled={!bulkEmailRecipient.trim()}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               Send
             </Button>
           </div>
@@ -1202,22 +1202,22 @@ export default function Avvik() {
               </Select>
             </div>
           </div>
-          <div className="flex justify-end gap-3">
+          <div className="my-2 flex justify-end gap-3">
             <Button
               variant="outline"
               onClick={() => {
                 setShowStatusDialog(false);
                 setNewStatus('');
-              }}
-              className="rounded-xl"
-            >
+              }} className="bg-background px-4 py-10 text-sm font-medium rounded-xl inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input shadow-sm hover:bg-accent hover:text-accent-foreground h-9">
+
+
               Avbryt
             </Button>
             <Button
               onClick={handleBulkStatusChange}
               disabled={!newStatus || updateMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               {updateMutation.isPending ? 'Endrer...' : 'Endre status'}
             </Button>
           </div>
@@ -1237,8 +1237,8 @@ export default function Avvik() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
+              className="bg-red-600 hover:bg-red-700">
+
               {deleteMutation.isPending ? 'Sletter...' : 'Slett'}
             </AlertDialogAction>
           </AlertDialogFooter>
