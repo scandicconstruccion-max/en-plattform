@@ -29,7 +29,7 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { AlertTriangle, Search, Calendar, User, DollarSign, Mail } from 'lucide-react';
+import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
@@ -135,6 +135,35 @@ export default function Avvik() {
       data: updateData
     });
     setSelectedDeviation(null);
+  };
+
+  const handleMarkAsCompleted = async (deviation, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    try {
+      const user = await base44.auth.me();
+      const newActivityLog = deviation.activity_log || [];
+      
+      newActivityLog.push({
+        action: 'markert_utfort',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: 'Avvik markert som utført'
+      });
+
+      await updateMutation.mutateAsync({
+        id: deviation.id,
+        data: {
+          status: 'utfort',
+          completed_date: new Date().toISOString(),
+          activity_log: newActivityLog
+        }
+      });
+    } catch (error) {
+      console.error('Feil ved markering som utført:', error);
+    }
   };
 
   const filteredDeviations = deviations.filter((d) => {
@@ -331,6 +360,17 @@ export default function Avvik() {
                     <Mail className="h-4 w-4" />
                     Send til kunde
                   </Button>
+                  {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => handleMarkAsCompleted(deviation, e)}
+                      disabled={updateMutation.isPending}
+                      className="rounded-xl gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Marker som utført
+                    </Button>
+                  )}
                   {deviation.status !== 'lukket' &&
               <>
                       <Button
