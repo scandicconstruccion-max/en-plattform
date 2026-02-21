@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle } from
 '@/components/ui/dialog';
-import { FileText, Plus, Search, Filter, Download, AlertCircle, Send, Mail, ShoppingCart } from 'lucide-react';
+import { FileText, Plus, Search, Filter, Download, AlertCircle, Send, Mail, ShoppingCart, AlertTriangle } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -61,6 +61,18 @@ export default function Faktura() {
     queryFn: () => base44.entities.Order.filter({ status: 'godkjent' }),
     initialData: []
   });
+
+  const { data: deviations = [] } = useQuery({
+    queryKey: ['deviations'],
+    queryFn: () => base44.entities.Deviation.list(),
+    initialData: []
+  });
+
+  const availableDeviations = deviations.filter(d => 
+    d.status === 'utfort' && 
+    d.has_cost_consequence && 
+    !d.invoice_id
+  );
 
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch =
@@ -396,7 +408,7 @@ export default function Faktura() {
                 Velg hvordan du vil opprette fakturaen
               </p>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <Link to={createPageUrl('FakturaDetaljer?new=manual')} className="group">
                 <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all duration-300 h-full p-6 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 hover:shadow-lg">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
@@ -426,6 +438,27 @@ export default function Faktura() {
                     <p className="text-sm text-slate-600 dark:text-slate-400">
                       Velg en godkjent ordre og generer faktura automatisk
                     </p>
+                  </div>
+                </div>
+              </Link>
+              <Link to={createPageUrl('FakturaDetaljer?new=deviation')} className="group">
+                <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 transition-all duration-300 h-full p-6 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 hover:shadow-lg">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                  <div className="relative">
+                    <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mb-4">
+                      <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                      Fra avvik
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Velg et utført avvik med kostnad og opprett faktura
+                    </p>
+                    {availableDeviations.length > 0 && (
+                      <div className="mt-3 text-xs text-orange-600 dark:text-orange-400 font-medium">
+                        {availableDeviations.length} avvik tilgjengelig
+                      </div>
+                    )}
                   </div>
                 </div>
               </Link>
