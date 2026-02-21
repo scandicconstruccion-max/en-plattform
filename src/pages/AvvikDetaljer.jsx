@@ -153,76 +153,7 @@ export default function AvvikDetaljer() {
     }
   };
 
-  const handleSendToInvoicing = async () => {
-    setIsProcessing(true);
-    try {
-      const user = await base44.auth.me();
-      const project = projects.find((p) => p.id === deviation.project_id);
-      
-      // Create invoice
-      const invoiceData = {
-        customer_name: project?.client_name || getProjectName(deviation.project_id),
-        customer_email: project?.client_email || getProjectEmail(deviation.project_id),
-        project_id: deviation.project_id,
-        project_name: getProjectName(deviation.project_id),
-        invoice_date: format(new Date(), 'yyyy-MM-dd'),
-        due_date: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
-        amount_excluding_vat: deviation.cost_amount || 0,
-        vat_amount: Math.round((deviation.cost_amount || 0) * 0.25 * 100) / 100,
-        total_amount: Math.round((deviation.cost_amount || 0) * 1.25 * 100) / 100,
-        status: 'kladd',
-        our_reference: user.email,
-        our_reference_name: user.full_name,
-        comment: `Opprettet fra avvik: ${deviation.title}\n\n${deviation.cost_description || ''}`
-      };
 
-      const newInvoice = await base44.entities.Invoice.create(invoiceData);
-
-      // Create invoice line
-      await base44.entities.InvoiceLine.create({
-        invoice_id: newInvoice.id,
-        description: deviation.cost_description || deviation.title,
-        quantity: 1,
-        unit: 'stk',
-        unit_price: deviation.cost_amount || 0,
-        line_total: deviation.cost_amount || 0
-      });
-
-      // Update deviation
-      const newActivityLog = deviation.activity_log || [];
-      newActivityLog.push({
-        action: 'sendt_fakturering',
-        timestamp: new Date().toISOString(),
-        user_email: user.email,
-        user_name: user.full_name,
-        details: `Faktura opprettet (ID: ${newInvoice.id})`
-      });
-
-      await base44.entities.Deviation.update(deviationId, {
-        status: 'fakturert',
-        invoice_id: newInvoice.id,
-        invoiced_date: new Date().toISOString(),
-        activity_log: newActivityLog
-      });
-
-      toast.success('Flott 👌 Avviket ligger nå klart i fakturamodulen.', {
-        duration: 5000,
-        action: {
-          label: 'Se faktura',
-          onClick: () => navigate(createPageUrl('FakturaDetaljer') + '?id=' + newInvoice.id)
-        }
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
-      queryClient.invalidateQueries({ queryKey: ['deviations'] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-    } catch (error) {
-      console.error('Feil ved opprettelse av faktura:', error);
-      toast.error('Kunne ikke opprette faktura');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -292,16 +223,7 @@ export default function AvvikDetaljer() {
                 Marker som utført
               </Button>
             )}
-            {deviation.status === 'utfort' && deviation.has_cost_consequence && !deviation.invoice_id && (
-              <Button
-                onClick={handleSendToInvoicing}
-                disabled={isProcessing}
-                className="rounded-xl gap-2 bg-green-600 hover:bg-green-700">
-                {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
-                <FileText className="h-4 w-4" />
-                Send til fakturering
-              </Button>
-            )}
+
             {deviation.invoice_id && (
               <Button
                 onClick={() => navigate(createPageUrl('FakturaDetaljer') + '?id=' + deviation.invoice_id)}
