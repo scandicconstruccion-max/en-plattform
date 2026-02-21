@@ -62,6 +62,7 @@ export default function FakturaDetaljer() {
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showOrderDialog, setShowOrderDialog] = useState(false);
+  const [showDeviationDialog, setShowDeviationDialog] = useState(false);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [paymentData, setPaymentData] = useState({
@@ -95,6 +96,17 @@ export default function FakturaDetaljer() {
     queryKey: ['orders'],
     queryFn: () => base44.entities.Order.list()
   });
+
+  const { data: deviations = [] } = useQuery({
+    queryKey: ['deviations'],
+    queryFn: () => base44.entities.Deviation.list()
+  });
+
+  const availableDeviations = deviations.filter(d => 
+    d.status === 'utfort' && 
+    d.has_cost_consequence && 
+    !d.invoice_id
+  );
 
   const { data: employees = [] } = useQuery({
     queryKey: ['employees'],
@@ -210,12 +222,47 @@ export default function FakturaDetaljer() {
         });
       }
 
+      // Update deviation if this invoice was created from one
+      if (newType === 'deviation' && formData.comment?.includes('Opprettet fra avvik:')) {
+        try {
+          const deviation = deviations.find(d => 
+            formData.comment.includes(d.title) && d.status === 'utfort'
+          );
+          
+          if (deviation) {
+            const user = await base44.auth.me();
+            const newActivityLog = deviation.activity_log || [];
+            newActivityLog.push({
+              action: 'fakturert',
+              timestamp: new Date().toISOString(),
+              user_email: user.email,
+              user_name: user.full_name,
+              details: `Faktura opprettet (ID: ${savedInvoice.id})`
+            });
+
+            await base44.entities.Deviation.update(deviation.id, {
+              status: 'fakturert',
+              invoice_id: savedInvoice.id,
+              invoiced_date: new Date().toISOString(),
+              activity_log: newActivityLog
+            });
+
+            queryClient.invalidateQueries({ queryKey: ['deviations'] });
+            toast.success('Flott 👌 Avviket ligger nå klart i fakturamodulen.', { duration: 5000 });
+          }
+        } catch (error) {
+          console.error('Kunne ikke oppdatere avvik:', error);
+        }
+      }
+
       return savedInvoice;
     },
     onSuccess: (savedInvoice) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
-      toast.success('Faktura lagret');
+      if (newType !== 'deviation') {
+        toast.success('Faktura lagret');
+      }
       if (!invoiceId) {
         navigate(createPageUrl(`FakturaDetaljer?id=${savedInvoice.id}`));
       }
@@ -305,6 +352,49 @@ ${base44.auth.me().then((u) => u.full_name)}
     toast.success('Ordre importert');
   };
 
+  const importFromDeviation = async (deviation) => {
+    const selectedProject = projects.find((p) => p.id === deviation.project_id);
+
+    setFormData({
+      ...formData,
+      customer_name: selectedProject?.client_name || '',
+      customer_email: selectedProject?.client_email || '',
+      project_id: selectedProject?.id || '',
+      project_name: selectedProject?.name || '',
+      comment: `Opprettet fra avvik: ${deviation.title}\n\n${deviation.cost_description || ''}`
+    });
+
+    setLines([{
+      description: deviation.cost_description || deviation.title,
+      quantity: 1,
+      unit: 'stk',
+      unit_price: deviation.cost_amount || 0,
+      vat_rate: 25
+    }]);
+
+    setShowDeviationDialog(false);
+    toast.success('Avvik importert');
+
+    // Update deviation with activity log
+    try {
+      const user = await base44.auth.me();
+      const newActivityLog = deviation.activity_log || [];
+      newActivityLog.push({
+        action: 'sendt_fakturering',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: 'Faktura påbegynt fra avvik'
+      });
+      
+      await base44.entities.Deviation.update(deviation.id, {
+        activity_log: newActivityLog
+      });
+    } catch (error) {
+      console.error('Kunne ikke oppdatere avvik:', error);
+    }
+  };
+
   const addLine = () => {
     setLines([...lines, { description: '', quantity: 1, unit: 'stk', unit_price: 0, vat_rate: 25 }]);
   };
@@ -374,6 +464,9 @@ ${base44.auth.me().then((u) => u.full_name)}
   useEffect(() => {
     if (newType === 'order' && !showOrderDialog) {
       setShowOrderDialog(true);
+    }
+    if (newType === 'deviation' && !showDeviationDialog) {
+      setShowDeviationDialog(true);
     }
   }, [newType]);
 
@@ -781,6 +874,58 @@ ${base44.auth.me().then((u) => u.full_name)}
                     </div>
                   </button>
               ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Deviation Selection Dialog */}
+        <Dialog open={showDeviationDialog} onOpenChange={setShowDeviationDialog}>
+          <DialogContent className="sm:max-w-2xl dark:bg-slate-900">
+            <DialogHeader>
+              <DialogTitle>Velg avvik</DialogTitle>
+            </DialogHeader>
+            {availableDeviations.length === 0 ? (
+            <div className="p-8 text-center">
+                <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
+                <p className="text-slate-500 dark:text-slate-400">Ingen tilgjengelige avvik</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                  Avvik må være utført og ha kostnadskonsekvensar for å vises her
+                </p>
+              </div>
+            ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+                {availableDeviations.map((deviation) => {
+                  const project = projects.find(p => p.id === deviation.project_id);
+                  return (
+                    <button
+                      key={deviation.id}
+                      onClick={() => importFromDeviation(deviation)}
+                      className="w-full p-4 text-left bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {deviation.title}
+                          </p>
+                          <p className="text-sm text-slate-600 dark:text-slate-400">
+                            {project?.name || 'Ukjent prosjekt'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            {deviation.cost_description}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs px-2 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                              Utført
+                            </span>
+                          </div>
+                        </div>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                          {formatAmount(deviation.cost_amount)}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </DialogContent>
