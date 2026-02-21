@@ -13,8 +13,20 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle } from
+  DialogTitle,
+  DialogDescription,
+  DialogFooter } from
 '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle } from
+'@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -44,7 +56,7 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download } from 'lucide-react';
+import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
@@ -54,6 +66,7 @@ export default function Avvik() {
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showBulkEmailDialog, setShowBulkEmailDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedDeviation, setSelectedDeviation] = useState(null);
   const [selectedDeviations, setSelectedDeviations] = useState([]);
   const [commentText, setCommentText] = useState('');
@@ -114,6 +127,15 @@ export default function Avvik() {
     mutationFn: ({ id, data }) => base44.entities.Deviation.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (ids) => Promise.all(ids.map(id => base44.entities.Deviation.delete(id))),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deviations'] });
+      setSelectedDeviations([]);
+      setShowDeleteDialog(false);
     }
   });
 
@@ -307,6 +329,10 @@ export default function Avvik() {
     toast.info('PDF-nedlasting kommer snart');
   };
 
+  const handleBulkDelete = () => {
+    deleteMutation.mutate(selectedDeviations);
+  };
+
   const filteredDeviations = deviations.filter((d) => {
     const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase()) || 
                           d.description?.toLowerCase().includes(search.toLowerCase());
@@ -403,6 +429,14 @@ export default function Avvik() {
               >
                 <Download className="h-4 w-4" />
                 Last ned PDF
+              </Button>
+              <Button
+                onClick={() => setShowDeleteDialog(true)}
+                variant="destructive"
+                className="rounded-xl gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Slett ({selectedDeviations.length})
               </Button>
               <Button
                 onClick={() => setSelectedDeviations([])}
@@ -1079,6 +1113,27 @@ export default function Avvik() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Er du sikker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dette vil permanent slette {selectedDeviations.length} avvik. Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? 'Sletter...' : 'Slett'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>);
 
