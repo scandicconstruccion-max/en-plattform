@@ -8,12 +8,13 @@ import { hasModuleAccess } from '@/components/shared/permissions';
 import {
   AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users,
-  CalendarDays, Building2, LayoutDashboard
+  CalendarDays, Building2, LayoutDashboard, ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const modules = [
   { key: 'prosjekter', name: 'Prosjekter', description: 'Administrer prosjekter', icon: Building2, color: 'emerald', page: 'Prosjekter' },
+  { key: 'hms', name: 'HMS & Risiko', description: 'Helse, miljø og sikkerhet', icon: ShieldAlert, color: 'red', page: 'HMS' },
   { key: 'avvik', name: 'Avvik', description: 'HMS og kvalitetsavvik', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
   { key: 'befaring', name: 'Befaring', description: 'Befaringer og oppfølging', icon: CheckSquare, color: 'cyan', page: 'Befaring' },
   { key: 'prosjektfiler', name: 'Prosjektfiler', description: 'Filer og dokumenter', icon: FileText, color: 'slate', page: 'Prosjektfiler' },
@@ -49,6 +50,7 @@ const colorClasses = {
   rose: { bg: 'bg-rose-100 dark:bg-rose-900/30', text: 'text-rose-600 dark:text-rose-400', hover: 'group-hover:bg-rose-200 dark:group-hover:bg-rose-900/50' },
   sky: { bg: 'bg-sky-100 dark:bg-sky-900/30', text: 'text-sky-600 dark:text-sky-400', hover: 'group-hover:bg-sky-200 dark:group-hover:bg-sky-900/50' },
   slate: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-600 dark:text-slate-400', hover: 'group-hover:bg-slate-200 dark:group-hover:bg-slate-700' },
+  red: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-600 dark:text-red-400', hover: 'group-hover:bg-red-200 dark:group-hover:bg-red-900/50' },
 };
 
 export default function ModuleGrid({ activeModules }) {
