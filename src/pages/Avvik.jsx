@@ -44,7 +44,7 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical } from 'lucide-react';
+import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
@@ -53,9 +53,12 @@ export default function Avvik() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showBulkEmailDialog, setShowBulkEmailDialog] = useState(false);
   const [selectedDeviation, setSelectedDeviation] = useState(null);
   const [selectedDeviations, setSelectedDeviations] = useState([]);
   const [commentText, setCommentText] = useState('');
+  const [bulkEmailRecipient, setBulkEmailRecipient] = useState('');
+  const [expandedRow, setExpandedRow] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
@@ -268,6 +271,37 @@ export default function Avvik() {
     );
   };
 
+  const handleBulkEmail = async () => {
+    if (!bulkEmailRecipient.trim()) {
+      toast.error('Vennligst fyll inn mottaker');
+      return;
+    }
+
+    try {
+      for (const deviationId of selectedDeviations) {
+        const deviation = deviations.find(d => d.id === deviationId);
+        if (deviation) {
+          await base44.integrations.Core.SendEmail({
+            to: bulkEmailRecipient,
+            subject: `Avvik: ${deviation.title}`,
+            body: `Hei,\n\nVedlagt informasjon om avvik:\n\nTittel: ${deviation.title}\nBeskrivelse: ${deviation.description || '-'}\nProsjekt: ${getProjectName(deviation.project_id)}\n\nMed vennlig hilsen`
+          });
+        }
+      }
+      toast.success(`${selectedDeviations.length} avvik sendt til ${bulkEmailRecipient}`);
+      setSelectedDeviations([]);
+      setBulkEmailRecipient('');
+      setShowBulkEmailDialog(false);
+    } catch (error) {
+      console.error('Feil ved sending:', error);
+      toast.error('Kunne ikke sende avvik');
+    }
+  };
+
+  const handleBulkDownload = () => {
+    toast.info('PDF-nedlasting kommer snart');
+  };
+
   const filteredDeviations = deviations.filter((d) => {
     const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase()) || 
                           d.description?.toLowerCase().includes(search.toLowerCase());
@@ -345,7 +379,37 @@ export default function Avvik() {
         title="Avvik"
         subtitle={`${deviations.length} avvik registrert`}
         onAdd={() => setShowDialog(true)}
-        addLabel="Nytt avvik" />
+        addLabel="Nytt avvik"
+        actions={
+          selectedDeviations.length > 0 && (
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowBulkEmailDialog(true)}
+                variant="outline"
+                className="rounded-xl gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Send ({selectedDeviations.length})
+              </Button>
+              <Button
+                onClick={handleBulkDownload}
+                variant="outline"
+                className="rounded-xl gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Last ned PDF
+              </Button>
+              <Button
+                onClick={() => setSelectedDeviations([])}
+                variant="outline"
+                className="rounded-xl"
+              >
+                Avbryt
+              </Button>
+            </div>
+          )
+        }
+      />
 
 
       <div className="px-6 lg:px-8 py-6">
@@ -464,79 +528,118 @@ export default function Avvik() {
                   <TableBody>
                     {filteredDeviations.map((deviation) => {
                       const project = projects.find(p => p.id === deviation.project_id);
+                      const isExpanded = expandedRow === deviation.id;
                       return (
-                        <TableRow key={deviation.id} className="cursor-pointer hover:bg-slate-50">
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={selectedDeviations.includes(deviation.id)}
-                              onCheckedChange={() => toggleSelectDeviation(deviation.id)}
-                            />
-                          </TableCell>
-                          <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{getStatusIcon(deviation.status)}</span>
-                              <div>
-                                <div className="font-medium text-slate-900">{deviation.title}</div>
-                                {deviation.description && (
-                                  <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
-                                )}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                            <span className="text-slate-600">{project?.name || '-'}</span>
-                          </TableCell>
-                          <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                            <span className="text-slate-600">{project?.client_name || '-'}</span>
-                          </TableCell>
-                          <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(deviation.status)}`}>
-                              {getStatusLabel(deviation.status)}
-                            </span>
-                          </TableCell>
-                          <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                            <span className="text-slate-600">
-                              {format(new Date(deviation.created_date), 'd. MMM yyyy', { locale: nb })}
-                            </span>
-                          </TableCell>
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-2">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  <DropdownMenuItem onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    Se detaljer
-                                  </DropdownMenuItem>
-                                  {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
-                                    <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
-                                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                                      Marker som utført
-                                    </DropdownMenuItem>
+                        <React.Fragment key={deviation.id}>
+                          <TableRow className="cursor-pointer hover:bg-slate-50">
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selectedDeviations.includes(deviation.id)}
+                                onCheckedChange={() => toggleSelectDeviation(deviation.id)}
+                              />
+                            </TableCell>
+                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{getStatusIcon(deviation.status)}</span>
+                                <div>
+                                  <div className="font-medium text-slate-900">{deviation.title}</div>
+                                  {deviation.description && (
+                                    <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
                                   )}
-                                  <DropdownMenuItem onClick={() => {
-                                    setSelectedDeviation(deviation);
-                                    setShowCommentDialog(true);
-                                  }}>
-                                    <MessageSquare className="h-4 w-4 mr-2" />
-                                    Legg til kommentar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => {
-                                    setSelectedDeviation(deviation);
-                                    setShowUploadDialog(true);
-                                  }}>
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    Last opp dokument
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              <span className="text-slate-600">{project?.name || '-'}</span>
+                            </TableCell>
+                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              <span className="text-slate-600">{project?.client_name || '-'}</span>
+                            </TableCell>
+                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(deviation.status)}`}>
+                                {getStatusLabel(deviation.status)}
+                              </span>
+                            </TableCell>
+                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              <span className="text-slate-600">
+                                {format(new Date(deviation.created_date), 'd. MMM yyyy', { locale: nb })}
+                              </span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setExpandedRow(isExpanded ? null : deviation.id)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      Se detaljer
+                                    </DropdownMenuItem>
+                                    {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
+                                      <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
+                                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                                        Marker som utført
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onClick={() => {
+                                      setSelectedDeviation(deviation);
+                                      setShowCommentDialog(true);
+                                    }}>
+                                      <MessageSquare className="h-4 w-4 mr-2" />
+                                      Legg til kommentar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      setSelectedDeviation(deviation);
+                                      setShowUploadDialog(true);
+                                    }}>
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Last opp dokument
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && (
+                            <TableRow>
+                              <TableCell colSpan={7} className="bg-slate-50 p-4">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
+                                    <span className="ml-2 text-slate-600">
+                                      {deviation.has_cost_consequence ? `${deviation.cost_amount?.toLocaleString('nb-NO')} kr - ${deviation.cost_description}` : 'Nei'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-slate-700">Frist:</span>
+                                    <span className="ml-2 text-slate-600">
+                                      {deviation.due_date ? format(new Date(deviation.due_date), 'd. MMM yyyy', { locale: nb }) : '-'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-slate-700">Ansvarlig:</span>
+                                    <span className="ml-2 text-slate-600">{deviation.assigned_to || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-slate-700">Registrert av:</span>
+                                    <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </TableBody>
@@ -548,6 +651,7 @@ export default function Avvik() {
             <div className="lg:hidden space-y-4">
               {filteredDeviations.map((deviation) => {
                 const project = projects.find(p => p.id === deviation.project_id);
+                const isExpanded = expandedRow === deviation.id;
                 return (
                   <Card key={deviation.id} className="p-4 border-0 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
@@ -572,40 +676,77 @@ export default function Avvik() {
                           </span>
                         </div>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Se detaljer
-                          </DropdownMenuItem>
-                          {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
-                            <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
-                              <CheckCircle2 className="h-4 w-4 mr-2" />
-                              Marker som utført
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedRow(isExpanded ? null : deviation.id);
+                          }}
+                          className="h-8 w-8 p-0"
+                        >
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Se detaljer
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedDeviation(deviation);
-                            setShowCommentDialog(true);
-                          }}>
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            Legg til kommentar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedDeviation(deviation);
-                            setShowUploadDialog(true);
-                          }}>
-                            <Upload className="h-4 w-4 mr-2" />
-                            Last opp dokument
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            {deviation.customer_approved && deviation.status === 'godkjent_kunde' && (
+                              <DropdownMenuItem onClick={() => handleMarkAsCompleted(deviation)}>
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                Marker som utført
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedDeviation(deviation);
+                              setShowCommentDialog(true);
+                            }}>
+                              <MessageSquare className="h-4 w-4 mr-2" />
+                              Legg til kommentar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedDeviation(deviation);
+                              setShowUploadDialog(true);
+                            }}>
+                              <Upload className="h-4 w-4 mr-2" />
+                              Last opp dokument
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-sm">
+                        <div>
+                          <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
+                          <span className="ml-2 text-slate-600">
+                            {deviation.has_cost_consequence ? `${deviation.cost_amount?.toLocaleString('nb-NO')} kr - ${deviation.cost_description}` : 'Nei'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-slate-700">Frist:</span>
+                          <span className="ml-2 text-slate-600">
+                            {deviation.due_date ? format(new Date(deviation.due_date), 'd. MMM yyyy', { locale: nb }) : '-'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-slate-700">Ansvarlig:</span>
+                          <span className="ml-2 text-slate-600">{deviation.assigned_to || '-'}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-slate-700">Registrert av:</span>
+                          <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
+                        </div>
+                      </div>
+                    )}
                   </Card>
                 );
               })}
@@ -878,6 +1019,49 @@ export default function Avvik() {
               className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
             >
               {updateMutation.isPending ? 'Laster opp...' : 'Last opp'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Email Dialog */}
+      <Dialog open={showBulkEmailDialog} onOpenChange={setShowBulkEmailDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send avvik ({selectedDeviations.length})</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>E-postadresse</Label>
+              <Input
+                type="email"
+                placeholder="mottaker@example.com"
+                value={bulkEmailRecipient}
+                onChange={(e) => setBulkEmailRecipient(e.target.value)}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+            <p className="text-sm text-slate-600">
+              {selectedDeviations.length} avvik vil bli sendt til denne e-postadressen.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowBulkEmailDialog(false);
+                setBulkEmailRecipient('');
+              }}
+              className="rounded-xl"
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleBulkEmail}
+              disabled={!bulkEmailRecipient.trim()}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              Send
             </Button>
           </div>
         </DialogContent>
