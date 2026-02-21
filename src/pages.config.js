@@ -65,22 +65,22 @@ import FDV from './pages/FDV';
 import FDVDetaljer from './pages/FDVDetaljer';
 import Faktura from './pages/Faktura';
 import FakturaDetaljer from './pages/FakturaDetaljer';
+import HMS from './pages/HMS';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
 import Lonnsgrunnlag from './pages/Lonnsgrunnlag';
 import MinBedrift from './pages/MinBedrift';
+import Mottakskontroll from './pages/Mottakskontroll';
 import Ordre from './pages/Ordre';
 import OrdreDetaljer from './pages/OrdreDetaljer';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
 import Prosjektfiler from './pages/Prosjektfiler';
 import Ressursplan from './pages/Ressursplan';
+import SJA from './pages/SJA';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import HMS from './pages/HMS';
-import SJA from './pages/SJA';
-import Mottakskontroll from './pages/Mottakskontroll';
 import __Layout from './Layout.jsx';
 
 
@@ -103,22 +103,22 @@ export const PAGES = {
     "FDVDetaljer": FDVDetaljer,
     "Faktura": Faktura,
     "FakturaDetaljer": FakturaDetaljer,
+    "HMS": HMS,
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
     "Lonnsgrunnlag": Lonnsgrunnlag,
     "MinBedrift": MinBedrift,
+    "Mottakskontroll": Mottakskontroll,
     "Ordre": Ordre,
     "OrdreDetaljer": OrdreDetaljer,
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
     "Prosjektfiler": Prosjektfiler,
     "Ressursplan": Ressursplan,
+    "SJA": SJA,
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "HMS": HMS,
-    "SJA": SJA,
-    "Mottakskontroll": Mottakskontroll,
 }
 
 export const pagesConfig = {

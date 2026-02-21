@@ -12,27 +12,56 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const modules = [
-  { key: 'prosjekter', name: 'Prosjekter', description: 'Administrer prosjekter', icon: Building2, color: 'emerald', page: 'Prosjekter' },
-  { key: 'hms', name: 'HMS & Risiko', description: 'Helse, miljø og sikkerhet', icon: ShieldAlert, color: 'red', page: 'HMS' },
-  { key: 'avvik', name: 'Avvik', description: 'Avvikshåndtering', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
-  { key: 'befaring', name: 'Befaring', description: 'Befaringer og oppfølging', icon: CheckSquare, color: 'cyan', page: 'Befaring' },
-  { key: 'prosjektfiler', name: 'Prosjektfiler', description: 'Filer og dokumenter', icon: FileText, color: 'slate', page: 'Prosjektfiler' },
-  { key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Tillegg og endringer', icon: FileText, color: 'blue', page: 'Endringsmeldinger' },
-  { key: 'timelister', name: 'Timelister', description: 'Timeføring', icon: Clock, color: 'indigo', page: 'Timelister' },
-  { key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumenter', icon: Camera, color: 'purple', page: 'Bildedok' },
-  { key: 'sjekklister', name: 'Sjekklister', description: 'Kvalitetskontroll', icon: CheckSquare, color: 'teal', page: 'Sjekklister' },
-  { key: 'tilbud', name: 'Tilbud', description: 'Tilbudsadministrasjon', icon: FileSpreadsheet, color: 'cyan', page: 'Tilbud' },
-  { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', icon: FileText, color: 'indigo', page: 'Ordre' },
-  { key: 'faktura', name: 'Faktura', description: 'Fakturering og betalinger', icon: FileText, color: 'green', page: 'Faktura' },
-  { key: 'fdv', name: 'FDV', description: 'Forvaltning, Drift og Vedlikehold', icon: FileText, color: 'rose', page: 'FDV' },
-  { key: 'bestillinger', name: 'Bestillinger', description: 'Innkjøp og ordre', icon: ShoppingCart, color: 'orange', page: 'Bestillinger' },
-  { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', icon: MessageSquare, color: 'pink', page: 'Chat' },
-  { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning', icon: Users, color: 'violet', page: 'Ressursplan' },
-  { key: 'ansatte', name: 'Ansatte', description: 'Personaladministrasjon', icon: Users, color: 'slate', page: 'Ansatte' },
-  { key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', icon: Users, color: 'rose', page: 'CRM' },
-  { key: 'kalender', name: 'Kalender', description: 'Hendelser og møter', icon: CalendarDays, color: 'sky', page: 'Kalender' },
-  { key: 'minbedrift', name: 'Min bedrift', description: 'Bedriftsinformasjon', icon: Building2, color: 'emerald', page: 'MinBedrift' },
+const moduleDefinitions = {
+  dashboard: { name: 'Dashboard', description: 'Oversikt', icon: LayoutDashboard, color: 'slate', page: 'Dashboard' },
+  prosjekter: { name: 'Prosjekter', description: 'Administrer prosjekter', icon: Building2, color: 'emerald', page: 'Prosjekter' },
+  prosjektfiler: { name: 'Prosjektfiler', description: 'Filer og dokumenter', icon: FileText, color: 'slate', page: 'Prosjektfiler' },
+  sjekklister: { name: 'Sjekklister', description: 'Kvalitetskontroll', icon: CheckSquare, color: 'teal', page: 'Sjekklister' },
+  avvik: { name: 'Avvik', description: 'Avvikshåndtering', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
+  hms: { name: 'HMS & Risiko', description: 'Helse, miljø og sikkerhet', icon: ShieldAlert, color: 'red', page: 'HMS' },
+  tilbud: { name: 'Tilbud', description: 'Tilbudsadministrasjon', icon: FileSpreadsheet, color: 'cyan', page: 'Tilbud' },
+  ordre: { name: 'Ordre', description: 'Arbeidsordre', icon: FileText, color: 'indigo', page: 'Ordre' },
+  endringsmeldinger: { name: 'Endringsmeldinger', description: 'Tillegg og endringer', icon: FileText, color: 'blue', page: 'Endringsmeldinger' },
+  faktura: { name: 'Faktura', description: 'Fakturering og betalinger', icon: FileText, color: 'green', page: 'Faktura' },
+  ansatte: { name: 'Ansatte', description: 'Personaladministrasjon', icon: Users, color: 'slate', page: 'Ansatte' },
+  timelister: { name: 'Timelister', description: 'Timeføring', icon: Clock, color: 'indigo', page: 'Timelister' },
+  ressursplan: { name: 'Ressursplanlegger', description: 'Bemanning', icon: Users, color: 'violet', page: 'Ressursplan' },
+  kalender: { name: 'Kalender', description: 'Hendelser og møter', icon: CalendarDays, color: 'sky', page: 'Kalender' },
+  chat: { name: 'Intern Chat', description: 'Teamkommunikasjon', icon: MessageSquare, color: 'pink', page: 'Chat' },
+  befaring: { name: 'Befaring', description: 'Befaringer og oppfølging', icon: CheckSquare, color: 'cyan', page: 'Befaring' },
+  bildedok: { name: 'Bildedokumentasjon', description: 'Foto og dokumenter', icon: Camera, color: 'purple', page: 'Bildedok' },
+  fdv: { name: 'FDV', description: 'Forvaltning, Drift og Vedlikehold', icon: FileText, color: 'rose', page: 'FDV' },
+  crm: { name: 'CRM', description: 'Kundeadministrasjon', icon: Users, color: 'rose', page: 'CRM' },
+  minbedrift: { name: 'Min bedrift', description: 'Bedriftsinformasjon', icon: Building2, color: 'emerald', page: 'MinBedrift' },
+  brukeradmin: { name: 'Brukere', description: 'Brukeradministrasjon', icon: Users, color: 'slate', page: 'BrukerAdmin' },
+};
+
+const moduleSections = [
+  {
+    title: '🔹 GRUNNPAKKE',
+    emoji: '🔹',
+    modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
+  },
+  {
+    title: '💰 ØKONOMI & KONTRAKT',
+    emoji: '💰',
+    modules: ['tilbud', 'ordre', 'endringsmeldinger', 'faktura']
+  },
+  {
+    title: '👷 PERSONELL & RESSURSER',
+    emoji: '👷',
+    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat']
+  },
+  {
+    title: '📸 DOKUMENTASJON & OVERLEVERING',
+    emoji: '📸',
+    modules: ['befaring', 'bildedok', 'fdv']
+  },
+  {
+    title: '⚙ SALG & ADMIN',
+    emoji: '⚙',
+    modules: ['crm', 'minbedrift', 'brukeradmin']
+  }
 ];
 
 const colorClasses = {
@@ -54,38 +83,72 @@ const colorClasses = {
 };
 
 export default function ModuleGrid({ activeModules }) {
+  const [collapsedSections, setCollapsedSections] = React.useState({});
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
     queryFn: () => base44.auth.me()
   });
-  
-  // Filter modules based on activeModules and user permissions
-  const filteredModules = modules.filter(m => {
-    const isActive = !activeModules || activeModules.includes(m.key);
-    const hasAccess = !user || hasModuleAccess(user, m.key);
-    return isActive && hasAccess;
-  });
+
+  const toggleSection = (index) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-      {filteredModules.map((module) => {
-        const colors = colorClasses[module.color];
+    <div className="space-y-8">
+      {moduleSections.map((section, sectionIndex) => {
+        const isCollapsed = collapsedSections[sectionIndex];
+        const sectionModules = section.modules
+          .filter(key => {
+            const hasAccess = !user || hasModuleAccess(user, key);
+            return hasAccess;
+          })
+          .map(key => ({ key, ...moduleDefinitions[key] }));
+
+        if (sectionModules.length === 0) return null;
+
         return (
-          <Link key={module.key} to={createPageUrl(module.page)}>
-            <Card className="group p-5 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer h-full dark:bg-slate-900">
-              <div className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
-                colors.bg,
-                colors.hover
-              )}>
-                <module.icon className={cn("h-6 w-6", colors.text)} />
-              </div>
-              <h3 className="font-semibold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                {module.name}
+          <div key={sectionIndex}>
+            <button
+              onClick={() => toggleSection(sectionIndex)}
+              className="flex items-center gap-3 mb-4 w-full text-left group"
+            >
+              <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                {section.title}
               </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
-            </Card>
-          </Link>
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {isCollapsed ? 'Vis' : 'Skjul'}
+              </span>
+            </button>
+            
+            {!isCollapsed && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                {sectionModules.map((module) => {
+                  const colors = colorClasses[module.color];
+                  return (
+                    <Link key={module.key} to={createPageUrl(module.page)}>
+                      <Card className="group p-5 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer h-full dark:bg-slate-900">
+                        <div className={cn(
+                          "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
+                          colors.bg,
+                          colors.hover
+                        )}>
+                          <module.icon className={cn("h-6 w-6", colors.text)} />
+                        </div>
+                        <h3 className="font-semibold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          {module.name}
+                        </h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
+                      </Card>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         );
       })}
     </div>

@@ -133,15 +133,32 @@ export default function Layout({ children, currentPageName }) {
 
   const company = companies?.[0];
 
-  // Filter modules based on user role
-  const allModulesList = [
-  'dashboard', 'prosjekter', 'hms', 'avvik', 'befaring', 'prosjektfiler',
-  'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister',
-  'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte',
-  'crm', 'kalender', 'minbedrift', 'brukeradmin'];
-
-
-  const allModules = user ? allModulesList.filter((moduleKey) => hasModuleAccess(user, moduleKey)) : allModulesList;
+  // Module sections
+  const moduleSections = [
+    {
+      title: 'GRUNNPAKKE',
+      modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
+    },
+    {
+      separator: true
+    },
+    {
+      title: 'ØKONOMI & KONTRAKT',
+      modules: ['tilbud', 'ordre', 'endringsmeldinger', 'faktura']
+    },
+    {
+      title: 'PERSONELL & RESSURSER',
+      modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat']
+    },
+    {
+      title: 'DOKUMENTASJON & OVERLEVERING',
+      modules: ['befaring', 'bildedok', 'fdv']
+    },
+    {
+      title: 'SALG & ADMIN',
+      modules: ['crm', 'minbedrift', 'brukeradmin']
+    }
+  ];
 
 
   useEffect(() => {
@@ -234,30 +251,51 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Navigation */}
         <nav className={cn("p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]", sidebarCollapsed && "px-2")}>
-          {allModules.map((moduleKey) => {
-            const Icon = moduleIcons[moduleKey] || LayoutDashboard;
-            const label = moduleLabels[moduleKey] || moduleKey;
-            const page = modulePages[moduleKey] || 'Dashboard';
-            const isActive = currentPageName === page;
+          {moduleSections.map((section, sectionIndex) => {
+            if (section.separator) {
+              return !sidebarCollapsed && (
+                <div key={`separator-${sectionIndex}`} className="my-4 border-t border-slate-200 dark:border-slate-700" />
+              );
+            }
 
             return (
-              <Link
-                key={moduleKey}
-                to={createPageUrl(page)}
-                onClick={() => isMobile && setSidebarOpen(false)}
-                title={sidebarCollapsed ? label : undefined}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all select-none",
-                  sidebarCollapsed && "justify-center px-2",
-                  isActive ?
-                  "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" :
-                  "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                )}>
+              <div key={sectionIndex} className="mb-6">
+                {!sidebarCollapsed && section.title && (
+                  <div className="px-4 mb-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    {section.title}
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {section.modules.map((moduleKey) => {
+                    if (!user || !hasModuleAccess(user, moduleKey)) return null;
 
-                <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600 dark:text-emerald-400")} />
-                {!sidebarCollapsed && label}
-              </Link>);
+                    const Icon = moduleIcons[moduleKey] || LayoutDashboard;
+                    const label = moduleLabels[moduleKey] || moduleKey;
+                    const page = modulePages[moduleKey] || 'Dashboard';
+                    const isActive = currentPageName === page;
 
+                    return (
+                      <Link
+                        key={moduleKey}
+                        to={createPageUrl(page)}
+                        onClick={() => isMobile && setSidebarOpen(false)}
+                        title={sidebarCollapsed ? label : undefined}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all select-none",
+                          sidebarCollapsed && "justify-center px-2",
+                          isActive ?
+                          "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" :
+                          "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                        )}>
+
+                        <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600 dark:text-emerald-400")} />
+                        {!sidebarCollapsed && label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
           })}
         </nav>
 
