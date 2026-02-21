@@ -22,6 +22,21 @@ import {
   SelectTrigger,
   SelectValue } from
 '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger } from
+'@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow } from
+'@/components/ui/table';
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
@@ -29,25 +44,32 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
 export default function Avvik() {
   const [showDialog, setShowDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showCommentDialog, setShowCommentDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedDeviation, setSelectedDeviation] = useState(null);
+  const [selectedDeviations, setSelectedDeviations] = useState([]);
+  const [commentText, setCommentText] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
+  const [assignedFilter, setAssignedFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('created_date');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     project_id: '',
     category: 'annet',
     severity: 'middels',
-    status: 'ny',
+    status: 'opprettet',
     assigned_to: '',
     due_date: '',
     corrective_action: '',
@@ -57,6 +79,7 @@ export default function Avvik() {
     cost_responsible: ''
   });
   const [attachments, setAttachments] = useState([]);
+  const [uploadAttachments, setUploadAttachments] = useState([]);
 
   const queryClient = useQueryClient();
 
@@ -138,8 +161,10 @@ export default function Avvik() {
   };
 
   const handleMarkAsCompleted = async (deviation, e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
     try {
       const user = await base44.auth.me();
@@ -166,12 +191,103 @@ export default function Avvik() {
     }
   };
 
+  const handleAddComment = async () => {
+    if (!commentText.trim() || !selectedDeviation) return;
+
+    try {
+      const user = await base44.auth.me();
+      const newActivityLog = selectedDeviation.activity_log || [];
+      
+      newActivityLog.push({
+        action: 'kommentar',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: commentText
+      });
+
+      await updateMutation.mutateAsync({
+        id: selectedDeviation.id,
+        data: {
+          activity_log: newActivityLog
+        }
+      });
+
+      setCommentText('');
+      setShowCommentDialog(false);
+      setSelectedDeviation(null);
+    } catch (error) {
+      console.error('Feil ved lagring av kommentar:', error);
+    }
+  };
+
+  const handleUploadDocuments = async () => {
+    if (!selectedDeviation || uploadAttachments.length === 0) return;
+
+    try {
+      const user = await base44.auth.me();
+      const newActivityLog = selectedDeviation.activity_log || [];
+      
+      newActivityLog.push({
+        action: 'dokument_lastet_opp',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: `${uploadAttachments.length} dokument(er) lastet opp`
+      });
+
+      const updatedImages = [...(selectedDeviation.images || []), ...uploadAttachments.map(a => a.file_url)];
+
+      await updateMutation.mutateAsync({
+        id: selectedDeviation.id,
+        data: {
+          images: updatedImages,
+          activity_log: newActivityLog
+        }
+      });
+
+      setUploadAttachments([]);
+      setShowUploadDialog(false);
+      setSelectedDeviation(null);
+    } catch (error) {
+      console.error('Feil ved opplasting:', error);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDeviations.length === filteredDeviations.length) {
+      setSelectedDeviations([]);
+    } else {
+      setSelectedDeviations(filteredDeviations.map(d => d.id));
+    }
+  };
+
+  const toggleSelectDeviation = (id) => {
+    setSelectedDeviations(prev => 
+      prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
+    );
+  };
+
   const filteredDeviations = deviations.filter((d) => {
-    const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = d.title?.toLowerCase().includes(search.toLowerCase()) || 
+                          d.description?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
     const matchesSeverity = severityFilter === 'all' || d.severity === severityFilter;
     const matchesProject = projectFilter === 'all' || d.project_id === projectFilter;
-    return matchesSearch && matchesStatus && matchesSeverity && matchesProject;
+    const matchesAssigned = assignedFilter === 'all' || d.assigned_to === assignedFilter;
+    return matchesSearch && matchesStatus && matchesSeverity && matchesProject && matchesAssigned;
+  }).sort((a, b) => {
+    let compareValue = 0;
+    
+    if (sortBy === 'created_date') {
+      compareValue = new Date(a.created_date) - new Date(b.created_date);
+    } else if (sortBy === 'status') {
+      compareValue = (a.status || '').localeCompare(b.status || '');
+    } else if (sortBy === 'title') {
+      compareValue = (a.title || '').localeCompare(b.title || '');
+    }
+    
+    return sortOrder === 'asc' ? compareValue : -compareValue;
   });
 
   const categoryLabels = {
@@ -188,6 +304,41 @@ export default function Avvik() {
     annet: 'Annet'
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'sendt_kunde': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'utfort': return 'bg-green-100 text-green-700 border-green-200';
+      case 'godkjent_kunde': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'opprettet': return 'bg-red-100 text-red-700 border-red-200';
+      case 'fakturert': return 'bg-purple-100 text-purple-700 border-purple-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'sendt_kunde': return '🔵';
+      case 'utfort': return '🟢';
+      case 'godkjent_kunde': return '🟡';
+      case 'opprettet': return '🔴';
+      case 'fakturert': return '🟣';
+      default: return '⚪';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'opprettet': return 'Ikke startet';
+      case 'sendt_kunde': return 'Sendt til kunde';
+      case 'godkjent_kunde': return 'Pågående';
+      case 'utfort': return 'Utført';
+      case 'fakturert': return 'Fakturert';
+      default: return status;
+    }
+  };
+
+  const uniqueAssignees = [...new Set(deviations.map(d => d.assigned_to).filter(Boolean))];
+
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
@@ -199,41 +350,30 @@ export default function Avvik() {
 
       <div className="px-6 lg:px-8 py-6">
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+          <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
               placeholder="Søk etter avvik..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 rounded-xl border-slate-200" />
-
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-40 rounded-xl">
+            <SelectTrigger className="rounded-xl">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle statuser</SelectItem>
-              <SelectItem value="ny">Ny</SelectItem>
-              <SelectItem value="under_behandling">Under behandling</SelectItem>
-              <SelectItem value="lukket">Lukket</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={severityFilter} onValueChange={setSeverityFilter}>
-            <SelectTrigger className="w-full sm:w-40 rounded-xl">
-              <SelectValue placeholder="Alvorlighet" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle</SelectItem>
-              <SelectItem value="lav">Lav</SelectItem>
-              <SelectItem value="middels">Middels</SelectItem>
-              <SelectItem value="hoy">Høy</SelectItem>
-              <SelectItem value="kritisk">Kritisk</SelectItem>
+              <SelectItem value="opprettet">Ikke startet</SelectItem>
+              <SelectItem value="sendt_kunde">Sendt til kunde</SelectItem>
+              <SelectItem value="godkjent_kunde">Pågående</SelectItem>
+              <SelectItem value="utfort">Utført</SelectItem>
+              <SelectItem value="fakturert">Fakturert</SelectItem>
             </SelectContent>
           </Select>
           <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+            <SelectTrigger className="rounded-xl">
               <SelectValue placeholder="Prosjekt" />
             </SelectTrigger>
             <SelectContent>
@@ -241,6 +381,19 @@ export default function Avvik() {
               {projects.map((project) =>
               <SelectItem key={project.id} value={project.id}>
                   {project.name}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <Select value={assignedFilter} onValueChange={setAssignedFilter}>
+            <SelectTrigger className="rounded-xl">
+              <SelectValue placeholder="Ansvarlig" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle ansvarlige</SelectItem>
+              {uniqueAssignees.map((assignee) =>
+              <SelectItem key={assignee} value={assignee}>
+                  {assignee}
                 </SelectItem>
               )}
             </SelectContent>
