@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 const modules = [
   { key: 'prosjekter', name: 'Prosjekter', description: 'Administrer prosjekter', icon: Building2, color: 'emerald', page: 'Prosjekter' },
   { key: 'hms', name: 'HMS & Risiko', description: 'Helse, miljø og sikkerhet', icon: ShieldAlert, color: 'red', page: 'HMS' },
-  { key: 'avvik', name: 'Avvik', description: 'HMS og kvalitetsavvik', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
+  { key: 'avvik', name: 'Avvik', description: 'Avvikshåndtering', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
   { key: 'befaring', name: 'Befaring', description: 'Befaringer og oppfølging', icon: CheckSquare, color: 'cyan', page: 'Befaring' },
   { key: 'prosjektfiler', name: 'Prosjektfiler', description: 'Filer og dokumenter', icon: FileText, color: 'slate', page: 'Prosjektfiler' },
   { key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Tillegg og endringer', icon: FileText, color: 'blue', page: 'Endringsmeldinger' },
