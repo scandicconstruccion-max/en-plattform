@@ -96,6 +96,11 @@ export default function Avvik() {
     queryFn: () => base44.entities.Project.list()
   });
 
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list()
+  });
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Deviation.create(data),
     onSuccess: () => {
@@ -829,12 +834,20 @@ export default function Avvik() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Ansvarlig</Label>
-                <Input
+                <Select
                   value={formData.assigned_to}
-                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                  placeholder="E-post"
-                  className="mt-1.5 rounded-xl" />
-
+                  onValueChange={(v) => setFormData({ ...formData, assigned_to: v })}>
+                  <SelectTrigger className="mt-1.5 rounded-xl">
+                    <SelectValue placeholder="Velg ansatt" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.email}>
+                        {employee.first_name} {employee.last_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Frist</Label>
