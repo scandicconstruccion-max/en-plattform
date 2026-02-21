@@ -29,7 +29,12 @@ export const MODULES = {
   KALENDER: 'kalender',
   ANSATTE: 'ansatte',
   MINBEDRIFT: 'minbedrift',
-  BRUKERADMIN: 'brukeradmin'
+  BRUKERADMIN: 'brukeradmin',
+  HMS: 'hms',
+  SJA: 'sja',
+  RUH: 'ruh',
+  RISIKOANALYSE: 'risikoanalyse',
+  HMSHANDBOK: 'hmshandbok'
 };
 
 // Definerer hvilke moduler hver rolle har tilgang til
@@ -53,7 +58,12 @@ const roleModuleAccess = {
     MODULES.CHAT,
     MODULES.RESSURSPLAN,
     MODULES.KALENDER,
-    MODULES.ANSATTE
+    MODULES.ANSATTE,
+    MODULES.HMS,
+    MODULES.SJA,
+    MODULES.RUH,
+    MODULES.RISIKOANALYSE,
+    MODULES.HMSHANDBOK
   ],
   [ROLES.ANSATT]: [
     MODULES.DASHBOARD,
@@ -64,7 +74,10 @@ const roleModuleAccess = {
     MODULES.BILDEDOK,
     MODULES.SJEKKLISTER,
     MODULES.CHAT,
-    MODULES.KALENDER
+    MODULES.KALENDER,
+    MODULES.SJA,
+    MODULES.RUH,
+    MODULES.RISIKOANALYSE
   ],
   [ROLES.REGNSKAPSFORER]: [
     MODULES.DASHBOARD,

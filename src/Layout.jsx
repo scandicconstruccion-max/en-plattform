@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users, CalendarDays,
-  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog } from
+  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen } from
 'lucide-react';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import { Button } from '@/components/ui/button';
@@ -44,7 +44,12 @@ const moduleIcons = {
   kalender: CalendarDays,
   ansatte: Users,
   minbedrift: Building2,
-  brukeradmin: UserCog
+  brukeradmin: UserCog,
+  hms: ShieldAlert,
+  sja: ClipboardCheck,
+  ruh: AlertCircle,
+  risikoanalyse: FileCheck,
+  hmshandbok: BookOpen
 };
 
 const moduleLabels = {
@@ -68,7 +73,12 @@ const moduleLabels = {
   kalender: 'Kalender',
   ansatte: 'Ansatte',
   minbedrift: 'Min bedrift',
-  brukeradmin: 'Brukere'
+  brukeradmin: 'Brukere',
+  hms: 'HMS & Risiko',
+  sja: 'SJA',
+  ruh: 'RUH',
+  risikoanalyse: 'Risikoanalyse',
+  hmshandbok: 'HMS-håndbok'
 };
 
 const modulePages = {
@@ -92,7 +102,12 @@ const modulePages = {
   kalender: 'Kalender',
   ansatte: 'Ansatte',
   minbedrift: 'MinBedrift',
-  brukeradmin: 'BrukerAdmin'
+  brukeradmin: 'BrukerAdmin',
+  hms: 'HMS',
+  sja: 'SJA',
+  ruh: 'RUH',
+  risikoanalyse: 'Risikoanalyse',
+  hmshandbok: 'HMSHandbok'
 };
 
 export default function Layout({ children, currentPageName }) {
@@ -117,7 +132,7 @@ export default function Layout({ children, currentPageName }) {
 
   // Filter modules based on user role
   const allModulesList = [
-  'dashboard', 'prosjekter', 'avvik', 'befaring', 'prosjektfiler',
+  'dashboard', 'prosjekter', 'hms', 'avvik', 'befaring', 'prosjektfiler',
   'endringsmeldinger', 'timelister', 'bildedok', 'sjekklister',
   'tilbud', 'ordre', 'faktura', 'fdv', 'bestillinger', 'chat', 'ressursplan', 'ansatte',
   'crm', 'kalender', 'minbedrift', 'brukeradmin'];
