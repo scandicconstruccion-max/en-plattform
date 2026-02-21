@@ -34,7 +34,8 @@ export const MODULES = {
   SJA: 'sja',
   RUH: 'ruh',
   RISIKOANALYSE: 'risikoanalyse',
-  HMSHANDBOK: 'hmshandbok'
+  HMSHANDBOK: 'hmshandbok',
+  MOTTAKSKONTROLL: 'mottakskontroll'
 };
 
 // Definerer hvilke moduler hver rolle har tilgang til
@@ -63,7 +64,8 @@ const roleModuleAccess = {
     MODULES.SJA,
     MODULES.RUH,
     MODULES.RISIKOANALYSE,
-    MODULES.HMSHANDBOK
+    MODULES.HMSHANDBOK,
+    MODULES.MOTTAKSKONTROLL
   ],
   [ROLES.ANSATT]: [
     MODULES.DASHBOARD,
@@ -77,7 +79,8 @@ const roleModuleAccess = {
     MODULES.KALENDER,
     MODULES.SJA,
     MODULES.RUH,
-    MODULES.RISIKOANALYSE
+    MODULES.RISIKOANALYSE,
+    MODULES.MOTTAKSKONTROLL
   ],
   [ROLES.REGNSKAPSFORER]: [
     MODULES.DASHBOARD,

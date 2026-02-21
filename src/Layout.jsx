@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users, CalendarDays,
-  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen } from
+  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen, PackageCheck } from
 'lucide-react';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import { Button } from '@/components/ui/button';
@@ -49,7 +49,8 @@ const moduleIcons = {
   sja: ClipboardCheck,
   ruh: AlertCircle,
   risikoanalyse: FileCheck,
-  hmshandbok: BookOpen
+  hmshandbok: BookOpen,
+  mottakskontroll: PackageCheck
 };
 
 const moduleLabels = {
@@ -78,7 +79,8 @@ const moduleLabels = {
   sja: 'SJA',
   ruh: 'RUH',
   risikoanalyse: 'Risikoanalyse',
-  hmshandbok: 'HMS-håndbok'
+  hmshandbok: 'HMS-håndbok',
+  mottakskontroll: 'Mottakskontroll'
 };
 
 const modulePages = {
@@ -107,7 +109,8 @@ const modulePages = {
   sja: 'SJA',
   ruh: 'RUH',
   risikoanalyse: 'Risikoanalyse',
-  hmshandbok: 'HMSHandbok'
+  hmshandbok: 'HMSHandbok',
+  mottakskontroll: 'Mottakskontroll'
 };
 
 export default function Layout({ children, currentPageName }) {

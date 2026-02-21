@@ -80,6 +80,7 @@ import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
 import HMS from './pages/HMS';
 import SJA from './pages/SJA';
+import Mottakskontroll from './pages/Mottakskontroll';
 import __Layout from './Layout.jsx';
 
 
@@ -117,6 +118,7 @@ export const PAGES = {
     "Timelister": Timelister,
     "HMS": HMS,
     "SJA": SJA,
+    "Mottakskontroll": Mottakskontroll,
 }
 
 export const pagesConfig = {

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import PageHeader from '@/components/shared/PageHeader';
 import { 
   ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen, 
-  AlertTriangle, Calendar, TrendingUp, CheckCircle2 
+  AlertTriangle, Calendar, TrendingUp, CheckCircle2, PackageCheck 
 } from 'lucide-react';
 
 export default function HMS() {
@@ -29,11 +29,17 @@ export default function HMS() {
     queryFn: () => base44.entities.Risikoanalyse.list()
   });
 
+  const { data: mottakList = [] } = useQuery({
+    queryKey: ['mottakskontroll'],
+    queryFn: () => base44.entities.Mottakskontroll.list()
+  });
+
   // Calculate statistics
   const openRUH = ruhList.filter(r => r.status !== 'lukket').length;
   const activeRisks = risikoList.filter(r => r.status === 'aktiv').length;
   const pendingSJA = sjaList.filter(s => s.status === 'opprettet').length;
   const highRisks = risikoList.filter(r => r.risikonivå >= 6).length;
+  const mottakMedAvvik = mottakList.filter(m => m.har_avvik && m.status !== 'lukket').length;
 
   const modules = [
     {
@@ -74,6 +80,16 @@ export default function HMS() {
       page: 'HMSHandbok',
       color: 'bg-emerald-500',
       stats: 'Dokumentasjon og rutiner'
+    },
+    {
+      key: 'mottakskontroll',
+      title: 'Mottakskontroll',
+      description: 'Dokumenter mottak av varer og materiell',
+      icon: PackageCheck,
+      page: 'Mottakskontroll',
+      color: 'bg-purple-500',
+      stats: `${mottakList.length} mottakskontroller`,
+      alert: mottakMedAvvik > 0 ? `${mottakMedAvvik} med avvik` : null
     }
   ];
 
