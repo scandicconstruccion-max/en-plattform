@@ -805,7 +805,83 @@ export default function Avvik() {
         type="avvik"
         item={selectedDeviation}
         defaultEmail={selectedDeviation ? getProjectEmail(selectedDeviation.project_id) : ''}
-        onSent={handleEmailSent} />
+        onSent={handleEmailSent}
+      />
+
+      {/* Comment Dialog */}
+      <Dialog open={showCommentDialog} onOpenChange={setShowCommentDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Legg til kommentar</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Skriv din kommentar..."
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              rows={4}
+              className="rounded-xl"
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCommentDialog(false);
+                setCommentText('');
+                setSelectedDeviation(null);
+              }}
+              className="rounded-xl"
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleAddComment}
+              disabled={!commentText.trim() || updateMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {updateMutation.isPending ? 'Lagrer...' : 'Lagre kommentar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Last opp dokumenter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <FileUploadSection
+              attachments={uploadAttachments}
+              onAttachmentsChange={setUploadAttachments}
+              projectId={selectedDeviation?.project_id}
+              moduleType="deviation"
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUploadDialog(false);
+                setUploadAttachments([]);
+                setSelectedDeviation(null);
+              }}
+              className="rounded-xl"
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleUploadDocuments}
+              disabled={uploadAttachments.length === 0 || updateMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {updateMutation.isPending ? 'Laster opp...' : 'Last opp'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>);
 
