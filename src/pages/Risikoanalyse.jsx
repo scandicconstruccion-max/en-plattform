@@ -14,7 +14,17 @@ import EmptyState from '@/components/shared/EmptyState';
 import { generateMultiElementPDF } from '@/components/shared/PDFGenerator';
 import RisikoanalysePDFView from '@/components/risikoanalyse/RisikoanalysePDFView';
 import SendRisikoanalyseDialog from '@/components/risikoanalyse/SendRisikoanalyseDialog';
-import { FileCheck, Calendar, AlertTriangle, Filter, X, Download, Send, CheckCircle, Search } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { FileCheck, Calendar, AlertTriangle, Filter, X, Download, Send, CheckCircle, Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -30,6 +40,7 @@ export default function Risikoanalyse() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAnalyser, setSelectedAnalyser] = useState([]);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
@@ -212,6 +223,24 @@ export default function Risikoanalyse() {
     }
   });
 
+  const slettAnalyserMutation = useMutation({
+    mutationFn: async () => {
+      const promises = selectedAnalyser.map(analyseId => 
+        base44.entities.Risikoanalyse.delete(analyseId)
+      );
+      return Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['risikoanalyser']);
+      toast.success(`${selectedAnalyser.length} risikoanalyser slettet`);
+      setSelectedAnalyser([]);
+      setDeleteDialogOpen(false);
+    },
+    onError: () => {
+      toast.error('Feil ved sletting av analyser');
+    }
+  });
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <PageHeader
@@ -246,6 +275,14 @@ export default function Risikoanalyse() {
               >
                 <CheckCircle className="h-4 w-4" />
                 Lukk ({selectedAnalyser.length})
+              </Button>
+              <Button 
+                onClick={() => setDeleteDialogOpen(true)}
+                variant="outline" 
+                className="rounded-xl gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                Slett ({selectedAnalyser.length})
               </Button>
             </>
           )
@@ -521,6 +558,28 @@ export default function Risikoanalyse() {
         analyserList={analyser}
         projects={projects}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bekreft sletting</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette {selectedAnalyser.length} risikoanalyse{selectedAnalyser.length > 1 ? 'r' : ''}? 
+              Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => slettAnalyserMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={slettAnalyserMutation.isPending}
+            >
+              {slettAnalyserMutation.isPending ? 'Sletter...' : 'Slett'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

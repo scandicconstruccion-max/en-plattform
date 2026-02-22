@@ -163,6 +163,7 @@ export default function RisikoanalyseDetaljer() {
       queryClient.invalidateQueries(['risikoanalyse', analyseId]);
       queryClient.invalidateQueries(['risikoanalyser']);
       toast.success('Risikoanalyse lukket');
+      navigate(createPageUrl('Risikoanalyse'));
     }
   });
 
