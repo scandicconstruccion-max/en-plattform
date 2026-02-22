@@ -92,6 +92,7 @@ const modulePages = {
   timelister: 'Timelister',
   bildedok: 'Bildedok',
   sjekklister: 'Sjekklister',
+  sjekkliste_maler: 'SjekklisteMaler',
   tilbud: 'Tilbud',
   ordre: 'Ordre',
   faktura: 'Faktura',
