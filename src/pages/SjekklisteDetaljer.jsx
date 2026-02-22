@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { ChevronLeft, Check, X, AlertCircle, Download, CheckCircle2, Upload, Camera, Trash2 } from 'lucide-react';
+import { ChevronLeft, Check, CheckCircle2, Download } from 'lucide-react';
+import ChecklistItemCard from '@/components/sjekklister/ChecklistItemCard';
 import { cn } from '@/lib/utils';
 
 export default function SjekklisteDetaljer() {
@@ -15,50 +14,26 @@ export default function SjekklisteDetaljer() {
     const params = new URLSearchParams(window.location.search);
     return params.get('id');
   });
-  const [responses, setResponses] = useState({});
-  const [showSignDialog, setShowSignDialog] = useState(false);
-  const canvasRef = useRef(null);
   const [user, setUser] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const currentUser = await base44.auth.me();
-        setUser(currentUser);
-      } catch (e) {
-        console.error('Error fetching user:', e);
-      }
-    };
-    fetchUser();
+    base44.auth.me().then(setUser).catch(console.error);
   }, []);
 
+  // Fetch checklist
   const { data: checklist, isLoading, error } = useQuery({
     queryKey: ['checklist', checklistId],
-    queryFn: () => {
-      if (!checklistId) return null;
-      return base44.entities.Checklist.read(checklistId);
-    },
+    queryFn: () => base44.entities.Checklist.read(checklistId),
     enabled: !!checklistId,
-    retry: 5,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    staleTime: 0,
-    gcTime: 0
+    retry: 3,
+    retryDelay: 1000,
+    staleTime: 0
   });
 
-  useEffect(() => {
-    if (checklist?.responses) {
-      const responseMap = {};
-      checklist.responses.forEach(r => {
-        responseMap[r.item_order] = r;
-      });
-      setResponses(responseMap);
-    }
-  }, [checklist]);
-
-  const updateChecklistMutation = useMutation({
+  // Update checklist
+  const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Checklist.update(checklistId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklist', checklistId] });
@@ -66,351 +41,220 @@ export default function SjekklisteDetaljer() {
     }
   });
 
-  const handleSetResponse = (itemOrder, status) => {
-    const updatedResponses = [...(checklist?.responses || [])];
-    const existingIndex = updatedResponses.findIndex(r => r.item_order === itemOrder);
-    
-    if (existingIndex >= 0) {
-      updatedResponses[existingIndex] = {
-        ...updatedResponses[existingIndex],
-        status,
-        responded_date: new Date().toISOString(),
-        responded_by: user?.email
-      };
-    } else {
-      updatedResponses.push({
-        item_order: itemOrder,
-        status,
-        responded_date: new Date().toISOString(),
-        responded_by: user?.email
-      });
-    }
-
-    setResponses({ ...responses, [itemOrder]: updatedResponses.find(r => r.item_order === itemOrder) });
-    updateChecklistMutation.mutate({ responses: updatedResponses });
-  };
-
-  const handleAddImage = useCallback(async (itemOrder, file) => {
-    if (!file) return;
-    
+  // Upload file
+  const uploadFile = async (file) => {
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      return file_url;
+    } catch (e) {
+      console.error('Upload failed:', e);
+      throw e;
+    }
+  };
+
+  const handleStatusChange = (itemIndex, status) => {
+    if (!checklist) return;
+    const responses = [...(checklist.responses || [])];
+    const idx = responses.findIndex(r => r.item_order === itemIndex);
+    
+    if (idx >= 0) {
+      responses[idx] = {
+        ...responses[idx],
+        status,
+        responded_by: user?.email,
+        responded_date: new Date().toISOString()
+      };
+    } else {
+      responses.push({
+        item_order: itemIndex,
+        status,
+        responded_by: user?.email,
+        responded_date: new Date().toISOString()
+      });
+    }
+    
+    updateMutation.mutate({ responses });
+  };
+
+  const handleCommentChange = (itemIndex, comment) => {
+    if (!checklist) return;
+    const responses = [...(checklist.responses || [])];
+    const idx = responses.findIndex(r => r.item_order === itemIndex);
+    
+    if (idx >= 0) {
+      responses[idx] = { ...responses[idx], comment };
+    } else {
+      responses.push({
+        item_order: itemIndex,
+        comment,
+        responded_by: user?.email,
+        responded_date: new Date().toISOString()
+      });
+    }
+    
+    updateMutation.mutate({ responses });
+  };
+
+  const handleImageAdd = async (itemIndex, file) => {
+    if (!file) return;
+    try {
+      const fileUrl = await uploadFile(file);
+      const responses = [...(checklist?.responses || [])];
+      const idx = responses.findIndex(r => r.item_order === itemIndex);
       
-      const updatedResponses = [...(checklist?.responses || [])];
-      const existingIndex = updatedResponses.findIndex(r => r.item_order === itemOrder);
-      
-      if (existingIndex >= 0) {
-        updatedResponses[existingIndex] = {
-          ...updatedResponses[existingIndex],
-          images: [...(updatedResponses[existingIndex].images || []), file_url]
+      if (idx >= 0) {
+        responses[idx] = {
+          ...responses[idx],
+          images: [...(responses[idx].images || []), fileUrl]
         };
       } else {
-        updatedResponses.push({
-          item_order: itemOrder,
-          images: [file_url]
+        responses.push({
+          item_order: itemIndex,
+          images: [fileUrl]
         });
       }
       
-      setResponses({ ...responses, [itemOrder]: updatedResponses.find(r => r.item_order === itemOrder) });
-      updateChecklistMutation.mutate({ responses: updatedResponses });
+      updateMutation.mutate({ responses });
     } catch (e) {
-      console.error('Bildeupplasting feilet:', e);
+      console.error('Image add failed:', e);
     }
-  }, [checklist?.responses, responses, updateChecklistMutation]);
-
-  const handleRemoveImage = (itemOrder, imageIndex) => {
-    const updatedResponses = [...(checklist?.responses || [])];
-    const existingIndex = updatedResponses.findIndex(r => r.item_order === itemOrder);
-    
-    if (existingIndex >= 0) {
-      updatedResponses[existingIndex].images = updatedResponses[existingIndex].images?.filter((_, i) => i !== imageIndex) || [];
-    }
-    
-    setResponses({ ...responses, [itemOrder]: updatedResponses.find(r => r.item_order === itemOrder) });
-    updateChecklistMutation.mutate({ responses: updatedResponses });
   };
 
-  const handleSign = (signatureImage) => {
-    updateChecklistMutation.mutate({
-      signed: true,
-      signed_by: checklist?.assigned_to,
-      signed_date: new Date().toISOString(),
-      signature_image_url: signatureImage,
+  const handleImageRemove = (itemIndex, imageIndex) => {
+    if (!checklist) return;
+    const responses = [...(checklist.responses || [])];
+    const idx = responses.findIndex(r => r.item_order === itemIndex);
+    
+    if (idx >= 0) {
+      responses[idx].images = responses[idx].images?.filter((_, i) => i !== imageIndex) || [];
+      updateMutation.mutate({ responses });
+    }
+  };
+
+  const handleComplete = () => {
+    updateMutation.mutate({
       status: 'fullfort',
       completed_date: new Date().toISOString()
     });
-    setShowSignDialog(false);
   };
 
-  if (isLoading) return <div className="p-6">Laster sjekkliste...</div>;
-  if (error) return <div className="p-6 text-red-600">Feil ved lasting: {error.message}</div>;
-  if (!checklist) return <div className="p-6">Sjekklisten ble ikke funnet (ID: {checklistId})</div>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="h-8 w-8 border-4 border-slate-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-slate-600">Laster sjekkliste...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const completionPercentage = Math.round(
-    ((checklist.responses?.filter(r => r.status && ['ok', 'ikke_ok', 'avvik'].includes(r.status)).length || 0) / (checklist.items?.length || 1)) * 100
-  );
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Feil ved lasting av sjekkliste</p>
+          <Button onClick={() => navigate(createPageUrl('Sjekklister'))}>
+            Tilbake til sjekklister
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!checklist) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-slate-600">Sjekklisten ble ikke funnet</p>
+      </div>
+    );
+  }
+
+  const completedItems = checklist.responses?.filter(r => r.status).length || 0;
+  const totalItems = checklist.items?.length || 1;
+  const progress = Math.round((completedItems / totalItems) * 100);
+  const isComplete = progress === 100 && checklist.status === 'fullfort';
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-2xl mx-auto p-4">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(createPageUrl('Sjekklister'))}
-          className="mb-4 gap-2"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Tilbake
-        </Button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-6 pb-20 md:pb-6">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(createPageUrl('Sjekklister'))}
+            className="gap-2 mb-4"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Tilbake
+          </Button>
 
-        <Card className="p-4 md:p-6 mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">{checklist.name}</h1>
-          <div className="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4">
-            {checklist.location && <span>📍 {checklist.location}</span>}
-            {checklist.date && <span>📅 {checklist.date}</span>}
-            {checklist.assigned_to_name && <span>👤 {checklist.assigned_to_name}</span>}
-          </div>
-
-          {/* Progress Bar */}
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-semibold">Fremdrift</span>
-              <span className="text-sm font-bold">{completionPercentage}%</span>
+          <Card className="bg-white p-6 mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">{checklist.name}</h1>
+            <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-4">
+              {checklist.location && <span>📍 {checklist.location}</span>}
+              {checklist.date && <span>📅 {checklist.date}</span>}
+              {checklist.assigned_to_name && <span>👤 {checklist.assigned_to_name}</span>}
             </div>
-            <div className="w-full bg-slate-200 rounded-full h-2">
-              <div
-                className="bg-green-600 h-2 rounded-full transition-all"
-                style={{ width: `${completionPercentage}%` }}
-              />
-            </div>
-          </div>
 
-          <div className="flex gap-2">
-            {checklist.status !== 'fullfort' && (
-              <Button
-                onClick={() => setShowSignDialog(true)}
-                className="gap-2"
-                disabled={completionPercentage < 100}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Signér og fullfør
-              </Button>
-            )}
-            {checklist.signed && (
-              <Button variant="outline" className="gap-2" disabled>
-                <Check className="h-4 w-4 text-green-600" />
-                Signert
-              </Button>
-            )}
-          </div>
-        </Card>
+            {/* Progress */}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-semibold">Fremdrift</span>
+                <span className="text-lg font-bold text-emerald-600">{progress}%</span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-3">
+                <div
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-3 rounded-full transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                {completedItems} av {totalItems} punkter fullført
+              </p>
+            </div>
+
+            {/* Status and Actions */}
+            <div className="flex gap-3 flex-wrap">
+              {isComplete && (
+                <div className="flex items-center gap-2 text-green-700 bg-green-50 px-4 py-2 rounded-lg">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span className="font-medium">Fullført</span>
+                </div>
+              )}
+              {!isComplete && checklist.status !== 'fullfort' && (
+                <Button
+                  onClick={handleComplete}
+                  disabled={progress < 100}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <Check className="h-4 w-4" />
+                  Fullfør sjekkliste
+                </Button>
+              )}
+            </div>
+          </Card>
+        </div>
 
         {/* Checklist Items */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {(checklist.items || []).map((item, idx) => {
-            const response = responses[idx];
+            const response = checklist.responses?.find(r => r.item_order === idx);
             return (
-              <Card key={idx} className={cn(
-                'p-4 transition-colors',
-                response?.status === 'ok' && 'bg-green-50 border-green-200',
-                response?.status === 'ikke_ok' && 'bg-red-50 border-red-200',
-                response?.status === 'avvik' && 'bg-yellow-50 border-yellow-200'
-              )}>
-                <div className="mb-3">
-                  <h3 className="font-semibold text-base">{idx + 1}. {item.title}</h3>
-                  {item.description && (
-                    <p className="text-sm text-slate-600 mt-1">{item.description}</p>
-                  )}
-                </div>
-
-                {/* Status Buttons - Mobile Optimized */}
-                <div className="flex gap-2 mb-4">
-                  <Button
-                    onClick={() => handleSetResponse(idx, 'ok')}
-                    variant={response?.status === 'ok' ? 'default' : 'outline'}
-                    className={cn(
-                      'flex-1 h-12 text-base font-semibold gap-2',
-                      response?.status === 'ok' && 'bg-green-600 hover:bg-green-700'
-                    )}
-                  >
-                    <Check className="h-5 w-5" />
-                    OK
-                  </Button>
-                  <Button
-                    onClick={() => handleSetResponse(idx, 'ikke_ok')}
-                    variant={response?.status === 'ikke_ok' ? 'destructive' : 'outline'}
-                    className={cn(
-                      'flex-1 h-12 text-base font-semibold gap-2',
-                      response?.status === 'ikke_ok' && 'bg-red-600 hover:bg-red-700'
-                    )}
-                  >
-                    <X className="h-5 w-5" />
-                    Ikke OK
-                  </Button>
-                  <Button
-                    onClick={() => handleSetResponse(idx, 'avvik')}
-                    variant={response?.status === 'avvik' ? 'default' : 'outline'}
-                    className={cn(
-                      'flex-1 h-12 text-base font-semibold gap-2',
-                      response?.status === 'avvik' && 'bg-yellow-600 hover:bg-yellow-700'
-                    )}
-                  >
-                    <AlertCircle className="h-5 w-5" />
-                    Avvik
-                  </Button>
-                </div>
-
-                {item.allow_comment && (
-                   <div className="mb-4">
-                     <label className="text-sm font-semibold mb-2 block">Kommentar</label>
-                     <Textarea
-                       placeholder="Legg til kommentar..."
-                       value={response?.comment || ''}
-                       onChange={(e) => {
-                         const updatedResponses = [...(checklist?.responses || [])];
-                         const idx2 = updatedResponses.findIndex(r => r.item_order === idx);
-                         if (idx2 >= 0) {
-                           updatedResponses[idx2].comment = e.target.value;
-                         } else {
-                           updatedResponses.push({ item_order: idx, comment: e.target.value, responded_by: user?.email, responded_date: new Date().toISOString() });
-                         }
-                         updateChecklistMutation.mutate({ responses: updatedResponses });
-                       }}
-                       className="text-base"
-                     />
-                   </div>
-                 )}
-
-                {item.allow_image && (
-                   <div className="mb-4">
-                     <label className="text-sm font-semibold mb-2 block">Bilder</label>
-
-                     {/* Image Upload */}
-                     <div className="flex gap-2 mb-3">
-                       <label className="flex-1">
-                         <input
-                           type="file"
-                           accept="image/*"
-                           onChange={(e) => {
-                             const file = e.target.files?.[0];
-                             if (file) handleAddImage(idx, file);
-                             e.target.value = '';
-                           }}
-                           className="hidden"
-                         />
-                         <Button as="div" variant="outline" className="w-full gap-2 cursor-pointer">
-                           <Upload className="h-4 w-4" />
-                           Last opp bilde
-                         </Button>
-                       </label>
-                       <label className="flex-1">
-                         <input
-                           type="file"
-                           accept="image/*"
-                           capture="environment"
-                           onChange={(e) => {
-                             const file = e.target.files?.[0];
-                             if (file) handleAddImage(idx, file);
-                             e.target.value = '';
-                           }}
-                           className="hidden"
-                         />
-                         <Button as="div" variant="outline" className="w-full gap-2 cursor-pointer">
-                           <Camera className="h-4 w-4" />
-                           Ta bilde
-                         </Button>
-                       </label>
-                     </div>
-
-                     {/* Image Thumbnails */}
-                     {(response?.images?.length > 0) && (
-                       <div className="grid grid-cols-3 gap-2">
-                         {response.images.map((imageUrl, imgIdx) => (
-                           <div key={imgIdx} className="relative group">
-                             <img
-                               src={imageUrl}
-                               alt={`Bilde ${imgIdx + 1}`}
-                               className="w-full h-24 object-cover rounded-lg border"
-                             />
-                             <Button
-                               variant="ghost"
-                               size="icon"
-                               onClick={() => handleRemoveImage(idx, imgIdx)}
-                               className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
-                             >
-                               <Trash2 className="h-3 w-3" />
-                             </Button>
-                           </div>
-                         ))}
-                       </div>
-                     )}
-                   </div>
-                 )}
-
-                {response && (
-                   <div className="text-xs text-slate-500 pt-2 border-t mt-4">
-                     <div>Utfylt av: {response.responded_by || '-'}</div>
-                     <div>Dato: {response.responded_date ? new Date(response.responded_date).toLocaleString('no-NO') : '-'}</div>
-                   </div>
-                 )}
-                </Card>
+              <ChecklistItemCard
+                key={idx}
+                item={item}
+                itemIndex={idx}
+                response={response}
+                onStatusChange={handleStatusChange}
+                onCommentChange={handleCommentChange}
+                onImageAdd={handleImageAdd}
+                onImageRemove={handleImageRemove}
+              />
             );
           })}
         </div>
       </div>
-
-      {/* Signature Dialog */}
-      <Dialog open={showSignDialog} onOpenChange={setShowSignDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Signér sjekklisten</DialogTitle>
-            <DialogDescription>
-              Tegn din signatur under for å fullføre sjekklisten
-            </DialogDescription>
-          </DialogHeader>
-          <canvas
-            ref={canvasRef}
-            width={500}
-            height={200}
-            className="border-2 border-slate-300 rounded-lg bg-white cursor-crosshair w-full"
-            style={{ maxWidth: '500px', height: 'auto' }}
-            onMouseDown={(e) => {
-              setIsDrawing(true);
-              const canvas = canvasRef.current;
-              if (!canvas) return;
-              const rect = canvas.getBoundingClientRect();
-              const ctx = canvas.getContext('2d');
-              ctx?.beginPath();
-              ctx?.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-            }}
-            onMouseMove={(e) => {
-              if (!isDrawing || !canvasRef.current) return;
-              const rect = canvasRef.current.getBoundingClientRect();
-              const ctx = canvasRef.current.getContext('2d');
-              ctx?.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-              ctx?.stroke();
-            }}
-            onMouseUp={() => setIsDrawing(false)}
-            onMouseLeave={() => setIsDrawing(false)}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              if (canvasRef.current) {
-                const ctx = canvasRef.current.getContext('2d');
-                ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-              }
-            }}>
-              Tøm
-            </Button>
-            <Button onClick={() => {
-              if (canvasRef.current) {
-                handleSign(canvasRef.current.toDataURL());
-              }
-            }}>
-              Signér
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
