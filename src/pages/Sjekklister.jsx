@@ -239,9 +239,10 @@ export default function Sjekklister() {
 
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
-                  </Card>
-              )}
+                      </div>
+                      </Card>
+                      </div>
+                      )}
               </div>
             }
           </TabsContent>
