@@ -125,9 +125,7 @@ export default function RUHDetaljer() {
     onSuccess: (savedRuh) => {
       queryClient.invalidateQueries(['ruh']);
       toast.success(ruhId ? 'RUH oppdatert' : 'RUH opprettet');
-      if (isNew) {
-        navigate(createPageUrl(`RUHDetaljer?id=${savedRuh.id}`));
-      }
+      navigate(createPageUrl('RUH'));
     }
   });
 
