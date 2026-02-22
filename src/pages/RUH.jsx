@@ -277,6 +277,7 @@ export default function RUH() {
                         <div 
                           className="flex-1 cursor-pointer"
                           onClick={() => navigate(createPageUrl(`RUHDetaljer?id=${ruh.id}`))}
+                        >
                         <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <Badge className={getStatusColor(ruh.status)}>
                             {getStatusLabel(ruh.status)}
