@@ -21,6 +21,11 @@ export default function ProjectDropdown() {
     queryFn: () => base44.entities.Project.list('-created_date'),
   });
 
+  const handleSelectProject = (project) => {
+    localStorage.setItem('selectedProject', JSON.stringify(project));
+    window.dispatchEvent(new Event('projectSelected'));
+  };
+
   const activeProjects = projects.filter(p => p.status === 'aktiv');
   const otherProjects = projects.filter(p => p.status !== 'aktiv');
 
@@ -40,11 +45,8 @@ export default function ProjectDropdown() {
               Aktive prosjekter
             </DropdownMenuLabel>
             {activeProjects.map((project) => (
-              <DropdownMenuItem key={project.id} asChild>
-                <Link
-                  to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
-                  className="flex items-center gap-3 cursor-pointer"
-                >
+              <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
+                <div className="flex items-center gap-3 w-full">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
                     <Building2 className="h-4 w-4 text-emerald-600" />
                   </div>
@@ -56,7 +58,7 @@ export default function ProjectDropdown() {
                     </p>
                   </div>
                   <StatusBadge status={project.status} />
-                </Link>
+                </div>
               </DropdownMenuItem>
             ))}
           </>
@@ -68,11 +70,8 @@ export default function ProjectDropdown() {
               Andre prosjekter
             </DropdownMenuLabel>
             {otherProjects.map((project) => (
-              <DropdownMenuItem key={project.id} asChild>
-                <Link
-                  to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
-                  className="flex items-center gap-3 cursor-pointer"
-                >
+              <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
+                <div className="flex items-center gap-3 w-full">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
                     <Building2 className="h-4 w-4 text-slate-600" />
                   </div>
@@ -84,7 +83,7 @@ export default function ProjectDropdown() {
                     </p>
                   </div>
                   <StatusBadge status={project.status} />
-                </Link>
+                </div>
               </DropdownMenuItem>
             ))}
           </>

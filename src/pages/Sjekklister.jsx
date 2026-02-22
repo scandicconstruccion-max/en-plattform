@@ -271,6 +271,7 @@ export default function Sjekklister() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Opprett ny sjekklistemal</DialogTitle>
+            <DialogDescription>Fyll inn informasjonen om sjekklistemalen</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
