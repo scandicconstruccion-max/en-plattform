@@ -137,7 +137,7 @@ export default function Layout({ children, currentPageName }) {
   const moduleSections = [
     {
       title: 'GRUNNPAKKE',
-      modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
+      modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'avvik', 'hms']
     },
     {
       separator: true
