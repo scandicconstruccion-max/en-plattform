@@ -267,8 +267,8 @@ export default function RUH() {
                     id={`ruh-card-${ruh.id}`}
                     className="border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900"
                   >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-4">
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-3">
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={(checked) => handleSelectRuh(ruh.id, checked)}
@@ -278,7 +278,7 @@ export default function RUH() {
                           className="flex-1 cursor-pointer"
                           onClick={() => navigate(createPageUrl(`RUHDetaljer?id=${ruh.id}`))}
                         >
-                        <div className="flex items-center gap-3 mb-3 flex-wrap">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <Badge className={getStatusColor(ruh.status)}>
                             {getStatusLabel(ruh.status)}
                           </Badge>
@@ -291,10 +291,10 @@ export default function RUH() {
                             <Badge className="bg-red-600 text-white">Alvorlig</Badge>
                           )}
                         </div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white mb-2">
+                        <h3 className="font-semibold text-slate-900 dark:text-white mb-1.5">
                           {project?.name || 'Ukjent prosjekt'}
                         </h3>
-                        <p className="text-slate-600 dark:text-slate-400 mb-3 line-clamp-2">
+                        <p className="text-slate-600 dark:text-slate-400 mb-2 line-clamp-2">
                           {ruh.hva_skjedde || ruh.beskrivelse || 'Ingen beskrivelse'}
                         </p>
                         <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
