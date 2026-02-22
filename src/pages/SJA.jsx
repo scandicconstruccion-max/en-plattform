@@ -281,40 +281,52 @@ export default function SJA() {
             onAction={() => setShowDialog(true)}
           />
         ) : (
-          <div className="grid gap-4">
+          <div className="space-y-3">
+            {filteredSJA.length > 1 && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border">
+                <Checkbox
+                  checked={selectedSJAs.length === filteredSJA.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-sm text-slate-600">Velg alle</span>
+              </div>
+            )}
             {filteredSJA.map((sja) => {
               const project = projects.find(p => p.id === sja.project_id);
+              const isSelected = selectedSJAs.includes(sja.id);
               return (
                 <Card 
                   key={sja.id} 
-                  className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => navigate(createPageUrl('SJADetaljer') + `?id=${sja.id}`)}
+                  className={`border-0 shadow-sm hover:shadow-md transition-all ${isSelected ? 'ring-2 ring-emerald-500' : ''}`}
                 >
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-slate-900">{sja.arbeidsoperasjon}</h3>
-                          <Badge className={getStatusColor(sja.status)}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelectSJA(sja.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => navigate(createPageUrl('SJADetaljer') + `?id=${sja.id}`)}
+                      >
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-semibold text-slate-900 text-sm">{sja.arbeidsoperasjon}</h3>
+                          <Badge className={getStatusColor(sja.status)} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
                             {getStatusLabel(sja.status)}
                           </Badge>
                         </div>
-                        {(sja.beskrivelse_av_arbeidsoperasjonen || sja.beskrivelse_av_arbeid) && (
-                          <p className="text-sm text-slate-600 line-clamp-2 mb-3">
-                            {sja.beskrivelse_av_arbeidsoperasjonen || sja.beskrivelse_av_arbeid}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4" />
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                          <div className="flex items-center gap-1">
+                            <FileText className="h-3 w-3" />
                             {project?.name || 'Prosjekt ikke funnet'}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
                             {format(new Date(sja.sikkerhetsanalyse_utfort || sja.dato), 'dd.MM.yyyy')}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4" />
+                          <div className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
                             {sja.ansvarlig_navn || sja.ansvarlig}
                           </div>
                         </div>
