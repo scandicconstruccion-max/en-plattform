@@ -69,6 +69,7 @@ export default function Avvik() {
   const [showBulkEmailDialog, setShowBulkEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [selectedDeviation, setSelectedDeviation] = useState(null);
   const [selectedDeviations, setSelectedDeviations] = useState([]);
