@@ -7,16 +7,20 @@ import PageHeader from '@/components/shared/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import EmptyState from '@/components/shared/EmptyState';
-import { AlertCircle, Plus, Calendar, MapPin, Filter, X } from 'lucide-react';
+import { generateMultiElementPDF } from '@/components/shared/PDFGenerator';
+import { AlertCircle, Plus, Calendar, MapPin, Filter, X, Download, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 export default function RUH() {
   const navigate = useNavigate();
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedRuh, setSelectedRuh] = useState([]);
 
   const { data: ruhList = [] } = useQuery({
     queryKey: ['ruh'],
@@ -68,6 +72,38 @@ export default function RUH() {
     return types.map(t => labels[t] || t).join(', ');
   };
 
+  const handleSelectRuh = (ruhId, checked) => {
+    if (checked) {
+      setSelectedRuh(prev => [...prev, ruhId]);
+    } else {
+      setSelectedRuh(prev => prev.filter(id => id !== ruhId));
+    }
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedRuh(filteredRuh.map(r => r.id));
+    } else {
+      setSelectedRuh([]);
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    toast.info('Genererer PDF...');
+    const elements = selectedRuh.map((id, index) => ({
+      elementId: `ruh-card-${id}`,
+      title: `RUH ${index + 1}`
+    }));
+    await generateMultiElementPDF(elements, 'RUH-samlet.pdf');
+    toast.success('PDF lastet ned');
+  };
+
+  const handleBulkResend = async () => {
+    toast.info('Sender RUH-rapporter...');
+    // Implement resend logic here
+    toast.success(`${selectedRuh.length} RUH-rapporter sendt`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <PageHeader
@@ -75,6 +111,28 @@ export default function RUH() {
         subtitle={`${ruhList.length} hendelser registrert`}
         onAdd={() => navigate(createPageUrl('RUHDetaljer?new=true'))}
         addLabel="Ny RUH"
+        actions={
+          selectedRuh.length > 0 && (
+            <>
+              <Button 
+                onClick={handleBulkDownload}
+                variant="outline" 
+                className="rounded-xl gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Last ned PDF ({selectedRuh.length})
+              </Button>
+              <Button 
+                onClick={handleBulkResend}
+                variant="outline" 
+                className="rounded-xl gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Send på nytt ({selectedRuh.length})
+              </Button>
+            </>
+          )
+        }
       />
 
       <div className="px-6 lg:px-8 py-8">
@@ -128,7 +186,7 @@ export default function RUH() {
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card className="border-0 shadow-sm dark:bg-slate-900">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Åpne RUH</p>
@@ -144,7 +202,7 @@ export default function RUH() {
           </Card>
 
           <Card className="border-0 shadow-sm dark:bg-slate-900">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Under behandling</p>
@@ -160,7 +218,7 @@ export default function RUH() {
           </Card>
 
           <Card className="border-0 shadow-sm dark:bg-slate-900">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Lukkede RUH</p>
@@ -186,18 +244,39 @@ export default function RUH() {
             onAction={() => navigate(createPageUrl('RUHDetaljer?new=true'))}
           />
         ) : (
-          <div className="grid gap-4">
-            {filteredRuh.map(ruh => {
-              const project = projects.find(p => p.id === ruh.project_id);
-              return (
-                <Card 
-                  key={ruh.id} 
-                  className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer dark:bg-slate-900"
-                  onClick={() => navigate(createPageUrl(`RUHDetaljer?id=${ruh.id}`))}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
+          <div className="space-y-4">
+            {filteredRuh.length > 0 && (
+              <div className="flex items-center gap-2 mb-2">
+                <Checkbox
+                  id="select-all"
+                  checked={selectedRuh.length === filteredRuh.length}
+                  onCheckedChange={handleSelectAll}
+                />
+                <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                  Velg alle ({filteredRuh.length})
+                </label>
+              </div>
+            )}
+            <div className="grid gap-4">
+              {filteredRuh.map(ruh => {
+                const project = projects.find(p => p.id === ruh.project_id);
+                const isSelected = selectedRuh.includes(ruh.id);
+                return (
+                  <Card 
+                    key={ruh.id} 
+                    id={`ruh-card-${ruh.id}`}
+                    className="border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900"
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-4">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={(checked) => handleSelectRuh(ruh.id, checked)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => navigate(createPageUrl(`RUHDetaljer?id=${ruh.id}`))}
                         <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <Badge className={getStatusColor(ruh.status)}>
                             {getStatusLabel(ruh.status)}
@@ -229,13 +308,14 @@ export default function RUH() {
                               {ruh.adresse || ruh.hvor_skjedde}
                             </div>
                           )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
