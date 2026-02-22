@@ -72,7 +72,6 @@ import Kalender from './pages/Kalender';
 import Lonnsgrunnlag from './pages/Lonnsgrunnlag';
 import MinBedrift from './pages/MinBedrift';
 import Mottakskontroll from './pages/Mottakskontroll';
-import Ordre from './pages/Ordre';
 import OrdreDetaljer from './pages/OrdreDetaljer';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
@@ -85,8 +84,9 @@ import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import SJA from './pages/SJA';
 import SJADetaljer from './pages/SJADetaljer';
 import Sjekklister from './pages/Sjekklister';
-import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
+import Tilbud from './pages/Tilbud';
+import Ordre from './pages/Ordre';
 import __Layout from './Layout.jsx';
 
 
@@ -116,7 +116,6 @@ export const PAGES = {
     "Lonnsgrunnlag": Lonnsgrunnlag,
     "MinBedrift": MinBedrift,
     "Mottakskontroll": Mottakskontroll,
-    "Ordre": Ordre,
     "OrdreDetaljer": OrdreDetaljer,
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
@@ -129,8 +128,9 @@ export const PAGES = {
     "SJA": SJA,
     "SJADetaljer": SJADetaljer,
     "Sjekklister": Sjekklister,
-    "Tilbud": Tilbud,
     "Timelister": Timelister,
+    "Tilbud": Tilbud,
+    "Ordre": Ordre,
 }
 
 export const pagesConfig = {

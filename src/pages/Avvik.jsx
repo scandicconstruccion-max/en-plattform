@@ -56,6 +56,7 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
+import ViewDeviationsDialog from '@/components/avvik/ViewDeviationsDialog';
 import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
