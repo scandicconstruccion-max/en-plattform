@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageHeader from '@/components/shared/PageHeader';
-import { Building2, CreditCard, Check, MapPin, Phone, Mail, FileText, Globe } from 'lucide-react';
+import { Building2, CreditCard, Check, MapPin, Phone, Mail, FileText, Globe, User, Users2, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const availableModules = [
@@ -136,6 +136,125 @@ export default function MinBedrift() {
                     className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
                     onChange={(e) => updateCompanyMutation.mutate({ email: e.target.value })}
                   />
+                </div>
+              </div>
+
+              {/* Kontaktpersoner */}
+              <div className="mt-8 pt-8 border-t dark:border-slate-700">
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                  <Users2 className="h-5 w-5" />
+                  Nøkkelpersoner
+                </h3>
+                
+                {/* Daglig leder */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Daglig leder
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="dark:text-slate-300">Navn</Label>
+                      <Input
+                        value={company?.ceo_name || ''}
+                        placeholder="Ola Nordmann"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ ceo_name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="dark:text-slate-300">Telefon</Label>
+                      <Input
+                        value={company?.ceo_phone || ''}
+                        placeholder="+47 123 45 678"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ ceo_phone: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="dark:text-slate-300">E-post</Label>
+                      <Input
+                        value={company?.ceo_email || ''}
+                        placeholder="daglig.leder@firma.no"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ ceo_email: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Styreformann */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Styreformann
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="dark:text-slate-300">Navn</Label>
+                      <Input
+                        value={company?.chairman_name || ''}
+                        placeholder="Kari Hansen"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ chairman_name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="dark:text-slate-300">Telefon</Label>
+                      <Input
+                        value={company?.chairman_phone || ''}
+                        placeholder="+47 123 45 678"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ chairman_phone: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="dark:text-slate-300">E-post</Label>
+                      <Input
+                        value={company?.chairman_email || ''}
+                        placeholder="styreformann@firma.no"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ chairman_email: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Økonomiansvarlig */}
+                <div>
+                  <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Økonomiansvarlig
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="dark:text-slate-300">Navn</Label>
+                      <Input
+                        value={company?.finance_contact_name || ''}
+                        placeholder="Per Jensen"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="dark:text-slate-300">Telefon</Label>
+                      <Input
+                        value={company?.finance_contact_phone || ''}
+                        placeholder="+47 123 45 678"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_phone: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="dark:text-slate-300">E-post</Label>
+                      <Input
+                        value={company?.finance_contact_email || ''}
+                        placeholder="okonomi@firma.no"
+                        className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_email: e.target.value })}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
