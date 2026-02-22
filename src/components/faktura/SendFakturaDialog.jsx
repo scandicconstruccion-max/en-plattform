@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { X, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatAmount } from '@/components/shared/formatNumber';
 
-export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations, deviationList, projects }) {
+export default function SendFakturaDialog({ open, onOpenChange, selectedInvoices, invoiceList }) {
   const [recipients, setRecipients] = useState([]);
   const [emailInput, setEmailInput] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -24,19 +25,21 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
   const sendMutation = useMutation({
     mutationFn: async (emailList) => {
       const promises = emailList.map(async (email) => {
-        for (const deviationId of selectedDeviations) {
-          const deviation = deviationList.find(d => d.id === deviationId);
-          const project = projects.find(p => p.id === deviation?.project_id);
+        for (const invoiceId of selectedInvoices) {
+          const invoice = invoiceList.find(i => i.id === invoiceId);
           
           await base44.integrations.Core.SendEmail({
             to: email,
-            subject: `Avvik: ${deviation?.title || 'Avvik'}`,
+            subject: `Faktura ${invoice?.invoice_number || 'Faktura'} - På nytt`,
             body: `
-              <h2>Avvik</h2>
-              <p><strong>Tittel:</strong> ${deviation?.title || 'Ukjent'}</p>
-              ${project ? `<p><strong>Prosjekt:</strong> ${project.name}</p>` : ''}
-              <p><strong>Status:</strong> ${deviation?.status || 'Ukjent'}</p>
-              ${deviation?.description ? `<p><strong>Beskrivelse:</strong> ${deviation.description}</p>` : ''}
+              <h2>Faktura</h2>
+              <p><strong>Fakturanummer:</strong> ${invoice?.invoice_number || 'Ukjent'}</p>
+              <p><strong>Kunde:</strong> ${invoice?.customer_name || 'Ukjent'}</p>
+              <p><strong>Beløp:</strong> ${invoice?.total_amount ? formatAmount(invoice.total_amount) : 'N/A'}</p>
+              <p><strong>Forfallsdato:</strong> ${invoice?.due_date || 'Ikke spesifisert'}</p>
+              ${invoice?.kid_number ? `<p><strong>KID:</strong> ${invoice.kid_number}</p>` : ''}
+              <br>
+              <p>Vennligst betal innen forfallsdato.</p>
               <br>
               <p>Se systemet for mer informasjon.</p>
             `
@@ -46,7 +49,7 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
       await Promise.all(promises);
     },
     onSuccess: () => {
-      toast.success(`Avvik sendt til ${recipients.length} mottaker(e)`);
+      toast.success(`Faktura sendt til ${recipients.length} mottaker(e)`);
       setRecipients([]);
       setEmailInput('');
       setSelectedEmployee('');
@@ -86,13 +89,7 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
       return;
     }
 
-    const projectNames = [...new Set(selectedDeviations.map(id => {
-      const deviation = deviationList.find(d => d.id === id);
-      const project = projects.find(p => p.id === deviation?.project_id);
-      return project?.name || 'Ukjent';
-    }))].join(', ');
-
-    toast.info(`Avvik for prosjekt ${projectNames} sendes på nytt...`);
+    toast.info(`Faktura sendes på nytt...`);
     sendMutation.mutate(recipients);
   };
 
@@ -100,12 +97,12 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send avvik på nytt</DialogTitle>
+          <DialogTitle>Send faktura på nytt</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-slate-600">
-            Sender {selectedDeviations.length} avvik
+            Sender {selectedInvoices.length} faktura(er)
           </p>
 
           {/* Manual Email Input */}

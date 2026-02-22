@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { X, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations, deviationList, projects }) {
+export default function SendOrdreDialog({ open, onOpenChange, selectedOrders, orderList, projects }) {
   const [recipients, setRecipients] = useState([]);
   const [emailInput, setEmailInput] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -24,19 +24,20 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
   const sendMutation = useMutation({
     mutationFn: async (emailList) => {
       const promises = emailList.map(async (email) => {
-        for (const deviationId of selectedDeviations) {
-          const deviation = deviationList.find(d => d.id === deviationId);
-          const project = projects.find(p => p.id === deviation?.project_id);
+        for (const orderId of selectedOrders) {
+          const order = orderList.find(o => o.id === orderId);
+          const project = projects.find(p => p.id === order?.project_id);
           
           await base44.integrations.Core.SendEmail({
             to: email,
-            subject: `Avvik: ${deviation?.title || 'Avvik'}`,
+            subject: `Ordre: ${order?.order_number || 'Ordre'}`,
             body: `
-              <h2>Avvik</h2>
-              <p><strong>Tittel:</strong> ${deviation?.title || 'Ukjent'}</p>
+              <h2>Ordre</h2>
+              <p><strong>Ordrenummer:</strong> ${order?.order_number || 'Ukjent'}</p>
+              <p><strong>Kunde:</strong> ${order?.customer_name || 'Ukjent'}</p>
               ${project ? `<p><strong>Prosjekt:</strong> ${project.name}</p>` : ''}
-              <p><strong>Status:</strong> ${deviation?.status || 'Ukjent'}</p>
-              ${deviation?.description ? `<p><strong>Beskrivelse:</strong> ${deviation.description}</p>` : ''}
+              <p><strong>Beløp:</strong> ${order?.total_amount ? order.total_amount.toLocaleString('nb-NO') + ' kr' : 'N/A'}</p>
+              <p><strong>Status:</strong> ${order?.status || 'Ukjent'}</p>
               <br>
               <p>Se systemet for mer informasjon.</p>
             `
@@ -46,7 +47,7 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
       await Promise.all(promises);
     },
     onSuccess: () => {
-      toast.success(`Avvik sendt til ${recipients.length} mottaker(e)`);
+      toast.success(`Ordre sendt til ${recipients.length} mottaker(e)`);
       setRecipients([]);
       setEmailInput('');
       setSelectedEmployee('');
@@ -86,13 +87,13 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
       return;
     }
 
-    const projectNames = [...new Set(selectedDeviations.map(id => {
-      const deviation = deviationList.find(d => d.id === id);
-      const project = projects.find(p => p.id === deviation?.project_id);
+    const projectNames = [...new Set(selectedOrders.map(id => {
+      const order = orderList.find(o => o.id === id);
+      const project = projects.find(p => p.id === order?.project_id);
       return project?.name || 'Ukjent';
     }))].join(', ');
 
-    toast.info(`Avvik for prosjekt ${projectNames} sendes på nytt...`);
+    toast.info(`Ordre for prosjekt ${projectNames} sendes på nytt...`);
     sendMutation.mutate(recipients);
   };
 
@@ -100,12 +101,12 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send avvik på nytt</DialogTitle>
+          <DialogTitle>Send ordre på nytt</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-slate-600">
-            Sender {selectedDeviations.length} avvik
+            Sender {selectedOrders.length} ordre
           </p>
 
           {/* Manual Email Input */}

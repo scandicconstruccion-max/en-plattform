@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { X, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations, deviationList, projects }) {
+export default function SendTilbudDialog({ open, onOpenChange, selectedQuotes, quoteList, projects }) {
   const [recipients, setRecipients] = useState([]);
   const [emailInput, setEmailInput] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -24,19 +24,20 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
   const sendMutation = useMutation({
     mutationFn: async (emailList) => {
       const promises = emailList.map(async (email) => {
-        for (const deviationId of selectedDeviations) {
-          const deviation = deviationList.find(d => d.id === deviationId);
-          const project = projects.find(p => p.id === deviation?.project_id);
+        for (const quoteId of selectedQuotes) {
+          const quote = quoteList.find(q => q.id === quoteId);
+          const project = projects.find(p => p.id === quote?.project_id);
           
           await base44.integrations.Core.SendEmail({
             to: email,
-            subject: `Avvik: ${deviation?.title || 'Avvik'}`,
+            subject: `Tilbud: ${quote?.quote_number || 'Tilbud'}`,
             body: `
-              <h2>Avvik</h2>
-              <p><strong>Tittel:</strong> ${deviation?.title || 'Ukjent'}</p>
+              <h2>Tilbud</h2>
+              <p><strong>Tilbudsnummer:</strong> ${quote?.quote_number || 'Ukjent'}</p>
+              <p><strong>Kunde:</strong> ${quote?.customer_name || 'Ukjent'}</p>
               ${project ? `<p><strong>Prosjekt:</strong> ${project.name}</p>` : ''}
-              <p><strong>Status:</strong> ${deviation?.status || 'Ukjent'}</p>
-              ${deviation?.description ? `<p><strong>Beskrivelse:</strong> ${deviation.description}</p>` : ''}
+              <p><strong>Beløp:</strong> ${quote?.total_amount ? quote.total_amount.toLocaleString('nb-NO') + ' kr' : 'N/A'}</p>
+              <p><strong>Gyldig til:</strong> ${quote?.valid_until || 'Ikke spesifisert'}</p>
               <br>
               <p>Se systemet for mer informasjon.</p>
             `
@@ -46,7 +47,7 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
       await Promise.all(promises);
     },
     onSuccess: () => {
-      toast.success(`Avvik sendt til ${recipients.length} mottaker(e)`);
+      toast.success(`Tilbud sendt til ${recipients.length} mottaker(e)`);
       setRecipients([]);
       setEmailInput('');
       setSelectedEmployee('');
@@ -86,13 +87,13 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
       return;
     }
 
-    const projectNames = [...new Set(selectedDeviations.map(id => {
-      const deviation = deviationList.find(d => d.id === id);
-      const project = projects.find(p => p.id === deviation?.project_id);
+    const projectNames = [...new Set(selectedQuotes.map(id => {
+      const quote = quoteList.find(q => q.id === id);
+      const project = projects.find(p => p.id === quote?.project_id);
       return project?.name || 'Ukjent';
     }))].join(', ');
 
-    toast.info(`Avvik for prosjekt ${projectNames} sendes på nytt...`);
+    toast.info(`Tilbud for prosjekt ${projectNames} sendes på nytt...`);
     sendMutation.mutate(recipients);
   };
 
@@ -100,12 +101,12 @@ export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send avvik på nytt</DialogTitle>
+          <DialogTitle>Send tilbud på nytt</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-slate-600">
-            Sender {selectedDeviations.length} avvik
+            Sender {selectedQuotes.length} tilbud
           </p>
 
           {/* Manual Email Input */}
