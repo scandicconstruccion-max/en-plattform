@@ -711,7 +711,7 @@ export default function Prosjektfiler() {
         }
       }}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader className="pt-0">
             <DialogTitle className="my-2 py-1 text-lg font-semibold tracking-tight leading-none">Last opp tegning/fil/bilde</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
