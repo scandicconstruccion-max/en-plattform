@@ -366,7 +366,8 @@ ${user?.full_name || 'Systemet'}
                           </p>
                         </div>
                       </div>
-                    <div className="text-right flex-shrink-0">
+                      </div>
+                      <div className="text-right flex-shrink-0">
                       {change.amount && (
                         <p className={`text-sm font-semibold ${
                           change.change_type === 'tillegg' ? 'text-emerald-600' :
