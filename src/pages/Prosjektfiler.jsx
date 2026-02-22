@@ -94,6 +94,8 @@ export default function Prosjektfiler() {
   const [categoryData, setCategoryData] = useState({ name: '', color: '#3b82f6', icon: 'Folder', access_level: 'alle' });
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
 
   const queryClient = useQueryClient();
 
@@ -223,6 +225,10 @@ export default function Prosjektfiler() {
     return categories.filter(c => c.project_id === projectFilter && canAccess(c.access_level));
   }, [categories, projectFilter, userAccessLevel]);
 
+  const getFilesCountForCategory = (categoryId) => {
+    return files.filter(f => f.category_id === categoryId && f.project_id === projectFilter && canAccess(f.access_level)).length;
+  };
+
   const filteredFiles = useMemo(() => {
     return files.filter(file => {
       if (!canAccess(file.access_level)) return false;
@@ -264,7 +270,7 @@ export default function Prosjektfiler() {
     });
   };
 
-  const handleFileUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -278,16 +284,31 @@ export default function Prosjektfiler() {
       return;
     }
 
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    const fileType = file.name.split('.').pop();
+    setSelectedFile(file);
+    
+    // Create preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => setPreviewFile(e.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      setPreviewFile(null);
+    }
+  };
+
+  const handleSaveFile = async () => {
+    if (!selectedFile) return;
+
+    const { file_url } = await base44.integrations.Core.UploadFile({ file: selectedFile });
+    const fileType = selectedFile.name.split('.').pop();
     
     const fileData = {
-      name: file.name,
+      name: selectedFile.name,
       project_id: projectFilter,
       category_id: selectedCategory,
       file_url,
       file_type: fileType,
-      file_size: file.size,
+      file_size: selectedFile.size,
       description: uploadData.description,
       access_level: uploadData.access_level,
       uploaded_by: user?.email,
@@ -302,6 +323,8 @@ export default function Prosjektfiler() {
     };
 
     await createFileMutation.mutateAsync(fileData);
+    setPreviewFile(null);
+    setSelectedFile(null);
   };
 
   const handleBulkDelete = async () => {
@@ -443,7 +466,7 @@ export default function Prosjektfiler() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{category.name}</p>
                         <p className="text-xs text-slate-500">
-                          {filteredFiles.filter(f => f.category_id === category.id).length} filer
+                          {getFilesCountForCategory(category.id)} filer
                         </p>
                       </div>
                       {!category.is_predefined && (
@@ -480,7 +503,7 @@ export default function Prosjektfiler() {
                     >
                       <p className="text-sm truncate">{sub.name}</p>
                       <p className="text-xs text-slate-500">
-                        {filteredFiles.filter(f => f.category_id === sub.id).length} filer
+                        {getFilesCountForCategory(sub.id)} filer
                       </p>
                     </button>
                   ))}
@@ -679,47 +702,98 @@ export default function Prosjektfiler() {
       />
 
       {/* Upload File Dialog */}
-      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+      <Dialog open={showUploadDialog} onOpenChange={(open) => {
+        setShowUploadDialog(open);
+        if (!open) {
+          setPreviewFile(null);
+          setSelectedFile(null);
+          setUploadData({ description: '', access_level: 'alle' });
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Last opp bilde</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Tilgangsnivå</Label>
-              <Select value={uploadData.access_level} onValueChange={(v) => setUploadData({...uploadData, access_level: v})}>
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="alle">Alle brukere</SelectItem>
-                  <SelectItem value="prosjektleder">Kun prosjektleder</SelectItem>
-                  <SelectItem value="admin">Kun admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Beskrivelse (valgfritt)</Label>
-              <Textarea
-                value={uploadData.description}
-                onChange={(e) => setUploadData({...uploadData, description: e.target.value})}
-                placeholder="Beskriv bildet..."
-                rows={2}
-                className="mt-1.5"
-              />
-            </div>
-            <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:bg-slate-50">
-              <Upload className="h-8 w-8 text-slate-400" />
-              <span className="text-sm text-slate-500">Klikk for å velge fil</span>
-              <span className="text-xs text-slate-400">Støtter bilder, PDF, Word og Excel</span>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                className="hidden"
-                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
-                capture="environment"
-              />
-            </label>
+            {!selectedFile ? (
+              <>
+                <div>
+                  <Label>Tilgangsnivå</Label>
+                  <Select value={uploadData.access_level} onValueChange={(v) => setUploadData({...uploadData, access_level: v})}>
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alle">Alle brukere</SelectItem>
+                      <SelectItem value="prosjektleder">Kun prosjektleder</SelectItem>
+                      <SelectItem value="admin">Kun admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Beskrivelse (valgfritt)</Label>
+                  <Textarea
+                    value={uploadData.description}
+                    onChange={(e) => setUploadData({...uploadData, description: e.target.value})}
+                    placeholder="Beskriv bildet..."
+                    rows={2}
+                    className="mt-1.5"
+                  />
+                </div>
+                <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:bg-slate-50">
+                  <Upload className="h-8 w-8 text-slate-400" />
+                  <span className="text-sm text-slate-500">Klikk for å velge fil</span>
+                  <span className="text-xs text-slate-400">Støtter bilder, PDF, Word og Excel</span>
+                  <input
+                    type="file"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                    capture="environment"
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                      {previewFile ? 'Bilde' : 'Dokument/Fil'}
+                    </Label>
+                    {previewFile ? (
+                      <div className="relative rounded-lg overflow-hidden border bg-slate-50">
+                        <img src={previewFile} alt="Preview" className="w-full h-64 object-contain" />
+                      </div>
+                    ) : (
+                      <div className="p-6 rounded-lg border bg-slate-50 text-center">
+                        <File className="h-12 w-12 text-slate-400 mx-auto mb-2" />
+                        <p className="font-medium text-slate-700">{selectedFile.name}</p>
+                        <p className="text-sm text-slate-500 mt-1">{formatFileSize(selectedFile.size)}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setPreviewFile(null);
+                      }}
+                      className="flex-1"
+                    >
+                      Velg annen fil
+                    </Button>
+                    <Button 
+                      onClick={handleSaveFile}
+                      disabled={createFileMutation.isPending}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {createFileMutation.isPending ? 'Laster opp...' : 'Lagre'}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
