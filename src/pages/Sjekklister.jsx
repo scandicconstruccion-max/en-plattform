@@ -99,13 +99,21 @@ export default function Sjekklister() {
         template_id: template.id,
         template_version: template.version,
         items: template.items || [],
-        status: 'ikke_startet'
+        status: 'ikke_startet',
+        responses: []
       });
     },
     onSuccess: (newChecklist) => {
-      queryClient.invalidateQueries({ queryKey: ['checklists'] });
       setShowSelectTemplateDialog(false);
-      navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
+      queryClient.invalidateQueries({ queryKey: ['checklists'] });
+      queryClient.setQueryData(['checklist', newChecklist.id], newChecklist);
+      setTimeout(() => {
+        navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
+      }, 100);
+    },
+    onError: (error) => {
+      console.error('Feil ved opprettelse av sjekkliste:', error);
+      alert('Feil ved opprettelse av sjekkliste');
     }
   });
 
