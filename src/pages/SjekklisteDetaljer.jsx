@@ -35,11 +35,17 @@ export default function SjekklisteDetaljer() {
     fetchUser();
   }, []);
 
-  const { data: checklist, isLoading } = useQuery({
+  const { data: checklist, isLoading, error } = useQuery({
     queryKey: ['checklist', checklistId],
-    queryFn: () => checklistId ? base44.entities.Checklist.read(checklistId) : null,
+    queryFn: () => {
+      if (!checklistId) return null;
+      return base44.entities.Checklist.read(checklistId);
+    },
     enabled: !!checklistId,
-    retry: 3
+    retry: 5,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: 0,
+    gcTime: 0
   });
 
   useEffect(() => {
