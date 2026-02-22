@@ -26,9 +26,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { PackageCheck, Search, Calendar, Building2, Trash2, AlertCircle } from 'lucide-react';
+import { PackageCheck, Search, Calendar, Building2, Trash2, AlertCircle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import SendMottakDialog from '@/components/mottakskontroll/SendMottakDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +48,7 @@ export default function Mottakskontroll() {
   const [projectFilter, setProjectFilter] = useState('all');
   const [selectedItems, setSelectedItems] = useState([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showSendDialog, setShowSendDialog] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [formData, setFormData] = useState({
     project_id: '',
@@ -200,6 +202,14 @@ export default function Mottakskontroll() {
         actions={
           selectedItems.length > 0 &&
           <div className="flex gap-2">
+            <Button
+              onClick={() => setShowSendDialog(true)}
+              variant="outline"
+              className="rounded-xl gap-2"
+            >
+              <Send className="h-4 w-4" />
+              Send ({selectedItems.length})
+            </Button>
             <Button
               onClick={() => setShowDeleteDialog(true)}
               variant="destructive"
@@ -501,6 +511,15 @@ export default function Mottakskontroll() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Send Dialog */}
+      <SendMottakDialog
+        open={showSendDialog}
+        onOpenChange={setShowSendDialog}
+        selectedMottaks={selectedItems}
+        mottakList={mottakList}
+        projects={projects}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
