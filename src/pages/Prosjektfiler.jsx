@@ -51,7 +51,8 @@ const PREDEFINED_CATEGORIES = [
   { name: 'Faktura / Økonomi', icon: 'FileText', color: '#ef4444', order: 4 },
   { name: 'Møtereferater / Kommunikasjon', icon: 'FileText', color: '#8b5cf6', order: 5 },
   { name: 'Tillatelser / Sertifikater', icon: 'FileText', color: '#06b6d4', order: 6 },
-  { name: 'Annet', icon: 'FileText', color: '#6b7280', order: 7 }
+  { name: 'Bilder', icon: 'FileImage', color: '#ec4899', order: 7 },
+  { name: 'Annet', icon: 'FileText', color: '#6b7280', order: 8 }
 ];
 
 const accessLevelLabels = {
@@ -85,11 +86,9 @@ export default function Prosjektfiler() {
   const [search, setSearch] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [showImageUpload, setShowImageUpload] = useState(false);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [uploadData, setUploadData] = useState({ description: '', access_level: 'alle' });
-  const [imageData, setImageData] = useState({ description: '' });
   const [categoryData, setCategoryData] = useState({ name: '', color: '#3b82f6', icon: 'Folder', access_level: 'alle' });
 
   const queryClient = useQueryClient();
@@ -159,9 +158,7 @@ export default function Prosjektfiler() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectFiles'] });
       setShowUploadDialog(false);
-      setShowImageUpload(false);
       setUploadData({ description: '', access_level: 'alle' });
-      setImageData({ description: '' });
       toast.success('Fil lastet opp');
     },
   });
@@ -218,23 +215,12 @@ export default function Prosjektfiler() {
     return files.filter(file => {
       if (!canAccess(file.access_level)) return false;
       if (file.project_id !== projectFilter) return false;
-      if (file.is_image) return false;
       if (selectedCategory && file.category_id !== selectedCategory) return false;
       if (search && !file.name.toLowerCase().includes(search.toLowerCase()) && 
           !file.description?.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
   }, [files, projectFilter, selectedCategory, search, userAccessLevel]);
-
-  const imageFiles = useMemo(() => {
-    return files.filter(file => {
-      if (!canAccess(file.access_level)) return false;
-      if (file.project_id !== projectFilter) return false;
-      if (!file.is_image) return false;
-      if (search && !file.name.toLowerCase().includes(search.toLowerCase())) return false;
-      return true;
-    });
-  }, [files, projectFilter, search, userAccessLevel]);
 
   const logActivity = (fileId, action, details) => {
     const file = files.find(f => f.id === fileId);
@@ -283,7 +269,6 @@ export default function Prosjektfiler() {
       file_size: file.size,
       description: uploadData.description,
       access_level: uploadData.access_level,
-      is_image: false,
       uploaded_by: user?.email,
       uploaded_by_name: user?.full_name,
       activity_log: [{
@@ -292,40 +277,6 @@ export default function Prosjektfiler() {
         user_email: user?.email,
         user_name: user?.full_name,
         details: 'Fil lastet opp'
-      }]
-    };
-
-    await createFileMutation.mutateAsync(fileData);
-  };
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (projectFilter === 'all') {
-      toast.error('Velg et prosjekt først');
-      return;
-    }
-
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    const fileType = file.name.split('.').pop();
-    
-    const fileData = {
-      name: file.name,
-      project_id: projectFilter,
-      file_url,
-      file_type: fileType,
-      file_size: file.size,
-      description: imageData.description,
-      is_image: true,
-      uploaded_by: user?.email,
-      uploaded_by_name: user?.full_name,
-      activity_log: [{
-        action: 'Opprettet',
-        timestamp: new Date().toISOString(),
-        user_email: user?.email,
-        user_name: user?.full_name,
-        details: 'Bilde lastet opp'
       }]
     };
 
@@ -630,82 +581,7 @@ export default function Prosjektfiler() {
                 </div>
               )}
 
-              {/* Images Section */}
-              <div className="mt-12 pt-8 border-t">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-900">Bilder</h3>
-                  <div className="flex gap-2">
-                    <label>
-                      <Button variant="outline" className="rounded-xl gap-2" asChild>
-                        <span>
-                          <Camera className="h-4 w-4" /> Ta bilde
-                        </span>
-                      </Button>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                    <Button 
-                      onClick={() => setShowImageUpload(true)}
-                      className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-                    >
-                      <ImageIcon className="h-4 w-4" /> Last opp bilde
-                    </Button>
-                  </div>
-                </div>
 
-                {imageFiles.length === 0 ? (
-                  <Card className="p-8 text-center">
-                    <ImageIcon className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-500">Ingen bilder lastet opp</p>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {imageFiles.map(image => (
-                      <Card key={image.id} className="p-3 group relative">
-                        <Checkbox
-                          checked={selectedFiles.includes(image.id)}
-                          onCheckedChange={() => toggleFileSelection(image.id)}
-                          className="absolute top-2 left-2 z-10 bg-white"
-                        />
-                        <img 
-                          src={image.file_url} 
-                          alt={image.name}
-                          className="w-full h-40 object-cover rounded-lg mb-2"
-                        />
-                        <p className="text-sm font-medium truncate">{image.name}</p>
-                        <p className="text-xs text-slate-500">{format(new Date(image.created_date), 'dd.MM.yyyy')}</p>
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="secondary" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              <DropdownMenuItem asChild>
-                                <a href={image.file_url} download>
-                                  <Download className="h-4 w-4 mr-2" /> Last ned
-                                </a>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => deleteFileMutation.mutate(image.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" /> Slett
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -747,36 +623,6 @@ export default function Prosjektfiler() {
               <input
                 type="file"
                 onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Upload Image Dialog */}
-      <Dialog open={showImageUpload} onOpenChange={setShowImageUpload}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Last opp bilde</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Beskrivelse (valgfritt)</Label>
-              <Input
-                value={imageData.description}
-                onChange={(e) => setImageData({...imageData, description: e.target.value})}
-                placeholder="Beskriv bildet..."
-                className="mt-1.5"
-              />
-            </div>
-            <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:bg-slate-50">
-              <ImageIcon className="h-8 w-8 text-slate-400" />
-              <span className="text-sm text-slate-500">Klikk for å velge bilde</span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
                 className="hidden"
               />
             </label>
