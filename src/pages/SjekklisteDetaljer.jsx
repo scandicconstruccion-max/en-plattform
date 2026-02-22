@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
@@ -7,27 +7,38 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { ChevronLeft, Check, X, AlertCircle, Download, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, Check, X, AlertCircle, Download, CheckCircle2, Upload, Camera, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function SjekklisteDetaljer() {
-  const [checklistId, setChecklistId] = useState(null);
+  const [checklistId, setChecklistId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('id');
+  });
   const [responses, setResponses] = useState({});
   const [showSignDialog, setShowSignDialog] = useState(false);
-  const [signaturePad, setSignaturePad] = useState(null);
   const [canvasRef, setCanvasRef] = useState(null);
+  const [user, setUser] = useState(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setChecklistId(params.get('id'));
+    const fetchUser = async () => {
+      try {
+        const currentUser = await base44.auth.me();
+        setUser(currentUser);
+      } catch (e) {
+        console.error('Error fetching user:', e);
+      }
+    };
+    fetchUser();
   }, []);
 
   const { data: checklist, isLoading } = useQuery({
     queryKey: ['checklist', checklistId],
     queryFn: () => checklistId ? base44.entities.Checklist.read(checklistId) : null,
-    enabled: !!checklistId
+    enabled: !!checklistId,
+    retry: 3
   });
 
   useEffect(() => {
