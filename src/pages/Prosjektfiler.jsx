@@ -273,11 +273,6 @@ export default function Prosjektfiler() {
       return;
     }
 
-    if (!uploadData.description.trim()) {
-      toast.error('Opplastningen må beskrives for å lagre');
-      return;
-    }
-
     if (!selectedCategory) {
       toast.error('Velg en kategori');
       return;
@@ -687,7 +682,7 @@ export default function Prosjektfiler() {
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Last opp fil</DialogTitle>
+            <DialogTitle>Last opp bilde</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -704,11 +699,11 @@ export default function Prosjektfiler() {
               </Select>
             </div>
             <div>
-              <Label>Beskrivelse *</Label>
+              <Label>Beskrivelse (valgfritt)</Label>
               <Textarea
                 value={uploadData.description}
                 onChange={(e) => setUploadData({...uploadData, description: e.target.value})}
-                placeholder="Beskriv filen..."
+                placeholder="Beskriv bildet..."
                 rows={2}
                 className="mt-1.5"
               />
