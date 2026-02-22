@@ -183,6 +183,11 @@ export default function Prosjektfiler() {
       return;
     }
 
+    if (!uploadData.description.trim()) {
+      toast.error('Opplastningen må beskrives for å lagre');
+      return;
+    }
+
     setUploading(true);
     const { file_url } = await base44.integrations.Core.UploadFile({ file });
     
@@ -468,7 +473,7 @@ export default function Prosjektfiler() {
               </Select>
             </div>
             <div>
-              <Label>Beskrivelse (valgfritt)</Label>
+              <Label>Beskrivelse *</Label>
               <Textarea
                 value={uploadData.description}
                 onChange={(e) => setUploadData({...uploadData, description: e.target.value})}
