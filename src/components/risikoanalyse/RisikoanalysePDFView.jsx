@@ -46,7 +46,7 @@ export default function RisikoanalysePDFView({ analyse, project }) {
           Prosjekt: {project?.name || 'Ukjent prosjekt'}
         </p>
         <p className="text-sm text-slate-500 mt-1">
-          Opprettet: {format(new Date(analyse.created_date), 'dd.MM.yyyy HH:mm', { locale: nb })}
+          Opprettet: {analyse.created_date ? format(new Date(analyse.created_date), 'dd.MM.yyyy HH:mm', { locale: nb }) : '-'}
         </p>
       </div>
 
@@ -71,7 +71,7 @@ export default function RisikoanalysePDFView({ analyse, project }) {
           <div>
             <p className="text-sm text-slate-500 mb-1">Dato for analyse</p>
             <p className="text-slate-900 font-medium">
-              {format(new Date(analyse.dato_analyse), 'dd.MM.yyyy', { locale: nb })}
+              {analyse.dato_analyse ? format(new Date(analyse.dato_analyse), 'dd.MM.yyyy', { locale: nb }) : '-'}
             </p>
           </div>
           {analyse.adresse && (
@@ -199,7 +199,7 @@ export default function RisikoanalysePDFView({ analyse, project }) {
               <div>
                 <p className="text-sm text-slate-500 mb-1 font-medium">Frist</p>
                 <p className="text-slate-900">
-                  {format(new Date(analyse.tiltak_frist), 'dd.MM.yyyy', { locale: nb })}
+                  {analyse.tiltak_frist ? format(new Date(analyse.tiltak_frist), 'dd.MM.yyyy', { locale: nb }) : '-'}
                 </p>
               </div>
             )}
@@ -217,7 +217,7 @@ export default function RisikoanalysePDFView({ analyse, project }) {
             {analyse.lukket_dato && (
               <p className="text-sm text-green-800">
                 <span className="font-medium">Lukket dato:</span>{' '}
-                {format(new Date(analyse.lukket_dato), 'dd.MM.yyyy HH:mm', { locale: nb })}
+                {analyse.lukket_dato ? format(new Date(analyse.lukket_dato), 'dd.MM.yyyy HH:mm', { locale: nb }) : '-'}
               </p>
             )}
             {analyse.lukket_av_navn && (
