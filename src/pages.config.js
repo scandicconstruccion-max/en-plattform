@@ -86,6 +86,8 @@ import SJA from './pages/SJA';
 import SJADetaljer from './pages/SJADetaljer';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
+import Sjekklister from './pages/Sjekklister';
+import SjekklisteDetaljer from './pages/SjekklisteDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -129,6 +131,8 @@ export const PAGES = {
     "SJADetaljer": SJADetaljer,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
+    "Sjekklister": Sjekklister,
+    "SjekklisteDetaljer": SjekklisteDetaljer,
 }
 
 export const pagesConfig = {

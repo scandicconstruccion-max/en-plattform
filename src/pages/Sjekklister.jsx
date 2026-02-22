@@ -1,0 +1,226 @@
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Plus, Search, Trash2 } from 'lucide-react';
+import TemplateSelector from '@/components/sjekklister/TemplateSelector';
+import PageHeader from '@/components/shared/PageHeader';
+import { cn } from '@/lib/utils';
+
+export default function Sjekklister() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
+
+  useEffect(() => {
+    const stored = localStorage.getItem('selectedProject');
+    if (stored) setSelectedProject(JSON.parse(stored));
+    const handleProjectChange = () => {
+      const updated = localStorage.getItem('selectedProject');
+      if (updated) setSelectedProject(JSON.parse(updated));
+    };
+    window.addEventListener('projectSelected', handleProjectChange);
+    return () => window.removeEventListener('projectSelected', handleProjectChange);
+  }, []);
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ['checklistTemplates'],
+    queryFn: () => base44.entities.ChecklistTemplate.list('-updated_date', 100)
+  });
+
+  const { data: checklists = [], isLoading: checklistsLoading, error: checklistsError } = useQuery({
+    queryKey: ['checklists', selectedProject?.id],
+    queryFn: () => selectedProject?.id 
+      ? base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100)
+      : Promise.resolve([]),
+    enabled: !!selectedProject?.id
+  });
+
+  const createChecklistMutation = useMutation({
+    mutationFn: (template) => {
+      return base44.entities.Checklist.create({
+        name: `${template.name} - ${new Date().toLocaleDateString('no-NO')}`,
+        project_id: selectedProject.id,
+        template_id: template.id,
+        template_version: template.version,
+        date: new Date().toISOString().split('T')[0],
+        items: (template.items || []).map((item, idx) => ({
+          ...item,
+          order: idx
+        })),
+        status: 'ikke_startet',
+        responses: [],
+        assigned_to: user?.email,
+        assigned_to_name: user?.full_name
+      });
+    },
+    onSuccess: (newChecklist) => {
+      queryClient.invalidateQueries({ queryKey: ['checklists'] });
+      setShowTemplateDialog(false);
+      navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
+    }
+  });
+
+  const deleteChecklistMutation = useMutation({
+    mutationFn: (id) => base44.entities.Checklist.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checklists'] });
+    }
+  });
+
+  const filteredChecklists = checklists.filter(c =>
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getProgressPercentage = (checklist) => {
+    if (!checklist.items?.length) return 0;
+    const answered = checklist.responses?.filter(r => r.status).length || 0;
+    return Math.round((answered / checklist.items.length) * 100);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'fullfort': return 'bg-green-100 text-green-800';
+      case 'pagaende': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-6 pb-20 md:pb-6">
+      <div className="max-w-6xl mx-auto">
+        <PageHeader
+          title="Sjekklister"
+          subtitle="Opprett og gjennomfør sjekklister for dine prosjekter"
+          actions={
+            selectedProject && (
+              <Button 
+                onClick={() => setShowTemplateDialog(true)}
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+              >
+                <Plus className="h-4 w-4" />
+                Ny sjekkliste
+              </Button>
+            )
+          }
+        />
+
+        {!selectedProject && (
+          <Card className="p-8 text-center bg-white">
+            <p className="text-slate-600 text-lg">Velg et prosjekt fra dropdown øverst til høyre for å komme i gang</p>
+          </Card>
+        )}
+
+        {selectedProject && (
+          <div className="space-y-6">
+            <div className="relative">
+              <Search className="absolute left-4 top-3 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Søk i sjekklister..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-white"
+              />
+            </div>
+
+            {checklistsError && (
+              <Card className="p-6 bg-red-50 border-red-200">
+                <p className="text-red-800">⚠️ Feil ved lasting av sjekklister. Prøv igjen senere.</p>
+              </Card>
+            )}
+            {checklistsLoading ? (
+              <div className="text-center py-8">Laster sjekklister...</div>
+            ) : filteredChecklists.length === 0 ? (
+              <Card className="p-8 text-center bg-white">
+                <p className="text-slate-600">Ingen sjekklister ennå. Opprett en ny sjekkliste fra malen din.</p>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredChecklists.map((checklist) => {
+                  const progress = getProgressPercentage(checklist);
+                  return (
+                    <Card
+                      key={checklist.id}
+                      className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300"
+                      onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-base line-clamp-2">{checklist.name}</h3>
+                          {checklist.location && (
+                            <p className="text-xs text-slate-500 mt-1">📍 {checklist.location}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteChecklistMutation.mutate(checklist.id);
+                          }}
+                          className="text-red-500 hover:text-red-700 h-8 w-8"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="mb-3">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs text-slate-600">Fremdrift</span>
+                          <span className="text-xs font-semibold text-slate-700">{progress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                          <div
+                            className="bg-emerald-600 h-2 rounded-full transition-all"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={cn('px-2 py-1 rounded-full', getStatusColor(checklist.status))}>
+                          {checklist.status === 'fullfort' ? 'Fullført' : checklist.status === 'pagaende' ? 'Pågår' : 'Ikke startet'}
+                        </span>
+                        <span className="text-slate-500">
+                          {checklist.items?.length || 0} punkter
+                        </span>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Velg sjekklistemal</DialogTitle>
+            <DialogDescription>Velg en mal for å opprette en ny sjekkliste</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto">
+            <TemplateSelector
+              templates={templates}
+              onSelect={(template) => createChecklistMutation.mutate(template)}
+              isLoading={false}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
