@@ -277,12 +277,7 @@ export default function Tilbud() {
   };
 
   const handleBulkSend = async () => {
-    const quotesToSend = quotes.filter((q) => selectedQuotes.includes(q.id));
-    for (const quote of quotesToSend) {
-      handleSendEmail(quote);
-    }
-    toast.success(`Sender ${quotesToSend.length} tilbud`);
-    setSelectedQuotes([]);
+    setShowSendDialog(true);
   };
 
   const handleBulkDownload = async () => {
