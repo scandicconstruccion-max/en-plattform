@@ -17,6 +17,16 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
@@ -35,6 +45,7 @@ export default function SJA() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('');
   const [selectedSJAs, setSelectedSJAs] = useState([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [formData, setFormData] = useState({
     project_id: '',
     sikkerhetsanalyse_utfort: new Date().toISOString().split('T')[0],
@@ -167,17 +178,67 @@ export default function SJA() {
   });
 
   const handleBulkDelete = () => {
-    if (confirm(`Er du sikker på at du vil slette ${selectedSJAs.length} SJA?`)) {
-      deleteMutation.mutate(selectedSJAs);
-    }
+    deleteMutation.mutate(selectedSJAs);
+    setShowDeleteDialog(false);
   };
 
   const handleBulkDownloadPDF = () => {
-    toast.info('PDF-nedlasting av flere SJA kommer snart');
+    selectedSJAs.forEach(sjaId => {
+      const sja = sjaList.find(s => s.id === sjaId);
+      if (sja) {
+        // Open each SJA in a new window and trigger print
+        const url = createPageUrl('SJADetaljer') + `?id=${sjaId}`;
+        const printWindow = window.open(url, '_blank');
+        if (printWindow) {
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.print();
+            }, 500);
+          };
+        }
+      }
+    });
+    toast.success('PDF-nedlasting startet');
   };
 
+  const sendEmailMutation = useMutation({
+    mutationFn: async (sjaIds) => {
+      const user = await base44.auth.me();
+      for (const sjaId of sjaIds) {
+        const sja = sjaList.find(s => s.id === sjaId);
+        if (sja) {
+          // Send to external participants
+          if (sja.deltakere_eksterne?.length > 0) {
+            for (const deltaker of sja.deltakere_eksterne) {
+              if (deltaker.epost) {
+                await base44.integrations.Core.SendEmail({
+                  to: deltaker.epost,
+                  subject: `SJA - ${sja.arbeidsoperasjon}`,
+                  body: `Hei ${deltaker.navn},\n\nDu har blitt registrert som deltaker på følgende Sikker Jobb Analyse:\n\nArbeidsoperasjon: ${sja.arbeidsoperasjon}\nDato: ${sja.sikkerhetsanalyse_utfort}\n\nMed vennlig hilsen`
+                });
+              }
+            }
+          }
+          // Send to internal participants
+          if (sja.deltakere_ansatte?.length > 0) {
+            for (const email of sja.deltakere_ansatte) {
+              await base44.integrations.Core.SendEmail({
+                to: email,
+                subject: `SJA - ${sja.arbeidsoperasjon}`,
+                body: `Hei,\n\nDu har blitt registrert som deltaker på følgende Sikker Jobb Analyse:\n\nArbeidsoperasjon: ${sja.arbeidsoperasjon}\nDato: ${sja.sikkerhetsanalyse_utfort}\n\nMed vennlig hilsen`
+              });
+            }
+          }
+        }
+      }
+    },
+    onSuccess: () => {
+      toast.success('SJA sendt til deltakere');
+    }
+  });
+
   const handleBulkResend = () => {
-    toast.info('Send på nytt kommer snart');
+    sendEmailMutation.mutate(selectedSJAs);
   };
 
   const getSJAStatus = (sja) => {
@@ -209,13 +270,13 @@ export default function SJA() {
         actions={
           selectedSJAs.length > 0 && (
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleBulkDelete}>
+              <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)}>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Slett ({selectedSJAs.length})
               </Button>
-              <Button variant="outline" size="sm" onClick={handleBulkResend}>
+              <Button variant="outline" size="sm" onClick={handleBulkResend} disabled={sendEmailMutation.isPending}>
                 <Send className="h-4 w-4 mr-2" />
-                Send på nytt
+                {sendEmailMutation.isPending ? 'Sender...' : 'Send på nytt'}
               </Button>
               <Button variant="outline" size="sm" onClick={handleBulkDownloadPDF}>
                 <Download className="h-4 w-4 mr-2" />
@@ -602,6 +663,24 @@ export default function SJA() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Er du sikker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Du er i ferd med å slette {selectedSJAs.length} SJA-skjema. Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700">
+              Slett
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
