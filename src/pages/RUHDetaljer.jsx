@@ -247,8 +247,8 @@ export default function RUHDetaljer() {
           }
         />
 
-        <div id="ruh-content">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div id="ruh-content" className="space-y-6">
             {/* 1. GRUNNINFORMASJON */}
             <Card className="border-0 shadow-sm dark:bg-slate-900">
               <CardHeader>
@@ -667,38 +667,39 @@ export default function RUHDetaljer() {
               </Card>
             )}
 
-            {/* Actions */}
-            <div className="flex gap-3 justify-end">
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(createPageUrl('RUH'))}
+              className="rounded-xl"
+            >
+              Avbryt
+            </Button>
+            {ruhId && !isNew && formData.status !== 'lukket' && (
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate(createPageUrl('RUH'))}
+                onClick={() => closeMutation.mutate()}
+                disabled={closeMutation.isPending}
                 className="rounded-xl"
               >
-                Avbryt
+                Lukk RUH
               </Button>
-              {ruhId && !isNew && formData.status !== 'lukket' && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => closeMutation.mutate()}
-                  disabled={closeMutation.isPending}
-                  className="rounded-xl"
-                >
-                  Lukk RUH
-                </Button>
-              )}
-              <Button
-                type="submit"
-                disabled={saveMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-              >
-                <Save className="h-4 w-4" />
-                {saveMutation.isPending ? 'Lagrer...' : 'Lagre RUH'}
-              </Button>
-            </div>
-          </form>
-        </div>
+            )}
+            <Button
+              type="submit"
+              disabled={saveMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {saveMutation.isPending ? 'Lagrer...' : 'Lagre RUH'}
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
   );
