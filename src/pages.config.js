@@ -86,6 +86,7 @@ import SJADetaljer from './pages/SJADetaljer';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
+import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -129,6 +130,7 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
+    "RisikoanalyseDetaljer": RisikoanalyseDetaljer,
 }
 
 export const pagesConfig = {
