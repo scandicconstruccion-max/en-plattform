@@ -84,12 +84,8 @@ import Risikoanalyse from './pages/Risikoanalyse';
 import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import SJA from './pages/SJA';
 import SJADetaljer from './pages/SJADetaljer';
-import SjekklisteDetaljer from './pages/SjekklisteDetaljer';
-import SjekklisteMalDetaljer from './pages/SjekklisteMalDetaljer';
-import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import SjekklisteMalbibliotek from './pages/SjekklisteMalbibliotek';
 import __Layout from './Layout.jsx';
 
 
@@ -131,12 +127,8 @@ export const PAGES = {
     "RisikoanalyseDetaljer": RisikoanalyseDetaljer,
     "SJA": SJA,
     "SJADetaljer": SJADetaljer,
-    "SjekklisteDetaljer": SjekklisteDetaljer,
-    "SjekklisteMalDetaljer": SjekklisteMalDetaljer,
-    "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "SjekklisteMalbibliotek": SjekklisteMalbibliotek,
 }
 
 export const pagesConfig = {
