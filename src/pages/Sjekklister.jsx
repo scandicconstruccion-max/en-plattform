@@ -48,7 +48,7 @@ export default function Sjekklister() {
   });
 
   // Fetch checklists for selected project
-  const { data: checklists = [], isLoading: checklistsLoading } = useQuery({
+  const { data: checklists = [], isLoading: checklistsLoading, error: checklistsError } = useQuery({
     queryKey: ['checklists', selectedProject?.id],
     queryFn: () => selectedProject?.id 
       ? base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100)
