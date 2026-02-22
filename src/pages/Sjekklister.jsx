@@ -42,7 +42,7 @@ export default function Sjekklister() {
       const existing = await base44.entities.ChecklistTemplate.list('-updated_date', 100);
       // Hvis ingen maler finnes, opprett standardmaler
       if (existing.length === 0) {
-        const { DEFAULT_TEMPLATES } = await import('@/components/sjekklister/DefaultTemplates.js');
+        const { DEFAULT_TEMPLATES } = await import('@/components/sjekklister/DefaultTemplates.jsx');
         for (const template of DEFAULT_TEMPLATES) {
           await base44.entities.ChecklistTemplate.create(template);
         }
