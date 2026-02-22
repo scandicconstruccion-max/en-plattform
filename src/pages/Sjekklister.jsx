@@ -257,7 +257,6 @@ export default function Sjekklister() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9" />
-
               </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger className="w-40">
@@ -278,24 +277,25 @@ export default function Sjekklister() {
               </Select>
             </div>
 
-            {templatesLoading ?
-            <div className="text-center py-8">Laster maler...</div> :
-            filteredTemplates.length === 0 ?
-            <EmptyState
-              title="Ingen maler"
-              description="Opprett din første sjekklistemal" /> :
-
-
-            <div className="grid gap-4">
+            {templatesLoading && (
+              <div className="text-center py-8">Laster maler...</div>
+            )}
+            {!templatesLoading && filteredTemplates.length === 0 && (
+              <EmptyState
+                title="Ingen maler"
+                description="Opprett din første sjekklistemal" />
+            )}
+            {!templatesLoading && filteredTemplates.length > 0 && (
+              <div className="grid gap-4">
                 {filteredTemplates.map((template) =>
-              <Card key={template.id} className="p-4 hover:shadow-md transition-shadow">
+                  <Card key={template.id} className="p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 cursor-pointer"
-                  onClick={() => navigate(createPageUrl('SjekklisteMalDetaljer') + `?id=${template.id}`)}>
+                        onClick={() => navigate(createPageUrl('SjekklisteMalDetaljer') + `?id=${template.id}`)}>
                         <h3 className="font-semibold text-lg">{template.name}</h3>
-                        {template.description &&
-                    <p className="text-sm text-slate-600 mt-1">{template.description}</p>
-                    }
+                        {template.description && (
+                          <p className="text-sm text-slate-600 mt-1">{template.description}</p>
+                        )}
                         <div className="flex gap-3 mt-2 text-sm text-slate-500">
                           <span>📂 {template.category}</span>
                           <span>v{template.version}</span>
@@ -304,29 +304,27 @@ export default function Sjekklister() {
                       </div>
                       <div className="flex gap-2">
                         <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-
-                        // Duplicate template
-                      }} title="Duplisere mal">
-
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            // Duplicate template
+                          }} 
+                          title="Duplisere mal">
                           <Copy className="h-4 w-4" />
                         </Button>
                         <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteTemplateMutation.mutate(template.id)}
-                      className="text-red-500 hover:text-red-700">
-
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteTemplateMutation.mutate(template.id)}
+                          className="text-red-500 hover:text-red-700">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
                   </Card>
-              )}
+                )}
               </div>
-            }
+            )}
           </TabsContent>
         </Tabs>
       </div>
