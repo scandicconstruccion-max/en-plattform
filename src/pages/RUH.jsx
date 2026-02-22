@@ -11,10 +11,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import EmptyState from '@/components/shared/EmptyState';
 import { generateMultiElementPDF } from '@/components/shared/PDFGenerator';
+import RUHPDFView from '@/components/ruh/RUHPDFView';
 import { AlertCircle, Plus, Calendar, MapPin, Filter, X, Download, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
+import ReactDOM from 'react-dom/client';
 
 export default function RUH() {
   const navigate = useNavigate();
@@ -90,11 +92,41 @@ export default function RUH() {
 
   const handleBulkDownload = async () => {
     toast.info('Genererer PDF...');
-    const elements = selectedRuh.map((id, index) => ({
-      elementId: `ruh-card-${id}`,
-      title: `RUH ${index + 1}`
-    }));
+    
+    // Create temporary container for PDF content
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px';
+    document.body.appendChild(tempContainer);
+
+    // Render each RUH to temporary DOM
+    const elements = [];
+    for (let i = 0; i < selectedRuh.length; i++) {
+      const ruhId = selectedRuh[i];
+      const ruh = ruhList.find(r => r.id === ruhId);
+      const project = projects.find(p => p.id === ruh?.project_id);
+      
+      const div = document.createElement('div');
+      div.id = `ruh-pdf-${ruhId}`;
+      tempContainer.appendChild(div);
+      
+      const root = ReactDOM.createRoot(div);
+      root.render(<RUHPDFView ruh={ruh} project={project} />);
+      
+      elements.push({
+        elementId: `ruh-pdf-${ruhId}`,
+        title: `RUH ${i + 1} - ${project?.name || 'Ukjent'}`
+      });
+    }
+
+    // Wait for rendering
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Generate PDF
     await generateMultiElementPDF(elements, 'RUH-samlet.pdf');
+    
+    // Cleanup
+    document.body.removeChild(tempContainer);
     toast.success('PDF lastet ned');
   };
 
