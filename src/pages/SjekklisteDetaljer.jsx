@@ -375,7 +375,7 @@ export default function SjekklisteDetaljer() {
             style={{ maxWidth: '500px', height: 'auto' }}
             onMouseDown={(e) => {
               setIsDrawing(true);
-              const canvas = canvasRef;
+              const canvas = canvasRef.current;
               if (!canvas) return;
               const rect = canvas.getBoundingClientRect();
               const ctx = canvas.getContext('2d');
@@ -383,9 +383,9 @@ export default function SjekklisteDetaljer() {
               ctx?.moveTo(e.clientX - rect.left, e.clientY - rect.top);
             }}
             onMouseMove={(e) => {
-              if (!isDrawing || !canvasRef) return;
-              const rect = canvasRef.getBoundingClientRect();
-              const ctx = canvasRef.getContext('2d');
+              if (!isDrawing || !canvasRef.current) return;
+              const rect = canvasRef.current.getBoundingClientRect();
+              const ctx = canvasRef.current.getContext('2d');
               ctx?.lineTo(e.clientX - rect.left, e.clientY - rect.top);
               ctx?.stroke();
             }}
