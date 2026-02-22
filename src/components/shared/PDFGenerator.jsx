@@ -23,11 +23,17 @@ export async function generatePDF(elementId, fileName = 'dokument.pdf') {
       scale: 2,
       useCORS: true,
       logging: false,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      allowTaint: true
     });
 
     // Konverter canvas til PDF
     const imgData = canvas.toDataURL('image/png');
+    
+    if (!imgData || !imgData.startsWith('data:image/png;base64,')) {
+      throw new Error('Kunne ikke generere gyldig bilde fra innholdet');
+    }
+    
     const pdf = new jsPDF('p', 'mm', 'a4');
     
     const imgWidth = 210; // A4 width in mm
@@ -104,15 +110,22 @@ export async function generateMultiElementPDF(elements, fileName = 'dokument.pdf
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        allowTaint: true
       });
 
       const imgData = canvas.toDataURL('image/png');
-      const imgWidth = pageWidth - 20; // margins
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const yOffset = title ? 25 : 10;
+      
+      // Validate image data before adding to PDF
+      if (imgData && imgData.startsWith('data:image/png;base64,')) {
+        const imgWidth = pageWidth - 20; // margins
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const yOffset = title ? 25 : 10;
 
-      pdf.addImage(imgData, 'PNG', 10, yOffset, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'PNG', 10, yOffset, imgWidth, imgHeight);
+      } else {
+        console.warn('Invalid image data for element:', elementId);
+      }
     }
 
     // Åpne PDF i ny fane
