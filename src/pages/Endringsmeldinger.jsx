@@ -516,6 +516,75 @@ ${user?.full_name || 'Systemet'}
         defaultEmail={selectedChange ? getProjectEmail(selectedChange.project_id) : ''}
         onSent={handleEmailSent}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Slett endringsmelding?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Denne endringsmeldingen vil bli permanent slettet. Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Slett
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Send to Employees Dialog */}
+      <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send endringsmelding til ansatte</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium mb-3 block">Velg ansatte å sende til:</Label>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {employees.filter(e => e.is_active !== false).map((employee) => (
+                  <div key={employee.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg">
+                    <Checkbox 
+                      id={employee.id}
+                      checked={sendTo.includes(employee.email)}
+                      onCheckedChange={() => toggleEmployee(employee.email)}
+                    />
+                    <label 
+                      htmlFor={employee.id}
+                      className="flex-1 cursor-pointer text-sm"
+                    >
+                      {employee.first_name} {employee.last_name}
+                      <span className="text-xs text-slate-500 block">{employee.email}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowSendDialog(false)}
+                className="rounded-xl"
+              >
+                Avbryt
+              </Button>
+              <Button 
+                onClick={handleConfirmSend}
+                disabled={sendTo.length === 0}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              >
+                Send
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
