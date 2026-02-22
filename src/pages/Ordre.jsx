@@ -37,8 +37,7 @@ import { toast } from 'sonner';
 export default function Ordre() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showSourceDialog, setShowSourceDialog] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showSendDialog, setShowSendDialog] = useState(false);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
