@@ -346,6 +346,48 @@ export default function Sjekklister() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Select Template Dialog */}
+      <Dialog open={showSelectTemplateDialog} onOpenChange={setShowSelectTemplateDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Velg sjekklistemal</DialogTitle>
+            <DialogDescription>Velg en mal som skal legges til i prosjektet</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {templatesLoading ? (
+              <div className="text-center py-8">Laster maler...</div>
+            ) : templates.length === 0 ? (
+              <EmptyState
+                title="Ingen maler"
+                description="Opprett maler først" />
+            ) : (
+              <div className="grid gap-3 max-h-96 overflow-y-auto">
+                {templates.map((template) => (
+                  <Card
+                    key={template.id}
+                    className="p-4 cursor-pointer hover:shadow-md transition-all hover:bg-slate-50"
+                    onClick={() => createChecklistFromTemplateMutation.mutate(template)}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{template.name}</h3>
+                        {template.description && (
+                          <p className="text-sm text-slate-600 mt-1">{template.description}</p>
+                        )}
+                        <div className="flex gap-3 mt-2 text-xs text-slate-500">
+                          <span>📂 {template.category}</span>
+                          <span>📌 {template.items?.length || 0} punkter</span>
+                        </div>
+                      </div>
+                      <Plus className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>);
 
 }
