@@ -1,24 +1,40 @@
 import React, { useState, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import PageHeader from '@/components/shared/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import EmptyState from '@/components/shared/EmptyState';
-import { FileCheck, Calendar, AlertTriangle, Filter, X } from 'lucide-react';
+import { generateMultiElementPDF } from '@/components/shared/PDFGenerator';
+import RisikoanalysePDFView from '@/components/risikoanalyse/RisikoanalysePDFView';
+import SendRisikoanalyseDialog from '@/components/risikoanalyse/SendRisikoanalyseDialog';
+import { FileCheck, Calendar, AlertTriangle, Filter, X, Download, Send, CheckCircle, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { toast } from 'sonner';
+import ReactDOM from 'react-dom/client';
 
 export default function Risikoanalyse() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterRisikoniva, setFilterRisikoniva] = useState('all');
   const [filterKategori, setFilterKategori] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedAnalyser, setSelectedAnalyser] = useState([]);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
 
   const { data: analyser = [] } = useQuery({
     queryKey: ['risikoanalyser'],
@@ -39,9 +55,25 @@ export default function Risikoanalyse() {
         if (niva !== filterRisikoniva) return false;
       }
       if (filterKategori !== 'all' && !a.kategorier?.includes(filterKategori)) return false;
+      
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const project = projects.find(p => p.id === a.project_id);
+        const projectName = project?.name?.toLowerCase() || '';
+        const arbeidsoperasjon = a.arbeidsoperasjon?.toLowerCase() || '';
+        const ansvarlig = a.ansvarlig_navn?.toLowerCase() || '';
+        
+        if (!projectName.includes(query) && 
+            !arbeidsoperasjon.includes(query) && 
+            !ansvarlig.includes(query)) {
+          return false;
+        }
+      }
+      
       return true;
     });
-  }, [analyser, filterProject, filterStatus, filterRisikoniva, filterKategori]);
+  }, [analyser, filterProject, filterStatus, filterRisikoniva, filterKategori, searchQuery, projects]);
 
   const getRisikonivaTekst = (niva) => {
     if (niva <= 2) return 'Lav';
@@ -95,6 +127,91 @@ export default function Risikoanalyse() {
     return labels[kategori] || kategori;
   };
 
+  const handleSelectAnalyse = (analyseId, checked) => {
+    if (checked) {
+      setSelectedAnalyser(prev => [...prev, analyseId]);
+    } else {
+      setSelectedAnalyser(prev => prev.filter(id => id !== analyseId));
+    }
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedAnalyser(filteredAnalyser.map(a => a.id));
+    } else {
+      setSelectedAnalyser([]);
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    toast.info('Genererer PDF...');
+    
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px';
+    document.body.appendChild(tempContainer);
+
+    const elements = [];
+    for (let i = 0; i < selectedAnalyser.length; i++) {
+      const analyseId = selectedAnalyser[i];
+      const analyse = analyser.find(a => a.id === analyseId);
+      const project = projects.find(p => p.id === analyse?.project_id);
+      
+      const div = document.createElement('div');
+      div.id = `risikoanalyse-pdf-${analyseId}`;
+      tempContainer.appendChild(div);
+      
+      const root = ReactDOM.createRoot(div);
+      root.render(<RisikoanalysePDFView analyse={analyse} project={project} />);
+      
+      elements.push({
+        elementId: `risikoanalyse-pdf-${analyseId}`,
+        title: `Risikoanalyse ${i + 1} - ${project?.name || 'Ukjent'}`
+      });
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await generateMultiElementPDF(elements, 'Risikoanalyser-samlet.pdf');
+    document.body.removeChild(tempContainer);
+    toast.success('PDF lastet ned');
+  };
+
+  const handleBulkSend = () => {
+    setSendDialogOpen(true);
+  };
+
+  const lukkAnalyserMutation = useMutation({
+    mutationFn: async () => {
+      const promises = selectedAnalyser.map(analyseId => {
+        const analyse = analyser.find(a => a.id === analyseId);
+        const updatedLog = [...(analyse?.aktivitetslogg || []), {
+          action: 'lukket',
+          timestamp: new Date().toISOString(),
+          user_email: user?.email,
+          user_name: user?.full_name,
+          details: 'Risikoanalyse lukket via bulk-handling'
+        }];
+        
+        return base44.entities.Risikoanalyse.update(analyseId, {
+          status: 'lukket',
+          lukket_dato: new Date().toISOString(),
+          lukket_av: user?.email,
+          lukket_av_navn: user?.full_name,
+          aktivitetslogg: updatedLog
+        });
+      });
+      return Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['risikoanalyser']);
+      toast.success(`${selectedAnalyser.length} risikoanalyser lukket`);
+      setSelectedAnalyser([]);
+    },
+    onError: () => {
+      toast.error('Feil ved lukking av analyser');
+    }
+  });
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <PageHeader
@@ -102,9 +219,65 @@ export default function Risikoanalyse() {
         subtitle={`${analyser.length} analyser registrert`}
         onAdd={() => navigate(createPageUrl('RisikoanalyseDetaljer?new=true'))}
         addLabel="Ny risikoanalyse"
+        actions={
+          selectedAnalyser.length > 0 && (
+            <>
+              <Button 
+                onClick={handleBulkDownload}
+                variant="outline" 
+                className="rounded-xl gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Last ned PDF ({selectedAnalyser.length})
+              </Button>
+              <Button 
+                onClick={handleBulkSend}
+                variant="outline" 
+                className="rounded-xl gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Send ({selectedAnalyser.length})
+              </Button>
+              <Button 
+                onClick={() => lukkAnalyserMutation.mutate()}
+                variant="outline" 
+                className="rounded-xl gap-2"
+                disabled={lukkAnalyserMutation.isPending}
+              >
+                <CheckCircle className="h-4 w-4" />
+                Lukk ({selectedAnalyser.length})
+              </Button>
+            </>
+          )
+        }
       />
 
       <div className="px-6 lg:px-8 py-8">
+        {/* Search */}
+        <Card className="mb-4 border-0 shadow-sm dark:bg-slate-900">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Search className="h-5 w-5 text-slate-400" />
+              <Input
+                placeholder="Søk etter prosjekt, arbeidsoperasjon eller ansvarlig..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="rounded-xl"
+              />
+              {searchQuery && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setSearchQuery('')}
+                  className="rounded-xl"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Filters */}
         <Card className="mb-6 border-0 shadow-sm dark:bg-slate-900">
           <CardContent className="p-4">
@@ -263,61 +436,91 @@ export default function Risikoanalyse() {
             onAction={() => navigate(createPageUrl('RisikoanalyseDetaljer?new=true'))}
           />
         ) : (
-          <div className="grid gap-4">
-            {filteredAnalyser.map(analyse => {
-              const project = projects.find(p => p.id === analyse.project_id);
-              return (
-                <Card 
-                  key={analyse.id}
-                  className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer dark:bg-slate-900"
-                  onClick={() => navigate(createPageUrl(`RisikoanalyseDetaljer?id=${analyse.id}`))}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <Badge className={getStatusColor(analyse.status)}>
-                            {getStatusLabel(analyse.status)}
-                          </Badge>
-                          {getRisikonivaBadge(analyse.risikoniva)}
-                          {analyse.kategorier?.slice(0, 2).map(kat => (
-                            <Badge key={kat} variant="outline" className="dark:border-slate-700">
-                              {getKategoriLabel(kat)}
+          <div className="space-y-4">
+            {filteredAnalyser.length > 0 && (
+              <div className="flex items-center gap-2 mb-2">
+                <Checkbox
+                  id="select-all"
+                  checked={selectedAnalyser.length === filteredAnalyser.length}
+                  onCheckedChange={handleSelectAll}
+                />
+                <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                  Velg alle ({filteredAnalyser.length})
+                </label>
+              </div>
+            )}
+            <div className="grid gap-4">
+              {filteredAnalyser.map(analyse => {
+                const project = projects.find(p => p.id === analyse.project_id);
+                const isSelected = selectedAnalyser.includes(analyse.id);
+                return (
+                  <Card 
+                    key={analyse.id}
+                    className="border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900"
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={(checked) => handleSelectAnalyse(analyse.id, checked)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => navigate(createPageUrl(`RisikoanalyseDetaljer?id=${analyse.id}`))}
+                        >
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <Badge className={getStatusColor(analyse.status)}>
+                              {getStatusLabel(analyse.status)}
                             </Badge>
-                          ))}
-                          {analyse.kategorier?.length > 2 && (
-                            <Badge variant="outline" className="dark:border-slate-700">
-                              +{analyse.kategorier.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
-                          {project?.name || 'Ukjent prosjekt'}
-                        </h3>
-                        <p className="text-slate-600 dark:text-slate-400 mb-2">
-                          {analyse.arbeidsoperasjon}
-                        </p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
-                          {analyse.risiko_beskrivelse}
-                        </p>
-                        <div className="flex items-center gap-4 mt-3 text-sm text-slate-500 dark:text-slate-400">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            {format(new Date(analyse.dato_analyse || analyse.created_date), 'dd.MM.yyyy', { locale: nb })}
+                            {getRisikonivaBadge(analyse.risikoniva)}
+                            {analyse.kategorier?.slice(0, 2).map(kat => (
+                              <Badge key={kat} variant="outline" className="dark:border-slate-700">
+                                {getKategoriLabel(kat)}
+                              </Badge>
+                            ))}
+                            {analyse.kategorier?.length > 2 && (
+                              <Badge variant="outline" className="dark:border-slate-700">
+                                +{analyse.kategorier.length - 2}
+                              </Badge>
+                            )}
                           </div>
-                          {analyse.ansvarlig_navn && (
-                            <div>Ansvarlig: {analyse.ansvarlig_navn}</div>
-                          )}
+                          <h3 className="font-semibold text-slate-900 dark:text-white mb-1.5">
+                            {project?.name || 'Ukjent prosjekt'}
+                          </h3>
+                          <p className="text-slate-600 dark:text-slate-400 mb-2">
+                            {analyse.arbeidsoperasjon}
+                          </p>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
+                            {analyse.risiko_beskrivelse}
+                          </p>
+                          <div className="flex items-center gap-4 mt-3 text-sm text-slate-500 dark:text-slate-400">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              {format(new Date(analyse.dato_analyse || analyse.created_date), 'dd.MM.yyyy', { locale: nb })}
+                            </div>
+                            {analyse.ansvarlig_navn && (
+                              <div>Ansvarlig: {analyse.ansvarlig_navn}</div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
+
+      <SendRisikoanalyseDialog
+        open={sendDialogOpen}
+        onOpenChange={setSendDialogOpen}
+        selectedAnalyser={selectedAnalyser}
+        analyserList={analyser}
+        projects={projects}
+      />
     </div>
   );
 }
