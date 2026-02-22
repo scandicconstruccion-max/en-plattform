@@ -470,14 +470,14 @@ export default function Avvik() {
                 <CheckCircle2 className="h-4 w-4" />
                 Endre status
               </Button>
-              <Button
-            onClick={() => setShowBulkEmailDialog(true)}
-            variant="outline"
-            className="rounded-xl gap-2">
+              
 
-                <Send className="h-4 w-4" />
-                Send ({selectedDeviations.length})
-              </Button>
+
+
+
+
+
+
               <Button
             onClick={handleBulkDownload}
             variant="outline"
@@ -1261,8 +1261,8 @@ export default function Avvik() {
         onOpenChange={setShowViewDialog}
         selectedDeviations={selectedDeviations}
         deviationList={deviations}
-        projects={projects}
-      />
+        projects={projects} />
+
 
     </div>);
 
