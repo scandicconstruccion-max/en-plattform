@@ -22,7 +22,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
-import SendOrdreDialog from '@/components/ordre/SendOrdreDialog';
+import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import OrderForm from '@/components/ordre/OrderForm';
 import { 
   FileText, Search, Plus, Building2, Calendar, 
@@ -37,7 +37,8 @@ import { toast } from 'sonner';
 export default function Ordre() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showSourceDialog, setShowSourceDialog] = useState(false);
-  const [showSendDialog, setShowSendDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -458,8 +459,8 @@ export default function Ordre() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedOrders([order.id]);
-                            setShowSendDialog(true);
+                            setSelectedOrder(order);
+                            setShowEmailDialog(true);
                           }}
                           className="rounded-xl gap-1"
                         >
@@ -561,14 +562,16 @@ export default function Ordre() {
         onSubmit={(data) => createOrderMutation.mutate(data)}
       />
 
-      {/* Send Ordre Dialog */}
-      <SendOrdreDialog
-        open={showSendDialog}
-        onOpenChange={setShowSendDialog}
-        selectedOrders={selectedOrders}
-        ordreList={orders}
-        projects={projects}
-      />
+      {/* Send Email Dialog */}
+      {selectedOrder && (
+        <SendEmailDialog
+          open={showEmailDialog}
+          onOpenChange={setShowEmailDialog}
+          type="ordre"
+          item={selectedOrder}
+          onSent={handleSendEmail}
+        />
+      )}
     </div>
   );
 }

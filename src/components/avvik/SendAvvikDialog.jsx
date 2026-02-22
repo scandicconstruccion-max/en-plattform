@@ -1,180 +1,130 @@
-import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { X, Mail } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
-export default function SendAvvikDialog({ open, onOpenChange, selectedDeviations, deviationList, projects }) {
-  const [recipients, setRecipients] = useState([]);
-  const [emailInput, setEmailInput] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState('');
+export default function SendAvvikDialog({ deviation, isOpen, onClose, onSent }) {
+  const [email, setEmail] = useState(deviation?.sent_to_email || '');
+  const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
-  const { data: employees = [] } = useQuery({
-    queryKey: ['employees'],
-    queryFn: () => base44.entities.Employee.list(),
-    enabled: open
-  });
-
-  const sendMutation = useMutation({
-    mutationFn: async (emailList) => {
-      const promises = emailList.map(async (email) => {
-        for (const deviationId of selectedDeviations) {
-          const deviation = deviationList.find(d => d.id === deviationId);
-          const project = projects.find(p => p.id === deviation?.project_id);
-          
-          await base44.integrations.Core.SendEmail({
-            to: email,
-            subject: `Avvik: ${deviation?.title || 'Avvik'}`,
-            body: `
-              <h2>Avvik</h2>
-              <p><strong>Tittel:</strong> ${deviation?.title || 'Ukjent'}</p>
-              ${project ? `<p><strong>Prosjekt:</strong> ${project.name}</p>` : ''}
-              <p><strong>Status:</strong> ${deviation?.status || 'Ukjent'}</p>
-              ${deviation?.description ? `<p><strong>Beskrivelse:</strong> ${deviation.description}</p>` : ''}
-              <br>
-              <p>Se systemet for mer informasjon.</p>
-            `
-          });
-        }
-      });
-      await Promise.all(promises);
-    },
-    onSuccess: () => {
-      toast.success(`Avvik sendt til ${recipients.length} mottaker(e)`);
-      setRecipients([]);
-      setEmailInput('');
-      setSelectedEmployee('');
-      onOpenChange(false);
-    },
-    onError: () => {
-      toast.error('Feil ved sending av e-post');
-    }
-  });
-
-  const addEmailRecipient = () => {
-    if (emailInput && emailInput.includes('@')) {
-      if (!recipients.includes(emailInput)) {
-        setRecipients([...recipients, emailInput]);
-      }
-      setEmailInput('');
-    }
-  };
-
-  const addEmployeeRecipient = () => {
-    if (selectedEmployee) {
-      const employee = employees.find(e => e.id === selectedEmployee);
-      if (employee?.email && !recipients.includes(employee.email)) {
-        setRecipients([...recipients, employee.email]);
-      }
-      setSelectedEmployee('');
-    }
-  };
-
-  const removeRecipient = (email) => {
-    setRecipients(recipients.filter(r => r !== email));
-  };
-
-  const handleSend = () => {
-    if (recipients.length === 0) {
-      toast.error('Legg til minst én mottaker');
+  const handleSend = async () => {
+    if (!email || !message.trim()) {
+      toast.error('Vennligst fyll inn e-post og melding');
       return;
     }
 
-    const projectNames = [...new Set(selectedDeviations.map(id => {
-      const deviation = deviationList.find(d => d.id === id);
-      const project = projects.find(p => p.id === deviation?.project_id);
-      return project?.name || 'Ukjent';
-    }))].join(', ');
+    setIsSending(true);
+    try {
+      // Generate approval token
+      const approvalToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      // Create approval URL (user can customize this)
+      const approvalUrl = `${window.location.origin}/ApproveDeviation?token=${approvalToken}&deviationId=${deviation.id}`;
 
-    toast.info(`Avvik for prosjekt ${projectNames} sendes på nytt...`);
-    sendMutation.mutate(recipients);
+      // Update deviation with approval token and activity log
+      const newActivityLog = deviation.activity_log || [];
+      const user = await base44.auth.me();
+      newActivityLog.push({
+        action: 'sendt_kunde',
+        timestamp: new Date().toISOString(),
+        user_email: user.email,
+        user_name: user.full_name,
+        details: `Avvik sendt til ${email}`
+      });
+
+      await base44.entities.Deviation.update(deviation.id, {
+        approval_token: approvalToken,
+        sent_to_customer: true,
+        sent_to_email: email,
+        sent_date: new Date().toISOString(),
+        status: 'sendt_kunde',
+        activity_log: newActivityLog
+      });
+
+      // Send email
+      const emailBody = `
+Hei,
+
+${message}
+
+Avvik: ${deviation.title}
+Beskrivelse: ${deviation.description}
+Kostnad: ${deviation.cost_amount} Kr
+
+Vennligst godkjenn eller avvis avviket ved å klikke linken nedenfor:
+${approvalUrl}
+
+Med vennlig hilsen
+${user.full_name}
+      `.trim();
+
+      await base44.integrations.Core.SendEmail({
+        to: email,
+        subject: `Godkjenning av avvik: ${deviation.title}`,
+        body: emailBody,
+        from_name: 'Avvik-system'
+      });
+
+      toast.success('Avvik sendt til kunde');
+      setEmail('');
+      setMessage('');
+      onSent();
+      onClose();
+    } catch (error) {
+      console.error('Feil ved sending:', error);
+      toast.error('Feil ved sending av avvik');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Send avvik på nytt</DialogTitle>
+          <DialogTitle>Send avvik til kunde</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <p className="text-sm text-slate-600">
-            Sender {selectedDeviations.length} avvik
-          </p>
-
-          {/* Manual Email Input */}
-          <div className="space-y-2">
-            <Label>E-postadresse</Label>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="navn@eksempel.no"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addEmailRecipient()}
-              />
-              <Button onClick={addEmailRecipient} variant="outline">
-                Legg til
-              </Button>
-            </div>
+        
+        <div className="space-y-4">
+          <div>
+            <Label>Kunde e-post</Label>
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="kunde@example.com"
+            />
+          </div>
+          
+          <div>
+            <Label>Melding</Label>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Legg inn melding til kunden..."
+              rows={4}
+            />
           </div>
 
-          {/* Employee Selector */}
-          <div className="space-y-2">
-            <Label>Velg ansatt</Label>
-            <div className="flex gap-2">
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Velg ansatt" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.filter(e => e.is_active !== false).map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} ({emp.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={addEmployeeRecipient} variant="outline">
-                Legg til
-              </Button>
-            </div>
+          <div className="bg-blue-50 p-3 rounded text-sm text-blue-800">
+            <strong>Avvik:</strong> {deviation.title}<br />
+            <strong>Kostnad:</strong> {deviation.cost_amount} Kr<br />
+            Kunde vil motta e-post med godkjenningslenke.
           </div>
-
-          {/* Recipients List */}
-          {recipients.length > 0 && (
-            <div className="space-y-2">
-              <Label>Mottakere ({recipients.length})</Label>
-              <div className="flex flex-wrap gap-2">
-                {recipients.map((email) => (
-                  <Badge key={email} variant="secondary" className="gap-1">
-                    <Mail className="h-3 w-3" />
-                    {email}
-                    <button onClick={() => removeRecipient(email)} className="ml-1">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={onClose}>
             Avbryt
           </Button>
-          <Button 
-            onClick={handleSend} 
-            disabled={recipients.length === 0 || sendMutation.isPending}
-          >
-            {sendMutation.isPending ? 'Sender...' : 'Send'}
+          <Button onClick={handleSend} disabled={isSending}>
+            {isSending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Send til kunde
           </Button>
         </DialogFooter>
       </DialogContent>

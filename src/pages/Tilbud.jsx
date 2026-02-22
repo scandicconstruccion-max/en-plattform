@@ -42,7 +42,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
-import SendTilbudDialog from '@/components/tilbud/SendTilbudDialog';
+import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
 import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit, X, CheckCircle, FileText } from 'lucide-react';
@@ -54,7 +54,8 @@ import { generateQuotePDF } from '@/components/tilbud/QuotePDFGenerator';
 export default function Tilbud() {
   const [showDialog, setShowDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [showSendDialog, setShowSendDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState(null);
   const [selectedQuotes, setSelectedQuotes] = useState([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -277,7 +278,12 @@ export default function Tilbud() {
   };
 
   const handleBulkSend = async () => {
-    setShowSendDialog(true);
+    const quotesToSend = quotes.filter((q) => selectedQuotes.includes(q.id));
+    for (const quote of quotesToSend) {
+      handleSendEmail(quote);
+    }
+    toast.success(`Sender ${quotesToSend.length} tilbud`);
+    setSelectedQuotes([]);
   };
 
   const handleBulkDownload = async () => {
@@ -898,14 +904,14 @@ export default function Tilbud() {
         </DialogContent>
       </Dialog>
 
-      {/* Send Tilbud Dialog */}
-      <SendTilbudDialog
-        open={showSendDialog}
-        onOpenChange={setShowSendDialog}
-        selectedQuotes={selectedQuotes}
-        quoteList={quotes}
-        projects={projects}
-      />
+      {/* Send Email Dialog */}
+      <SendEmailDialog
+        open={showEmailDialog}
+        onOpenChange={setShowEmailDialog}
+        type="tilbud"
+        item={selectedQuote}
+        defaultEmail={selectedQuote?.customer_email || ''}
+        onSent={handleEmailSent} />
 
 
       {/* Delete Confirmation Dialog */}
