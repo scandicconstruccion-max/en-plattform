@@ -86,7 +86,7 @@ export default function Sjekklister() {
   });
 
   const filteredChecklists = checklists.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getProgressPercentage = (checklist) => {
