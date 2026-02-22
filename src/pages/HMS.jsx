@@ -37,7 +37,17 @@ export default function HMS() {
   // Calculate statistics
   const openRUH = ruhList.filter(r => r.status !== 'lukket').length;
   const activeRisks = risikoList.filter(r => r.status === 'aktiv').length;
-  const pendingSJA = sjaList.filter(s => s.status === 'opprettet').length;
+  
+  // Count SJA awaiting execution (jobb_utfores in the future)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const pendingSJA = sjaList.filter(s => {
+    if (!s.jobb_utfores || s.status === 'utfort') return false;
+    const jobbDato = new Date(s.jobb_utfores);
+    jobbDato.setHours(0, 0, 0, 0);
+    return jobbDato > today;
+  }).length;
+  
   const highRisks = risikoList.filter(r => r.risikonivå >= 6).length;
   const mottakMedAvvik = mottakList.filter(m => m.har_avvik && m.status !== 'lukket').length;
 
@@ -50,7 +60,7 @@ export default function HMS() {
       page: 'SJA',
       color: 'bg-blue-500',
       stats: `${sjaList.length} SJA registrert`,
-      alert: pendingSJA > 0 ? `${pendingSJA} venter godkjenning` : null
+      alert: pendingSJA > 0 ? `${pendingSJA} venter utførelse` : null
     },
     {
       key: 'ruh',
@@ -109,7 +119,7 @@ export default function HMS() {
       bgColor: activeRisks > 0 ? 'bg-amber-50' : 'bg-green-50'
     },
     {
-      label: 'SJA venter godkjenning',
+      label: 'SJA venter utførelse',
       value: pendingSJA,
       icon: Calendar,
       color: pendingSJA > 0 ? 'text-blue-600' : 'text-green-600',

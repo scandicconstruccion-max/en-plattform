@@ -46,7 +46,8 @@ export default function SJA() {
     beskrivelse_av_arbeidsoperasjonen: '',
     faremomenter: [],
     konsekvensgrad: '',
-    tiltak: ''
+    tiltak: '',
+    status: 'aktiv'
   });
   const [newEksternDeltaker, setNewEksternDeltaker] = useState({ navn: '', epost: '' });
 
@@ -179,20 +180,21 @@ export default function SJA() {
     toast.info('Send på nytt kommer snart');
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'godkjent': return 'bg-green-100 text-green-700 border-green-200';
-      case 'arkivert': return 'bg-slate-100 text-slate-700 border-slate-200';
-      default: return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'opprettet': return 'Opprettet';
-      case 'godkjent': return 'Godkjent';
-      case 'arkivert': return 'Arkivert';
-      default: return status;
+  const getSJAStatus = (sja) => {
+    if (sja.status === 'utfort') return { label: 'Utført', color: 'bg-green-100 text-green-700 border-green-200' };
+    if (sja.status === 'arkivert') return { label: 'Arkivert', color: 'bg-slate-100 text-slate-700 border-slate-200' };
+    
+    if (!sja.jobb_utfores) return { label: 'Aktiv', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const jobbDato = new Date(sja.jobb_utfores);
+    jobbDato.setHours(0, 0, 0, 0);
+    
+    if (jobbDato > today) {
+      return { label: 'Venter utførelse', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+    } else {
+      return { label: 'Klar for utført', color: 'bg-orange-100 text-orange-700 border-orange-200' };
     }
   };
 
@@ -255,7 +257,8 @@ export default function SJA() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle statuser</SelectItem>
-              <SelectItem value="opprettet">Opprettet</SelectItem>
+              <SelectItem value="aktiv">Aktiv</SelectItem>
+              <SelectItem value="utfort">Utført</SelectItem>
               <SelectItem value="arkivert">Arkivert</SelectItem>
             </SelectContent>
           </Select>
@@ -293,6 +296,7 @@ export default function SJA() {
             {filteredSJA.map((sja) => {
               const project = projects.find(p => p.id === sja.project_id);
               const isSelected = selectedSJAs.includes(sja.id);
+              const statusInfo = getSJAStatus(sja);
               return (
                 <Card 
                   key={sja.id} 
@@ -311,8 +315,8 @@ export default function SJA() {
                       >
                         <div className="flex items-center gap-3 mb-1">
                           <h3 className="font-semibold text-slate-900 text-sm">{sja.arbeidsoperasjon}</h3>
-                          <Badge className={getStatusColor(sja.status)} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                            {getStatusLabel(sja.status)}
+                          <Badge className={statusInfo.color} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                            {statusInfo.label}
                           </Badge>
                         </div>
                         <div className="flex flex-wrap gap-3 text-xs text-slate-500">
