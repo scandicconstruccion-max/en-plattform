@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
@@ -12,17 +12,38 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { Building2, ChevronDown, FolderOpen } from 'lucide-react';
+import { Building2, ChevronDown, FolderOpen, Check } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
 
 export default function ProjectDropdown() {
+  const [selectedProject, setSelectedProject] = useState(null);
+
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date'),
   });
 
+  useEffect(() => {
+    const stored = localStorage.getItem('selectedProject');
+    if (stored) {
+      setSelectedProject(JSON.parse(stored));
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleProjectSelected = () => {
+      const stored = localStorage.getItem('selectedProject');
+      if (stored) {
+        setSelectedProject(JSON.parse(stored));
+      }
+    };
+    window.addEventListener('projectSelected', handleProjectSelected);
+    return () => window.removeEventListener('projectSelected', handleProjectSelected);
+  }, []);
+
   const handleSelectProject = (project) => {
     localStorage.setItem('selectedProject', JSON.stringify(project));
+    setSelectedProject(project);
     window.dispatchEvent(new Event('projectSelected'));
   };
 
@@ -34,7 +55,9 @@ export default function ProjectDropdown() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="rounded-xl gap-2 h-11 px-4">
           <FolderOpen className="h-4 w-4 text-emerald-600" />
-          <span>Velg prosjekt</span>
+          <span className="max-w-xs truncate">
+            {selectedProject ? selectedProject.name : 'Velg prosjekt'}
+          </span>
           <ChevronDown className="h-4 w-4 text-slate-400" />
         </Button>
       </DropdownMenuTrigger>
@@ -48,7 +71,11 @@ export default function ProjectDropdown() {
               <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
                 <div className="flex items-center gap-3 w-full">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                    <Building2 className="h-4 w-4 text-emerald-600" />
+                    {selectedProject?.id === project.id ? (
+                      <Check className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <Building2 className="h-4 w-4 text-emerald-600" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900 truncate">{project.name}</p>
@@ -73,7 +100,11 @@ export default function ProjectDropdown() {
               <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
                 <div className="flex items-center gap-3 w-full">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <Building2 className="h-4 w-4 text-slate-600" />
+                    {selectedProject?.id === project.id ? (
+                      <Check className="h-4 w-4 text-slate-600" />
+                    ) : (
+                      <Building2 className="h-4 w-4 text-slate-600" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900 truncate">{project.name}</p>

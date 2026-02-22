@@ -23,7 +23,7 @@ export default function Sjekklister() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('alle');
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
-  const [showNewChecklistDialog, setShowNewChecklistDialog] = useState(false);
+  const [showSelectTemplateDialog, setShowSelectTemplateDialog] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateCategory, setNewTemplateCategory] = useState('annet');
   const [newTemplateDescription, setNewTemplateDescription] = useState('');
@@ -82,6 +82,24 @@ export default function Sjekklister() {
     }
   });
 
+  const createChecklistFromTemplateMutation = useMutation({
+    mutationFn: (template) => {
+      return base44.entities.Checklist.create({
+        name: template.name,
+        project_id: selectedProject.id,
+        template_id: template.id,
+        template_version: template.version,
+        items: template.items || [],
+        status: 'ikke_startet'
+      });
+    },
+    onSuccess: (newChecklist) => {
+      queryClient.invalidateQueries({ queryKey: ['checklists'] });
+      setShowSelectTemplateDialog(false);
+      navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
+    }
+  });
+
   const handleCreateTemplate = () => {
     if (!newTemplateName.trim()) return;
     createTemplateMutation.mutate({
@@ -115,7 +133,13 @@ export default function Sjekklister() {
                 Ny mal
               </Button> :
 
-          <Button onClick={() => setShowNewChecklistDialog(true)} className="gap-2">
+          <Button onClick={() => {
+            if (!selectedProject) {
+              alert('Velg et prosjekt først');
+              return;
+            }
+            setShowSelectTemplateDialog(true);
+          }} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Ny sjekkliste
               </Button>
