@@ -54,8 +54,7 @@ import { generateQuotePDF } from '@/components/tilbud/QuotePDFGenerator';
 export default function Tilbud() {
   const [showDialog, setShowDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [selectedQuote, setSelectedQuote] = useState(null);
+  const [showSendDialog, setShowSendDialog] = useState(false);
   const [selectedQuotes, setSelectedQuotes] = useState([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
