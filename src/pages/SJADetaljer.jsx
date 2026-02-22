@@ -164,25 +164,25 @@ export default function SJADetaljer() {
   }
 
   const project = projects.find((p) => p.id === sja.project_id);
-  
+
   const getSJAStatus = () => {
     if (sja.status === 'utfort') return { label: 'Utført', color: 'bg-green-100 text-green-700 border-green-200' };
     if (sja.status === 'arkivert') return { label: 'Arkivert', color: 'bg-slate-100 text-slate-700 border-slate-200' };
-    
+
     if (!sja.jobb_utfores) return { label: 'Aktiv', color: 'bg-blue-100 text-blue-700 border-blue-200' };
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const jobbDato = new Date(sja.jobb_utfores);
     jobbDato.setHours(0, 0, 0, 0);
-    
+
     if (jobbDato > today) {
       return { label: 'Venter utførelse', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
     } else {
       return { label: 'Klar for utført', color: 'bg-orange-100 text-orange-700 border-orange-200' };
     }
   };
-  
+
   const statusInfo = getSJAStatus();
 
   return (
@@ -198,12 +198,12 @@ export default function SJADetaljer() {
               <Download className="h-4 w-4 mr-2" />
               Last ned PDF
             </Button>
-            {sja.status !== 'utfort' && !editMode && (
-              <Button onClick={() => markerUtfortMutation.mutate()} variant="outline" className="bg-green-600 text-white hover:bg-green-700">
+            {sja.status !== 'utfort' && !editMode &&
+          <Button onClick={() => markerUtfortMutation.mutate()} variant="outline" className="bg-green-600 text-white hover:bg-green-700">
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Marker som utført
               </Button>
-            )}
+          }
             
 
             {!editMode ?
@@ -217,7 +217,7 @@ export default function SJADetaljer() {
                   <X className="h-4 w-4 mr-2" />
                   Avbryt
                 </Button>
-                <Button onClick={handleSave} disabled={updateMutation.isPending}>
+                <Button onClick={handleSave} disabled={updateMutation.isPending} className="bg-blue-600 text-primary-foreground px-4 py-2 text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9">
                   <Save className="h-4 w-4 mr-2" />
                   Lagre
                 </Button>
@@ -235,11 +235,11 @@ export default function SJADetaljer() {
               <Badge className={statusInfo.color}>
                 {statusInfo.label}
               </Badge>
-              {sja.jobb_utfores && (
-                <span className="text-sm text-slate-500">
+              {sja.jobb_utfores &&
+              <span className="text-sm text-slate-500">
                   Jobb skal utføres: {format(new Date(sja.jobb_utfores), 'dd.MM.yyyy', { locale: nb })}
                 </span>
-              )}
+              }
             </div>
           </CardContent>
         </Card>
