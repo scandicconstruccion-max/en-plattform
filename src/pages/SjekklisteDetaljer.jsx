@@ -394,16 +394,16 @@ export default function SjekklisteDetaljer() {
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => {
-              if (canvasRef) {
-                const ctx = canvasRef.getContext('2d');
-                ctx?.clearRect(0, 0, canvasRef.width, canvasRef.height);
+              if (canvasRef.current) {
+                const ctx = canvasRef.current.getContext('2d');
+                ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
               }
             }}>
               Tøm
             </Button>
             <Button onClick={() => {
-              if (canvasRef) {
-                handleSign(canvasRef.toDataURL());
+              if (canvasRef.current) {
+                handleSign(canvasRef.current.toDataURL());
               }
             }}>
               Signér
