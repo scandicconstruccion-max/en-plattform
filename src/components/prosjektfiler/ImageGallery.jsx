@@ -206,12 +206,12 @@ export default function ImageGallery({
           return (
             <Button
               key={mode.id}
-              variant={viewMode === mode.id ? 'default' : 'ghost'}
+              variant="ghost"
               size="sm"
               onClick={() => setViewMode(mode.id)}
               className={cn(
                 "gap-2",
-                viewMode === mode.id && "bg-white shadow-sm"
+                viewMode === mode.id && "bg-emerald-50 text-emerald-700 shadow-sm hover:bg-emerald-50"
               )}
             >
               <Icon className="h-4 w-4" />
