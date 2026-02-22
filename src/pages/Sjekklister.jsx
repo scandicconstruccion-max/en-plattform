@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import PageHeader from '@/components/shared/PageHeader';
-import { Plus, Settings, Trash2, Copy, Search } from 'lucide-react';
+import { Plus, Settings, Trash2, Copy, Search, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import EmptyState from '@/components/shared/EmptyState';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -24,9 +24,11 @@ export default function Sjekklister() {
   const [selectedCategory, setSelectedCategory] = useState('alle');
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
   const [showSelectTemplateDialog, setShowSelectTemplateDialog] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateCategory, setNewTemplateCategory] = useState('annet');
   const [newTemplateDescription, setNewTemplateDescription] = useState('');
+  const [newTemplateItems, setNewTemplateItems] = useState([]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -35,14 +37,20 @@ export default function Sjekklister() {
     queryFn: () => base44.auth.me()
   });
 
-  const { data: selectedProject } = useQuery({
-    queryKey: ['selectedProject'],
-    queryFn: async () => {
-      const project = localStorage.getItem('selectedProject');
-      if (!project) return null;
-      return JSON.parse(project);
+  useEffect(() => {
+    const stored = localStorage.getItem('selectedProject');
+    if (stored) {
+      setSelectedProject(JSON.parse(stored));
     }
-  });
+    const handleProjectChange = () => {
+      const updated = localStorage.getItem('selectedProject');
+      if (updated) {
+        setSelectedProject(JSON.parse(updated));
+      }
+    };
+    window.addEventListener('projectSelected', handleProjectChange);
+    return () => window.removeEventListener('projectSelected', handleProjectChange);
+  }, []);
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['checklistTemplates'],
@@ -65,6 +73,7 @@ export default function Sjekklister() {
       setNewTemplateName('');
       setNewTemplateDescription('');
       setNewTemplateCategory('annet');
+      setNewTemplateItems([]);
     }
   });
 
@@ -106,8 +115,31 @@ export default function Sjekklister() {
       name: newTemplateName,
       category: newTemplateCategory,
       description: newTemplateDescription,
-      items: []
+      items: newTemplateItems.map((item, idx) => ({
+        ...item,
+        order: idx
+      }))
     });
+  };
+
+  const handleAddTemplateItem = () => {
+    setNewTemplateItems([...newTemplateItems, {
+      title: '',
+      description: '',
+      required: true,
+      allow_image: true,
+      allow_comment: true
+    }]);
+  };
+
+  const handleRemoveTemplateItem = (index) => {
+    setNewTemplateItems(newTemplateItems.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateTemplateItem = (index, field, value) => {
+    const updated = [...newTemplateItems];
+    updated[index] = { ...updated[index], [field]: value };
+    setNewTemplateItems(updated);
   };
 
   const filteredTemplates = templates.filter((t) => {
