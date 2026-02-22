@@ -142,6 +142,11 @@ export default function Sjekklister() {
             </div>
 
             {/* Checklists List */}
+            {checklistsError && (
+              <Card className="p-6 bg-red-50 border-red-200">
+                <p className="text-red-800">⚠️ Feil ved lasting av sjekklister. Prøv igjen senere.</p>
+              </Card>
+            )}
             {checklistsLoading ? (
               <div className="text-center py-8">Laster sjekklister...</div>
             ) : filteredChecklists.length === 0 ? (
