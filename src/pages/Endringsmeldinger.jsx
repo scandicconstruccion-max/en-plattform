@@ -26,9 +26,19 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail } from 'lucide-react';
+import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail, Trash2, Download, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Endringsmeldinger() {
   const [showDialog, setShowDialog] = useState(false);
@@ -46,6 +56,12 @@ export default function Endringsmeldinger() {
     status: 'utkast'
   });
   const [attachments, setAttachments] = useState([]);
+  const [selectedChanges, setSelectedChanges] = useState([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [changeToDelete, setChangeToDelete] = useState(null);
+  const [showSendDialog, setShowSendDialog] = useState(false);
+  const [changeToSend, setChangeToSend] = useState(null);
+  const [sendTo, setSendTo] = useState([]);
 
   const queryClient = useQueryClient();
 
@@ -64,6 +80,11 @@ export default function Endringsmeldinger() {
     queryFn: () => base44.entities.Project.list(),
   });
 
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list(),
+  });
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ChangeNotification.create({
       ...data,
@@ -80,6 +101,16 @@ export default function Endringsmeldinger() {
     mutationFn: ({ id, data }) => base44.entities.ChangeNotification.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['changeNotifications'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.ChangeNotification.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['changeNotifications'] });
+      setSelectedChanges(selectedChanges.filter(id => id !== changeToDelete));
+      setShowDeleteDialog(false);
+      setChangeToDelete(null);
     },
   });
 
@@ -125,6 +156,88 @@ export default function Endringsmeldinger() {
       data: updateData 
     });
     setSelectedChange(null);
+  };
+
+  const handleDeleteClick = (change) => {
+    setChangeToDelete(change.id);
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (changeToDelete) {
+      deleteMutation.mutate(changeToDelete);
+    }
+  };
+
+  const handleSendToEmployees = (change) => {
+    setChangeToSend(change);
+    setSendTo([]);
+    setShowSendDialog(true);
+  };
+
+  const toggleEmployee = (email) => {
+    setSendTo(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]);
+  };
+
+  const handleConfirmSend = async () => {
+    if (!changeToSend || sendTo.length === 0) return;
+    
+    for (const email of sendTo) {
+      const employee = employees.find(e => e.email === email);
+      if (employee) {
+        await base44.integrations.Core.SendEmail({
+          to: email,
+          subject: `Ny endringsmelding: ${changeToSend.title}`,
+          body: `
+Hei ${employee.first_name},
+
+En ny endringsmelding har blitt opprettet og sendt til deg:
+
+Tittel: ${changeToSend.title}
+Prosjekt: ${getProjectName(changeToSend.project_id)}
+Type: ${changeTypeLabels[changeToSend.change_type]}
+${changeToSend.amount ? `Beløp: ${changeToSend.amount.toLocaleString('nb-NO')} kr` : ''}
+
+Beskrivelse: ${changeToSend.description || ''}
+
+Logg inn i systemet for mer informasjon.
+
+Med vennlig hilsen,
+${user?.full_name || 'Systemet'}
+          `
+        });
+      }
+    }
+    
+    setShowSendDialog(false);
+    setChangeToSend(null);
+    setSendTo([]);
+  };
+
+  const handleDownloadPDF = (change) => {
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <div style="font-family: Arial, sans-serif; padding: 20px;">
+        <h1>${change.title}</h1>
+        <p><strong>Prosjekt:</strong> ${getProjectName(change.project_id)}</p>
+        <p><strong>Type:</strong> ${changeTypeLabels[change.change_type]}</p>
+        <p><strong>Beløp:</strong> ${change.amount ? change.amount.toLocaleString('nb-NO') + ' kr' : 'N/A'}</p>
+        <p><strong>Dato:</strong> ${format(new Date(change.created_date), 'd. MMM yyyy', { locale: nb })}</p>
+        <p><strong>Status:</strong> ${change.status}</p>
+        <hr>
+        <h3>Beskrivelse:</h3>
+        <p>${change.description || ''}</p>
+      </div>
+    `;
+    
+    const printWindow = window.open('', '', 'width=800,height=600');
+    printWindow.document.write(element.innerHTML);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const toggleChangeSelection = (changeId) => {
+    setSelectedChanges(prev => prev.includes(changeId) ? prev.filter(id => id !== changeId) : [...prev, changeId]);
   };
 
   const filteredChanges = changes.filter(c => {
@@ -219,39 +332,43 @@ export default function Endringsmeldinger() {
             onAction={() => setShowDialog(true)}
           />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredChanges.map((change) => {
               const Icon = changeTypeIcons[change.change_type] || RefreshCw;
+              const isSelected = selectedChanges.includes(change.id);
               return (
-                <Card key={change.id} className="p-6 border-0 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                        changeTypeColors[change.change_type] || 'bg-slate-100 text-slate-600'
-                      }`}>
-                        <Icon className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-slate-900">{change.title}</h3>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            changeTypeColors[change.change_type] || 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {changeTypeLabels[change.change_type]}
-                          </span>
+                <Card key={change.id} className="p-4 border-0 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1">
+                      <Checkbox 
+                        checked={isSelected}
+                        onCheckedChange={() => toggleChangeSelection(change.id)}
+                        className="mt-1"
+                      />
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          changeTypeColors[change.change_type] || 'bg-slate-100 text-slate-600'
+                        }`}>
+                          <Icon className="h-5 w-5" />
                         </div>
-                        <p className="text-sm text-slate-500 mt-1">{getProjectName(change.project_id)}</p>
-                        {change.description && (
-                          <p className="text-slate-600 mt-2 line-clamp-2">{change.description}</p>
-                        )}
-                        <p className="text-sm text-slate-500 mt-2">
-                          {change.created_date && format(new Date(change.created_date), 'd. MMM yyyy', { locale: nb })}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-sm text-slate-900 truncate">{change.title}</h3>
+                            <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
+                              changeTypeColors[change.change_type] || 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {changeTypeLabels[change.change_type]}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">{getProjectName(change.project_id)}</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {change.created_date && format(new Date(change.created_date), 'd. MMM yyyy', { locale: nb })}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       {change.amount && (
-                        <p className={`text-lg font-semibold ${
+                        <p className={`text-sm font-semibold ${
                           change.change_type === 'tillegg' ? 'text-emerald-600' :
                           change.change_type === 'fradrag' ? 'text-red-600' : 'text-slate-900'
                         }`}>
@@ -259,62 +376,42 @@ export default function Endringsmeldinger() {
                           {change.amount.toLocaleString('nb-NO')} kr
                         </p>
                       )}
-                      <StatusBadge status={change.status} className="mt-2" />
+                      <StatusBadge status={change.status} className="mt-1 text-xs" />
                     </div>
                   </div>
 
-                  {/* Delivery Status */}
-                  <DeliveryStatus item={change} />
-
-                  {/* Actions */}
-                  <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSendEmail(change)}
-                      className="rounded-xl gap-2"
-                    >
-                      <Mail className="h-4 w-4" />
-                      Send til kunde
-                    </Button>
-                    {change.status === 'utkast' && (
+                  {/* Actions - Show when selected */}
+                  {isSelected && (
+                    <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-slate-100">
                       <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleSendEmail(change)}
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                        onClick={() => handleDownloadPDF(change)}
+                        className="rounded-lg gap-2 text-xs"
                       >
-                        Send til godkjenning
+                        <Download className="h-3.5 w-3.5" />
+                        Last ned PDF
                       </Button>
-                    )}
-                    {change.status === 'sendt' && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateMutation.mutate({ 
-                            id: change.id, 
-                            data: { status: 'avvist' } 
-                          })}
-                          className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
-                        >
-                          Avvis
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => updateMutation.mutate({ 
-                            id: change.id, 
-                            data: { 
-                              status: 'godkjent',
-                              approved_date: new Date().toISOString().split('T')[0]
-                            } 
-                          })}
-                          className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                        >
-                          Godkjenn
-                        </Button>
-                      </>
-                    )}
-                  </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSendToEmployees(change)}
+                        className="rounded-lg gap-2 text-xs"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        Send på nytt
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteClick(change)}
+                        className="rounded-lg text-red-600 border-red-200 hover:bg-red-50 text-xs"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Slett
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               );
             })}
