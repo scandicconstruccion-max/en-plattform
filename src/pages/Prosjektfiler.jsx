@@ -394,7 +394,7 @@ export default function Prosjektfiler() {
                     className={cn(
                       "w-full text-left px-4 py-3 rounded-xl transition-all",
                       selectedCategory === category.id 
-                        ? "bg-white shadow-md" 
+                        ? "bg-emerald-50 text-emerald-700 shadow-md" 
                         : "hover:bg-white/50"
                     )}
                   >
@@ -439,7 +439,7 @@ export default function Prosjektfiler() {
                       className={cn(
                         "w-full text-left px-4 py-2 pl-12 rounded-xl transition-all ml-4 mt-1",
                         selectedCategory === sub.id 
-                          ? "bg-white shadow-sm" 
+                          ? "bg-emerald-50 text-emerald-700 shadow-sm" 
                           : "hover:bg-white/50"
                       )}
                     >
