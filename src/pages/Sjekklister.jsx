@@ -85,9 +85,12 @@ export default function Sjekklister() {
   );
 
   const getProgressPercentage = (checklist) => {
-    if (!checklist.items?.length) return 0;
+    const totalItems = checklist.sections && checklist.sections.length > 0
+      ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+      : (checklist.items?.length || 0);
+    if (!totalItems) return 0;
     const answered = checklist.responses?.filter(r => r.status).length || 0;
-    return Math.round((answered / checklist.items.length) * 100);
+    return Math.round((answered / totalItems) * 100);
   };
 
   const getStatusColor = (status) => {
