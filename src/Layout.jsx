@@ -31,7 +31,7 @@ const moduleIcons = {
   endringsmeldinger: FileText,
   timelister: Clock,
   bildedok: Camera,
-  sjekklister: CheckSquare,
+    sjekklister: CheckSquare,
   tilbud: FileSpreadsheet,
   ordre: FileText,
   faktura: FileText,
@@ -137,7 +137,7 @@ export default function Layout({ children, currentPageName }) {
   const moduleSections = [
     {
       title: 'GRUNNPAKKE',
-      modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'avvik', 'hms']
+      modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
     },
     {
       separator: true
