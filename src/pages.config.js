@@ -81,12 +81,12 @@ import RUH from './pages/RUH';
 import RUHDetaljer from './pages/RUHDetaljer';
 import Ressursplan from './pages/Ressursplan';
 import Risikoanalyse from './pages/Risikoanalyse';
+import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import SJA from './pages/SJA';
 import SJADetaljer from './pages/SJADetaljer';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -125,12 +125,12 @@ export const PAGES = {
     "RUHDetaljer": RUHDetaljer,
     "Ressursplan": Ressursplan,
     "Risikoanalyse": Risikoanalyse,
+    "RisikoanalyseDetaljer": RisikoanalyseDetaljer,
     "SJA": SJA,
     "SJADetaljer": SJADetaljer,
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "RisikoanalyseDetaljer": RisikoanalyseDetaljer,
 }
 
 export const pagesConfig = {

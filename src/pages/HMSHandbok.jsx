@@ -10,10 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { BookOpen, Save, History, Plus, X, FileText } from 'lucide-react';
+import { BookOpen, Save, History, Plus, X, FileText, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { generateHMSHandbookPDF } from '@/components/hms/HMSHandbookPDF';
 
 export default function HMSHandbok() {
   const [editMode, setEditMode] = useState(false);
@@ -27,6 +28,13 @@ export default function HMSHandbok() {
     queryKey: ['currentUser'],
     queryFn: () => base44.auth.me()
   });
+
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => base44.entities.Company.list()
+  });
+
+  const company = companies[0];
 
   const { data: handbooks = [] } = useQuery({
     queryKey: ['hmshandbook'],
@@ -156,6 +164,16 @@ export default function HMSHandbok() {
         subtitle={handbook ? `Versjon ${handbook.version} • Sist oppdatert ${format(new Date(handbook.sist_endret_dato || handbook.created_date), 'dd.MM.yyyy', { locale: nb })}` : 'Opprett HMS-håndbok for bedriften'}
         actions={
           <div className="flex gap-2">
+            {handbook && (
+              <Button 
+                variant="outline" 
+                onClick={() => generateHMSHandbookPDF(formData, company)}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Last ned PDF
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setVersionDialog(true)}>
               <History className="h-4 w-4 mr-2" />
               Versjonshistorikk
