@@ -79,19 +79,15 @@ export default function SJADetaljer() {
     }
   });
 
-  const godkjennMutation = useMutation({
+  const markerUtfortMutation = useMutation({
     mutationFn: async () => {
-      const user = await base44.auth.me();
       return base44.entities.SJA.update(sjaId, {
-        ...formData,
-        status: 'godkjent',
-        godkjent_av: user.email,
-        godkjent_dato: new Date().toISOString()
+        status: 'utfort'
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['sja']);
-      toast.success('SJA godkjent');
+      queryClient.invalidateQueries({ queryKey: ['sja', sjaId] });
+      toast.success('SJA markert som utført');
     }
   });
 
@@ -233,17 +229,17 @@ export default function SJADetaljer() {
 
       <div className="px-6 lg:px-8 py-8 space-y-6">
         {/* Status */}
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <Badge className={getStatusColor(sja.status)}>
-                {sja.status === 'godkjent' ? 'Godkjent' : sja.status === 'arkivert' ? 'Arkivert' : 'Opprettet'}
+            <div className="flex items-center gap-3">
+              <Badge className={statusInfo.color}>
+                {statusInfo.label}
               </Badge>
-              {sja.godkjent_av &&
-              <span className="text-sm text-slate-500">
-                  Godkjent av {sja.godkjent_av} • {format(new Date(sja.godkjent_dato), 'dd.MM.yyyy HH:mm', { locale: nb })}
+              {sja.jobb_utfores && (
+                <span className="text-sm text-slate-500">
+                  Jobb skal utføres: {format(new Date(sja.jobb_utfores), 'dd.MM.yyyy', { locale: nb })}
                 </span>
-              }
+              )}
             </div>
           </CardContent>
         </Card>
