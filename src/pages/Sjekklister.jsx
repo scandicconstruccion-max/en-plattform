@@ -111,13 +111,13 @@ export default function Sjekklister() {
   };
 
   const filteredTemplates = templates.filter((t) => {
-    const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = (t.name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchCategory = selectedCategory === 'alle' || t.category === selectedCategory;
     return matchSearch && matchCategory;
   });
 
   const filteredChecklists = checklists.filter((c) =>
-  c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
