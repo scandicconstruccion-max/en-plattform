@@ -39,6 +39,8 @@ import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import ImageGallery from '@/components/prosjektfiler/ImageGallery';
+import ImageModal from '@/components/prosjektfiler/ImageModal';
 
 const PREDEFINED_CATEGORIES = [
   { name: 'Tegninger / Planer', icon: 'FileText', color: '#3b82f6', order: 1, children: [
@@ -90,6 +92,8 @@ export default function Prosjektfiler() {
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [uploadData, setUploadData] = useState({ description: '', access_level: 'alle' });
   const [categoryData, setCategoryData] = useState({ name: '', color: '#3b82f6', icon: 'Folder', access_level: 'alle' });
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -230,6 +234,20 @@ export default function Prosjektfiler() {
     });
   }, [files, projectFilter, selectedCategory, search, userAccessLevel]);
 
+  const imageFiles = useMemo(() => {
+    return filteredFiles.filter(f => {
+      const type = f.file_type?.toLowerCase();
+      return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(type);
+    });
+  }, [filteredFiles]);
+
+  const documentFiles = useMemo(() => {
+    return filteredFiles.filter(f => {
+      const type = f.file_type?.toLowerCase();
+      return !['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(type);
+    });
+  }, [filteredFiles]);
+
   const logActivity = (fileId, action, details) => {
     const file = files.find(f => f.id === fileId);
     const log = file?.activity_log || [];
@@ -340,6 +358,28 @@ export default function Prosjektfiler() {
     setSelectedFiles(prev => 
       prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
     );
+  };
+
+  const handleOpenImage = (image) => {
+    setSelectedImage(image);
+    setShowImageModal(true);
+  };
+
+  const handleNavigateImage = (image) => {
+    setSelectedImage(image);
+  };
+
+  const handleBulkDownload = async () => {
+    for (const fileId of selectedFiles) {
+      const file = files.find(f => f.id === fileId);
+      if (file) {
+        const link = document.createElement('a');
+        link.href = file.file_url;
+        link.download = file.name;
+        link.click();
+      }
+    }
+    toast.success(`${selectedFiles.length} filer lastet ned`);
   };
 
   return (
@@ -477,10 +517,18 @@ export default function Prosjektfiler() {
 
               {/* Bulk Actions */}
               {selectedFiles.length > 0 && (
-                <Card className="p-4 bg-blue-50 border-blue-200">
+                <Card className="p-4 bg-emerald-50 border-emerald-200">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">{selectedFiles.length} filer valgt</p>
+                    <p className="text-sm font-medium text-emerald-700">{selectedFiles.length} filer valgt</p>
                     <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleBulkDownload}
+                        className="rounded-xl"
+                      >
+                        <Download className="h-4 w-4 mr-2" /> Last ned
+                      </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="rounded-xl">
@@ -531,61 +579,88 @@ export default function Prosjektfiler() {
                   onAction={() => setShowUploadDialog(true)}
                 />
               ) : (
-                <div className="space-y-2">
-                  {filteredFiles.map(file => {
-                    const FileIcon = getFileIcon(file.file_type);
-                    const AccessIcon = accessLevelIcons[file.access_level];
-                    return (
-                      <Card key={file.id} className="p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-4">
-                          <Checkbox
-                            checked={selectedFiles.includes(file.id)}
-                            onCheckedChange={() => toggleFileSelection(file.id)}
-                          />
-                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                            <FileIcon className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{file.name}</p>
-                            <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                              <span>{formatFileSize(file.file_size)}</span>
-                              <span>•</span>
-                              <span>{format(new Date(file.created_date), 'dd.MM.yyyy', { locale: nb })}</span>
-                              <span>•</span>
-                              <AccessIcon className="h-3 w-3 inline" />
-                              <span>{accessLevelLabels[file.access_level]}</span>
-                            </div>
-                            {file.description && (
-                              <p className="text-sm text-slate-600 mt-1">{file.description}</p>
-                            )}
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <a href={file.file_url} target="_blank" rel="noopener noreferrer">
-                                  <Download className="h-4 w-4 mr-2" /> Last ned
-                                </a>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => {
-                                  deleteFileMutation.mutate(file.id);
-                                  logActivity(file.id, 'Slettet', 'Fil slettet');
-                                }}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" /> Slett
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </Card>
-                    );
-                  })}
+                <div className="space-y-6">
+                  {/* Images Section */}
+                  {imageFiles.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-slate-900 mb-4">
+                        Bilder ({imageFiles.length})
+                      </h3>
+                      <ImageGallery
+                        images={imageFiles}
+                        selectedFiles={selectedFiles}
+                        onToggleSelection={toggleFileSelection}
+                        onOpenImage={handleOpenImage}
+                        onDelete={(id) => deleteFileMutation.mutate(id)}
+                        userAccessLevel={userAccessLevel}
+                      />
+                    </div>
+                  )}
+
+                  {/* Documents Section */}
+                  {documentFiles.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-slate-900 mb-4">
+                        Dokumenter ({documentFiles.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {documentFiles.map(file => {
+                          const FileIcon = getFileIcon(file.file_type);
+                          const AccessIcon = accessLevelIcons[file.access_level];
+                          return (
+                            <Card key={file.id} className="p-4 hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-4">
+                                <Checkbox
+                                  checked={selectedFiles.includes(file.id)}
+                                  onCheckedChange={() => toggleFileSelection(file.id)}
+                                />
+                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                  <FileIcon className="h-5 w-5 text-blue-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium truncate">{file.name}</p>
+                                  <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                                    <span>{formatFileSize(file.file_size)}</span>
+                                    <span>•</span>
+                                    <span>{format(new Date(file.created_date), 'dd.MM.yyyy', { locale: nb })}</span>
+                                    <span>•</span>
+                                    <AccessIcon className="h-3 w-3 inline" />
+                                    <span>{accessLevelLabels[file.access_level]}</span>
+                                  </div>
+                                  {file.description && (
+                                    <p className="text-sm text-slate-600 mt-1">{file.description}</p>
+                                  )}
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem asChild>
+                                      <a href={file.file_url} target="_blank" rel="noopener noreferrer">
+                                        <Download className="h-4 w-4 mr-2" /> Last ned
+                                      </a>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => {
+                                        deleteFileMutation.mutate(file.id);
+                                        logActivity(file.id, 'Slettet', 'Fil slettet');
+                                      }}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" /> Slett
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -594,6 +669,19 @@ export default function Prosjektfiler() {
           </div>
         )}
       </div>
+
+      {/* Image Modal */}
+      <ImageModal
+        image={selectedImage}
+        images={imageFiles}
+        isOpen={showImageModal}
+        onClose={() => setShowImageModal(false)}
+        onDelete={(id) => {
+          deleteFileMutation.mutate(id);
+          logActivity(id, 'Slettet', 'Bilde slettet');
+        }}
+        onNavigate={handleNavigateImage}
+      />
 
       {/* Upload File Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
@@ -628,10 +716,13 @@ export default function Prosjektfiler() {
             <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:bg-slate-50">
               <Upload className="h-8 w-8 text-slate-400" />
               <span className="text-sm text-slate-500">Klikk for å velge fil</span>
+              <span className="text-xs text-slate-400">Støtter bilder, PDF, Word og Excel</span>
               <input
                 type="file"
                 onChange={handleFileUpload}
                 className="hidden"
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                capture="environment"
               />
             </label>
           </div>

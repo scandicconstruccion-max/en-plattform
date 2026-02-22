@@ -76,7 +76,6 @@ import Ordre from './pages/Ordre';
 import OrdreDetaljer from './pages/OrdreDetaljer';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
-import Prosjektfiler from './pages/Prosjektfiler';
 import RUH from './pages/RUH';
 import RUHDetaljer from './pages/RUHDetaljer';
 import Ressursplan from './pages/Ressursplan';
@@ -87,6 +86,7 @@ import SJADetaljer from './pages/SJADetaljer';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
+import Prosjektfiler from './pages/Prosjektfiler';
 import __Layout from './Layout.jsx';
 
 
@@ -120,7 +120,6 @@ export const PAGES = {
     "OrdreDetaljer": OrdreDetaljer,
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
-    "Prosjektfiler": Prosjektfiler,
     "RUH": RUH,
     "RUHDetaljer": RUHDetaljer,
     "Ressursplan": Ressursplan,
@@ -131,6 +130,7 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
+    "Prosjektfiler": Prosjektfiler,
 }
 
 export const pagesConfig = {
