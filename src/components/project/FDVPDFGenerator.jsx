@@ -395,6 +395,16 @@ export async function generateFDVPDF({
     pdf.text(company.website, pageWidth / 2, yPosition, { align: 'center' });
   }
 
+  // Åpne PDF i ny fane i stedet for å returnere
+  const pdfBlob = pdf.output('blob');
+  const pdfUrl = URL.createObjectURL(pdfBlob);
+  window.open(pdfUrl, '_blank');
+  
+  // Rydd opp URL etter 1 minutt
+  setTimeout(() => {
+    URL.revokeObjectURL(pdfUrl);
+  }, 60000);
+  
   return pdf;
 }
 

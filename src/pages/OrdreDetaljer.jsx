@@ -6,11 +6,10 @@ import { createPageUrl } from '../utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Send, CheckCircle, FileText, Clock, Download, Eye, X, Receipt } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { generatePDF } from '@/components/shared/PDFGenerator';
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
@@ -125,20 +124,7 @@ export default function OrdreDetaljer() {
   const handleDownloadPDF = async () => {
     setIsDownloading(true);
     try {
-      const element = document.getElementById('order-content');
-      const canvas = await html2canvas(element, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`Ordre-${order.order_number || 'ny'}.pdf`);
-      
-      toast.success('PDF lastet ned');
-    } catch (error) {
-      toast.error('Kunne ikke laste ned PDF');
+      await generatePDF('order-content', `Ordre-${order.order_number || 'ny'}.pdf`);
     } finally {
       setIsDownloading(false);
     }

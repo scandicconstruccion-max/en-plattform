@@ -16,6 +16,7 @@ import { Calendar, FileText, CheckCircle2, Edit, Save, X, Plus, Mail, Download }
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { generatePDF } from '@/components/shared/PDFGenerator';
 
 export default function SJADetaljer() {
   const [editMode, setEditMode] = useState(false);
@@ -151,28 +152,8 @@ export default function SJADetaljer() {
     return labels[key] || key;
   };
 
-  const handleDownloadPDF = () => {
-    // Add print-specific styles
-    const style = document.createElement('style');
-    style.id = 'print-styles';
-    style.innerHTML = `
-      @media print {
-        body * { visibility: hidden; }
-        #sja-content, #sja-content * { visibility: visible; }
-        #sja-content { position: absolute; left: 0; top: 0; width: 100%; }
-        .no-print { display: none !important; }
-        @page { margin: 2cm; }
-      }
-    `;
-    document.head.appendChild(style);
-    
-    window.print();
-    
-    // Remove print styles after printing
-    setTimeout(() => {
-      const printStyle = document.getElementById('print-styles');
-      if (printStyle) printStyle.remove();
-    }, 1000);
+  const handleDownloadPDF = async () => {
+    await generatePDF('sja-content', `SJA-${sja.arbeidsoperasjon || 'dokument'}.pdf`);
   };
 
   if (isLoading) {
@@ -213,7 +194,7 @@ export default function SJADetaljer() {
         showBack
         backUrl={createPageUrl('SJA')}
         actions={
-        <div className="flex gap-2 no-print">
+        <div className="flex gap-2">
             <Button onClick={handleDownloadPDF} variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Last ned PDF
