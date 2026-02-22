@@ -211,8 +211,8 @@ export default function Sjekklister() {
 
             <div className="grid gap-4">
                 {filteredChecklists.map((checklist) =>
-              <Card key={checklist.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}>
+              <div key={checklist.id} onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)} className="cursor-pointer">
+                <Card className="p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">{checklist.name}</h3>
