@@ -23,7 +23,7 @@ export default function Risikoanalyse() {
   const [selectedRisk, setSelectedRisk] = useState(null);
   const [filterProject, setFilterProject] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  
+
   const queryClient = useQueryClient();
 
   const { data: user } = useQuery({
@@ -76,12 +76,12 @@ export default function Risikoanalyse() {
   // Calculate risk level when konsekvens or sannsynlighet changes
   React.useEffect(() => {
     const risikonivå = formData.konsekvens * formData.sannsynlighet;
-    setFormData(prev => ({ ...prev, risikonivå }));
+    setFormData((prev) => ({ ...prev, risikonivå }));
   }, [formData.konsekvens, formData.sannsynlighet]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (selectedRisk) {
       updateMutation.mutate({ id: selectedRisk.id, data: formData });
     } else {
@@ -113,7 +113,7 @@ export default function Risikoanalyse() {
     setDialogOpen(true);
   };
 
-  const filteredRisks = risks.filter(r => {
+  const filteredRisks = risks.filter((r) => {
     if (filterProject && r.project_id !== filterProject) return false;
     if (filterStatus && r.status !== filterStatus) return false;
     return true;
@@ -146,19 +146,19 @@ export default function Risikoanalyse() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'aktiv': return 'bg-blue-100 text-blue-800';
-      case 'tiltak_igangsatt': return 'bg-yellow-100 text-yellow-800';
-      case 'lukket': return 'bg-green-100 text-green-800';
-      default: return 'bg-slate-100 text-slate-800';
+      case 'aktiv':return 'bg-blue-100 text-blue-800';
+      case 'tiltak_igangsatt':return 'bg-yellow-100 text-yellow-800';
+      case 'lukket':return 'bg-green-100 text-green-800';
+      default:return 'bg-slate-100 text-slate-800';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'aktiv': return 'Aktiv';
-      case 'tiltak_igangsatt': return 'Tiltak igangsatt';
-      case 'lukket': return 'Lukket';
-      default: return status;
+      case 'aktiv':return 'Aktiv';
+      case 'tiltak_igangsatt':return 'Tiltak igangsatt';
+      case 'lukket':return 'Lukket';
+      default:return status;
     }
   };
 
@@ -168,8 +168,8 @@ export default function Risikoanalyse() {
         title="Risikoanalyse"
         subtitle="Identifiser og håndter risikoer"
         onAdd={openCreateDialog}
-        addLabel="Ny risikoanalyse"
-      />
+        addLabel="Ny risikoanalyse" />
+
 
       <div className="px-6 lg:px-8 py-8">
         {/* Filters */}
@@ -186,9 +186,9 @@ export default function Risikoanalyse() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={null}>Alle prosjekter</SelectItem>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
+                      {projects.map((p) =>
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -207,30 +207,30 @@ export default function Risikoanalyse() {
                   </Select>
                 </div>
               </div>
-              {(filterProject || filterStatus) && (
-                <Button variant="ghost" size="sm" onClick={() => { setFilterProject(''); setFilterStatus(''); }}>
+              {(filterProject || filterStatus) &&
+              <Button variant="ghost" size="sm" onClick={() => {setFilterProject('');setFilterStatus('');}}>
                   <X className="h-4 w-4" />
                 </Button>
-              )}
+              }
             </div>
           </CardContent>
         </Card>
 
         {/* Risks List */}
-        {filteredRisks.length === 0 ? (
-          <EmptyState
-            icon={FileCheck}
-            title="Ingen risikoanalyser"
-            description="Opprett første risikoanalyse"
-            actionLabel="Ny risikoanalyse"
-            onAction={openCreateDialog}
-          />
-        ) : (
-          <div className="grid gap-4">
-            {filteredRisks.map(risk => {
-              const project = projects.find(p => p.id === risk.project_id);
-              return (
-                <Card key={risk.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditDialog(risk)}>
+        {filteredRisks.length === 0 ?
+        <EmptyState
+          icon={FileCheck}
+          title="Ingen risikoanalyser"
+          description="Opprett første risikoanalyse"
+          actionLabel="Ny risikoanalyse"
+          onAction={openCreateDialog} /> :
+
+
+        <div className="grid gap-4">
+            {filteredRisks.map((risk) => {
+            const project = projects.find((p) => p.id === risk.project_id);
+            return (
+              <Card key={risk.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditDialog(risk)}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
@@ -257,19 +257,19 @@ export default function Risikoanalyse() {
                             <span className="font-medium">{risk.sannsynlighet}/3</span>
                           </div>
                         </div>
-                        {risk.frist && (
-                          <p className="text-sm text-slate-500 mt-2">
+                        {risk.frist &&
+                      <p className="text-sm text-slate-500 mt-2">
                             Frist: {format(new Date(risk.frist), 'dd.MM.yyyy', { locale: nb })}
                           </p>
-                        )}
+                      }
                       </div>
                     </div>
                   </CardContent>
-                </Card>
-              );
-            })}
+                </Card>);
+
+          })}
           </div>
-        )}
+        }
       </div>
 
       {/* Create/Edit Dialog */}
@@ -282,8 +282,8 @@ export default function Risikoanalyse() {
             <ProjectSelector
               value={formData.project_id}
               onChange={(value) => setFormData({ ...formData, project_id: value })}
-              required
-            />
+              required />
+
 
             <div>
               <Label>Risikoområde *</Label>
@@ -309,17 +309,17 @@ export default function Risikoanalyse() {
                 value={formData.beskrivelse}
                 onChange={(e) => setFormData({ ...formData, beskrivelse: e.target.value })}
                 rows={3}
-                required
-              />
+                required />
+
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Konsekvens (1-3) *</Label>
-                <Select 
-                  value={formData.konsekvens.toString()} 
-                  onValueChange={(value) => setFormData({ ...formData, konsekvens: parseInt(value) })}
-                >
+                <Select
+                  value={formData.konsekvens.toString()}
+                  onValueChange={(value) => setFormData({ ...formData, konsekvens: parseInt(value) })}>
+
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -332,10 +332,10 @@ export default function Risikoanalyse() {
               </div>
               <div>
                 <Label>Sannsynlighet (1-3) *</Label>
-                <Select 
-                  value={formData.sannsynlighet.toString()} 
-                  onValueChange={(value) => setFormData({ ...formData, sannsynlighet: parseInt(value) })}
-                >
+                <Select
+                  value={formData.sannsynlighet.toString()}
+                  onValueChange={(value) => setFormData({ ...formData, sannsynlighet: parseInt(value) })}>
+
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -363,23 +363,23 @@ export default function Risikoanalyse() {
                 value={formData.tiltak}
                 onChange={(e) => setFormData({ ...formData, tiltak: e.target.value })}
                 rows={3}
-                placeholder="Beskriv foreslåtte tiltak for å redusere risikoen"
-              />
+                placeholder="Beskriv foreslåtte tiltak for å redusere risikoen" />
+
             </div>
 
             <EmployeeSelector
               label="Ansvarlig for oppfølging"
               value={formData.ansvarlig}
-              onChange={(email, name) => setFormData({ ...formData, ansvarlig: email, ansvarlig_navn: name })}
-            />
+              onChange={(email, name) => setFormData({ ...formData, ansvarlig: email, ansvarlig_navn: name })} />
+
 
             <div>
               <Label>Frist</Label>
               <Input
                 type="date"
                 value={formData.frist}
-                onChange={(e) => setFormData({ ...formData, frist: e.target.value })}
-              />
+                onChange={(e) => setFormData({ ...formData, frist: e.target.value })} />
+
             </div>
 
             <div>
@@ -400,13 +400,13 @@ export default function Risikoanalyse() {
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Avbryt
               </Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-green-700 text-primary-foreground px-4 py-2 text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9">
                 {selectedRisk ? 'Oppdater' : 'Opprett'}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-    </div>
-  );
+    </div>);
+
 }
