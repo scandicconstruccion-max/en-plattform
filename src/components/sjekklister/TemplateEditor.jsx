@@ -12,7 +12,8 @@ import {
 import { Card } from '@/components/ui/card';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { v4 as uuidv4 } from 'crypto-js';
+
+const generateId = () => `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const categories = {
   'tømrer': '🪵 Tømrer',
@@ -84,7 +85,7 @@ export default function TemplateEditor({ template, onSave, onCancel }) {
 
   const handleAddCustomField = () => {
     setCustomFields([...customFields, {
-      id: uuidv4?.() || `field_${Date.now()}`,
+      id: generateId(),
       label: 'Nytt felt',
       field_type: 'text',
       required: false,
