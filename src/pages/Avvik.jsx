@@ -455,12 +455,12 @@ export default function Avvik() {
         selectedDeviations.length > 0 &&
         <div className="flex gap-2">
               <Button
-            onClick={() => setShowViewDialog(true)}
+            onClick={() => setShowBulkEmailDialog(true)}
             variant="outline"
             className="rounded-xl gap-2">
 
-                <Eye className="h-4 w-4" />
-                Se ({selectedDeviations.length})
+                <Send className="h-4 w-4" />
+                Send på nytt ({selectedDeviations.length})
               </Button>
               <Button
             onClick={() => setShowStatusDialog(true)}
