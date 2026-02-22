@@ -195,54 +195,56 @@ export default function Sjekklister() {
 
           {/* Project Checklists Tab */}
           <TabsContent value="project" className="space-y-4">
-            {!selectedProject ?
-            <EmptyState
-              title="Velg prosjekt"
-              description="Velg et prosjekt fra dropdown øverst til høyre" /> :
-
-            checklistsLoading ?
-            <div className="text-center py-8">Laster sjekklister...</div> :
-            filteredChecklists.length === 0 ?
-            <EmptyState
-              title="Ingen sjekklister"
-              description="Opprett en ny sjekkliste eller velg fra malbibliotek"
-              icon={null} /> :
-
-
-            <div className="grid gap-4">
-              {filteredChecklists.map((checklist) =>
-                <div key={checklist.id} onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)} className="cursor-pointer">
-                  <Card className="p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{checklist.name}</h3>
-                        <div className="flex gap-4 mt-2 text-sm text-slate-600">
-                          {checklist.location && <span>📍 {checklist.location}</span>}
-                          {checklist.date && <span>📅 {checklist.date}</span>}
-                          {checklist.assigned_to_name && <span>👤 {checklist.assigned_to_name}</span>}
+            {!selectedProject && (
+              <EmptyState
+                title="Velg prosjekt"
+                description="Velg et prosjekt fra dropdown øverst til høyre" />
+            )}
+            {selectedProject && checklistsLoading && (
+              <div className="text-center py-8">Laster sjekklister...</div>
+            )}
+            {selectedProject && !checklistsLoading && filteredChecklists.length === 0 && (
+              <EmptyState
+                title="Ingen sjekklister"
+                description="Opprett en ny sjekkliste eller velg fra malbibliotek"
+                icon={null} />
+            )}
+            {selectedProject && !checklistsLoading && filteredChecklists.length > 0 && (
+              <div className="grid gap-4">
+                {filteredChecklists.map((checklist) =>
+                  <div key={checklist.id} onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)} className="cursor-pointer">
+                    <Card className="p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg">{checklist.name}</h3>
+                          <div className="flex gap-4 mt-2 text-sm text-slate-600">
+                            {checklist.location && <span>📍 {checklist.location}</span>}
+                            {checklist.date && <span>📅 {checklist.date}</span>}
+                            {checklist.assigned_to_name && <span>👤 {checklist.assigned_to_name}</span>}
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <StatusBadge status={checklist.status} />
+                            <span className="text-xs text-slate-500">
+                              {checklist.responses?.filter((r) => r.status === 'ok').length || 0} / {checklist.items?.length || 0} utført
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex gap-2 mt-3">
-                          <StatusBadge status={checklist.status} />
-                          <span className="text-xs text-slate-500">
-                            {checklist.responses?.filter((r) => r.status === 'ok').length || 0} / {checklist.items?.length || 0} utført
-                          </span>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteChecklistMutation.mutate(checklist.id);
+                          }}
+                          className="text-red-500 hover:text-red-700">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteChecklistMutation.mutate(checklist.id);
-                        }}
-                        className="text-red-500 hover:text-red-700">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </Card>
-                </div>
-              )}
-            </div>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
 
           {/* Templates Tab */}
