@@ -152,7 +152,27 @@ export default function SJADetaljer() {
   };
 
   const handleDownloadPDF = () => {
+    // Add print-specific styles
+    const style = document.createElement('style');
+    style.id = 'print-styles';
+    style.innerHTML = `
+      @media print {
+        body * { visibility: hidden; }
+        #sja-content, #sja-content * { visibility: visible; }
+        #sja-content { position: absolute; left: 0; top: 0; width: 100%; }
+        .no-print { display: none !important; }
+        @page { margin: 2cm; }
+      }
+    `;
+    document.head.appendChild(style);
+    
     window.print();
+    
+    // Remove print styles after printing
+    setTimeout(() => {
+      const printStyle = document.getElementById('print-styles');
+      if (printStyle) printStyle.remove();
+    }, 1000);
   };
 
   if (isLoading) {
@@ -193,7 +213,7 @@ export default function SJADetaljer() {
         showBack
         backUrl={createPageUrl('SJA')}
         actions={
-        <div className="flex gap-2">
+        <div className="flex gap-2 no-print">
             <Button onClick={handleDownloadPDF} variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Last ned PDF
@@ -227,7 +247,7 @@ export default function SJADetaljer() {
         } />
 
 
-      <div className="px-6 lg:px-8 py-8 space-y-6">
+      <div id="sja-content" className="px-6 lg:px-8 py-8 space-y-6">
         {/* Status */}
         <Card className="border-0 shadow-sm">
           <CardContent className="p-6">
