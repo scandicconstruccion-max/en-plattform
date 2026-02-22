@@ -140,7 +140,7 @@ export default function SjekklisteDetaljer() {
   if (!checklist) return <div className="p-6">Sjekklisten ble ikke funnet</div>;
 
   const completionPercentage = Math.round(
-    ((checklist.responses?.length || 0) / (checklist.items?.length || 1)) * 100
+    ((checklist.responses?.filter(r => r.status && ['ok', 'ikke_ok', 'avvik'].includes(r.status)).length || 0) / (checklist.items?.length || 1)) * 100
   );
 
   return (
