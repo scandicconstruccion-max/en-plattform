@@ -51,9 +51,9 @@ export default function Sjekklister() {
 
   const { data: checklists = [], isLoading: checklistsLoading } = useQuery({
     queryKey: ['checklists', selectedProject?.id],
-    queryFn: () => selectedProject?.id 
-      ? base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100)
-      : Promise.resolve([]),
+    queryFn: () => selectedProject?.id ?
+    base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100) :
+    Promise.resolve([]),
     enabled: !!selectedProject?.id
   });
 
@@ -92,14 +92,14 @@ export default function Sjekklister() {
     });
   };
 
-  const filteredTemplates = templates.filter(t => {
+  const filteredTemplates = templates.filter((t) => {
     const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCategory = selectedCategory === 'alle' || t.category === selectedCategory;
     return matchSearch && matchCategory;
   });
 
-  const filteredChecklists = checklists.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredChecklists = checklists.filter((c) =>
+  c.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -109,19 +109,19 @@ export default function Sjekklister() {
           title="Sjekklister"
           subtitle="Håndter sjekklistemaler og prosjektsjekklister"
           actions={
-            activeTab === 'templates' ? (
-              <Button onClick={() => setShowNewTemplateDialog(true)} className="gap-2">
+          activeTab === 'templates' ?
+          <Button onClick={() => setShowNewTemplateDialog(true)} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Ny mal
-              </Button>
-            ) : (
-              <Button onClick={() => setShowNewChecklistDialog(true)} className="gap-2">
+              </Button> :
+
+          <Button onClick={() => setShowNewChecklistDialog(true)} className="bg-green-700 text-primary-foreground px-4 py-2 text-sm font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9 gap-2">
                 <Plus className="h-4 w-4" />
                 Ny sjekkliste
               </Button>
-            )
-          }
-        />
+
+          } />
+
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
           <TabsList>
@@ -131,24 +131,24 @@ export default function Sjekklister() {
 
           {/* Project Checklists Tab */}
           <TabsContent value="project" className="space-y-4">
-            {!selectedProject ? (
-              <EmptyState
-                title="Velg prosjekt"
-                description="Velg et prosjekt fra dropdown øverst til høyre"
-              />
-            ) : checklistsLoading ? (
-              <div className="text-center py-8">Laster sjekklister...</div>
-            ) : filteredChecklists.length === 0 ? (
-              <EmptyState
-                title="Ingen sjekklister"
-                description="Opprett en ny sjekkliste eller velg fra malbibliotek"
-                icon={null}
-              />
-            ) : (
-              <div className="grid gap-4">
-                {filteredChecklists.map((checklist) => (
-                  <Card key={checklist.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}>
+            {!selectedProject ?
+            <EmptyState
+              title="Velg prosjekt"
+              description="Velg et prosjekt fra dropdown øverst til høyre" /> :
+
+            checklistsLoading ?
+            <div className="text-center py-8">Laster sjekklister...</div> :
+            filteredChecklists.length === 0 ?
+            <EmptyState
+              title="Ingen sjekklister"
+              description="Opprett en ny sjekkliste eller velg fra malbibliotek"
+              icon={null} /> :
+
+
+            <div className="grid gap-4">
+                {filteredChecklists.map((checklist) =>
+              <Card key={checklist.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">{checklist.name}</h3>
@@ -160,26 +160,26 @@ export default function Sjekklister() {
                         <div className="flex gap-2 mt-3">
                           <StatusBadge status={checklist.status} />
                           <span className="text-xs text-slate-500">
-                            {checklist.responses?.filter(r => r.status === 'ok').length || 0} / {checklist.items?.length || 0} utført
+                            {checklist.responses?.filter((r) => r.status === 'ok').length || 0} / {checklist.items?.length || 0} utført
                           </span>
                         </div>
                       </div>
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteChecklistMutation.mutate(checklist.id);
-                        }}
-                        className="text-red-500 hover:text-red-700"
-                      >
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteChecklistMutation.mutate(checklist.id);
+                    }}
+                    className="text-red-500 hover:text-red-700">
+
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </Card>
-                ))}
+              )}
               </div>
-            )}
+            }
           </TabsContent>
 
           {/* Templates Tab */}
@@ -191,8 +191,8 @@ export default function Sjekklister() {
                   placeholder="Søk i maler..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
+                  className="pl-9" />
+
               </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger className="w-40">
@@ -213,24 +213,24 @@ export default function Sjekklister() {
               </Select>
             </div>
 
-            {templatesLoading ? (
-              <div className="text-center py-8">Laster maler...</div>
-            ) : filteredTemplates.length === 0 ? (
-              <EmptyState
-                title="Ingen maler"
-                description="Opprett din første sjekklistemal"
-              />
-            ) : (
-              <div className="grid gap-4">
-                {filteredTemplates.map((template) => (
-                  <Card key={template.id} className="p-4 hover:shadow-md transition-shadow">
+            {templatesLoading ?
+            <div className="text-center py-8">Laster maler...</div> :
+            filteredTemplates.length === 0 ?
+            <EmptyState
+              title="Ingen maler"
+              description="Opprett din første sjekklistemal" /> :
+
+
+            <div className="grid gap-4">
+                {filteredTemplates.map((template) =>
+              <Card key={template.id} className="p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 cursor-pointer"
-                        onClick={() => navigate(createPageUrl('SjekklisteMalDetaljer') + `?id=${template.id}`)}>
+                  onClick={() => navigate(createPageUrl('SjekklisteMalDetaljer') + `?id=${template.id}`)}>
                         <h3 className="font-semibold text-lg">{template.name}</h3>
-                        {template.description && (
-                          <p className="text-sm text-slate-600 mt-1">{template.description}</p>
-                        )}
+                        {template.description &&
+                    <p className="text-sm text-slate-600 mt-1">{template.description}</p>
+                    }
                         <div className="flex gap-3 mt-2 text-sm text-slate-500">
                           <span>📂 {template.category}</span>
                           <span>v{template.version}</span>
@@ -239,29 +239,29 @@ export default function Sjekklister() {
                       </div>
                       <div className="flex gap-2">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            // Duplicate template
-                          }}
-                          title="Duplisere mal"
-                        >
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+
+                        // Duplicate template
+                      }} title="Duplisere mal">
+
                           <Copy className="h-4 w-4" />
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteTemplateMutation.mutate(template.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteTemplateMutation.mutate(template.id)}
+                      className="text-red-500 hover:text-red-700">
+
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
                   </Card>
-                ))}
+              )}
               </div>
-            )}
+            }
           </TabsContent>
         </Tabs>
       </div>
@@ -279,8 +279,8 @@ export default function Sjekklister() {
                 id="name"
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="F.eks. Kvalitetskontroll Tak"
-              />
+                placeholder="F.eks. Kvalitetskontroll Tak" />
+
             </div>
             <div>
               <Label htmlFor="category">Kategori</Label>
@@ -307,8 +307,8 @@ export default function Sjekklister() {
                 id="description"
                 value={newTemplateDescription}
                 onChange={(e) => setNewTemplateDescription(e.target.value)}
-                placeholder="Beskrivelse av malen..."
-              />
+                placeholder="Beskrivelse av malen..." />
+
             </div>
           </div>
           <DialogFooter>
@@ -321,6 +321,6 @@ export default function Sjekklister() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
+    </div>);
+
 }
