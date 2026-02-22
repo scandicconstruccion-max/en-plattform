@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ChevronLeft, Check, CheckCircle2 } from 'lucide-react';
 import ChecklistItemCard from '@/components/sjekklister/ChecklistItemCard.jsx';
 
@@ -167,8 +169,10 @@ export default function SjekklisteDetaljer() {
   }
 
   const completedItems = checklist.responses?.filter(r => r.status).length || 0;
-  const totalItems = checklist.items?.length || 1;
-  const progress = Math.round((completedItems / totalItems) * 100);
+  const totalItems = checklist.sections && checklist.sections.length > 0
+    ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+    : (checklist.items?.length || 1);
+  const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
   const isComplete = progress === 100 && checklist.status === 'fullfort';
 
   return (
@@ -229,22 +233,141 @@ export default function SjekklisteDetaljer() {
           </Card>
         </div>
 
-        <div className="space-y-4">
-          {(checklist.items || []).map((item, idx) => {
-            const response = checklist.responses?.find(r => r.item_order === idx);
-            return (
-              <ChecklistItemCard
-                key={idx}
-                item={item}
-                itemIndex={idx}
-                response={response}
-                onStatusChange={handleStatusChange}
-                onCommentChange={handleCommentChange}
-                onImageAdd={handleImageAdd}
-                onImageRemove={handleImageRemove}
-              />
-            );
-          })}
+        <div className="space-y-6">
+          {/* Seksjoner */}
+          {(checklist.sections || []).length > 0 ? (
+            checklist.sections.map((section, secIdx) => (
+              <div key={secIdx}>
+                {section.title && (
+                  <div className="mb-4">
+                    <h2 className="text-xl font-bold text-slate-900">{section.title}</h2>
+                    {section.description && (
+                      <p className="text-sm text-slate-600 mt-1">{section.description}</p>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-4">
+                  {(section.items || []).map((item, itemIdx) => {
+                    const globalIdx = (checklist.sections
+                      .slice(0, secIdx)
+                      .reduce((sum, s) => sum + (s.items?.length || 0), 0)) + itemIdx;
+                    const response = checklist.responses?.find(r => r.item_order === globalIdx);
+                    
+                    // Sjekk betinget visning
+                    if (item.conditional_display) {
+                      const conditionalResponse = checklist.responses?.find(
+                        r => r.item_order === item.conditional_display.item_order
+                      );
+                      if (!conditionalResponse || conditionalResponse.status !== item.conditional_display.required_status) {
+                        return null;
+                      }
+                    }
+
+                    return (
+                      <ChecklistItemCard
+                        key={globalIdx}
+                        item={item}
+                        itemIndex={globalIdx}
+                        response={response}
+                        onStatusChange={handleStatusChange}
+                        onCommentChange={handleCommentChange}
+                        onImageAdd={handleImageAdd}
+                        onImageRemove={handleImageRemove}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : (
+            // Legacy items uten seksjoner
+            (checklist.items || []).map((item, idx) => {
+              const response = checklist.responses?.find(r => r.item_order === idx);
+              return (
+                <ChecklistItemCard
+                  key={idx}
+                  item={item}
+                  itemIndex={idx}
+                  response={response}
+                  onStatusChange={handleStatusChange}
+                  onCommentChange={handleCommentChange}
+                  onImageAdd={handleImageAdd}
+                  onImageRemove={handleImageRemove}
+                />
+              );
+            })
+          )}
+
+          {/* Egendefinerte felt */}
+          {(checklist.custom_fields_data || []).length > 0 && (
+            <Card className="p-6 bg-slate-50 border-l-4 border-l-blue-600">
+              <h3 className="font-semibold text-lg mb-4">Tilleggsinformasjon</h3>
+              <div className="space-y-4">
+                {checklist.custom_fields_data.map((field) => (
+                  <div key={field.field_id}>
+                    <label className="text-sm font-medium text-slate-700 block mb-2">
+                      {field.label}
+                    </label>
+                    {field.field_type === 'textarea' ? (
+                      <Textarea
+                        defaultValue={field.value || ''}
+                        onChange={(e) => {
+                          const updated = checklist.custom_fields_data.map(f =>
+                            f.field_id === field.field_id
+                              ? { ...f, value: e.target.value }
+                              : f
+                          );
+                          updateMutation.mutate({ custom_fields_data: updated });
+                        }}
+                        placeholder="Skriv inn verdi"
+                      />
+                    ) : field.field_type === 'date' ? (
+                      <Input
+                        type="date"
+                        defaultValue={field.value || ''}
+                        onChange={(e) => {
+                          const updated = checklist.custom_fields_data.map(f =>
+                            f.field_id === field.field_id
+                              ? { ...f, value: e.target.value }
+                              : f
+                          );
+                          updateMutation.mutate({ custom_fields_data: updated });
+                        }}
+                      />
+                    ) : field.field_type === 'number' ? (
+                      <Input
+                        type="number"
+                        defaultValue={field.value || ''}
+                        onChange={(e) => {
+                          const updated = checklist.custom_fields_data.map(f =>
+                            f.field_id === field.field_id
+                              ? { ...f, value: e.target.value }
+                              : f
+                          );
+                          updateMutation.mutate({ custom_fields_data: updated });
+                        }}
+                        placeholder="Skriv inn tall"
+                      />
+                    ) : (
+                      <Input
+                        type="text"
+                        defaultValue={field.value || ''}
+                        onChange={(e) => {
+                          const updated = checklist.custom_fields_data.map(f =>
+                            f.field_id === field.field_id
+                              ? { ...f, value: e.target.value }
+                              : f
+                          );
+                          updateMutation.mutate({ custom_fields_data: updated });
+                        }}
+                        placeholder="Skriv inn tekst"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>
