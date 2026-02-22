@@ -206,7 +206,7 @@ export default function SjekklisteDetaljer() {
                 'p-4 transition-colors',
                 response?.status === 'ok' && 'bg-green-50 border-green-200',
                 response?.status === 'ikke_ok' && 'bg-red-50 border-red-200',
-                response?.status === 'ikke_relevant' && 'bg-slate-100'
+                response?.status === 'avvik' && 'bg-yellow-50 border-yellow-200'
               )}>
                 <div className="mb-3">
                   <h3 className="font-semibold text-base">{idx + 1}. {item.title}</h3>
