@@ -11,7 +11,7 @@ import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import KPISection from '@/components/dashboard/KPISection';
 import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
 import {
-  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText
+  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -115,6 +115,25 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Moduler</h2>
           <ModuleGrid activeModules={activeModules} />
         </div>
+
+        {/* Checklist Templates Quick Access */}
+        <Link 
+          to={createPageUrl('Sjekklister')}
+          className="block"
+        >
+          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950">
+            <div className="p-6 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center">
+                <CheckSquare className="h-6 w-6 text-emerald-700 dark:text-emerald-300" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Sjekklistemaler</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Opprett og administrer sjekklistemaler for prosjektene dine</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400 ml-auto" />
+            </div>
+          </Card>
+        </Link>
 
         {/* Bottom Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
