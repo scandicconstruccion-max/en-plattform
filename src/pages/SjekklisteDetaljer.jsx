@@ -240,14 +240,15 @@ export default function SjekklisteDetaljer() {
                     Ikke OK
                   </Button>
                   <Button
-                    onClick={() => handleSetResponse(idx, 'ikke_relevant')}
-                    variant={response?.status === 'ikke_relevant' ? 'default' : 'outline'}
+                    onClick={() => handleSetResponse(idx, 'avvik')}
+                    variant={response?.status === 'avvik' ? 'default' : 'outline'}
                     className={cn(
-                      'flex-1 h-12 text-base font-semibold',
-                      response?.status === 'ikke_relevant' && 'bg-slate-600 hover:bg-slate-700'
+                      'flex-1 h-12 text-base font-semibold gap-2',
+                      response?.status === 'avvik' && 'bg-yellow-600 hover:bg-yellow-700'
                     )}
                   >
-                    -
+                    <AlertCircle className="h-5 w-5" />
+                    Avvik
                   </Button>
                 </div>
 
