@@ -48,7 +48,7 @@ const PREDEFINED_CATEGORIES = [
   ]},
   { name: 'Beskrivelser / Spesifikasjoner', icon: 'FileText', color: '#10b981', order: 2 },
   { name: 'Kontrakt / Avtaler', icon: 'FileText', color: '#f59e0b', order: 3 },
-  { name: 'Faktura / Økonomi', icon: 'FileText', color: '#ef4444', order: 4 },
+  { name: 'Økonomi', icon: 'FileText', color: '#ef4444', order: 4 },
   { name: 'Møtereferater / Kommunikasjon', icon: 'FileText', color: '#8b5cf6', order: 5 },
   { name: 'Tillatelser / Sertifikater', icon: 'FileText', color: '#06b6d4', order: 6 },
   { name: 'Bilder', icon: 'FileImage', color: '#ec4899', order: 7 },
