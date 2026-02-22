@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { Calendar, FileText, CheckCircle2, Edit, Save, X, Plus, Mail } from 'lucide-react';
+import { Calendar, FileText, CheckCircle2, Edit, Save, X, Plus, Mail, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -155,6 +155,10 @@ export default function SJADetaljer() {
     return labels[key] || key;
   };
 
+  const handleDownloadPDF = () => {
+    window.print();
+  };
+
   if (isLoading) {
     return <div className="p-8">Laster...</div>;
   }
@@ -181,8 +185,11 @@ export default function SJADetaljer() {
         backUrl={createPageUrl('SJA')}
         actions={
         <div className="flex gap-2">
+            <Button onClick={handleDownloadPDF} variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Last ned PDF
+            </Button>
             
-
 
 
 

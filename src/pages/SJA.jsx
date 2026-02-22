@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -24,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { ClipboardCheck, Search, Calendar, FileText, CheckCircle2, X, Plus, UserPlus } from 'lucide-react';
+import { ClipboardCheck, Search, Calendar, FileText, CheckCircle2, X, Plus, UserPlus, Download, Trash2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -32,6 +33,8 @@ export default function SJA() {
   const [showDialog, setShowDialog] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('');
+  const [selectedSJAs, setSelectedSJAs] = useState([]);
   const [formData, setFormData] = useState({
     project_id: '',
     sikkerhetsanalyse_utfort: new Date().toISOString().split('T')[0],
@@ -131,8 +134,50 @@ export default function SJA() {
                           sja.beskrivelse_av_arbeidsoperasjonen?.toLowerCase().includes(search.toLowerCase()) ||
                           sja.beskrivelse_av_arbeid?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || sja.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesProject = !projectFilter || sja.project_id === projectFilter;
+    return matchesSearch && matchesStatus && matchesProject;
   });
+
+  const toggleSelectSJA = (id) => {
+    setSelectedSJAs(prev => 
+      prev.includes(id) ? prev.filter(sjaId => sjaId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedSJAs.length === filteredSJA.length) {
+      setSelectedSJAs([]);
+    } else {
+      setSelectedSJAs(filteredSJA.map(sja => sja.id));
+    }
+  };
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids) => {
+      for (const id of ids) {
+        await base44.entities.SJA.delete(id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sja'] });
+      setSelectedSJAs([]);
+      toast.success('SJA slettet');
+    }
+  });
+
+  const handleBulkDelete = () => {
+    if (confirm(`Er du sikker på at du vil slette ${selectedSJAs.length} SJA?`)) {
+      deleteMutation.mutate(selectedSJAs);
+    }
+  };
+
+  const handleBulkDownloadPDF = () => {
+    toast.info('PDF-nedlasting av flere SJA kommer snart');
+  };
+
+  const handleBulkResend = () => {
+    toast.info('Send på nytt kommer snart');
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -159,6 +204,24 @@ export default function SJA() {
         icon={ClipboardCheck}
         onAdd={() => setShowDialog(true)}
         addLabel="Ny SJA"
+        actions={
+          selectedSJAs.length > 0 && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleBulkDelete}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Slett ({selectedSJAs.length})
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleBulkResend}>
+                <Send className="h-4 w-4 mr-2" />
+                Send på nytt
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleBulkDownloadPDF}>
+                <Download className="h-4 w-4 mr-2" />
+                Last ned PDF
+              </Button>
+            </div>
+          )
+        }
       />
 
       <div className="px-6 lg:px-8 py-6">
@@ -173,6 +236,19 @@ export default function SJA() {
               className="pl-10 rounded-xl"
             />
           </div>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-full lg:w-48 rounded-xl">
+              <SelectValue placeholder="Alle prosjekter" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={null}>Alle prosjekter</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full lg:w-48 rounded-xl">
               <SelectValue placeholder="Status" />
