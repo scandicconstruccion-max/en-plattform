@@ -898,14 +898,14 @@ export default function Tilbud() {
         </DialogContent>
       </Dialog>
 
-      {/* Send Email Dialog */}
-      <SendEmailDialog
-        open={showEmailDialog}
-        onOpenChange={setShowEmailDialog}
-        type="tilbud"
-        item={selectedQuote}
-        defaultEmail={selectedQuote?.customer_email || ''}
-        onSent={handleEmailSent} />
+      {/* Send Tilbud Dialog */}
+      <SendTilbudDialog
+        open={showSendDialog}
+        onOpenChange={setShowSendDialog}
+        selectedQuotes={selectedQuotes}
+        quoteList={quotes}
+        projects={projects}
+      />
 
 
       {/* Delete Confirmation Dialog */}
