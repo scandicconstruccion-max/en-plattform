@@ -1,446 +1,324 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Card } from '@/components/ui/card';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
 import PageHeader from '@/components/shared/PageHeader';
-import StatusBadge from '@/components/shared/StatusBadge';
+import { Plus, Settings, Trash2, Copy, Search } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import EmptyState from '@/components/shared/EmptyState';
-import ProjectSelector from '@/components/shared/ProjectSelector';
-import { CheckSquare, Search, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import { format } from 'date-fns';
-import { nb } from 'date-fns/locale';
-
-const checklistTemplates = [
-  {
-    name: 'HMS-sjekk',
-    items: [
-      'Verneutstyr på plass',
-      'Førstehjelpsutstyr tilgjengelig',
-      'Rømningsveier fri',
-      'Brannslukker tilgjengelig',
-      'Sikkerhetsskilt på plass'
-    ]
-  },
-  {
-    name: 'Kvalitetskontroll betong',
-    items: [
-      'Armering kontrollert',
-      'Forskaling sikret',
-      'Betongkvalitet verifisert',
-      'Herdetid dokumentert',
-      'Overflate godkjent'
-    ]
-  },
-  {
-    name: 'Oppstartsmøte',
-    items: [
-      'Prosjektplan gjennomgått',
-      'HMS-gjennomgang',
-      'Kontaktinformasjon delt',
-      'Adkomst og riggområde avklart',
-      'Tidsplan bekreftet'
-    ]
-  },
-  {
-    name: 'Egendefinert',
-    items: []
-  }
-];
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import StatusBadge from '@/components/shared/StatusBadge';
+import { cn } from '@/lib/utils';
+import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 
 export default function Sjekklister() {
-  const [showDialog, setShowDialog] = useState(false);
-  const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [selectedChecklist, setSelectedChecklist] = useState(null);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [expandedChecklists, setExpandedChecklists] = useState({});
-  const [formData, setFormData] = useState({
-    title: '',
-    project_id: '',
-    template_name: '',
-    items: []
-  });
-
+  const [activeTab, setActiveTab] = useState('project');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('alle');
+  const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
+  const [showNewChecklistDialog, setShowNewChecklistDialog] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateCategory, setNewTemplateCategory] = useState('annet');
+  const [newTemplateDescription, setNewTemplateDescription] = useState('');
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => base44.auth.me()
   });
 
-  const { data: checklists = [], isLoading } = useQuery({
-    queryKey: ['checklists'],
-    queryFn: () => base44.entities.Checklist.list('-created_date'),
+  const { data: selectedProject } = useQuery({
+    queryKey: ['selectedProject'],
+    queryFn: async () => {
+      const project = localStorage.getItem('selectedProject');
+      if (!project) return null;
+      return JSON.parse(project);
+    }
   });
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+    queryKey: ['checklistTemplates'],
+    queryFn: () => base44.entities.ChecklistTemplate.list('-updated_date', 100)
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Checklist.create(data),
+  const { data: checklists = [], isLoading: checklistsLoading } = useQuery({
+    queryKey: ['checklists', selectedProject?.id],
+    queryFn: () => selectedProject?.id 
+      ? base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100)
+      : Promise.resolve([]),
+    enabled: !!selectedProject?.id
+  });
+
+  const createTemplateMutation = useMutation({
+    mutationFn: (data) => base44.entities.ChecklistTemplate.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checklistTemplates'] });
+      setShowNewTemplateDialog(false);
+      setNewTemplateName('');
+      setNewTemplateDescription('');
+      setNewTemplateCategory('annet');
+    }
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (id) => base44.entities.ChecklistTemplate.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checklistTemplates'] });
+    }
+  });
+
+  const deleteChecklistMutation = useMutation({
+    mutationFn: (id) => base44.entities.Checklist.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklists'] });
-      setShowDialog(false);
-      resetForm();
-    },
+    }
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Checklist.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checklists'] });
-    },
-  });
-
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      project_id: '',
-      template_name: '',
+  const handleCreateTemplate = () => {
+    if (!newTemplateName.trim()) return;
+    createTemplateMutation.mutate({
+      name: newTemplateName,
+      category: newTemplateCategory,
+      description: newTemplateDescription,
       items: []
     });
   };
 
-  const handleTemplateSelect = (templateName) => {
-    const template = checklistTemplates.find(t => t.name === templateName);
-    if (template) {
-      setFormData({
-        ...formData,
-        template_name: templateName,
-        items: template.items.map(text => ({ text, checked: false, comment: '' }))
-      });
-    }
-  };
-
-  const handleAddItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { text: '', checked: false, comment: '' }]
-    });
-  };
-
-  const handleRemoveItem = (index) => {
-    setFormData({
-      ...formData,
-      items: formData.items.filter((_, i) => i !== index)
-    });
-  };
-
-  const handleItemChange = (index, field, value) => {
-    const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setFormData({ ...formData, items: newItems });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    createMutation.mutate({
-      ...formData,
-      status: 'ikke_startet'
-    });
-  };
-
-  const handleCheckItem = (checklist, itemIndex, checked) => {
-    const newItems = [...checklist.items];
-    newItems[itemIndex] = { ...newItems[itemIndex], checked };
-    
-    const allChecked = newItems.every(item => item.checked);
-    const anyChecked = newItems.some(item => item.checked);
-    
-    let status = 'ikke_startet';
-    if (allChecked) {
-      status = 'fullfort';
-    } else if (anyChecked) {
-      status = 'pagarende';
-    }
-
-    updateMutation.mutate({
-      id: checklist.id,
-      data: {
-        items: newItems,
-        status,
-        completed_date: allChecked ? new Date().toISOString().split('T')[0] : null,
-        signed_by: allChecked ? user?.email : null
-      }
-    });
-  };
-
-  const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
-    return project?.name || 'Ukjent prosjekt';
-  };
-
-  const getProgress = (items) => {
-    if (!items?.length) return 0;
-    return Math.round((items.filter(i => i.checked).length / items.length) * 100);
-  };
-
-  const toggleExpanded = (id) => {
-    setExpandedChecklists(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const filteredChecklists = checklists.filter(c => {
-    const matchesSearch = c.title?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  const filteredTemplates = templates.filter(t => {
+    const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCategory = selectedCategory === 'alle' || t.category === selectedCategory;
+    return matchSearch && matchCategory;
   });
 
+  const filteredChecklists = checklists.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <PageHeader
-        title="Sjekklister"
-        subtitle={`${checklists.length} sjekklister totalt`}
-        onAdd={() => setShowDialog(true)}
-        addLabel="Ny sjekkliste"
-      />
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        <PageHeader
+          title="Sjekklister"
+          subtitle="Håndter sjekklistemaler og prosjektsjekklister"
+          actions={
+            activeTab === 'templates' ? (
+              <Button onClick={() => setShowNewTemplateDialog(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Ny mal
+              </Button>
+            ) : (
+              <Button onClick={() => setShowNewChecklistDialog(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Ny sjekkliste
+              </Button>
+            )
+          }
+        />
 
-      <div className="px-6 lg:px-8 py-6">
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Søk etter sjekklister..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 rounded-xl border-slate-200"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-40 rounded-xl">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle statuser</SelectItem>
-              <SelectItem value="ikke_startet">Ikke startet</SelectItem>
-              <SelectItem value="pagarende">Pågående</SelectItem>
-              <SelectItem value="fullfort">Fullført</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
+          <TabsList>
+            <TabsTrigger value="project">Prosjektsjekklister</TabsTrigger>
+            <TabsTrigger value="templates">Sjekklistemaler</TabsTrigger>
+          </TabsList>
 
-        {/* Checklists */}
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1,2,3].map(i => (
-              <Card key={i} className="p-6 animate-pulse">
-                <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
-                <div className="h-4 bg-slate-200 rounded w-1/2" />
-              </Card>
-            ))}
-          </div>
-        ) : filteredChecklists.length === 0 ? (
-          <EmptyState
-            icon={CheckSquare}
-            title="Ingen sjekklister"
-            description="Opprett sjekklister for kvalitetskontroll og HMS"
-            actionLabel="Ny sjekkliste"
-            onAction={() => setShowDialog(true)}
-          />
-        ) : (
-          <div className="space-y-4">
-            {filteredChecklists.map((checklist) => {
-              const progress = getProgress(checklist.items);
-              const isExpanded = expandedChecklists[checklist.id];
-              
-              return (
-                <Card key={checklist.id} className="border-0 shadow-sm overflow-hidden">
-                  <div
-                    className="p-6 cursor-pointer hover:bg-slate-50 transition-colors"
-                    onClick={() => toggleExpanded(checklist.id)}
-                  >
+          {/* Project Checklists Tab */}
+          <TabsContent value="project" className="space-y-4">
+            {!selectedProject ? (
+              <EmptyState
+                title="Velg prosjekt"
+                description="Velg et prosjekt fra dropdown øverst til høyre"
+              />
+            ) : checklistsLoading ? (
+              <div className="text-center py-8">Laster sjekklister...</div>
+            ) : filteredChecklists.length === 0 ? (
+              <EmptyState
+                title="Ingen sjekklister"
+                description="Opprett en ny sjekkliste eller velg fra malbibliotek"
+                icon={null}
+              />
+            ) : (
+              <div className="grid gap-4">
+                {filteredChecklists.map((checklist) => (
+                  <Card key={checklist.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}>
                     <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                          progress === 100 ? 'bg-emerald-100' : 'bg-slate-100'
-                        }`}>
-                          <CheckSquare className={`h-6 w-6 ${
-                            progress === 100 ? 'text-emerald-600' : 'text-slate-600'
-                          }`} />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg">{checklist.name}</h3>
+                        <div className="flex gap-4 mt-2 text-sm text-slate-600">
+                          {checklist.location && <span>📍 {checklist.location}</span>}
+                          {checklist.date && <span>📅 {checklist.date}</span>}
+                          {checklist.assigned_to_name && <span>👤 {checklist.assigned_to_name}</span>}
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-slate-900">{checklist.title}</h3>
-                          <p className="text-sm text-slate-500 mt-1">
-                            {getProjectName(checklist.project_id)}
-                            {checklist.template_name && ` • ${checklist.template_name}`}
-                          </p>
+                        <div className="flex gap-2 mt-3">
+                          <StatusBadge status={checklist.status} />
+                          <span className="text-xs text-slate-500">
+                            {checklist.responses?.filter(r => r.status === 'ok').length || 0} / {checklist.items?.length || 0} utført
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <StatusBadge status={checklist.status} />
-                        {isExpanded ? (
-                          <ChevronUp className="h-5 w-5 text-slate-400" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-slate-400" />
-                        )}
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteChecklistMutation.mutate(checklist.id);
+                        }}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    {/* Progress Bar */}
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-slate-500">Fremgang</span>
-                        <span className="font-medium text-slate-900">{progress}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
-                  {/* Expanded Items */}
-                  {isExpanded && (
-                    <div className="px-6 pb-6 border-t border-slate-100 pt-4">
-                      <div className="space-y-3">
-                        {checklist.items?.map((item, index) => (
-                          <div
-                            key={index}
-                            className={`flex items-center gap-3 p-3 rounded-xl ${
-                              item.checked ? 'bg-emerald-50' : 'bg-slate-50'
-                            }`}
-                          >
-                            <Checkbox
-                              checked={item.checked}
-                              onCheckedChange={(checked) => handleCheckItem(checklist, index, checked)}
-                            />
-                            <span className={`flex-1 ${item.checked ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
-                              {item.text}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      {checklist.signed_by && (
-                        <p className="text-sm text-slate-500 mt-4">
-                          Signert av {checklist.signed_by} • {checklist.completed_date && format(new Date(checklist.completed_date), 'd. MMM yyyy', { locale: nb })}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Ny sjekkliste</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label>Tittel *</Label>
-              <Input
-                value={formData.title}
-                onChange={(e) => setFormData({...formData, title: e.target.value})}
-                placeholder="Navn på sjekklisten"
-                required
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div>
-              <Label>Prosjekt *</Label>
-              <ProjectSelector
-                value={formData.project_id}
-                onChange={(v) => setFormData({...formData, project_id: v})}
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div>
-              <Label>Mal</Label>
-              <Select 
-                value={formData.template_name} 
-                onValueChange={handleTemplateSelect}
-              >
-                <SelectTrigger className="mt-1.5 rounded-xl">
-                  <SelectValue placeholder="Velg mal" />
+          {/* Templates Tab */}
+          <TabsContent value="templates" className="space-y-4">
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Søk i maler..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {checklistTemplates.map((template) => (
-                    <SelectItem key={template.name} value={template.name}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="alle">Alle kategorier</SelectItem>
+                  <SelectItem value="tømrer">Tømrer</SelectItem>
+                  <SelectItem value="betong">Betong</SelectItem>
+                  <SelectItem value="tak">Tak</SelectItem>
+                  <SelectItem value="våtrom">Våtrom</SelectItem>
+                  <SelectItem value="internkontroll">Internkontroll</SelectItem>
+                  <SelectItem value="overtakelse">Overtakelse</SelectItem>
+                  <SelectItem value="hms">HMS</SelectItem>
+                  <SelectItem value="kvalitet">Kvalitet</SelectItem>
+                  <SelectItem value="annet">Annet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {templatesLoading ? (
+              <div className="text-center py-8">Laster maler...</div>
+            ) : filteredTemplates.length === 0 ? (
+              <EmptyState
+                title="Ingen maler"
+                description="Opprett din første sjekklistemal"
+              />
+            ) : (
+              <div className="grid gap-4">
+                {filteredTemplates.map((template) => (
+                  <Card key={template.id} className="p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 cursor-pointer"
+                        onClick={() => navigate(createPageUrl('SjekklisteMalDetaljer') + `?id=${template.id}`)}>
+                        <h3 className="font-semibold text-lg">{template.name}</h3>
+                        {template.description && (
+                          <p className="text-sm text-slate-600 mt-1">{template.description}</p>
+                        )}
+                        <div className="flex gap-3 mt-2 text-sm text-slate-500">
+                          <span>📂 {template.category}</span>
+                          <span>v{template.version}</span>
+                          <span>📌 {template.items?.length || 0} punkter</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            // Duplicate template
+                          }}
+                          title="Duplisere mal"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteTemplateMutation.mutate(template.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* New Template Dialog */}
+      <Dialog open={showNewTemplateDialog} onOpenChange={setShowNewTemplateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Opprett ny sjekklistemal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="name">Navn på mal</Label>
+              <Input
+                id="name"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                placeholder="F.eks. Kvalitetskontroll Tak"
+              />
+            </div>
+            <div>
+              <Label htmlFor="category">Kategori</Label>
+              <Select value={newTemplateCategory} onValueChange={setNewTemplateCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tømrer">Tømrer</SelectItem>
+                  <SelectItem value="betong">Betong</SelectItem>
+                  <SelectItem value="tak">Tak</SelectItem>
+                  <SelectItem value="våtrom">Våtrom</SelectItem>
+                  <SelectItem value="internkontroll">Internkontroll</SelectItem>
+                  <SelectItem value="overtakelse">Overtakelse</SelectItem>
+                  <SelectItem value="hms">HMS</SelectItem>
+                  <SelectItem value="kvalitet">Kvalitet</SelectItem>
+                  <SelectItem value="annet">Annet</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label>Sjekkpunkter</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddItem}
-                  className="rounded-xl"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Legg til
-                </Button>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {formData.items.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <Input
-                      value={item.text}
-                      onChange={(e) => handleItemChange(index, 'text', e.target.value)}
-                      placeholder="Sjekkpunkt..."
-                      className="rounded-xl"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveItem(index)}
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                {formData.items.length === 0 && (
-                  <p className="text-sm text-slate-500 text-center py-4">
-                    Velg en mal eller legg til sjekkpunkter manuelt
-                  </p>
-                )}
-              </div>
+              <Label htmlFor="description">Beskrivelse (valgfritt)</Label>
+              <Textarea
+                id="description"
+                value={newTemplateDescription}
+                onChange={(e) => setNewTemplateDescription(e.target.value)}
+                placeholder="Beskrivelse av malen..."
+              />
             </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={createMutation.isPending || formData.items.length === 0}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {createMutation.isPending ? 'Lagrer...' : 'Opprett'}
-              </Button>
-            </div>
-          </form>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewTemplateDialog(false)}>
+              Avbryt
+            </Button>
+            <Button onClick={handleCreateTemplate} disabled={!newTemplateName.trim()}>
+              Opprett mal
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
