@@ -1255,6 +1255,15 @@ export default function Avvik() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* View Deviations Dialog */}
+      <ViewDeviationsDialog
+        open={showViewDialog}
+        onOpenChange={setShowViewDialog}
+        selectedDeviations={selectedDeviations}
+        deviationList={deviations}
+        projects={projects}
+      />
+
     </div>);
 
 }
