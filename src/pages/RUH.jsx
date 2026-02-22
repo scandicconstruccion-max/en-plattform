@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import EmptyState from '@/components/shared/EmptyState';
 import { generateMultiElementPDF } from '@/components/shared/PDFGenerator';
 import RUHPDFView from '@/components/ruh/RUHPDFView';
+import SendRUHDialog from '@/components/ruh/SendRUHDialog';
 import { AlertCircle, Plus, Calendar, MapPin, Filter, X, Download, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -23,6 +24,7 @@ export default function RUH() {
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedRuh, setSelectedRuh] = useState([]);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
 
   const { data: ruhList = [] } = useQuery({
     queryKey: ['ruh'],
@@ -130,10 +132,8 @@ export default function RUH() {
     toast.success('PDF lastet ned');
   };
 
-  const handleBulkResend = async () => {
-    toast.info('Sender RUH-rapporter...');
-    // Implement resend logic here
-    toast.success(`${selectedRuh.length} RUH-rapporter sendt`);
+  const handleBulkResend = () => {
+    setSendDialogOpen(true);
   };
 
   return (
@@ -352,6 +352,14 @@ export default function RUH() {
           </div>
         )}
       </div>
+
+      <SendRUHDialog
+        open={sendDialogOpen}
+        onOpenChange={setSendDialogOpen}
+        selectedRuh={selectedRuh}
+        ruhList={ruhList}
+        projects={projects}
+      />
     </div>
   );
 }
