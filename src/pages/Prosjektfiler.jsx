@@ -712,7 +712,7 @@ export default function Prosjektfiler() {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-lg font-semibold leading-none tracking-tight">Last opp tegning/fil/bilde</DialogTitle>
+            <DialogTitle className="my-2 py-1 text-lg font-semibold tracking-tight leading-none">Last opp tegning/fil/bilde</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {!selectedFile ?
