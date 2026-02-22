@@ -324,7 +324,7 @@ export default function Sjekklister() {
 
       {/* New Template Dialog */}
       <Dialog open={showNewTemplateDialog} onOpenChange={setShowNewTemplateDialog}>
-        <DialogContent className="max-w-2xl max-h-96 overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh]">
           <DialogHeader>
             <DialogTitle>Opprett ny sjekklistemal</DialogTitle>
             <DialogDescription>Fyll inn malen med navn, kategori og sjekkpunkter</DialogDescription>
