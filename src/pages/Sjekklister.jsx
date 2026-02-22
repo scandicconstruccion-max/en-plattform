@@ -210,9 +210,9 @@ export default function Sjekklister() {
 
 
             <div className="grid gap-4">
-                {filteredChecklists.map((checklist) =>
-              <div key={checklist.id} onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)} className="cursor-pointer">
-                <Card className="p-4 hover:shadow-md transition-shadow">
+              {filteredChecklists.map((checklist) =>
+                <div key={checklist.id} onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)} className="cursor-pointer">
+                  <Card className="p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">{checklist.name}</h3>
@@ -229,22 +229,20 @@ export default function Sjekklister() {
                         </div>
                       </div>
                       <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteChecklistMutation.mutate(checklist.id);
-                    }}
-                    className="text-red-500 hover:text-red-700">
-
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteChecklistMutation.mutate(checklist.id);
+                        }}
+                        className="text-red-500 hover:text-red-700">
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      </div>
-                      </Card>
-                      </div>
-                      )}
-              </div>
-            }
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           {/* Templates Tab */}
