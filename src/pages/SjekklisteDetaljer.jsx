@@ -17,7 +17,7 @@ export default function SjekklisteDetaljer() {
   });
   const [responses, setResponses] = useState({});
   const [showSignDialog, setShowSignDialog] = useState(false);
-  const [canvasRef, setCanvasRef] = useState(null);
+  const canvasRef = useRef(null);
   const [user, setUser] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const navigate = useNavigate();
