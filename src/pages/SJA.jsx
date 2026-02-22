@@ -256,7 +256,6 @@ export default function SJA() {
             <SelectContent>
               <SelectItem value="all">Alle statuser</SelectItem>
               <SelectItem value="opprettet">Opprettet</SelectItem>
-              <SelectItem value="godkjent">Godkjent</SelectItem>
               <SelectItem value="arkivert">Arkivert</SelectItem>
             </SelectContent>
           </Select>
