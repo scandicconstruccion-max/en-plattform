@@ -366,6 +366,24 @@ export default function SjekklisteDetaljer() {
             height={200}
             className="border-2 border-slate-300 rounded-lg bg-white cursor-crosshair w-full"
             style={{ maxWidth: '500px', height: 'auto' }}
+            onMouseDown={(e) => {
+              setIsDrawing(true);
+              const canvas = canvasRef;
+              if (!canvas) return;
+              const rect = canvas.getBoundingClientRect();
+              const ctx = canvas.getContext('2d');
+              ctx?.beginPath();
+              ctx?.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+            }}
+            onMouseMove={(e) => {
+              if (!isDrawing || !canvasRef) return;
+              const rect = canvasRef.getBoundingClientRect();
+              const ctx = canvasRef.getContext('2d');
+              ctx?.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+              ctx?.stroke();
+            }}
+            onMouseUp={() => setIsDrawing(false)}
+            onMouseLeave={() => setIsDrawing(false)}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => {
