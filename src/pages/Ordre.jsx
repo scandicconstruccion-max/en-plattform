@@ -458,8 +458,8 @@ export default function Ordre() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedOrder(order);
-                            setShowEmailDialog(true);
+                            setSelectedOrders([order.id]);
+                            setShowSendDialog(true);
                           }}
                           className="rounded-xl gap-1"
                         >
