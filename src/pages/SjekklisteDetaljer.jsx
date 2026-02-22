@@ -143,7 +143,8 @@ export default function SjekklisteDetaljer() {
   };
 
   if (isLoading) return <div className="p-6">Laster sjekkliste...</div>;
-  if (!checklist) return <div className="p-6">Sjekklisten ble ikke funnet</div>;
+  if (error) return <div className="p-6 text-red-600">Feil ved lasting: {error.message}</div>;
+  if (!checklist) return <div className="p-6">Sjekklisten ble ikke funnet (ID: {checklistId})</div>;
 
   const completionPercentage = Math.round(
     ((checklist.responses?.filter(r => r.status && ['ok', 'ikke_ok', 'avvik'].includes(r.status)).length || 0) / (checklist.items?.length || 1)) * 100
