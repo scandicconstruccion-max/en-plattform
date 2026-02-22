@@ -115,42 +115,50 @@ export default function Prosjektfiler() {
 
   // Initialize categories for new projects
   useEffect(() => {
-    if (projectFilter !== 'all' && categories.length === 0) {
-      initializeCategoriesForProject(projectFilter);
+    if (projectFilter !== 'all') {
+      const projectCats = categories.filter(c => c.project_id === projectFilter);
+      if (projectCats.length === 0) {
+        initializeCategoriesForProject(projectFilter);
+      }
     }
-  }, [projectFilter]);
+  }, [projectFilter, categories]);
 
   const initializeCategoriesForProject = async (projectId) => {
     const existingCats = categories.filter(c => c.project_id === projectId);
     if (existingCats.length > 0) return;
 
-    for (const cat of PREDEFINED_CATEGORIES) {
-      const categoryId = await base44.entities.FileCategory.create({
-        project_id: projectId,
-        name: cat.name,
-        icon: cat.icon,
-        color: cat.color,
-        order: cat.order,
-        is_predefined: true,
-        access_level: 'alle'
-      });
+    try {
+      for (const cat of PREDEFINED_CATEGORIES) {
+        await base44.entities.FileCategory.create({
+          project_id: projectId,
+          name: cat.name,
+          icon: cat.icon,
+          color: cat.color,
+          order: cat.order,
+          is_predefined: true,
+          access_level: 'alle',
+          parent_category: null
+        });
 
-      if (cat.children) {
-        for (const child of cat.children) {
-          await base44.entities.FileCategory.create({
-            project_id: projectId,
-            name: child.name,
-            parent_category: cat.name,
-            icon: child.icon,
-            color: child.color,
-            order: child.order,
-            is_predefined: true,
-            access_level: 'alle'
-          });
+        if (cat.children) {
+          for (const child of cat.children) {
+            await base44.entities.FileCategory.create({
+              project_id: projectId,
+              name: child.name,
+              parent_category: cat.name,
+              icon: child.icon,
+              color: child.color,
+              order: child.order,
+              is_predefined: true,
+              access_level: 'alle'
+            });
+          }
         }
       }
+      queryClient.invalidateQueries({ queryKey: ['fileCategories'] });
+    } catch (error) {
+      console.error('Error initializing categories:', error);
     }
-    queryClient.invalidateQueries({ queryKey: ['fileCategories'] });
   };
 
   const createFileMutation = useMutation({
