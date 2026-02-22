@@ -735,7 +735,7 @@ export default function Prosjektfiler() {
                   <Textarea
                   value={uploadData.description}
                   onChange={(e) => setUploadData({ ...uploadData, description: e.target.value })}
-                  placeholder="Beskriv bildet..."
+                  placeholder="Legg til beskrivelse av opplastningen..."
                   rows={2}
                   className="mt-1.5" />
 
