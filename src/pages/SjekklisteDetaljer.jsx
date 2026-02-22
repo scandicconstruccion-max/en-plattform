@@ -6,7 +6,7 @@ import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChevronLeft, Check, CheckCircle2 } from 'lucide-react';
-import ChecklistItemCard from '@/components/sjekklister/ChecklistItemCard';
+import ChecklistItemCard from '@/components/sjekklister/ChecklistItemCard.jsx';
 
 export default function SjekklisteDetaljer() {
   const [checklistId, setChecklistId] = useState(() => {

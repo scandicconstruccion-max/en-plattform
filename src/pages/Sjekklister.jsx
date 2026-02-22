@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Plus, Search, Trash2 } from 'lucide-react';
-import TemplateSelector from '@/components/sjekklister/TemplateSelector';
+import TemplateSelector from '@/components/sjekklister/TemplateSelector.jsx';
 import PageHeader from '@/components/shared/PageHeader';
 import { cn } from '@/lib/utils';
 
