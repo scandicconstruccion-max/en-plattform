@@ -22,7 +22,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
-import SendEmailDialog from '@/components/shared/SendEmailDialog';
+import SendOrdreDialog from '@/components/ordre/SendOrdreDialog';
 import OrderForm from '@/components/ordre/OrderForm';
 import { 
   FileText, Search, Plus, Building2, Calendar, 
