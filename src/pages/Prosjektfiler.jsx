@@ -96,6 +96,7 @@ export default function Prosjektfiler() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -294,6 +295,45 @@ export default function Prosjektfiler() {
     } else {
       setPreviewFile(null);
     }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    if (projectFilter === 'all') {
+      toast.error('Velg et prosjekt først');
+      return;
+    }
+
+    if (!selectedCategory) {
+      toast.error('Velg en kategori');
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Create preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => setPreviewFile(e.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      setPreviewFile(null);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
   };
 
   const handleSaveFile = async () => {
@@ -740,9 +780,18 @@ export default function Prosjektfiler() {
                   className="mt-1.5" />
 
                 </div>
-                <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:bg-slate-50">
-                  <Upload className="h-8 w-8 text-slate-400" />
-                  <span className="text-sm text-slate-500">Klikk for å velge fil</span>
+                <label 
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={cn(
+                    "flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+                    isDragging ? "border-emerald-500 bg-emerald-50" : "border-slate-300 hover:bg-slate-50"
+                  )}>
+                  <Upload className={cn("h-8 w-8", isDragging ? "text-emerald-600" : "text-slate-400")} />
+                  <span className={cn("text-sm font-medium", isDragging ? "text-emerald-700" : "text-slate-500")}>
+                    {isDragging ? "Slipp filen her" : "Klikk for å velge fil eller dra og slipp"}
+                  </span>
                   <span className="text-xs text-slate-400">Støtter bilder, PDF, Word og Excel</span>
                   <input
                   type="file"
