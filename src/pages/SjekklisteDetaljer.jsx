@@ -67,16 +67,58 @@ export default function SjekklisteDetaljer() {
       updatedResponses[existingIndex] = {
         ...updatedResponses[existingIndex],
         status,
-        responded_date: new Date().toISOString()
+        responded_date: new Date().toISOString(),
+        responded_by: user?.email
       };
     } else {
       updatedResponses.push({
         item_order: itemOrder,
         status,
-        responded_date: new Date().toISOString()
+        responded_date: new Date().toISOString(),
+        responded_by: user?.email
       });
     }
 
+    setResponses({ ...responses, [itemOrder]: updatedResponses.find(r => r.item_order === itemOrder) });
+    updateChecklistMutation.mutate({ responses: updatedResponses });
+  };
+
+  const handleAddImage = useCallback(async (itemOrder, file) => {
+    if (!file) return;
+    
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      
+      const updatedResponses = [...(checklist?.responses || [])];
+      const existingIndex = updatedResponses.findIndex(r => r.item_order === itemOrder);
+      
+      if (existingIndex >= 0) {
+        updatedResponses[existingIndex] = {
+          ...updatedResponses[existingIndex],
+          images: [...(updatedResponses[existingIndex].images || []), file_url]
+        };
+      } else {
+        updatedResponses.push({
+          item_order: itemOrder,
+          images: [file_url]
+        });
+      }
+      
+      setResponses({ ...responses, [itemOrder]: updatedResponses.find(r => r.item_order === itemOrder) });
+      updateChecklistMutation.mutate({ responses: updatedResponses });
+    } catch (e) {
+      console.error('Bildeupplasting feilet:', e);
+    }
+  }, [checklist?.responses, responses, updateChecklistMutation]);
+
+  const handleRemoveImage = (itemOrder, imageIndex) => {
+    const updatedResponses = [...(checklist?.responses || [])];
+    const existingIndex = updatedResponses.findIndex(r => r.item_order === itemOrder);
+    
+    if (existingIndex >= 0) {
+      updatedResponses[existingIndex].images = updatedResponses[existingIndex].images?.filter((_, i) => i !== imageIndex) || [];
+    }
+    
     setResponses({ ...responses, [itemOrder]: updatedResponses.find(r => r.item_order === itemOrder) });
     updateChecklistMutation.mutate({ responses: updatedResponses });
   };
