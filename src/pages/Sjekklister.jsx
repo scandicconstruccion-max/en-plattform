@@ -11,6 +11,7 @@ import { Plus, Search, Trash2 } from 'lucide-react';
 import TemplateSelector from '@/components/sjekklister/TemplateSelector.jsx';
 import PageHeader from '@/components/shared/PageHeader';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 
 export default function Sjekklister() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,9 +36,20 @@ export default function Sjekklister() {
     return () => window.removeEventListener('projectSelected', handleProjectChange);
   }, []);
 
-  const { data: templates = [] } = useQuery({
+  const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['checklistTemplates'],
-    queryFn: () => base44.entities.ChecklistTemplate.list('-updated_date', 100)
+    queryFn: async () => {
+      const existing = await base44.entities.ChecklistTemplate.list('-updated_date', 100);
+      // Hvis ingen maler finnes, opprett standardmaler
+      if (existing.length === 0) {
+        const { DEFAULT_TEMPLATES } = await import('@/components/sjekklister/DefaultTemplates.js');
+        for (const template of DEFAULT_TEMPLATES) {
+          await base44.entities.ChecklistTemplate.create(template);
+        }
+        return base44.entities.ChecklistTemplate.list('-updated_date', 100);
+      }
+      return existing;
+    }
   });
 
   const { data: checklists = [], isLoading: checklistsLoading, error: checklistsError } = useQuery({
@@ -109,13 +121,20 @@ export default function Sjekklister() {
           subtitle="Opprett og gjennomfør sjekklister for dine prosjekter"
           actions={
             selectedProject && (
-              <Button 
-                onClick={() => setShowTemplateDialog(true)}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-              >
-                <Plus className="h-4 w-4" />
-                Ny sjekkliste
-              </Button>
+              <div className="flex gap-3">
+                <Button 
+                  onClick={() => setShowTemplateDialog(true)}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  Ny sjekkliste
+                </Button>
+                <Link to={createPageUrl('SjekklisteMaler')}>
+                  <Button variant="outline" className="gap-2">
+                    📋 Maler
+                  </Button>
+                </Link>
+              </div>
             )
           }
         />
