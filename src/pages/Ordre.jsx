@@ -561,16 +561,14 @@ export default function Ordre() {
         onSubmit={(data) => createOrderMutation.mutate(data)}
       />
 
-      {/* Send Email Dialog */}
-      {selectedOrder && (
-        <SendEmailDialog
-          open={showEmailDialog}
-          onOpenChange={setShowEmailDialog}
-          type="ordre"
-          item={selectedOrder}
-          onSent={handleSendEmail}
-        />
-      )}
+      {/* Send Ordre Dialog */}
+      <SendOrdreDialog
+        open={showSendDialog}
+        onOpenChange={setShowSendDialog}
+        selectedOrders={selectedOrders}
+        ordreList={orders}
+        projects={projects}
+      />
     </div>
   );
 }
