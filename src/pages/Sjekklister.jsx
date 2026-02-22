@@ -324,10 +324,10 @@ export default function Sjekklister() {
 
       {/* New Template Dialog */}
       <Dialog open={showNewTemplateDialog} onOpenChange={setShowNewTemplateDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-96 overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Opprett ny sjekklistemal</DialogTitle>
-            <DialogDescription>Fyll inn informasjonen om sjekklistemalen</DialogDescription>
+            <DialogDescription>Fyll inn malen med navn, kategori og sjekkpunkter</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -337,7 +337,6 @@ export default function Sjekklister() {
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
                 placeholder="F.eks. Kvalitetskontroll Tak" />
-
             </div>
             <div>
               <Label htmlFor="category">Kategori</Label>
@@ -365,11 +364,56 @@ export default function Sjekklister() {
                 value={newTemplateDescription}
                 onChange={(e) => setNewTemplateDescription(e.target.value)}
                 placeholder="Beskrivelse av malen..." />
+            </div>
 
+            <div className="border-t pt-4">
+              <div className="flex justify-between items-center mb-3">
+                <Label>Sjekkpunkter</Label>
+                <Button onClick={handleAddTemplateItem} size="sm" variant="outline" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Legg til punkt
+                </Button>
+              </div>
+              <div className="space-y-3 max-h-48 overflow-y-auto">
+                {newTemplateItems.map((item, idx) => (
+                  <Card key={idx} className="p-3 bg-slate-50">
+                    <div className="space-y-2">
+                      <div className="flex gap-2 items-start">
+                        <Input
+                          placeholder="Tittel på sjekkpunkt"
+                          value={item.title}
+                          onChange={(e) => handleUpdateTemplateItem(idx, 'title', e.target.value)}
+                          className="flex-1" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveTemplateItem(idx)}
+                          className="text-red-500 hover:text-red-700">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Textarea
+                        placeholder="Beskrivelse (valgfritt)"
+                        value={item.description || ''}
+                        onChange={(e) => handleUpdateTemplateItem(idx, 'description', e.target.value)}
+                        className="text-sm" />
+                    </div>
+                  </Card>
+                ))}
+                {newTemplateItems.length === 0 && (
+                  <p className="text-sm text-slate-500 text-center py-4">Ingen sjekkpunkter ennå. Klikk "Legg til punkt" for å legge til.</p>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewTemplateDialog(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowNewTemplateDialog(false);
+              setNewTemplateName('');
+              setNewTemplateDescription('');
+              setNewTemplateCategory('annet');
+              setNewTemplateItems([]);
+            }}>
               Avbryt
             </Button>
             <Button onClick={handleCreateTemplate} disabled={!newTemplateName.trim()}>
