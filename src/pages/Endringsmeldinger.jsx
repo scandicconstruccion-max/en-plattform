@@ -26,6 +26,7 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
+import SendEndringsmeldingerDialog from '@/components/endringsmeldinger/SendEndringsmeldingerDialog';
 import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail, Trash2, Download, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -60,8 +61,6 @@ export default function Endringsmeldinger() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [changeToDelete, setChangeToDelete] = useState(null);
   const [showSendDialog, setShowSendDialog] = useState(false);
-  const [changeToSend, setChangeToSend] = useState(null);
-  const [sendTo, setSendTo] = useState([]);
 
   const queryClient = useQueryClient();
 
@@ -169,49 +168,8 @@ export default function Endringsmeldinger() {
     }
   };
 
-  const handleSendToEmployees = (change) => {
-    setChangeToSend(change);
-    setSendTo([]);
+  const handleSendToEmployees = () => {
     setShowSendDialog(true);
-  };
-
-  const toggleEmployee = (email) => {
-    setSendTo(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]);
-  };
-
-  const handleConfirmSend = async () => {
-    if (!changeToSend || sendTo.length === 0) return;
-    
-    for (const email of sendTo) {
-      const employee = employees.find(e => e.email === email);
-      if (employee) {
-        await base44.integrations.Core.SendEmail({
-          to: email,
-          subject: `Ny endringsmelding: ${changeToSend.title}`,
-          body: `
-Hei ${employee.first_name},
-
-En ny endringsmelding har blitt opprettet og sendt til deg:
-
-Tittel: ${changeToSend.title}
-Prosjekt: ${getProjectName(changeToSend.project_id)}
-Type: ${changeTypeLabels[changeToSend.change_type]}
-${changeToSend.amount ? `Beløp: ${changeToSend.amount.toLocaleString('nb-NO')} kr` : ''}
-
-Beskrivelse: ${changeToSend.description || ''}
-
-Logg inn i systemet for mer informasjon.
-
-Med vennlig hilsen,
-${user?.full_name || 'Systemet'}
-          `
-        });
-      }
-    }
-    
-    setShowSendDialog(false);
-    setChangeToSend(null);
-    setSendTo([]);
   };
 
   const handleDownloadPDF = (change) => {
@@ -396,7 +354,7 @@ ${user?.full_name || 'Systemet'}
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleSendToEmployees(change)}
+                        onClick={handleSendToEmployees}
                         className="rounded-lg gap-2 text-xs"
                       >
                         <Mail className="h-3.5 w-3.5" />
@@ -539,53 +497,16 @@ ${user?.full_name || 'Systemet'}
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Send to Employees Dialog */}
-      <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send endringsmelding til ansatte</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium mb-3 block">Velg ansatte å sende til:</Label>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {employees.filter(e => e.is_active !== false).map((employee) => (
-                  <div key={employee.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg">
-                    <Checkbox 
-                      id={employee.id}
-                      checked={sendTo.includes(employee.email)}
-                      onCheckedChange={() => toggleEmployee(employee.email)}
-                    />
-                    <label 
-                      htmlFor={employee.id}
-                      className="flex-1 cursor-pointer text-sm"
-                    >
-                      {employee.first_name} {employee.last_name}
-                      <span className="text-xs text-slate-500 block">{employee.email}</span>
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowSendDialog(false)}
-                className="rounded-xl"
-              >
-                Avbryt
-              </Button>
-              <Button 
-                onClick={handleConfirmSend}
-                disabled={sendTo.length === 0}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                Send
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Send Endringsmeldinger Dialog */}
+      <SendEndringsmeldingerDialog
+        open={showSendDialog}
+        onOpenChange={setShowSendDialog}
+        selectedChanges={selectedChanges}
+        changeList={changes}
+        projects={projects}
+        getProjectName={getProjectName}
+        changeTypeLabels={changeTypeLabels}
+      />
     </div>
   );
 }
