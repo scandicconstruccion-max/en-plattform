@@ -251,25 +251,99 @@ export default function SjekklisteDetaljer() {
                 </div>
 
                 {item.allow_comment && (
-                  <div>
-                    <Textarea
-                      placeholder="Kommentar..."
-                      value={response?.comment || ''}
-                      onChange={(e) => {
-                        const updatedResponses = [...(checklist?.responses || [])];
-                        const idx2 = updatedResponses.findIndex(r => r.item_order === idx);
-                        if (idx2 >= 0) {
-                          updatedResponses[idx2].comment = e.target.value;
-                        } else {
-                          updatedResponses.push({ item_order: idx, comment: e.target.value });
-                        }
-                        updateChecklistMutation.mutate({ responses: updatedResponses });
-                      }}
-                      className="text-base"
-                    />
-                  </div>
-                )}
-              </Card>
+                   <div className="mb-4">
+                     <label className="text-sm font-semibold mb-2 block">Kommentar</label>
+                     <Textarea
+                       placeholder="Legg til kommentar..."
+                       value={response?.comment || ''}
+                       onChange={(e) => {
+                         const updatedResponses = [...(checklist?.responses || [])];
+                         const idx2 = updatedResponses.findIndex(r => r.item_order === idx);
+                         if (idx2 >= 0) {
+                           updatedResponses[idx2].comment = e.target.value;
+                         } else {
+                           updatedResponses.push({ item_order: idx, comment: e.target.value, responded_by: user?.email, responded_date: new Date().toISOString() });
+                         }
+                         updateChecklistMutation.mutate({ responses: updatedResponses });
+                       }}
+                       className="text-base"
+                     />
+                   </div>
+                 )}
+
+                {item.allow_image && (
+                   <div className="mb-4">
+                     <label className="text-sm font-semibold mb-2 block">Bilder</label>
+
+                     {/* Image Upload */}
+                     <div className="flex gap-2 mb-3">
+                       <label className="flex-1">
+                         <input
+                           type="file"
+                           accept="image/*"
+                           onChange={(e) => {
+                             const file = e.target.files?.[0];
+                             if (file) handleAddImage(idx, file);
+                             e.target.value = '';
+                           }}
+                           className="hidden"
+                         />
+                         <Button as="div" variant="outline" className="w-full gap-2 cursor-pointer">
+                           <Upload className="h-4 w-4" />
+                           Last opp bilde
+                         </Button>
+                       </label>
+                       <label className="flex-1">
+                         <input
+                           type="file"
+                           accept="image/*"
+                           capture="environment"
+                           onChange={(e) => {
+                             const file = e.target.files?.[0];
+                             if (file) handleAddImage(idx, file);
+                             e.target.value = '';
+                           }}
+                           className="hidden"
+                         />
+                         <Button as="div" variant="outline" className="w-full gap-2 cursor-pointer">
+                           <Camera className="h-4 w-4" />
+                           Ta bilde
+                         </Button>
+                       </label>
+                     </div>
+
+                     {/* Image Thumbnails */}
+                     {(response?.images?.length > 0) && (
+                       <div className="grid grid-cols-3 gap-2">
+                         {response.images.map((imageUrl, imgIdx) => (
+                           <div key={imgIdx} className="relative group">
+                             <img
+                               src={imageUrl}
+                               alt={`Bilde ${imgIdx + 1}`}
+                               className="w-full h-24 object-cover rounded-lg border"
+                             />
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               onClick={() => handleRemoveImage(idx, imgIdx)}
+                               className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                             >
+                               <Trash2 className="h-3 w-3" />
+                             </Button>
+                           </div>
+                         ))}
+                       </div>
+                     )}
+                   </div>
+                 )}
+
+                {response && (
+                   <div className="text-xs text-slate-500 pt-2 border-t mt-4">
+                     <div>Utfylt av: {response.responded_by || '-'}</div>
+                     <div>Dato: {response.responded_date ? new Date(response.responded_date).toLocaleString('no-NO') : '-'}</div>
+                   </div>
+                 )}
+                </Card>
             );
           })}
         </div>
