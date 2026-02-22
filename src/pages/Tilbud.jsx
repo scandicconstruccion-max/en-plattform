@@ -288,10 +288,18 @@ export default function Tilbud() {
 
   const handleBulkDownload = async () => {
     const quotesToDownload = quotes.filter((q) => selectedQuotes.includes(q.id));
+    
     for (const quote of quotesToDownload) {
-      await generatePDF(quote);
+      try {
+        await generateQuotePDF(quote, company);
+        // Vent litt mellom hver PDF for å unngå problemer
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error('Feil ved generering av PDF for tilbud:', quote.quote_number, error);
+      }
     }
-    toast.success(`Lastet ned ${quotesToDownload.length} tilbud`);
+    
+    toast.success(`${quotesToDownload.length} PDF-er åpnet i nye faner`);
   };
 
   const handleDelete = () => {
@@ -300,7 +308,6 @@ export default function Tilbud() {
 
   const generatePDF = async (quote) => {
     await generateQuotePDF(quote, company);
-    toast.success('PDF lastet ned');
   };
 
   const handleReviseQuote = async (quote) => {
