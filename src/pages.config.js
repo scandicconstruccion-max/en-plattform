@@ -66,6 +66,7 @@ import FDVDetaljer from './pages/FDVDetaljer';
 import Faktura from './pages/Faktura';
 import FakturaDetaljer from './pages/FakturaDetaljer';
 import HMS from './pages/HMS';
+import HMSHandbok from './pages/HMSHandbok';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
 import Lonnsgrunnlag from './pages/Lonnsgrunnlag';
@@ -76,14 +77,13 @@ import OrdreDetaljer from './pages/OrdreDetaljer';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
 import Prosjektfiler from './pages/Prosjektfiler';
+import RUH from './pages/RUH';
 import Ressursplan from './pages/Ressursplan';
+import Risikoanalyse from './pages/Risikoanalyse';
 import SJA from './pages/SJA';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import RUH from './pages/RUH';
-import Risikoanalyse from './pages/Risikoanalyse';
-import HMSHandbok from './pages/HMSHandbok';
 import __Layout from './Layout.jsx';
 
 
@@ -107,6 +107,7 @@ export const PAGES = {
     "Faktura": Faktura,
     "FakturaDetaljer": FakturaDetaljer,
     "HMS": HMS,
+    "HMSHandbok": HMSHandbok,
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
     "Lonnsgrunnlag": Lonnsgrunnlag,
@@ -117,14 +118,13 @@ export const PAGES = {
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
     "Prosjektfiler": Prosjektfiler,
+    "RUH": RUH,
     "Ressursplan": Ressursplan,
+    "Risikoanalyse": Risikoanalyse,
     "SJA": SJA,
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "RUH": RUH,
-    "Risikoanalyse": Risikoanalyse,
-    "HMSHandbok": HMSHandbok,
 }
 
 export const pagesConfig = {

@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { ClipboardCheck, Search, Calendar, FileText, CheckCircle2 } from 'lucide-react';
+import { ClipboardCheck, Search, Calendar, FileText, CheckCircle2, X, Plus, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -34,11 +34,18 @@ export default function SJA() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [formData, setFormData] = useState({
     project_id: '',
-    dato: new Date().toISOString().split('T')[0],
+    sikkerhetsanalyse_utfort: new Date().toISOString().split('T')[0],
+    jobb_utfores: '',
     ansvarlig: '',
+    deltakere_ansatte: [],
+    deltakere_eksterne: [],
     arbeidsoperasjon: '',
-    beskrivelse_av_arbeid: ''
+    beskrivelse_av_arbeidsoperasjonen: '',
+    faremomenter: [],
+    konsekvensgrad: '',
+    tiltak: ''
   });
+  const [newEksternDeltaker, setNewEksternDeltaker] = useState({ navn: '', epost: '' });
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -73,16 +80,55 @@ export default function SJA() {
     const user = await base44.auth.me();
     const employee = employees.find(emp => emp.email === formData.ansvarlig);
     
+    // Get names for ansatte deltakere
+    const deltakereNavn = formData.deltakere_ansatte.map(email => {
+      const emp = employees.find(e => e.email === email);
+      return emp ? `${emp.first_name} ${emp.last_name}` : email;
+    });
+    
     createMutation.mutate({
       ...formData,
       ansvarlig_navn: employee ? `${employee.first_name} ${employee.last_name}` : formData.ansvarlig,
-      deltakere: [],
-      deltakere_navn: []
+      deltakere_ansatte_navn: deltakereNavn
     });
+  };
+
+  const addEksternDeltaker = () => {
+    if (!newEksternDeltaker.navn || !newEksternDeltaker.epost) {
+      toast.error('Fyll ut navn og e-post');
+      return;
+    }
+    setFormData({
+      ...formData,
+      deltakere_eksterne: [...formData.deltakere_eksterne, newEksternDeltaker]
+    });
+    setNewEksternDeltaker({ navn: '', epost: '' });
+  };
+
+  const removeEksternDeltaker = (index) => {
+    const updated = [...formData.deltakere_eksterne];
+    updated.splice(index, 1);
+    setFormData({ ...formData, deltakere_eksterne: updated });
+  };
+
+  const toggleFaremoment = (faremoment) => {
+    const current = formData.faremomenter || [];
+    if (current.includes(faremoment)) {
+      setFormData({
+        ...formData,
+        faremomenter: current.filter(f => f !== faremoment)
+      });
+    } else {
+      setFormData({
+        ...formData,
+        faremomenter: [...current, faremoment]
+      });
+    }
   };
 
   const filteredSJA = sjaList.filter((sja) => {
     const matchesSearch = sja.arbeidsoperasjon?.toLowerCase().includes(search.toLowerCase()) ||
+                          sja.beskrivelse_av_arbeidsoperasjonen?.toLowerCase().includes(search.toLowerCase()) ||
                           sja.beskrivelse_av_arbeid?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || sja.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -177,9 +223,9 @@ export default function SJA() {
                             {getStatusLabel(sja.status)}
                           </Badge>
                         </div>
-                        {sja.beskrivelse_av_arbeid && (
+                        {(sja.beskrivelse_av_arbeidsoperasjonen || sja.beskrivelse_av_arbeid) && (
                           <p className="text-sm text-slate-600 line-clamp-2 mb-3">
-                            {sja.beskrivelse_av_arbeid}
+                            {sja.beskrivelse_av_arbeidsoperasjonen || sja.beskrivelse_av_arbeid}
                           </p>
                         )}
                         <div className="flex flex-wrap gap-4 text-sm text-slate-500">
@@ -189,7 +235,7 @@ export default function SJA() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            {format(new Date(sja.dato), 'dd.MM.yyyy')}
+                            {format(new Date(sja.sikkerhetsanalyse_utfort || sja.dato), 'dd.MM.yyyy')}
                           </div>
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="h-4 w-4" />
@@ -232,14 +278,25 @@ export default function SJA() {
               </Select>
             </div>
 
-            <div>
-              <Label>Dato *</Label>
-              <Input
-                type="date"
-                value={formData.dato}
-                onChange={(e) => setFormData({...formData, dato: e.target.value})}
-                className="mt-1.5 rounded-xl"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Sikkerhetsanalyse utført *</Label>
+                <Input
+                  type="date"
+                  value={formData.sikkerhetsanalyse_utfort}
+                  onChange={(e) => setFormData({...formData, sikkerhetsanalyse_utfort: e.target.value})}
+                  className="mt-1.5 rounded-xl"
+                />
+              </div>
+              <div>
+                <Label>Jobb utføres</Label>
+                <Input
+                  type="date"
+                  value={formData.jobb_utfores}
+                  onChange={(e) => setFormData({...formData, jobb_utfores: e.target.value})}
+                  className="mt-1.5 rounded-xl"
+                />
+              </div>
             </div>
 
             <div>
@@ -262,6 +319,104 @@ export default function SJA() {
             </div>
 
             <div>
+              <Label>Deltakere fra bedriften</Label>
+              <Select
+                onValueChange={(value) => {
+                  if (!formData.deltakere_ansatte.includes(value)) {
+                    setFormData({
+                      ...formData,
+                      deltakere_ansatte: [...formData.deltakere_ansatte, value]
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue placeholder="Legg til ansatt" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.filter(e => !formData.deltakere_ansatte.includes(e.email)).map((employee) => (
+                    <SelectItem key={employee.id} value={employee.email}>
+                      {employee.first_name} {employee.last_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.deltakere_ansatte.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {formData.deltakere_ansatte.map((email, idx) => {
+                    const emp = employees.find(e => e.email === email);
+                    return (
+                      <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                        <span className="text-sm">{emp ? `${emp.first_name} ${emp.last_name}` : email}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setFormData({
+                            ...formData,
+                            deltakere_ansatte: formData.deltakere_ansatte.filter((_, i) => i !== idx)
+                          })}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label>Andre deltakere (ikke ansatte)</Label>
+              <div className="mt-1.5 space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Navn"
+                    value={newEksternDeltaker.navn}
+                    onChange={(e) => setNewEksternDeltaker({...newEksternDeltaker, navn: e.target.value})}
+                    className="rounded-xl"
+                  />
+                  <Input
+                    type="email"
+                    placeholder="E-post"
+                    value={newEksternDeltaker.epost}
+                    onChange={(e) => setNewEksternDeltaker({...newEksternDeltaker, epost: e.target.value})}
+                    className="rounded-xl"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addEksternDeltaker}
+                    className="rounded-xl"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {formData.deltakere_eksterne.length > 0 && (
+                  <div className="space-y-1">
+                    {formData.deltakere_eksterne.map((deltaker, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                        <div className="text-sm">
+                          <span className="font-medium">{deltaker.navn}</span>
+                          <span className="text-slate-500 ml-2">({deltaker.epost})</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeEksternDeltaker(idx)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-slate-500 mt-1">Eksterne deltakere får automatisk kopi av SJA når skjemaet lagres</p>
+              </div>
+            </div>
+
+            <div>
               <Label>Arbeidsoperasjon *</Label>
               <Input
                 value={formData.arbeidsoperasjon}
@@ -272,11 +427,66 @@ export default function SJA() {
             </div>
 
             <div>
-              <Label>Beskrivelse av arbeid</Label>
+              <Label>Beskrivelse av arbeidsoperasjonen</Label>
               <Textarea
-                value={formData.beskrivelse_av_arbeid}
-                onChange={(e) => setFormData({...formData, beskrivelse_av_arbeid: e.target.value})}
-                rows={4}
+                value={formData.beskrivelse_av_arbeidsoperasjonen}
+                onChange={(e) => setFormData({...formData, beskrivelse_av_arbeidsoperasjonen: e.target.value})}
+                rows={2}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+
+            <div>
+              <Label>Faremomenter</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {[
+                  { key: 'personskade', label: 'Personskade' },
+                  { key: 'materielle_skader', label: 'Materielle skader' },
+                  { key: 'forurensning', label: 'Forurensning' },
+                  { key: 'fallfare', label: 'Fallfare' },
+                  { key: 'elektrisk_fare', label: 'Elektrisk fare' },
+                  { key: 'annet', label: 'Annet' }
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleFaremoment(key)}
+                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      (formData.faremomenter || []).includes(key)
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label>Konsekvensgrad</Label>
+              <Select
+                value={formData.konsekvensgrad}
+                onValueChange={(value) => setFormData({...formData, konsekvensgrad: value})}
+              >
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue placeholder="Velg konsekvensgrad" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lav">Lav</SelectItem>
+                  <SelectItem value="middels">Middels</SelectItem>
+                  <SelectItem value="hoy">Høy</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Tiltak</Label>
+              <Textarea
+                value={formData.tiltak}
+                onChange={(e) => setFormData({...formData, tiltak: e.target.value})}
+                rows={3}
+                placeholder="Beskriv hvilke tiltak som skal utføres for å sikre sikker jobb..."
                 className="mt-1.5 rounded-xl"
               />
             </div>
