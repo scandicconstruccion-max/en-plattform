@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronLeft, Check, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, Check, CheckCircle2, Edit2, Plus, Trash2, Save, X } from 'lucide-react';
 import ChecklistItemCard from '@/components/sjekklister/ChecklistItemCard.jsx';
 
 export default function SjekklisteDetaljer() {
@@ -16,6 +16,7 @@ export default function SjekklisteDetaljer() {
     return params.get('id');
   });
   const [user, setUser] = useState(null);
+  const [editMode, setEditMode] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -152,6 +153,53 @@ export default function SjekklisteDetaljer() {
     });
   };
 
+  const addItemToSection = (sectionIndex) => {
+    if (!checklist) return;
+    const sections = [...(checklist.sections || [])];
+    const newItem = {
+      order: sections[sectionIndex].items?.length || 0,
+      title: 'Nytt punkt',
+      description: '',
+      required: true,
+      allow_image: true,
+      allow_comment: true
+    };
+    sections[sectionIndex].items = [...(sections[sectionIndex].items || []), newItem];
+    updateMutation.mutate({ sections });
+  };
+
+  const removeItemFromSection = (sectionIndex, itemIndex) => {
+    if (!checklist) return;
+    const sections = [...(checklist.sections || [])];
+    sections[sectionIndex].items = sections[sectionIndex].items.filter((_, i) => i !== itemIndex);
+    updateMutation.mutate({ sections });
+  };
+
+  const updateItemInSection = (sectionIndex, itemIndex, field, value) => {
+    if (!checklist) return;
+    const sections = [...(checklist.sections || [])];
+    sections[sectionIndex].items[itemIndex][field] = value;
+    updateMutation.mutate({ sections });
+  };
+
+  const addSection = () => {
+    if (!checklist) return;
+    const sections = [...(checklist.sections || [])];
+    sections.push({
+      title: 'Ny seksjon',
+      description: '',
+      order: sections.length,
+      items: []
+    });
+    updateMutation.mutate({ sections });
+  };
+
+  const removeSection = (sectionIndex) => {
+    if (!checklist) return;
+    const sections = checklist.sections.filter((_, i) => i !== sectionIndex);
+    updateMutation.mutate({ sections });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -254,6 +302,13 @@ export default function SjekklisteDetaljer() {
                   Fullfør sjekkliste
                 </Button>
               )}
+              <Button
+                variant={editMode ? "default" : "outline"}
+                onClick={() => setEditMode(!editMode)}
+                className="gap-2"
+              >
+                {editMode ? <><X className="h-4 w-4" /> Avslutt redigering</> : <><Edit2 className="h-4 w-4" /> Rediger punkter</>}
+              </Button>
             </div>
           </Card>
         </div>
@@ -261,49 +316,134 @@ export default function SjekklisteDetaljer() {
         <div className="space-y-6">
           {/* Seksjoner */}
           {(checklist.sections || []).length > 0 ? (
-            checklist.sections.map((section, secIdx) => (
-              <div key={secIdx}>
-                {section.title && (
-                  <div className="mb-4">
-                    <h2 className="text-xl font-bold text-slate-900">{section.title}</h2>
-                    {section.description && (
-                      <p className="text-sm text-slate-600 mt-1">{section.description}</p>
+            <>
+              {checklist.sections.map((section, secIdx) => (
+                <div key={secIdx}>
+                  <div className="mb-4 flex items-start justify-between">
+                    <div className="flex-1">
+                      {editMode ? (
+                        <div className="space-y-2">
+                          <Input
+                            value={section.title}
+                            onChange={(e) => {
+                              const sections = [...checklist.sections];
+                              sections[secIdx].title = e.target.value;
+                              updateMutation.mutate({ sections });
+                            }}
+                            className="text-xl font-bold"
+                            placeholder="Seksjonstittel"
+                          />
+                          <Textarea
+                            value={section.description || ''}
+                            onChange={(e) => {
+                              const sections = [...checklist.sections];
+                              sections[secIdx].description = e.target.value;
+                              updateMutation.mutate({ sections });
+                            }}
+                            className="text-sm"
+                            placeholder="Beskrivelse"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          {section.title && <h2 className="text-xl font-bold text-slate-900">{section.title}</h2>}
+                          {section.description && <p className="text-sm text-slate-600 mt-1">{section.description}</p>}
+                        </>
+                      )}
+                    </div>
+                    {editMode && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeSection(secIdx)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     )}
                   </div>
-                )}
-                <div className="space-y-4">
-                  {(section.items || []).map((item, itemIdx) => {
-                    const globalIdx = (checklist.sections
-                      .slice(0, secIdx)
-                      .reduce((sum, s) => sum + (s.items?.length || 0), 0)) + itemIdx;
-                    const response = checklist.responses?.find(r => r.item_order === globalIdx);
-                    
-                    // Sjekk betinget visning
-                    if (item.conditional_display) {
-                      const conditionalResponse = checklist.responses?.find(
-                        r => r.item_order === item.conditional_display.item_order
-                      );
-                      if (!conditionalResponse || conditionalResponse.status !== item.conditional_display.required_status) {
-                        return null;
-                      }
-                    }
+                  <div className="space-y-4">
+                    {(section.items || []).map((item, itemIdx) => {
+                      const globalIdx = (checklist.sections
+                        .slice(0, secIdx)
+                        .reduce((sum, s) => sum + (s.items?.length || 0), 0)) + itemIdx;
+                      const response = checklist.responses?.find(r => r.item_order === globalIdx);
 
-                    return (
-                      <ChecklistItemCard
-                        key={globalIdx}
-                        item={item}
-                        itemIndex={globalIdx}
-                        response={response}
-                        onStatusChange={handleStatusChange}
-                        onCommentChange={handleCommentChange}
-                        onImageAdd={handleImageAdd}
-                        onImageRemove={handleImageRemove}
-                      />
-                    );
-                  })}
+                      // Sjekk betinget visning
+                      if (!editMode && item.conditional_display) {
+                        const conditionalResponse = checklist.responses?.find(
+                          r => r.item_order === item.conditional_display.item_order
+                        );
+                        if (!conditionalResponse || conditionalResponse.status !== item.conditional_display.required_status) {
+                          return null;
+                        }
+                      }
+
+                      return (
+                        <div key={globalIdx}>
+                          {editMode ? (
+                            <Card className="p-4 border-2 border-dashed border-slate-300">
+                              <div className="flex gap-3">
+                                <div className="flex-1 space-y-3">
+                                  <Input
+                                    value={item.title}
+                                    onChange={(e) => updateItemInSection(secIdx, itemIdx, 'title', e.target.value)}
+                                    placeholder="Punkttittel"
+                                  />
+                                  <Textarea
+                                    value={item.description || ''}
+                                    onChange={(e) => updateItemInSection(secIdx, itemIdx, 'description', e.target.value)}
+                                    placeholder="Beskrivelse"
+                                  />
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeItemFromSection(secIdx, itemIdx)}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </Card>
+                          ) : (
+                            <ChecklistItemCard
+                              item={item}
+                              itemIndex={globalIdx}
+                              response={response}
+                              onStatusChange={handleStatusChange}
+                              onCommentChange={handleCommentChange}
+                              onImageAdd={handleImageAdd}
+                              onImageRemove={handleImageRemove}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {editMode && (
+                      <Button
+                        variant="outline"
+                        onClick={() => addItemToSection(secIdx)}
+                        className="w-full gap-2 border-dashed"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Legg til punkt
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {editMode && (
+                <Button
+                  variant="outline"
+                  onClick={addSection}
+                  className="w-full gap-2 border-dashed border-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Legg til seksjon
+                </Button>
+              )}
+            </>
           ) : (
             // Legacy items uten seksjoner
             (checklist.items || []).map((item, idx) => {
