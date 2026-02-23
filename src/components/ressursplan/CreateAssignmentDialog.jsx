@@ -1,0 +1,196 @@
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import ProjectSelector from '@/components/shared/ProjectSelector';
+
+export default function CreateAssignmentDialog({
+  open,
+  onOpenChange,
+  employees,
+  externals,
+  projects,
+  onSubmit,
+  isLoading
+}) {
+  const [formData, setFormData] = useState({
+    prosjekt_id: '',
+    resource_type: 'employee',
+    resource_ids: [],
+    start_dato_tid: '',
+    slutt_dato_tid: '',
+    rolle_pa_prosjekt: '',
+    kommentar: ''
+  });
+
+  const [selectedResources, setSelectedResources] = useState([]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (selectedResources.length === 0) {
+      alert('Velg minst én ressurs');
+      return;
+    }
+    onSubmit({ ...formData, resource_ids: selectedResources });
+  };
+
+  const resetForm = () => {
+    setFormData({
+      prosjekt_id: '',
+      resource_type: 'employee',
+      resource_ids: [],
+      start_dato_tid: '',
+      slutt_dato_tid: '',
+      rolle_pa_prosjekt: '',
+      kommentar: ''
+    });
+    setSelectedResources([]);
+  };
+
+  const handleClose = (open) => {
+    if (!open) resetForm();
+    onOpenChange(open);
+  };
+
+  const availableResources = formData.resource_type === 'employee' ? employees : externals;
+
+  const toggleResource = (resourceId) => {
+    setSelectedResources(prev =>
+      prev.includes(resourceId)
+        ? prev.filter(id => id !== resourceId)
+        : [...prev, resourceId]
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Ny ressursplanlegging</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>Prosjekt *</Label>
+            <ProjectSelector
+              value={formData.prosjekt_id}
+              onChange={(v) => setFormData({ ...formData, prosjekt_id: v })}
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+
+          <div>
+            <Label>Ressurstype *</Label>
+            <Select
+              value={formData.resource_type}
+              onValueChange={(v) => {
+                setFormData({ ...formData, resource_type: v });
+                setSelectedResources([]);
+              }}
+            >
+              <SelectTrigger className="mt-1.5 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="employee">Ansatt</SelectItem>
+                <SelectItem value="external">Ekstern (UE)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Velg ressurser * (kan velge flere)</Label>
+            <div className="mt-2 border rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
+              {availableResources.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Ingen {formData.resource_type === 'employee' ? 'ansatte' : 'eksterne ressurser'} tilgjengelig
+                </p>
+              ) : (
+                availableResources.map((resource) => (
+                  <div key={resource.id} className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedResources.includes(resource.id)}
+                      onCheckedChange={() => toggleResource(resource.id)}
+                    />
+                    <label className="text-sm cursor-pointer flex-1" onClick={() => toggleResource(resource.id)}>
+                      <span className="font-medium">
+                        {resource.first_name ? `${resource.first_name} ${resource.last_name}` : resource.navn}
+                      </span>
+                      <span className="text-slate-500 ml-2">
+                        {resource.position || resource.stilling || resource.rolle || ''}
+                      </span>
+                    </label>
+                  </div>
+                ))
+              )}
+            </div>
+            {selectedResources.length > 0 && (
+              <p className="text-xs text-slate-500 mt-2">
+                {selectedResources.length} ressurs(er) valgt
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Start dato og tid *</Label>
+              <Input
+                type="datetime-local"
+                value={formData.start_dato_tid}
+                onChange={(e) => setFormData({ ...formData, start_dato_tid: e.target.value })}
+                required
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+            <div>
+              <Label>Slutt dato og tid *</Label>
+              <Input
+                type="datetime-local"
+                value={formData.slutt_dato_tid}
+                onChange={(e) => setFormData({ ...formData, slutt_dato_tid: e.target.value })}
+                required
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Rolle på prosjekt</Label>
+            <Input
+              value={formData.rolle_pa_prosjekt}
+              onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
+              placeholder="f.eks. Prosjektleder, Tømrer, Montør"
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+
+          <div>
+            <Label>Kommentar</Label>
+            <Textarea
+              value={formData.kommentar}
+              onChange={(e) => setFormData({ ...formData, kommentar: e.target.value })}
+              placeholder="Eventuelle notater..."
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => handleClose(false)} className="rounded-xl">
+              Avbryt
+            </Button>
+            <Button
+              type="submit"
+              disabled={isLoading || selectedResources.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {isLoading ? 'Oppretter...' : 'Opprett planlegging'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
