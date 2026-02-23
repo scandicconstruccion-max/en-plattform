@@ -163,7 +163,12 @@ export default function SjekklisteMaler() {
                       v{template.version}
                     </span>
                     <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">
-                      {template.sections?.length || template.items?.length || 0} punkter
+                      {(() => {
+                        const totalItems = template.sections && template.sections.length > 0
+                          ? template.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+                          : (template.items?.length || 0);
+                        return `${totalItems} punkter`;
+                      })()}
                     </span>
                   </div>
 
