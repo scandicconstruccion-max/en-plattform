@@ -62,15 +62,26 @@ export default function Sjekklister() {
 
   const createChecklistMutation = useMutation({
     mutationFn: (template) => {
+      const projectName = selectedProject?.name || 'Prosjekt';
+      const date = new Date().toLocaleDateString('no-NO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const checklistName = `${template.name} - ${projectName} (${date})`;
+      
       return base44.entities.Checklist.create({
-        name: `${template.name} - ${new Date().toLocaleDateString('no-NO')}`,
+        name: checklistName,
         project_id: selectedProject.id,
         template_id: template.id,
         template_version: template.version,
         date: new Date().toISOString().split('T')[0],
+        sections: template.sections || [],
         items: (template.items || []).map((item, idx) => ({
           ...item,
           order: idx
+        })),
+        custom_fields_data: (template.custom_fields || []).map(field => ({
+          field_id: field.id,
+          label: field.label,
+          field_type: field.field_type,
+          value: ''
         })),
         status: 'ikke_startet',
         responses: [],
