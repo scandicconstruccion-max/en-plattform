@@ -9,6 +9,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import KPISection from '@/components/dashboard/KPISection';
+import UnfinishedChecklists from '@/components/dashboard/UnfinishedChecklists';
 import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
 import {
   Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare
@@ -115,6 +116,9 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Moduler</h2>
           <ModuleGrid activeModules={activeModules} />
         </div>
+
+        {/* Unfinished Checklists */}
+        <UnfinishedChecklists />
 
         {/* Checklist Templates Quick Access */}
         <Link 
