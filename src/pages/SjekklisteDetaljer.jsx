@@ -25,11 +25,15 @@ export default function SjekklisteDetaljer() {
 
   const { data: checklist, isLoading, error } = useQuery({
     queryKey: ['checklist', checklistId],
-    queryFn: () => base44.entities.Checklist.read(checklistId),
+    queryFn: async () => {
+      if (!checklistId) throw new Error('No checklist ID');
+      const data = await base44.entities.Checklist.read(checklistId);
+      if (!data) throw new Error('Checklist not found');
+      return data;
+    },
     enabled: !!checklistId,
-    retry: 3,
-    retryDelay: 1000,
-    staleTime: 0
+    retry: 1,
+    retryDelay: 500
   });
 
   const updateMutation = useMutation({
