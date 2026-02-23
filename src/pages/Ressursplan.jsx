@@ -1,365 +1,484 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import ProjectSelector from '@/components/shared/ProjectSelector';
-import { Users, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
-import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay, isWithinInterval, parseISO } from 'date-fns';
-import { nb } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import ResourceCalendar from '@/components/ressursplan/ResourceCalendar';
+import CreateAssignmentDialog from '@/components/ressursplan/CreateAssignmentDialog';
+import ConflictDialog from '@/components/ressursplan/ConflictDialog';
+import ExternalResourceDialog from '@/components/ressursplan/ExternalResourceDialog';
+import AssignmentDetailsDialog from '@/components/ressursplan/AssignmentDetailsDialog';
+import { Users, UserPlus, Calendar, Grid3x3, List, Settings } from 'lucide-react';
+import { toast } from 'sonner';
+import { isWithinInterval, parseISO } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 
 export default function Ressursplan() {
-  const [showDialog, setShowDialog] = useState(false);
-  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [formData, setFormData] = useState({
-    user_email: '',
-    user_name: '',
-    project_id: '',
-    start_date: '',
-    end_date: '',
-    allocation_percent: 100,
-    role: ''
+  const [viewMode, setViewMode] = useState('week');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showExternalDialog, setShowExternalDialog] = useState(false);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [pendingAssignment, setPendingAssignment] = useState(null);
+  const [conflicts, setConflicts] = useState([]);
+  const [editingExternal, setEditingExternal] = useState(null);
+  const [filters, setFilters] = useState({
+    resourceType: 'all',
+    projectId: 'all'
   });
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const { data: resources = [], isLoading } = useQuery({
-    queryKey: ['resources'],
-    queryFn: () => base44.entities.Resource.list('-created_date'),
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
   });
 
+  // Fetch permissions
+  const { data: permissions = [] } = useQuery({
+    queryKey: ['resourcePlannerPermissions'],
+    queryFn: () => base44.entities.ResourcePlannerPermission.list(),
+    initialData: []
+  });
+
+  const userPermission = permissions.find(p => p.bruker_id === user?.email);
+  const canEdit = user?.role === 'admin' || userPermission?.kan_redigere || false;
+  const canDelete = user?.role === 'admin' || userPermission?.kan_slette || false;
+
+  // Fetch employees
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => {
+      const allEmployees = await base44.entities.Employee.list();
+      return allEmployees.filter(e => e.is_active);
+    },
+    initialData: []
+  });
+
+  // Fetch external resources
+  const { data: externals = [] } = useQuery({
+    queryKey: ['externalResources'],
+    queryFn: async () => {
+      const allExternals = await base44.entities.ExternalResource.list();
+      return allExternals.filter(e => e.aktiv);
+    },
+    initialData: []
+  });
+
+  // Fetch assignments
+  const { data: assignments = [] } = useQuery({
+    queryKey: ['resourceAssignments'],
+    queryFn: () => base44.entities.ResourceAssignment.list('-created_date'),
+    initialData: []
+  });
+
+  // Fetch projects
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
+    initialData: []
   });
 
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
-  });
+  // Create assignment mutation
+  const createAssignmentMutation = useMutation({
+    mutationFn: async (data) => {
+      const results = [];
+      for (const resourceId of data.resource_ids) {
+        const resource = data.resource_type === 'employee'
+          ? employees.find(e => e.id === resourceId)
+          : externals.find(e => e.id === resourceId);
 
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Resource.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['resources'] });
-      setShowDialog(false);
-      resetForm();
+        const project = projects.find(p => p.id === data.prosjekt_id);
+        
+        const assignmentData = {
+          prosjekt_id: data.prosjekt_id,
+          prosjekt_navn: project?.name || '',
+          resource_type: data.resource_type,
+          resource_id: resourceId,
+          resource_navn: resource?.first_name 
+            ? `${resource.first_name} ${resource.last_name}` 
+            : resource?.navn || '',
+          start_dato_tid: data.start_dato_tid,
+          slutt_dato_tid: data.slutt_dato_tid,
+          rolle_pa_prosjekt: data.rolle_pa_prosjekt,
+          kommentar: data.kommentar,
+          status: 'planlagt',
+          opprettet_av: user?.email,
+          opprettet_av_navn: user?.full_name,
+          change_log: [{
+            timestamp: new Date().toISOString(),
+            user_email: user?.email,
+            user_name: user?.full_name,
+            action: 'Opprettet',
+            changes: 'Ressursplanlegging opprettet'
+          }]
+        };
+
+        results.push(await base44.entities.ResourceAssignment.create(assignmentData));
+      }
+      return results;
     },
-  });
-
-  const resetForm = () => {
-    setFormData({
-      user_email: '',
-      user_name: '',
-      project_id: '',
-      start_date: '',
-      end_date: '',
-      allocation_percent: 100,
-      role: ''
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const selectedUser = allUsers.find(u => u.email === formData.user_email);
-    createMutation.mutate({
-      ...formData,
-      user_name: selectedUser?.full_name || formData.user_email,
-      allocation_percent: parseInt(formData.allocation_percent)
-    });
-  };
-
-  const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
-    return project?.name || 'Ukjent';
-  };
-
-  const getProjectColor = (projectId) => {
-    const colors = [
-      'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500', 
-      'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'
-    ];
-    const index = projects.findIndex(p => p.id === projectId);
-    return colors[index % colors.length];
-  };
-
-  // Group resources by user
-  const userResources = {};
-  resources.forEach(r => {
-    if (!userResources[r.user_email]) {
-      userResources[r.user_email] = {
-        name: r.user_name,
-        email: r.user_email,
-        allocations: []
-      };
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
+      setShowCreateDialog(false);
+      toast.success('Ressursplanlegging opprettet');
+    },
+    onError: () => {
+      toast.error('Kunne ikke opprette planlegging');
     }
-    userResources[r.user_email].allocations.push(r);
   });
 
-  // Generate week days
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  // Update assignment mutation
+  const updateAssignmentMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.ResourceAssignment.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
+      toast.success('Planlegging oppdatert');
+    },
+    onError: () => {
+      toast.error('Kunne ikke oppdatere planlegging');
+    }
+  });
 
-  const isAllocatedOnDay = (allocations, day) => {
-    return allocations.filter(a => {
-      if (!a.start_date || !a.end_date) return false;
-      const start = parseISO(a.start_date);
-      const end = parseISO(a.end_date);
-      return isWithinInterval(day, { start, end });
+  // Delete assignment mutation
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: (id) => base44.entities.ResourceAssignment.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
+      toast.success('Planlegging slettet');
+    },
+    onError: () => {
+      toast.error('Kunne ikke slette planlegging');
+    }
+  });
+
+  // External resource mutations
+  const createExternalMutation = useMutation({
+    mutationFn: (data) => base44.entities.ExternalResource.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['externalResources'] });
+      setShowExternalDialog(false);
+      setEditingExternal(null);
+      toast.success('Ekstern ressurs opprettet');
+    }
+  });
+
+  const updateExternalMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.ExternalResource.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['externalResources'] });
+      setShowExternalDialog(false);
+      setEditingExternal(null);
+      toast.success('Ekstern ressurs oppdatert');
+    }
+  });
+
+  // Check for conflicts
+  const checkConflicts = (resourceId, startDatoTid, sluttDatoTid, excludeId = null) => {
+    const start = parseISO(startDatoTid);
+    const end = parseISO(sluttDatoTid);
+    
+    return assignments.filter(a => {
+      if (a.id === excludeId) return false;
+      if (a.resource_id !== resourceId) return false;
+      
+      const aStart = parseISO(a.start_dato_tid);
+      const aEnd = parseISO(a.slutt_dato_tid);
+      
+      return (
+        isWithinInterval(start, { start: aStart, end: aEnd }) ||
+        isWithinInterval(end, { start: aStart, end: aEnd }) ||
+        isWithinInterval(aStart, { start, end }) ||
+        isWithinInterval(aEnd, { start, end })
+      );
     });
   };
+
+  // Handle assignment drop (drag and drop)
+  const handleAssignmentDrop = (assignment, newResourceId, newDay) => {
+    const foundConflicts = checkConflicts(
+      newResourceId,
+      assignment.start_dato_tid,
+      assignment.slutt_dato_tid,
+      assignment.id
+    );
+
+    if (foundConflicts.length > 0) {
+      setConflicts(foundConflicts);
+      setPendingAssignment({ ...assignment, newResourceId, newDay });
+      setShowConflictDialog(true);
+    } else {
+      // Update assignment
+      const updatedData = {
+        ...assignment,
+        resource_id: newResourceId,
+        change_log: [
+          ...(assignment.change_log || []),
+          {
+            timestamp: new Date().toISOString(),
+            user_email: user?.email,
+            user_name: user?.full_name,
+            action: 'Flyttet',
+            changes: `Ressurs endret via drag-and-drop`
+          }
+        ]
+      };
+      updateAssignmentMutation.mutate({ id: assignment.id, data: updatedData });
+    }
+  };
+
+  const handleConflictConfirm = () => {
+    if (pendingAssignment) {
+      const updatedData = {
+        ...pendingAssignment,
+        resource_id: pendingAssignment.newResourceId,
+        change_log: [
+          ...(pendingAssignment.change_log || []),
+          {
+            timestamp: new Date().toISOString(),
+            user_email: user?.email,
+            user_name: user?.full_name,
+            action: 'Flyttet med konflikt',
+            changes: `Ressurs endret med overlappende planlegging`
+          }
+        ]
+      };
+      updateAssignmentMutation.mutate({ id: pendingAssignment.id, data: updatedData });
+    }
+    setShowConflictDialog(false);
+    setPendingAssignment(null);
+    setConflicts([]);
+  };
+
+  const handleCreateAssignment = (formData) => {
+    createAssignmentMutation.mutate(formData);
+  };
+
+  const handleExternalSubmit = (formData) => {
+    if (editingExternal) {
+      updateExternalMutation.mutate({ id: editingExternal.id, data: formData });
+    } else {
+      createExternalMutation.mutate(formData);
+    }
+  };
+
+  // Combine all resources
+  const allResources = [
+    ...employees.map(e => ({
+      id: e.id,
+      navn: `${e.first_name} ${e.last_name}`,
+      type: 'employee',
+      stilling: e.position,
+      telefon: e.phone,
+      epost: e.email
+    })),
+    ...externals.map(e => ({
+      id: e.id,
+      navn: e.navn,
+      type: 'external',
+      rolle: e.rolle,
+      firma: e.firma,
+      telefon: e.telefon,
+      epost: e.epost
+    }))
+  ];
+
+  // Apply filters
+  const filteredResources = allResources.filter(r => {
+    if (filters.resourceType !== 'all' && r.type !== filters.resourceType) return false;
+    return true;
+  });
+
+  const filteredAssignments = assignments.filter(a => {
+    if (filters.projectId !== 'all' && a.prosjekt_id !== filters.projectId) return false;
+    return true;
+  });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pb-20 md:pb-6">
       <PageHeader
-        title="Ressursplanlegger"
-        subtitle="Planlegg og følg opp ressursallokering"
-        onAdd={() => setShowDialog(true)}
-        addLabel="Ny allokering"
+        title="Ressursplanlegger 2.0"
+        subtitle="Planlegg ressurser på tvers av prosjekter"
+        actions={
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => navigate(createPageUrl('Innstillinger'))}
+              className="gap-2 rounded-xl"
+            >
+              <Settings className="h-4 w-4" />
+              Innstillinger
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingExternal(null);
+                setShowExternalDialog(true);
+              }}
+              className="gap-2 rounded-xl"
+            >
+              <UserPlus className="h-4 w-4" />
+              Ny ekstern
+            </Button>
+            {canEdit && (
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              >
+                <Calendar className="h-4 w-4" />
+                Ny planlegging
+              </Button>
+            )}
+          </div>
+        }
       />
 
-      <div className="px-6 lg:px-8 py-6">
-        {/* Week Navigation */}
-        <Card className="border-0 shadow-sm p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentWeekStart(subWeeks(currentWeekStart, 1))}
-              className="rounded-xl"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="text-center">
-              <h2 className="font-semibold text-slate-900">
-                Uke {format(currentWeekStart, 'w', { locale: nb })} - {format(currentWeekStart, 'yyyy')}
-              </h2>
-              <p className="text-sm text-slate-500">
-                {format(currentWeekStart, 'd. MMM', { locale: nb })} - {format(addDays(currentWeekStart, 6), 'd. MMM', { locale: nb })}
-              </p>
+      <div className="px-6 lg:px-8 py-6 space-y-6">
+        {/* Filters and View Mode */}
+        <Card className="border-0 shadow-sm p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex-1 flex items-center gap-3">
+              <Select value={viewMode} onValueChange={setViewMode}>
+                <SelectTrigger className="w-[140px] rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day">Dag</SelectItem>
+                  <SelectItem value="week">Uke</SelectItem>
+                  <SelectItem value="month">Måned</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select 
+                value={filters.resourceType} 
+                onValueChange={(v) => setFilters({ ...filters, resourceType: v })}
+              >
+                <SelectTrigger className="w-[160px] rounded-xl">
+                  <SelectValue placeholder="Ressurstype" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle ressurser</SelectItem>
+                  <SelectItem value="employee">Ansatte</SelectItem>
+                  <SelectItem value="external">Eksterne</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select 
+                value={filters.projectId} 
+                onValueChange={(v) => setFilters({ ...filters, projectId: v })}
+              >
+                <SelectTrigger className="w-[180px] rounded-xl">
+                  <SelectValue placeholder="Prosjekt" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle prosjekter</SelectItem>
+                  {projects.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentWeekStart(addWeeks(currentWeekStart, 1))}
-              className="rounded-xl"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+
+            <div className="text-sm text-slate-600">
+              {filteredResources.length} ressurs(er) • {filteredAssignments.length} planlegging(er)
+            </div>
           </div>
         </Card>
 
-        {/* Resource Grid */}
-        {isLoading ? (
-          <Card className="border-0 shadow-sm p-6 animate-pulse">
-            <div className="h-64 bg-slate-100 rounded-xl" />
-          </Card>
-        ) : Object.keys(userResources).length === 0 ? (
+        {/* Calendar */}
+        {filteredResources.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="Ingen allokeringer"
-            description="Planlegg hvem som skal jobbe på hvilke prosjekter"
-            actionLabel="Ny allokering"
-            onAction={() => setShowDialog(true)}
+            title="Ingen ressurser"
+            description="Legg til ansatte eller eksterne ressurser for å komme i gang"
+            actionLabel="Ny ekstern ressurs"
+            onAction={() => setShowExternalDialog(true)}
           />
         ) : (
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="text-left p-4 font-medium text-slate-600 w-48 sticky left-0 bg-slate-50">
-                      Ansatt
-                    </th>
-                    {weekDays.map((day) => (
-                      <th
-                        key={day.toISOString()}
-                        className={cn(
-                          "text-center p-4 font-medium min-w-[100px]",
-                          isSameDay(day, new Date()) ? "text-emerald-600 bg-emerald-50" : "text-slate-600"
-                        )}
-                      >
-                        <div className="text-xs uppercase">{format(day, 'EEE', { locale: nb })}</div>
-                        <div className="text-lg">{format(day, 'd')}</div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.values(userResources).map((user) => (
-                    <tr key={user.email} className="border-t border-slate-100">
-                      <td className="p-4 sticky left-0 bg-white">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                            <span className="text-sm font-medium text-emerald-700">
-                              {user.name?.charAt(0) || 'U'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900 text-sm">{user.name}</p>
-                          </div>
-                        </div>
-                      </td>
-                      {weekDays.map((day) => {
-                        const dayAllocations = isAllocatedOnDay(user.allocations, day);
-                        return (
-                          <td
-                            key={day.toISOString()}
-                            className={cn(
-                              "p-2 border-l border-slate-100",
-                              isSameDay(day, new Date()) && "bg-emerald-50/50"
-                            )}
-                          >
-                            <div className="space-y-1">
-                              {dayAllocations.map((a, i) => (
-                                <div
-                                  key={i}
-                                  className={cn(
-                                    "px-2 py-1 rounded text-xs text-white truncate",
-                                    getProjectColor(a.project_id)
-                                  )}
-                                  title={`${getProjectName(a.project_id)} (${a.allocation_percent}%)`}
-                                >
-                                  {getProjectName(a.project_id)}
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <ResourceCalendar
+            assignments={filteredAssignments}
+            resources={filteredResources}
+            projects={projects}
+            viewMode={viewMode}
+            onAssignmentDrop={handleAssignmentDrop}
+            onAssignmentClick={(a) => {
+              setSelectedAssignment(a);
+              setShowDetailsDialog(true);
+            }}
+            canEdit={canEdit}
+          />
         )}
 
-        {/* Legend */}
+        {/* Project Legend */}
         {projects.length > 0 && (
-          <Card className="border-0 shadow-sm p-4 mt-6">
+          <Card className="border-0 shadow-sm p-4">
             <h3 className="font-medium text-slate-900 mb-3">Prosjekter</h3>
             <div className="flex flex-wrap gap-3">
-              {projects.map((project) => (
-                <div key={project.id} className="flex items-center gap-2">
-                  <div className={cn("w-3 h-3 rounded", getProjectColor(project.id))} />
-                  <span className="text-sm text-slate-600">{project.name}</span>
-                </div>
-              ))}
+              {projects.map((project, idx) => {
+                const colors = [
+                  'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
+                  'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'
+                ];
+                return (
+                  <div key={project.id} className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded ${colors[idx % colors.length]}`} />
+                    <span className="text-sm text-slate-600">{project.name}</span>
+                  </div>
+                );
+              })}
             </div>
           </Card>
         )}
       </div>
 
-      {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Ny allokering</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label>Ansatt *</Label>
-              <Select 
-                value={formData.user_email} 
-                onValueChange={(v) => setFormData({...formData, user_email: v})}
-              >
-                <SelectTrigger className="mt-1.5 rounded-xl">
-                  <SelectValue placeholder="Velg ansatt" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.email}>
-                      {user.full_name || user.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Prosjekt *</Label>
-              <ProjectSelector
-                value={formData.project_id}
-                onChange={(v) => setFormData({...formData, project_id: v})}
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Fra dato *</Label>
-                <Input
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                  required
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-              <div>
-                <Label>Til dato *</Label>
-                <Input
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({...formData, end_date: e.target.value})}
-                  required
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Allokering (%)</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={formData.allocation_percent}
-                  onChange={(e) => setFormData({...formData, allocation_percent: e.target.value})}
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-              <div>
-                <Label>Rolle</Label>
-                <Input
-                  value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value})}
-                  placeholder="f.eks. Prosjektleder"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {createMutation.isPending ? 'Lagrer...' : 'Opprett'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Dialogs */}
+      <CreateAssignmentDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        employees={employees}
+        externals={externals}
+        projects={projects}
+        onSubmit={handleCreateAssignment}
+        isLoading={createAssignmentMutation.isPending}
+      />
+
+      <ConflictDialog
+        open={showConflictDialog}
+        onOpenChange={setShowConflictDialog}
+        conflicts={conflicts}
+        onConfirm={handleConflictConfirm}
+        resourceName={pendingAssignment?.resource_navn}
+      />
+
+      <ExternalResourceDialog
+        open={showExternalDialog}
+        onOpenChange={(open) => {
+          setShowExternalDialog(open);
+          if (!open) setEditingExternal(null);
+        }}
+        resource={editingExternal}
+        onSubmit={handleExternalSubmit}
+        isLoading={createExternalMutation.isPending || updateExternalMutation.isPending}
+      />
+
+      <AssignmentDetailsDialog
+        open={showDetailsDialog}
+        onOpenChange={setShowDetailsDialog}
+        assignment={selectedAssignment}
+        onEdit={(a) => {
+          // TODO: Implement edit dialog
+          toast.info('Redigering kommer i neste versjon');
+        }}
+        onDelete={(a) => deleteAssignmentMutation.mutate(a.id)}
+        canEdit={canEdit}
+        canDelete={canDelete}
+      />
     </div>
   );
 }

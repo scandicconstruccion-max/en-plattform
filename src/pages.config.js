@@ -89,6 +89,7 @@ import SjekklisteMaler from './pages/SjekklisteMaler';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
+import RessursplanleggerInnstillinger from './pages/RessursplanleggerInnstillinger';
 import __Layout from './Layout.jsx';
 
 
@@ -135,6 +136,7 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
+    "RessursplanleggerInnstillinger": RessursplanleggerInnstillinger,
 }
 
 export const pagesConfig = {
