@@ -61,38 +61,82 @@ export default function Sjekklister() {
   });
 
   const createChecklistMutation = useMutation({
-    mutationFn: (template) => {
+    mutationFn: async (template) => {
       const projectName = selectedProject?.name || 'Prosjekt';
       const date = new Date().toLocaleDateString('no-NO', { day: '2-digit', month: '2-digit', year: 'numeric' });
       const checklistName = `${template.name} - ${projectName} (${date})`;
       
-      return base44.entities.Checklist.create({
+      // Properly structure sections from template
+      const sections = (template.sections || []).map(section => ({
+        title: section.title || '',
+        description: section.description || '',
+        order: section.order || 0,
+        items: (section.items || []).map(item => ({
+          order: item.order || 0,
+          title: item.title || '',
+          description: item.description || '',
+          required: item.required !== undefined ? item.required : true,
+          allow_image: item.allow_image !== undefined ? item.allow_image : true,
+          allow_comment: item.allow_comment !== undefined ? item.allow_comment : true,
+          conditional_display: item.conditional_display || undefined
+        }))
+      }));
+
+      // Structure custom fields data
+      const custom_fields_data = (template.custom_fields || []).map(field => ({
+        field_id: field.id,
+        label: field.label,
+        field_type: field.field_type,
+        value: ''
+      }));
+
+      const checklistData = {
         name: checklistName,
         project_id: selectedProject.id,
         template_id: template.id,
-        template_version: template.version,
+        template_version: template.version || 1,
         date: new Date().toISOString().split('T')[0],
-        sections: template.sections || [],
-        items: (template.items || []).map((item, idx) => ({
-          ...item,
-          order: idx
-        })),
-        custom_fields_data: (template.custom_fields || []).map(field => ({
-          field_id: field.id,
-          label: field.label,
-          field_type: field.field_type,
-          value: ''
-        })),
         status: 'ikke_startet',
         responses: [],
-        assigned_to: user?.email,
-        assigned_to_name: user?.full_name
-      });
+        assigned_to: user?.email || '',
+        assigned_to_name: user?.full_name || ''
+      };
+
+      // Add sections if they exist
+      if (sections.length > 0) {
+        checklistData.sections = sections;
+      }
+
+      // Add legacy items if no sections (backward compatibility)
+      if (sections.length === 0 && template.items && template.items.length > 0) {
+        checklistData.items = template.items.map((item, idx) => ({
+          order: idx,
+          title: item.title || '',
+          description: item.description || '',
+          required: item.required !== undefined ? item.required : true,
+          allow_image: item.allow_image !== undefined ? item.allow_image : true,
+          allow_comment: item.allow_comment !== undefined ? item.allow_comment : true
+        }));
+      }
+
+      // Add custom fields if they exist
+      if (custom_fields_data.length > 0) {
+        checklistData.custom_fields_data = custom_fields_data;
+      }
+
+      return base44.entities.Checklist.create(checklistData);
     },
-    onSuccess: (newChecklist) => {
-      queryClient.invalidateQueries({ queryKey: ['checklists'] });
+    onSuccess: async (newChecklist) => {
       setShowTemplateDialog(false);
-      navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
+      await queryClient.invalidateQueries({ queryKey: ['checklists'] });
+      // Small delay to ensure database propagation
+      setTimeout(() => {
+        navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
+      }, 300);
+    },
+    onError: (error) => {
+      console.error('Failed to create checklist:', error);
+      alert('Kunne ikke opprette sjekkliste. Prøv igjen.');
     }
   });
 
