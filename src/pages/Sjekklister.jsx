@@ -127,12 +127,12 @@ export default function Sjekklister() {
       return base44.entities.Checklist.create(checklistData);
     },
     onSuccess: async (newChecklist) => {
+      console.log('Checklist created successfully:', newChecklist.id);
       setShowTemplateDialog(false);
       await queryClient.invalidateQueries({ queryKey: ['checklists'] });
-      // Small delay to ensure database propagation
-      setTimeout(() => {
-        navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
-      }, 300);
+      await queryClient.invalidateQueries({ queryKey: ['checklist', newChecklist.id] });
+      // Navigate immediately with the fresh data
+      navigate(createPageUrl('SjekklisteDetaljer') + `?id=${newChecklist.id}`);
     },
     onError: (error) => {
       console.error('Failed to create checklist:', error);

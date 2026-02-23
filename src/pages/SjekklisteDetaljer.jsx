@@ -23,17 +23,29 @@ export default function SjekklisteDetaljer() {
     base44.auth.me().then(setUser).catch(console.error);
   }, []);
 
-  const { data: checklist, isLoading, error } = useQuery({
+  const { data: checklist, isLoading, error, refetch } = useQuery({
     queryKey: ['checklist', checklistId],
     queryFn: async () => {
-      if (!checklistId) throw new Error('No checklist ID');
-      const data = await base44.entities.Checklist.read(checklistId);
-      if (!data) throw new Error('Checklist not found');
-      return data;
+      if (!checklistId) {
+        console.error('Missing checklist ID');
+        throw new Error('Ingen sjekkliste-ID oppgitt');
+      }
+      console.log('Fetching checklist:', checklistId);
+      try {
+        const data = await base44.entities.Checklist.read(checklistId);
+        console.log('Checklist loaded:', data);
+        if (!data) {
+          throw new Error('Sjekkliste ikke funnet');
+        }
+        return data;
+      } catch (err) {
+        console.error('Failed to load checklist:', err);
+        throw err;
+      }
     },
     enabled: !!checklistId,
-    retry: 1,
-    retryDelay: 500
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 3000)
   });
 
   const updateMutation = useMutation({
@@ -152,13 +164,22 @@ export default function SjekklisteDetaljer() {
   }
 
   if (error) {
+    console.error('Checklist load error:', error, 'ID:', checklistId);
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Feil ved lasting av sjekkliste</p>
-          <Button onClick={() => navigate(createPageUrl('Sjekklister'))}>
-            Tilbake til sjekklister
-          </Button>
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="text-center max-w-md">
+          <p className="text-red-600 mb-2 font-semibold">Kunne ikke laste sjekkliste</p>
+          <p className="text-sm text-slate-600 mb-4">
+            Sjekklisten ble kanskje nettopp opprettet. Prøv å gå tilbake og åpne den på nytt.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <Button onClick={() => navigate(createPageUrl('Sjekklister'))}>
+              Tilbake til sjekklister
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Last siden på nytt
+            </Button>
+          </div>
         </div>
       </div>
     );
