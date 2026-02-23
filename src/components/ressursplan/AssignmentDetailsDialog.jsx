@@ -13,8 +13,7 @@ export default function AssignmentDetailsDialog({
   onEdit,
   onDelete,
   canEdit,
-  canDelete,
-  isHoverMode
+  canDelete
 }) {
   if (!assignment) return null;
 
@@ -38,14 +37,7 @@ export default function AssignmentDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
-        className="sm:max-w-2xl"
-        onMouseLeave={() => {
-          if (isHoverMode) {
-            onOpenChange(false);
-          }
-        }}
-      >
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>Ressursplanlegging detaljer</span>

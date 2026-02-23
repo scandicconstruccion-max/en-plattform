@@ -13,7 +13,6 @@ export default function ResourceCalendar({
   viewMode = 'week',
   onAssignmentDrop,
   onAssignmentClick,
-  onAssignmentHover,
   canEdit
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -217,43 +216,22 @@ export default function ResourceCalendar({
                         onDragOver={handleDragOver}
                       >
                         <div className="space-y-1 min-h-[40px]">
-                          {dayAssignments.map((assignment) => {
-                            let hoverTimeout = null;
-                            return (
-                              <div
-                                key={assignment.id}
-                                draggable={canEdit}
-                                onDragStart={(e) => handleDragStart(e, assignment)}
-                                onClick={() => onAssignmentClick(assignment, false)}
-                                onMouseEnter={(e) => {
-                                  const element = e.currentTarget;
-                                  element.dataset.showTooltip = 'true';
-                                  hoverTimeout = setTimeout(() => {
-                                    if (element && element.dataset && element.dataset.showTooltip === 'true') {
-                                      onAssignmentHover(assignment);
-                                    }
-                                  }, 800);
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (hoverTimeout) {
-                                    clearTimeout(hoverTimeout);
-                                    hoverTimeout = null;
-                                  }
-                                  if (e.currentTarget && e.currentTarget.dataset) {
-                                    e.currentTarget.dataset.showTooltip = 'false';
-                                  }
-                                }}
-                                className={cn(
-                                  "px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 hover:shadow-lg transition-all",
-                                  getProjectColor(assignment.prosjekt_id),
-                                  canEdit && "cursor-move"
-                                )}
-                                title={`${getProjectName(assignment.prosjekt_id)} - ${assignment.rolle_pa_prosjekt || ''}`}
-                              >
-                                {getProjectName(assignment.prosjekt_id)}
-                              </div>
-                            );
-                          })}
+                          {dayAssignments.map((assignment) => (
+                            <div
+                              key={assignment.id}
+                              draggable={canEdit}
+                              onDragStart={(e) => handleDragStart(e, assignment)}
+                              onClick={() => onAssignmentClick(assignment)}
+                              className={cn(
+                                "px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 hover:shadow-lg transition-all",
+                                getProjectColor(assignment.prosjekt_id),
+                                canEdit && "cursor-move"
+                              )}
+                              title={`${getProjectName(assignment.prosjekt_id)} - ${assignment.rolle_pa_prosjekt || ''}`}
+                            >
+                              {getProjectName(assignment.prosjekt_id)}
+                            </div>
+                          ))}
                         </div>
                       </td>
                     );
