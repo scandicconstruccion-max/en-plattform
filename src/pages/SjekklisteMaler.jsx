@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import TemplateEditor from '@/components/sjekklister/TemplateEditor.jsx';
 
@@ -43,6 +43,25 @@ export default function SjekklisteMaler() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.ChecklistTemplate.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checklistTemplates'] });
+    }
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async (template) => {
+      const newVersion = (template.version || 1) + 1;
+      const newTemplate = {
+        ...template,
+        name: template.name,
+        version: newVersion,
+        id: undefined,
+        created_date: undefined,
+        updated_date: undefined,
+        created_by: undefined
+      };
+      return base44.entities.ChecklistTemplate.create(newTemplate);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklistTemplates'] });
     }
@@ -158,6 +177,15 @@ export default function SjekklisteMaler() {
                     >
                       <Edit className="h-4 w-4" />
                       Rediger
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => duplicateMutation.mutate(template)}
+                      className="gap-2"
+                      title="Kopier mal"
+                    >
+                      <Copy className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
