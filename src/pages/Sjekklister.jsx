@@ -271,7 +271,13 @@ export default function Sjekklister() {
                           {checklist.status === 'fullfort' ? 'Fullført' : checklist.status === 'pagaende' ? 'Pågår' : 'Ikke startet'}
                         </span>
                         <span className="text-slate-500">
-                          {checklist.items?.length || 0} punkter
+                          {(() => {
+                            const totalItems = checklist.sections && checklist.sections.length > 0
+                              ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+                              : (checklist.items?.length || 0);
+                            const answered = checklist.responses?.filter(r => r.status).length || 0;
+                            return `${answered} av ${totalItems} punkter`;
+                          })()}
                         </span>
                       </div>
                     </Card>
