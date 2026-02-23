@@ -32,12 +32,12 @@ export default function SjekklisteDetaljer() {
       }
       console.log('Fetching checklist:', checklistId);
       try {
-        const data = await base44.entities.Checklist.read(checklistId);
-        console.log('Checklist loaded:', data);
-        if (!data) {
+        const results = await base44.entities.Checklist.filter({ id: checklistId });
+        console.log('Checklist loaded:', results);
+        if (!results || results.length === 0) {
           throw new Error('Sjekkliste ikke funnet');
         }
-        return data;
+        return results[0];
       } catch (err) {
         console.error('Failed to load checklist:', err);
         throw err;
