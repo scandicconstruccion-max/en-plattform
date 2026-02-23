@@ -80,6 +80,7 @@ import Prosjektfiler from './pages/Prosjektfiler';
 import RUH from './pages/RUH';
 import RUHDetaljer from './pages/RUHDetaljer';
 import Ressursplan from './pages/Ressursplan';
+import RessursplanleggerInnstillinger from './pages/RessursplanleggerInnstillinger';
 import Risikoanalyse from './pages/Risikoanalyse';
 import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import SJA from './pages/SJA';
@@ -89,7 +90,6 @@ import SjekklisteMaler from './pages/SjekklisteMaler';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import RessursplanleggerInnstillinger from './pages/RessursplanleggerInnstillinger';
 import __Layout from './Layout.jsx';
 
 
@@ -127,6 +127,7 @@ export const PAGES = {
     "RUH": RUH,
     "RUHDetaljer": RUHDetaljer,
     "Ressursplan": Ressursplan,
+    "RessursplanleggerInnstillinger": RessursplanleggerInnstillinger,
     "Risikoanalyse": Risikoanalyse,
     "RisikoanalyseDetaljer": RisikoanalyseDetaljer,
     "SJA": SJA,
@@ -136,7 +137,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "RessursplanleggerInnstillinger": RessursplanleggerInnstillinger,
 }
 
 export const pagesConfig = {

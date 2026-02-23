@@ -6,12 +6,11 @@ import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import ResourceCalendar from '@/components/ressursplan/ResourceCalendar';
+import OptimizedResourceCalendar from '@/components/ressursplan/OptimizedResourceCalendar';
 import CreateAssignmentDialog from '@/components/ressursplan/CreateAssignmentDialog';
 import ConflictDialog from '@/components/ressursplan/ConflictDialog';
 import ExternalResourceDialog from '@/components/ressursplan/ExternalResourceDialog';
-import AssignmentDetailsDialog from '@/components/ressursplan/AssignmentDetailsDialog';
-import EditAssignmentDialog from '@/components/ressursplan/EditAssignmentDialog';
+import InlineEditDialog from '@/components/ressursplan/InlineEditDialog';
 import { Users, UserPlus, Calendar, Grid3x3, List, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { isWithinInterval, parseISO } from 'date-fns';
@@ -23,11 +22,11 @@ export default function Ressursplan() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showExternalDialog, setShowExternalDialog] = useState(false);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
-  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showInlineEdit, setShowInlineEdit] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [pendingAssignment, setPendingAssignment] = useState(null);
   const [conflicts, setConflicts] = useState([]);
+  const [optimisticAssignments, setOptimisticAssignments] = useState([]);
   const [editingExternal, setEditingExternal] = useState(null);
   const [filters, setFilters] = useState({
     resourceType: 'all',
@@ -136,15 +135,33 @@ export default function Ressursplan() {
     }
   });
 
-  // Update assignment mutation
+  // Update assignment mutation with optimistic update
   const updateAssignmentMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ResourceAssignment.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
-      toast.success('Planlegging oppdatert');
+    onMutate: async ({ id, data }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['resourceAssignments'] });
+      
+      // Snapshot previous value
+      const previousAssignments = queryClient.getQueryData(['resourceAssignments']);
+      
+      // Optimistically update
+      queryClient.setQueryData(['resourceAssignments'], (old) =>
+        old.map(a => a.id === id ? { ...a, ...data } : a)
+      );
+      
+      return { previousAssignments };
     },
-    onError: () => {
+    onError: (err, variables, context) => {
+      // Rollback on error
+      queryClient.setQueryData(['resourceAssignments'], context.previousAssignments);
       toast.error('Kunne ikke oppdatere planlegging');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
+    },
+    onSuccess: () => {
+      toast.success('Planlegging oppdatert');
     }
   });
 
@@ -202,7 +219,7 @@ export default function Ressursplan() {
     });
   };
 
-  // Handle assignment drop (drag and drop)
+  // Handle assignment drop (drag and drop) with optimistic update
   const handleAssignmentDrop = (assignment, newResourceId, newStartDatoTid, newSluttDatoTid) => {
     const foundConflicts = checkConflicts(
       newResourceId,
@@ -211,37 +228,39 @@ export default function Ressursplan() {
       assignment.id
     );
 
+    const resource = newResourceId !== assignment.resource_id
+      ? (allResources.find(r => r.id === newResourceId))
+      : null;
+
+    const updatedData = {
+      resource_id: newResourceId,
+      resource_navn: resource ? resource.navn : assignment.resource_navn,
+      start_dato_tid: newStartDatoTid,
+      slutt_dato_tid: newSluttDatoTid,
+      change_log: [
+        ...(assignment.change_log || []),
+        {
+          timestamp: new Date().toISOString(),
+          user_email: user?.email,
+          user_name: user?.full_name,
+          action: 'Flyttet',
+          changes: `Planlegging flyttet via drag-and-drop`
+        }
+      ]
+    };
+
     if (foundConflicts.length > 0) {
       setConflicts(foundConflicts);
       setPendingAssignment({ 
         ...assignment, 
+        ...updatedData,
         newResourceId, 
         newStartDatoTid,
         newSluttDatoTid
       });
       setShowConflictDialog(true);
     } else {
-      // Update assignment
-      const resource = newResourceId !== assignment.resource_id
-        ? (allResources.find(r => r.id === newResourceId))
-        : null;
-
-      const updatedData = {
-        resource_id: newResourceId,
-        resource_navn: resource ? resource.navn : assignment.resource_navn,
-        start_dato_tid: newStartDatoTid,
-        slutt_dato_tid: newSluttDatoTid,
-        change_log: [
-          ...(assignment.change_log || []),
-          {
-            timestamp: new Date().toISOString(),
-            user_email: user?.email,
-            user_name: user?.full_name,
-            action: 'Flyttet',
-            changes: `Planlegging flyttet via drag-and-drop`
-          }
-        ]
-      };
+      // Immediate UI update
       updateAssignmentMutation.mutate({ id: assignment.id, data: updatedData });
     }
   };
@@ -304,11 +323,11 @@ export default function Ressursplan() {
     }
   };
 
-  const handleEditAssignment = (formData) => {
+  const handleInlineEdit = (formData) => {
     const updatedData = {
       ...formData,
-      start_dato_tid: formData.start_dato_tid.includes('T') ? formData.start_dato_tid : `${formData.start_dato_tid}:00`,
-      slutt_dato_tid: formData.slutt_dato_tid.includes('T') ? formData.slutt_dato_tid : `${formData.slutt_dato_tid}:00`,
+      start_dato_tid: formData.start_dato_tid.includes('T') ? `${formData.start_dato_tid}:00` : formData.start_dato_tid,
+      slutt_dato_tid: formData.slutt_dato_tid.includes('T') ? `${formData.slutt_dato_tid}:00` : formData.slutt_dato_tid,
       change_log: [
         ...(selectedAssignment.change_log || []),
         {
@@ -316,7 +335,7 @@ export default function Ressursplan() {
           user_email: user?.email,
           user_name: user?.full_name,
           action: 'Redigert',
-          changes: 'Planlegging oppdatert manuelt'
+          changes: 'Planlegging oppdatert via inline-redigering'
         }
       ]
     };
@@ -324,8 +343,17 @@ export default function Ressursplan() {
       id: selectedAssignment.id, 
       data: updatedData 
     });
-    setShowEditDialog(false);
+    setShowInlineEdit(false);
     setSelectedAssignment(null);
+  };
+
+  const handleQuickCreate = (resourceId, startTime, endTime) => {
+    const resource = allResources.find(r => r.id === resourceId);
+    if (!resource) return;
+
+    // Show create dialog with pre-filled data
+    setShowCreateDialog(true);
+    // You can extend CreateAssignmentDialog to accept initial values
   };
 
   // Combine all resources
@@ -363,7 +391,7 @@ export default function Ressursplan() {
   return (
     <div className="min-h-screen bg-slate-50 pb-20 md:pb-6">
       <PageHeader
-        title="Ressursplanlegger 2.0"
+        title="Ressursplanlegger"
         subtitle="Planlegg ressurser på tvers av prosjekter"
         actions={
           <div className="flex gap-2 flex-wrap">
@@ -411,6 +439,7 @@ export default function Ressursplan() {
                 <SelectContent>
                   <SelectItem value="day">Dag</SelectItem>
                   <SelectItem value="week">Uke</SelectItem>
+                  <SelectItem value="twoweeks">2 uker</SelectItem>
                   <SelectItem value="month">Måned</SelectItem>
                 </SelectContent>
               </Select>
@@ -461,7 +490,7 @@ export default function Ressursplan() {
             onAction={() => setShowExternalDialog(true)}
           />
         ) : (
-          <ResourceCalendar
+          <OptimizedResourceCalendar
             assignments={filteredAssignments}
             resources={filteredResources}
             projects={projects}
@@ -469,9 +498,12 @@ export default function Ressursplan() {
             onAssignmentDrop={handleAssignmentDrop}
             onAssignmentClick={(a) => {
               setSelectedAssignment(a);
-              setShowDetailsDialog(true);
+              setShowInlineEdit(true);
             }}
+            onCreateAssignment={handleQuickCreate}
             canEdit={canEdit}
+            optimisticAssignments={optimisticAssignments}
+            conflicts={conflicts}
           />
         )}
 
@@ -527,28 +559,15 @@ export default function Ressursplan() {
         isLoading={createExternalMutation.isPending || updateExternalMutation.isPending}
       />
 
-      <AssignmentDetailsDialog
-        open={showDetailsDialog}
-        onOpenChange={setShowDetailsDialog}
-        assignment={selectedAssignment}
-        onEdit={(a) => {
-          setShowDetailsDialog(false);
-          setSelectedAssignment(a);
-          setShowEditDialog(true);
-        }}
-        onDelete={(a) => deleteAssignmentMutation.mutate(a.id)}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
-
-      <EditAssignmentDialog
-        open={showEditDialog}
+      <InlineEditDialog
+        open={showInlineEdit}
         onOpenChange={(open) => {
-          setShowEditDialog(open);
+          setShowInlineEdit(open);
           if (!open) setSelectedAssignment(null);
         }}
         assignment={selectedAssignment}
-        onSubmit={handleEditAssignment}
+        projects={projects}
+        onSubmit={handleInlineEdit}
         isLoading={updateAssignmentMutation.isPending}
       />
     </div>
