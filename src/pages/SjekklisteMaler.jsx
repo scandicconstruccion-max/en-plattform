@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Edit, Trash2, Search, Copy } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import TemplateEditor from '@/components/sjekklister/TemplateEditor.jsx';
@@ -15,6 +16,7 @@ export default function SjekklisteMaler() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -190,7 +192,7 @@ export default function SjekklisteMaler() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => deleteMutation.mutate(template.id)}
+                      onClick={() => setDeleteConfirmTemplate(template)}
                       className="text-red-500 hover:text-red-700"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -220,6 +222,29 @@ export default function SjekklisteMaler() {
           />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteConfirmTemplate} onOpenChange={(open) => !open && setDeleteConfirmTemplate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bekreft sletting</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette malen "{deleteConfirmTemplate?.name}"? Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                deleteMutation.mutate(deleteConfirmTemplate.id);
+                setDeleteConfirmTemplate(null);
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Slett mal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
