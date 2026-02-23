@@ -26,6 +26,7 @@ export default function Ressursplan() {
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [isHoverMode, setIsHoverMode] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState(null);
   const [conflicts, setConflicts] = useState([]);
   const [editingExternal, setEditingExternal] = useState(null);
@@ -467,8 +468,14 @@ export default function Ressursplan() {
             projects={projects}
             viewMode={viewMode}
             onAssignmentDrop={handleAssignmentDrop}
-            onAssignmentClick={(a) => {
+            onAssignmentClick={(a, isHover = false) => {
               setSelectedAssignment(a);
+              setIsHoverMode(isHover);
+              setShowDetailsDialog(true);
+            }}
+            onAssignmentHover={(a) => {
+              setSelectedAssignment(a);
+              setIsHoverMode(true);
               setShowDetailsDialog(true);
             }}
             canEdit={canEdit}
@@ -529,16 +536,24 @@ export default function Ressursplan() {
 
       <AssignmentDetailsDialog
         open={showDetailsDialog}
-        onOpenChange={setShowDetailsDialog}
+        onOpenChange={(open) => {
+          setShowDetailsDialog(open);
+          if (!open) {
+            setIsHoverMode(false);
+            setSelectedAssignment(null);
+          }
+        }}
         assignment={selectedAssignment}
         onEdit={(a) => {
           setShowDetailsDialog(false);
+          setIsHoverMode(false);
           setSelectedAssignment(a);
           setShowEditDialog(true);
         }}
         onDelete={(a) => deleteAssignmentMutation.mutate(a.id)}
         canEdit={canEdit}
         canDelete={canDelete}
+        isHoverMode={isHoverMode}
       />
 
       <EditAssignmentDialog

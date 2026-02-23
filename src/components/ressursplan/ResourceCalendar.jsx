@@ -13,6 +13,7 @@ export default function ResourceCalendar({
   viewMode = 'week',
   onAssignmentDrop,
   onAssignmentClick,
+  onAssignmentHover,
   canEdit
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -223,13 +224,13 @@ export default function ResourceCalendar({
                                 key={assignment.id}
                                 draggable={canEdit}
                                 onDragStart={(e) => handleDragStart(e, assignment)}
-                                onClick={() => onAssignmentClick(assignment)}
+                                onClick={() => onAssignmentClick(assignment, false)}
                                 onMouseEnter={(e) => {
                                   const element = e.currentTarget;
                                   element.dataset.showTooltip = 'true';
                                   hoverTimeout = setTimeout(() => {
                                     if (element && element.dataset && element.dataset.showTooltip === 'true') {
-                                      onAssignmentClick(assignment);
+                                      onAssignmentHover(assignment);
                                     }
                                   }, 800);
                                 }}
