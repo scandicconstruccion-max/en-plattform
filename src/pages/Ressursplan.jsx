@@ -11,6 +11,7 @@ import CreateAssignmentDialog from '@/components/ressursplan/CreateAssignmentDia
 import ConflictDialog from '@/components/ressursplan/ConflictDialog';
 import ExternalResourceDialog from '@/components/ressursplan/ExternalResourceDialog';
 import AssignmentDetailsDialog from '@/components/ressursplan/AssignmentDetailsDialog';
+import EditAssignmentDialog from '@/components/ressursplan/EditAssignmentDialog';
 import { Users, UserPlus, Calendar, Grid3x3, List, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { isWithinInterval, parseISO } from 'date-fns';
@@ -23,6 +24,7 @@ export default function Ressursplan() {
   const [showExternalDialog, setShowExternalDialog] = useState(false);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [pendingAssignment, setPendingAssignment] = useState(null);
   const [conflicts, setConflicts] = useState([]);
@@ -201,23 +203,34 @@ export default function Ressursplan() {
   };
 
   // Handle assignment drop (drag and drop)
-  const handleAssignmentDrop = (assignment, newResourceId, newDay) => {
+  const handleAssignmentDrop = (assignment, newResourceId, newStartDatoTid, newSluttDatoTid) => {
     const foundConflicts = checkConflicts(
       newResourceId,
-      assignment.start_dato_tid,
-      assignment.slutt_dato_tid,
+      newStartDatoTid,
+      newSluttDatoTid,
       assignment.id
     );
 
     if (foundConflicts.length > 0) {
       setConflicts(foundConflicts);
-      setPendingAssignment({ ...assignment, newResourceId, newDay });
+      setPendingAssignment({ 
+        ...assignment, 
+        newResourceId, 
+        newStartDatoTid,
+        newSluttDatoTid
+      });
       setShowConflictDialog(true);
     } else {
       // Update assignment
+      const resource = newResourceId !== assignment.resource_id
+        ? (allResources.find(r => r.id === newResourceId))
+        : null;
+
       const updatedData = {
-        ...assignment,
         resource_id: newResourceId,
+        resource_navn: resource ? resource.navn : assignment.resource_navn,
+        start_dato_tid: newStartDatoTid,
+        slutt_dato_tid: newSluttDatoTid,
         change_log: [
           ...(assignment.change_log || []),
           {
@@ -225,7 +238,7 @@ export default function Ressursplan() {
             user_email: user?.email,
             user_name: user?.full_name,
             action: 'Flyttet',
-            changes: `Ressurs endret via drag-and-drop`
+            changes: `Planlegging flyttet via drag-and-drop`
           }
         ]
       };
@@ -235,21 +248,29 @@ export default function Ressursplan() {
 
   const handleConflictConfirm = () => {
     if (pendingAssignment) {
-      const updatedData = {
-        ...pendingAssignment,
-        resource_id: pendingAssignment.newResourceId,
-        change_log: [
-          ...(pendingAssignment.change_log || []),
-          {
-            timestamp: new Date().toISOString(),
-            user_email: user?.email,
-            user_name: user?.full_name,
-            action: 'Flyttet med konflikt',
-            changes: `Ressurs endret med overlappende planlegging`
-          }
-        ]
-      };
-      updateAssignmentMutation.mutate({ id: pendingAssignment.id, data: updatedData });
+      if (pendingAssignment.id) {
+        // Updating existing assignment
+        const updatedData = {
+          ...pendingAssignment,
+          resource_id: pendingAssignment.newResourceId,
+          start_dato_tid: pendingAssignment.newStartDatoTid || pendingAssignment.start_dato_tid,
+          slutt_dato_tid: pendingAssignment.newSluttDatoTid || pendingAssignment.slutt_dato_tid,
+          change_log: [
+            ...(pendingAssignment.change_log || []),
+            {
+              timestamp: new Date().toISOString(),
+              user_email: user?.email,
+              user_name: user?.full_name,
+              action: 'Flyttet med konflikt',
+              changes: `Ressurs endret med overlappende planlegging`
+            }
+          ]
+        };
+        updateAssignmentMutation.mutate({ id: pendingAssignment.id, data: updatedData });
+      } else {
+        // Creating new assignment
+        createAssignmentMutation.mutate(pendingAssignment);
+      }
     }
     setShowConflictDialog(false);
     setPendingAssignment(null);
@@ -257,7 +278,22 @@ export default function Ressursplan() {
   };
 
   const handleCreateAssignment = (formData) => {
-    createAssignmentMutation.mutate(formData);
+    // Check for conflicts for each resource
+    let allConflicts = [];
+    for (const resourceId of formData.resource_ids) {
+      const resourceConflicts = checkConflicts(resourceId, formData.start_dato_tid, formData.slutt_dato_tid);
+      if (resourceConflicts.length > 0) {
+        allConflicts = [...allConflicts, ...resourceConflicts];
+      }
+    }
+
+    if (allConflicts.length > 0) {
+      setConflicts(allConflicts);
+      setPendingAssignment(formData);
+      setShowConflictDialog(true);
+    } else {
+      createAssignmentMutation.mutate(formData);
+    }
   };
 
   const handleExternalSubmit = (formData) => {
@@ -266,6 +302,30 @@ export default function Ressursplan() {
     } else {
       createExternalMutation.mutate(formData);
     }
+  };
+
+  const handleEditAssignment = (formData) => {
+    const updatedData = {
+      ...formData,
+      start_dato_tid: formData.start_dato_tid.includes('T') ? formData.start_dato_tid : `${formData.start_dato_tid}:00`,
+      slutt_dato_tid: formData.slutt_dato_tid.includes('T') ? formData.slutt_dato_tid : `${formData.slutt_dato_tid}:00`,
+      change_log: [
+        ...(selectedAssignment.change_log || []),
+        {
+          timestamp: new Date().toISOString(),
+          user_email: user?.email,
+          user_name: user?.full_name,
+          action: 'Redigert',
+          changes: 'Planlegging oppdatert manuelt'
+        }
+      ]
+    };
+    updateAssignmentMutation.mutate({ 
+      id: selectedAssignment.id, 
+      data: updatedData 
+    });
+    setShowEditDialog(false);
+    setSelectedAssignment(null);
   };
 
   // Combine all resources
@@ -472,12 +532,24 @@ export default function Ressursplan() {
         onOpenChange={setShowDetailsDialog}
         assignment={selectedAssignment}
         onEdit={(a) => {
-          // TODO: Implement edit dialog
-          toast.info('Redigering kommer i neste versjon');
+          setShowDetailsDialog(false);
+          setSelectedAssignment(a);
+          setShowEditDialog(true);
         }}
         onDelete={(a) => deleteAssignmentMutation.mutate(a.id)}
         canEdit={canEdit}
         canDelete={canDelete}
+      />
+
+      <EditAssignmentDialog
+        open={showEditDialog}
+        onOpenChange={(open) => {
+          setShowEditDialog(open);
+          if (!open) setSelectedAssignment(null);
+        }}
+        assignment={selectedAssignment}
+        onSubmit={handleEditAssignment}
+        isLoading={updateAssignmentMutation.isPending}
       />
     </div>
   );

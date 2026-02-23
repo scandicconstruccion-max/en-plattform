@@ -80,13 +80,23 @@ export default function ResourceCalendar({
   const handleDragStart = (e, assignment) => {
     if (!canEdit) return;
     e.dataTransfer.setData('assignment', JSON.stringify(assignment));
+    e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDrop = (e, resourceId, day) => {
     if (!canEdit) return;
     e.preventDefault();
     const assignment = JSON.parse(e.dataTransfer.getData('assignment'));
-    onAssignmentDrop(assignment, resourceId, day);
+    
+    // Calculate time difference and update assignment times
+    const originalStart = parseISO(assignment.start_dato_tid);
+    const timeDiff = day.getTime() - new Date(originalStart.getFullYear(), originalStart.getMonth(), originalStart.getDate()).getTime();
+    
+    const newStart = new Date(originalStart.getTime() + timeDiff);
+    const originalEnd = parseISO(assignment.slutt_dato_tid);
+    const newEnd = new Date(originalEnd.getTime() + timeDiff);
+    
+    onAssignmentDrop(assignment, resourceId, newStart.toISOString(), newEnd.toISOString());
   };
 
   const handleDragOver = (e) => {
@@ -212,8 +222,19 @@ export default function ResourceCalendar({
                               draggable={canEdit}
                               onDragStart={(e) => handleDragStart(e, assignment)}
                               onClick={() => onAssignmentClick(assignment)}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.dataset.showTooltip = 'true';
+                                setTimeout(() => {
+                                  if (e.currentTarget.dataset.showTooltip === 'true') {
+                                    onAssignmentClick(assignment);
+                                  }
+                                }, 800);
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.dataset.showTooltip = 'false';
+                              }}
                               className={cn(
-                                "px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-opacity",
+                                "px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 hover:shadow-lg transition-all",
                                 getProjectColor(assignment.prosjekt_id),
                                 canEdit && "cursor-move"
                               )}
