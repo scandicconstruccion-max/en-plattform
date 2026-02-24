@@ -481,8 +481,8 @@ const ResourceRow = memo(({
               key={day.toISOString()}
               style={{ width: style.dayWidth }}
               className={cn(
-                "flex-shrink-0 p-1.5 border-l border-slate-100 relative hover:bg-slate-50/50 transition-colors",
-                isWeekend && "bg-slate-50/80",
+                "flex-shrink-0 p-1.5 border-l border-slate-200 relative hover:bg-slate-50/50 transition-colors",
+                isWeekend && "bg-slate-100/60",
                 isToday && "bg-emerald-50/30",
                 dayIsHoliday && "bg-red-50/20"
               )}
@@ -646,10 +646,23 @@ export default function OptimizedResourceCalendar({
     return showHolidays ? getHolidayName(date) : null;
   }, [showHolidays]);
 
-  // Fixed day width for consistent grid
-  const dayWidth = 120;
+  // Dynamic day width for week view to fill available space
+  const [containerWidth, setContainerWidth] = React.useState(window.innerWidth);
+  
+  React.useEffect(() => {
+    const handleResize = () => setContainerWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
   const resourceWidth = resourceColumnCollapsed ? 64 : 208;
-  const totalCalendarWidth = viewDates.length * dayWidth + resourceWidth;
+  const availableWidth = containerWidth - resourceWidth - 16; // 16px for scrollbar
+  const dayWidth = viewMode === 'week' 
+    ? Math.max(100, Math.floor(availableWidth / viewDates.length))
+    : 120;
+  const totalCalendarWidth = viewMode === 'week'
+    ? containerWidth
+    : viewDates.length * dayWidth + resourceWidth;
 
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
@@ -770,12 +783,12 @@ export default function OptimizedResourceCalendar({
                     key={day.toISOString()}
                     style={{ width: dayWidth }}
                     className={cn(
-                      "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100 relative",
-                      isWeekend && !isToday && "bg-slate-100",
+                      "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-200 relative",
+                      isWeekend && !isToday && "bg-slate-200/70",
                       isToday && "bg-emerald-100 text-emerald-900 font-bold",
                       !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
                       !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
-                      isWeekend && !isToday && !dayIsHoliday && "text-slate-500"
+                      isWeekend && !isToday && !dayIsHoliday && "text-slate-600 font-medium"
                     )}
                   >
                     {isToday && (
