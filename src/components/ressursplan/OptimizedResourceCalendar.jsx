@@ -476,20 +476,38 @@ const ResourceRow = memo(({
           
           const isWeekend = getDay(day) === 0 || getDay(day) === 6;
           
+          const dayAssignments = getAssignmentsForDay(day);
+          const isEmptyCell = dayAssignments.length === 0;
+
           return (
             <div
               key={day.toISOString()}
               style={{ width: style.dayWidth }}
               className={cn(
-                "flex-shrink-0 p-1.5 border-l border-t border-slate-200 relative hover:bg-slate-50/50 transition-colors",
+                "flex-shrink-0 p-1.5 border-l border-t border-slate-200 relative transition-colors",
                 isWeekend && "bg-slate-100/60",
                 isToday && "bg-emerald-50/30",
-                dayIsHoliday && "bg-red-50/20"
+                dayIsHoliday && "bg-red-50/20",
+                isEmptyCell && canEdit && "cursor-pointer hover:bg-slate-200/60",
+                !isEmptyCell && "hover:bg-slate-50/50"
               )}
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
               onMouseDown={(e) => handleCellMouseDown(e, day)}
               onMouseUp={(e) => handleCellMouseUp(e, day)}
+              onClick={(e) => {
+                if (isEmptyCell && canEdit && e.target === e.currentTarget) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const clickY = e.clientY - rect.top;
+                  const hourFraction = clickY / rect.height;
+                  const startTime = new Date(day);
+                  startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
+                  const snappedStart = snapToInterval(startTime);
+                  const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
+                  onCellClick(resource.id, snappedStart, snappedEnd);
+                }
+              }}
+              title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}
             >
               {dayIsHoliday && dayHolidayName && (
                 <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
