@@ -888,9 +888,9 @@ export default function OptimizedResourceCalendar({
           </div>
 
           {/* Calendar Body - Rows */}
-          <div className="flex-1 relative"
-          {/* Today Marker - Vertical Line */}
-          {viewDates.map((day, index) => {
+          <div className="flex-1 relative">
+            {/* Today Marker - Vertical Line */}
+            {viewDates.map((day, index) => {
             const isToday = isSameDay(day, new Date());
             if (!isToday) return null;
             
