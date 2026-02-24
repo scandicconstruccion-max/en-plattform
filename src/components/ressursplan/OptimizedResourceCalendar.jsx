@@ -365,12 +365,20 @@ const ResourceRow = memo(({
     const rect = e.currentTarget.getBoundingClientRect();
     const clickY = e.clientY - rect.top;
     const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
+
+    const [startHour, startMin] = currentSettings.standard_start_tid.split(':').map(Number);
+    const [endHour, endMin] = currentSettings.standard_slutt_tid.split(':').map(Number);
+
     const startTime = new Date(day);
-    startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round(hourFraction * 8 % 1 * 60));
+    startTime.setHours(startHour, startMin);
     const snappedStart = snapToInterval(startTime);
-    const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
+
+    const endTime = new Date(day);
+    endTime.setHours(endHour, endMin);
+    const snappedEnd = snapToInterval(endTime);
+
     onCellClick(resourceId, snappedStart, snappedEnd);
-  }, [canEdit, onCellClick]);
+  }, [canEdit, onCellClick, currentSettings]);
 
   const handleDrop = useCallback((e, day) => {
     if (!canEdit) return;
@@ -737,7 +745,7 @@ export default function OptimizedResourceCalendar({
   const handleCellClick = useCallback((resourceId, startTime, endTime) => {
     if (!canEdit) return;
     onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
-  }, [canEdit, onCreateAssignment]);
+  }, [canEdit, onCreateAssignment, currentSettings]);
 
   const isHolidayFunc = useCallback((date) => {
     return showHolidays && isNorwegianHoliday(date);
@@ -830,13 +838,18 @@ export default function OptimizedResourceCalendar({
               onClick={(e) => {
                 if (!canEdit || !isEmptyCell) return;
                 e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const clickY = e.clientY - rect.top;
-                const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
+
+                const [startHour, startMin] = currentSettings.standard_start_tid.split(':').map(Number);
+                const [endHour, endMin] = currentSettings.standard_slutt_tid.split(':').map(Number);
+
                 const startTime = new Date(day);
-                startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round(hourFraction * 8 % 1 * 60));
+                startTime.setHours(startHour, startMin);
                 const snappedStart = snapToInterval(startTime);
-                const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
+
+                const endTime = new Date(day);
+                endTime.setHours(endHour, endMin);
+                const snappedEnd = snapToInterval(endTime);
+
                 onCreateAssignment(resource.id, snappedStart.toISOString(), snappedEnd.toISOString());
               }}
               title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}>
