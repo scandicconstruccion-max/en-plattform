@@ -739,6 +739,16 @@ export default function OptimizedResourceCalendar({
     totalCalendarWidth = viewDates.length * dayWidth + resourceWidth;
   }
 
+  const handleScroll = useCallback((source) => {
+    if (viewMode !== 'month') return;
+    
+    if (source === 'header' && bodyScrollRef.current) {
+      bodyScrollRef.current.scrollLeft = headerScrollRef.current.scrollLeft;
+    } else if (source === 'body' && headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = bodyScrollRef.current.scrollLeft;
+    }
+  }, [viewMode]);
+
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
     const getResourceId = (idx) => resources[idx]?.id;
