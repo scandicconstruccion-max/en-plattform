@@ -30,7 +30,8 @@ const AssignmentBlock = memo(({
   isConflict,
   isResizing,
   dragTransform,
-  dragConflict
+  dragConflict,
+  resource
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
