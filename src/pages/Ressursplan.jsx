@@ -352,9 +352,42 @@ export default function Ressursplan() {
     setSelectedAssignment(null);
   };
 
-  const handleAssignmentResize = (assignment, edge, action) => {
-    // This is just a placeholder for now - resize functionality needs proper implementation
-    // The calendar will handle the visual feedback
+  const handleAssignmentResize = (assignment, newStartDatoTid, newSluttDatoTid) => {
+    const foundConflicts = checkConflicts(
+      assignment.resource_id,
+      newStartDatoTid,
+      newSluttDatoTid,
+      assignment.id
+    );
+
+    const updatedData = {
+      start_dato_tid: newStartDatoTid,
+      slutt_dato_tid: newSluttDatoTid,
+      change_log: [
+        ...(assignment.change_log || []),
+        {
+          timestamp: new Date().toISOString(),
+          user_email: user?.email,
+          user_name: user?.full_name,
+          action: 'Utvidet',
+          changes: `Aktivitet utvidet via drag`
+        }
+      ]
+    };
+
+    if (foundConflicts.length > 0) {
+      setConflicts(foundConflicts);
+      setPendingAssignment({ 
+        ...assignment, 
+        ...updatedData,
+        newResourceId: assignment.resource_id,
+        newStartDatoTid,
+        newSluttDatoTid
+      });
+      setShowConflictDialog(true);
+    } else {
+      updateAssignmentMutation.mutate({ id: assignment.id, data: updatedData });
+    }
   };
 
   const handleQuickCreate = (resourceId, startTime, endTime) => {

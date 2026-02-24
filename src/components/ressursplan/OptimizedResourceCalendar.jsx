@@ -213,7 +213,6 @@ const ResourceRow = memo(({
     const originalEnd = parseISO(assignment.slutt_dato_tid);
 
     setResizeState({ assignment, edge, startPos, originalStart, originalEnd });
-    onAssignmentResize(assignment, edge, 'start');
 
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
@@ -256,22 +255,20 @@ const ResourceRow = memo(({
         const finalStart = snapToInterval(resizeState.previewStart);
         const finalEnd = snapToInterval(resizeState.previewEnd);
         
-        // Call parent with updated times
-        onAssignmentDrop(
+        // Call resize handler instead of drop
+        onAssignmentResize(
           assignment,
-          assignment.resource_id,
           finalStart.toISOString(),
           finalEnd.toISOString()
         );
       }
       
       setResizeState(null);
-      onAssignmentResize(assignment, edge, 'end');
     };
 
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
-  }, [canEdit, onAssignmentResize, onAssignmentDrop, resizeState]);
+  }, [canEdit, onAssignmentResize, resizeState]);
 
   const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
   const collapsed = style.resourceColumnCollapsed;
@@ -476,14 +473,7 @@ export default function OptimizedResourceCalendar({
     onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
   }, [canEdit, onCreateAssignment]);
 
-  const handleResizeUpdate = useCallback((assignment, edge, action) => {
-    if (action === 'start') {
-      setResizingAssignment(assignment);
-    } else if (action === 'end') {
-      setResizingAssignment(null);
-      setResizeGhost(null);
-    }
-  }, []);
+
 
   const isHolidayFunc = useCallback((date) => {
     return showHolidays && isNorwegianHoliday(date);
@@ -506,7 +496,7 @@ export default function OptimizedResourceCalendar({
         getProjectName={getProjectName}
         onAssignmentDrop={onAssignmentDrop}
         onAssignmentClick={onAssignmentClick}
-        onAssignmentResize={handleResizeUpdate}
+        onAssignmentResize={onAssignmentResize}
         onCellClick={handleCellClick}
         draggedAssignment={draggedAssignment}
         ghostPreview={ghostPreview}
@@ -518,7 +508,7 @@ export default function OptimizedResourceCalendar({
         style={{ ...style, resourceColumnCollapsed }}
       />
     );
-  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, handleResizeUpdate, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed]);
 
   const resourceColWidth = resourceColumnCollapsed ? 'w-16' : 'w-52';
 
