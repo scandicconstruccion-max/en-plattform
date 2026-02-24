@@ -402,7 +402,7 @@ const ResourceRow = memo(({
   const colWidth = collapsed ? 64 : 208;
 
   return (
-    <div style={style} className="flex border-t border-slate-50">
+    <div style={style} className="flex border-t border-slate-200">
       <div 
         className={cn(
           "sticky left-0 bg-white z-10 border-r border-slate-200 flex-shrink-0",
