@@ -315,7 +315,13 @@ const ResourceRow = memo(({
           <div className="flex flex-col items-center gap-1">
             <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
               <span className="text-xs font-semibold text-emerald-700">
-                {resource.navn?.charAt(0) || 'R'}
+                {(() => {
+                  const names = resource.navn?.split(' ') || [];
+                  if (names.length >= 2) {
+                    return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                  }
+                  return resource.navn?.charAt(0) || 'R';
+                })()}
               </span>
             </div>
             <span className={cn(
@@ -331,7 +337,13 @@ const ResourceRow = memo(({
           <div className="flex items-start gap-2">
             <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-semibold text-emerald-700">
-                {resource.navn?.charAt(0) || 'R'}
+                {(() => {
+                  const names = resource.navn?.split(' ') || [];
+                  if (names.length >= 2) {
+                    return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                  }
+                  return resource.navn?.charAt(0) || 'R';
+                })()}
               </span>
             </div>
             <div className="min-w-0 flex-1">
