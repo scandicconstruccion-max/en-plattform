@@ -54,7 +54,7 @@ export default function Ressursplan() {
     initialData: []
   });
 
-  const userPermission = permissions.find(p => p.bruker_id === user?.email);
+  const userPermission = permissions.find((p) => p.bruker_id === user?.email);
   const canEdit = user?.role === 'admin' || userPermission?.kan_redigere || false;
   const canDelete = user?.role === 'admin' || userPermission?.kan_slette || false;
 
@@ -63,7 +63,7 @@ export default function Ressursplan() {
     queryKey: ['employees'],
     queryFn: async () => {
       const allEmployees = await base44.entities.Employee.list();
-      return allEmployees.filter(e => e.is_active);
+      return allEmployees.filter((e) => e.is_active);
     },
     initialData: []
   });
@@ -73,7 +73,7 @@ export default function Ressursplan() {
     queryKey: ['externalResources'],
     queryFn: async () => {
       const allExternals = await base44.entities.ExternalResource.list();
-      return allExternals.filter(e => e.aktiv);
+      return allExternals.filter((e) => e.aktiv);
     },
     initialData: []
   });
@@ -97,20 +97,20 @@ export default function Ressursplan() {
     mutationFn: async (data) => {
       const results = [];
       for (const resourceId of data.resource_ids) {
-        const resource = data.resource_type === 'employee'
-          ? employees.find(e => e.id === resourceId)
-          : externals.find(e => e.id === resourceId);
+        const resource = data.resource_type === 'employee' ?
+        employees.find((e) => e.id === resourceId) :
+        externals.find((e) => e.id === resourceId);
 
-        const project = projects.find(p => p.id === data.prosjekt_id);
-        
+        const project = projects.find((p) => p.id === data.prosjekt_id);
+
         const assignmentData = {
           prosjekt_id: data.prosjekt_id,
           prosjekt_navn: project?.name || '',
           resource_type: data.resource_type,
           resource_id: resourceId,
-          resource_navn: resource?.first_name 
-            ? `${resource.first_name} ${resource.last_name}` 
-            : resource?.navn || '',
+          resource_navn: resource?.first_name ?
+          `${resource.first_name} ${resource.last_name}` :
+          resource?.navn || '',
           start_dato_tid: data.start_dato_tid,
           slutt_dato_tid: data.slutt_dato_tid,
           rolle_pa_prosjekt: data.rolle_pa_prosjekt,
@@ -147,15 +147,15 @@ export default function Ressursplan() {
     onMutate: async ({ id, data }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['resourceAssignments'] });
-      
+
       // Snapshot previous value
       const previousAssignments = queryClient.getQueryData(['resourceAssignments']);
-      
+
       // Optimistically update
       queryClient.setQueryData(['resourceAssignments'], (old) =>
-        old.map(a => a.id === id ? { ...a, ...data } : a)
+      old.map((a) => a.id === id ? { ...a, ...data } : a)
       );
-      
+
       return { previousAssignments };
     },
     onError: (err, variables, context) => {
@@ -208,20 +208,20 @@ export default function Ressursplan() {
   const checkConflicts = (resourceId, startDatoTid, sluttDatoTid, excludeId = null) => {
     const start = parseISO(startDatoTid);
     const end = parseISO(sluttDatoTid);
-    
-    return assignments.filter(a => {
+
+    return assignments.filter((a) => {
       if (a.id === excludeId) return false;
       if (a.resource_id !== resourceId) return false;
-      
+
       const aStart = parseISO(a.start_dato_tid);
       const aEnd = parseISO(a.slutt_dato_tid);
-      
+
       return (
         isWithinInterval(start, { start: aStart, end: aEnd }) ||
         isWithinInterval(end, { start: aStart, end: aEnd }) ||
         isWithinInterval(aStart, { start, end }) ||
-        isWithinInterval(aEnd, { start, end })
-      );
+        isWithinInterval(aEnd, { start, end }));
+
     });
   };
 
@@ -234,9 +234,9 @@ export default function Ressursplan() {
       assignment.id
     );
 
-    const resource = newResourceId !== assignment.resource_id
-      ? (allResources.find(r => r.id === newResourceId))
-      : null;
+    const resource = newResourceId !== assignment.resource_id ?
+    allResources.find((r) => r.id === newResourceId) :
+    null;
 
     const updatedData = {
       resource_id: newResourceId,
@@ -244,23 +244,23 @@ export default function Ressursplan() {
       start_dato_tid: newStartDatoTid,
       slutt_dato_tid: newSluttDatoTid,
       change_log: [
-        ...(assignment.change_log || []),
-        {
-          timestamp: new Date().toISOString(),
-          user_email: user?.email,
-          user_name: user?.full_name,
-          action: 'Flyttet',
-          changes: `Planlegging flyttet via drag-and-drop`
-        }
-      ]
+      ...(assignment.change_log || []),
+      {
+        timestamp: new Date().toISOString(),
+        user_email: user?.email,
+        user_name: user?.full_name,
+        action: 'Flyttet',
+        changes: `Planlegging flyttet via drag-and-drop`
+      }]
+
     };
 
     if (foundConflicts.length > 0) {
       setConflicts(foundConflicts);
-      setPendingAssignment({ 
-        ...assignment, 
+      setPendingAssignment({
+        ...assignment,
         ...updatedData,
-        newResourceId, 
+        newResourceId,
         newStartDatoTid,
         newSluttDatoTid
       });
@@ -281,15 +281,15 @@ export default function Ressursplan() {
           start_dato_tid: pendingAssignment.newStartDatoTid || pendingAssignment.start_dato_tid,
           slutt_dato_tid: pendingAssignment.newSluttDatoTid || pendingAssignment.slutt_dato_tid,
           change_log: [
-            ...(pendingAssignment.change_log || []),
-            {
-              timestamp: new Date().toISOString(),
-              user_email: user?.email,
-              user_name: user?.full_name,
-              action: 'Flyttet med konflikt',
-              changes: `Ressurs endret med overlappende planlegging`
-            }
-          ]
+          ...(pendingAssignment.change_log || []),
+          {
+            timestamp: new Date().toISOString(),
+            user_email: user?.email,
+            user_name: user?.full_name,
+            action: 'Flyttet med konflikt',
+            changes: `Ressurs endret med overlappende planlegging`
+          }]
+
         };
         updateAssignmentMutation.mutate({ id: pendingAssignment.id, data: updatedData });
       } else {
@@ -303,18 +303,18 @@ export default function Ressursplan() {
   };
 
   const handleCreateAssignment = async (data) => {
-    const selectedProject = data.assignment_type === 'arbeid' ? projects.find(p => p.id === data.prosjekt_id) : null;
+    const selectedProject = data.assignment_type === 'arbeid' ? projects.find((p) => p.id === data.prosjekt_id) : null;
 
-    const assignments = data.resource_ids.map(resourceId => {
-      const resource = [...employees, ...externals].find(r => r.id === resourceId);
+    const assignments = data.resource_ids.map((resourceId) => {
+      const resource = [...employees, ...externals].find((r) => r.id === resourceId);
       return {
         prosjekt_id: data.prosjekt_id || 'N/A',
         prosjekt_navn: selectedProject?.name || data.assignment_type,
         resource_type: data.resource_type,
         resource_id: resourceId,
-        resource_navn: data.resource_type === 'employee'
-          ? `${resource.first_name} ${resource.last_name}`
-          : resource.navn,
+        resource_navn: data.resource_type === 'employee' ?
+        `${resource.first_name} ${resource.last_name}` :
+        resource.navn,
         assignment_type: data.assignment_type,
         start_dato_tid: new Date(data.start_dato_tid).toISOString(),
         slutt_dato_tid: new Date(data.slutt_dato_tid).toISOString(),
@@ -333,7 +333,7 @@ export default function Ressursplan() {
       };
     });
 
-    await Promise.all(assignments.map(a => createAssignmentMutation.mutateAsync(a)));
+    await Promise.all(assignments.map((a) => createAssignmentMutation.mutateAsync(a)));
     setShowCreateDialog(false);
   };
 
@@ -351,19 +351,19 @@ export default function Ressursplan() {
       start_dato_tid: formData.start_dato_tid.includes('T') ? `${formData.start_dato_tid}:00` : formData.start_dato_tid,
       slutt_dato_tid: formData.slutt_dato_tid.includes('T') ? `${formData.slutt_dato_tid}:00` : formData.slutt_dato_tid,
       change_log: [
-        ...(selectedAssignment.change_log || []),
-        {
-          timestamp: new Date().toISOString(),
-          user_email: user?.email,
-          user_name: user?.full_name,
-          action: 'Redigert',
-          changes: 'Planlegging oppdatert via inline-redigering'
-        }
-      ]
+      ...(selectedAssignment.change_log || []),
+      {
+        timestamp: new Date().toISOString(),
+        user_email: user?.email,
+        user_name: user?.full_name,
+        action: 'Redigert',
+        changes: 'Planlegging oppdatert via inline-redigering'
+      }]
+
     };
-    updateAssignmentMutation.mutate({ 
-      id: selectedAssignment.id, 
-      data: updatedData 
+    updateAssignmentMutation.mutate({
+      id: selectedAssignment.id,
+      data: updatedData
     });
     setShowInlineEdit(false);
     setSelectedAssignment(null);
@@ -381,21 +381,21 @@ export default function Ressursplan() {
       start_dato_tid: newStartDatoTid,
       slutt_dato_tid: newSluttDatoTid,
       change_log: [
-        ...(assignment.change_log || []),
-        {
-          timestamp: new Date().toISOString(),
-          user_email: user?.email,
-          user_name: user?.full_name,
-          action: 'Utvidet',
-          changes: `Aktivitet utvidet via drag`
-        }
-      ]
+      ...(assignment.change_log || []),
+      {
+        timestamp: new Date().toISOString(),
+        user_email: user?.email,
+        user_name: user?.full_name,
+        action: 'Utvidet',
+        changes: `Aktivitet utvidet via drag`
+      }]
+
     };
 
     if (foundConflicts.length > 0) {
       setConflicts(foundConflicts);
-      setPendingAssignment({ 
-        ...assignment, 
+      setPendingAssignment({
+        ...assignment,
         ...updatedData,
         newResourceId: assignment.resource_id,
         newStartDatoTid,
@@ -408,7 +408,7 @@ export default function Ressursplan() {
   };
 
   const handleQuickCreate = (resourceId, startTime, endTime) => {
-    const resource = allResources.find(r => r.id === resourceId);
+    const resource = allResources.find((r) => r.id === resourceId);
     if (!resource) return;
 
     // Parse startTime to get just the date
@@ -418,31 +418,31 @@ export default function Ressursplan() {
 
   // Combine all resources
   const allResources = [
-    ...employees.map(e => ({
-      id: e.id,
-      navn: `${e.first_name} ${e.last_name}`,
-      type: 'employee',
-      stilling: e.position,
-      department: e.department || 'Ingen avdeling',
-      normal_hours_per_day: e.normal_hours_per_day || 8,
-      telefon: e.phone,
-      epost: e.email
-    })),
-    ...externals.map(e => ({
-      id: e.id,
-      navn: e.navn,
-      type: 'external',
-      rolle: e.rolle,
-      department: e.firma || 'Ekstern',
-      normal_hours_per_day: 8,
-      firma: e.firma,
-      telefon: e.telefon,
-      epost: e.epost
-    }))
-  ];
+  ...employees.map((e) => ({
+    id: e.id,
+    navn: `${e.first_name} ${e.last_name}`,
+    type: 'employee',
+    stilling: e.position,
+    department: e.department || 'Ingen avdeling',
+    normal_hours_per_day: e.normal_hours_per_day || 8,
+    telefon: e.phone,
+    epost: e.email
+  })),
+  ...externals.map((e) => ({
+    id: e.id,
+    navn: e.navn,
+    type: 'external',
+    rolle: e.rolle,
+    department: e.firma || 'Ekstern',
+    normal_hours_per_day: 8,
+    firma: e.firma,
+    telefon: e.telefon,
+    epost: e.epost
+  }))];
+
 
   // Apply filters with search and grouping
-  let filteredResources = allResources.filter(r => {
+  let filteredResources = allResources.filter((r) => {
     if (filters.resourceType !== 'all' && r.type !== filters.resourceType) return false;
     if (searchQuery && !r.navn.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
@@ -450,8 +450,8 @@ export default function Ressursplan() {
 
   // Apply grouping
   if (groupBy === 'type') {
-    const employees = filteredResources.filter(r => r.type === 'employee');
-    const externals = filteredResources.filter(r => r.type === 'external');
+    const employees = filteredResources.filter((r) => r.type === 'employee');
+    const externals = filteredResources.filter((r) => r.type === 'external');
     filteredResources = [...employees, ...externals];
   } else if (groupBy === 'department') {
     filteredResources = filteredResources.sort((a, b) => {
@@ -461,7 +461,7 @@ export default function Ressursplan() {
     });
   }
 
-  const filteredAssignments = assignments.filter(a => {
+  const filteredAssignments = assignments.filter((a) => {
     if (filters.projectId !== 'all' && a.prosjekt_id !== filters.projectId) return false;
     return true;
   });
@@ -470,44 +470,44 @@ export default function Ressursplan() {
     <div className={cn(
       isFullscreen ? "fixed inset-0 z-50 bg-slate-50 flex flex-col" : "min-h-screen bg-slate-50 pb-20 md:pb-6"
     )}>
-      {!isFullscreen && (
-        <PageHeader
-          title="Ressursplanlegger"
-          subtitle="Planlegg ressurser på tvers av prosjekter"
-          actions={
-            <div className="flex gap-2 flex-wrap">
+      {!isFullscreen &&
+      <PageHeader
+        title="Ressursplanlegger"
+        subtitle="Planlegg ressurser på tvers av prosjekter"
+        actions={
+        <div className="flex gap-2 flex-wrap">
+              
+
+
+
+
+
+
+
               <Button
-                variant="outline"
-                onClick={() => navigate(createPageUrl('Innstillinger'))}
-                className="gap-2 rounded-xl"
-              >
-                <Settings className="h-4 w-4" />
-                <span className="hidden lg:inline">Innstillinger</span>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEditingExternal(null);
-                  setShowExternalDialog(true);
-                }}
-                className="gap-2 rounded-xl"
-              >
+            variant="outline"
+            onClick={() => {
+              setEditingExternal(null);
+              setShowExternalDialog(true);
+            }}
+            className="gap-2 rounded-xl">
+
                 <UserPlus className="h-4 w-4" />
                 <span className="hidden lg:inline">Ny ekstern</span>
               </Button>
-              {canEdit && (
-                <Button
-                  onClick={() => setShowCreateDialog(true)}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-                >
+              {canEdit &&
+          <Button
+            onClick={() => setShowCreateDialog(true)}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
                   <Calendar className="h-4 w-4" />
                   <span className="hidden sm:inline">Ny planlegging</span>
                 </Button>
-              )}
-            </div>
           }
-        />
-      )}
+            </div>
+        } />
+
+      }
 
       <div className={cn(
         "flex-1 flex flex-col",
@@ -531,41 +531,41 @@ export default function Ressursplan() {
               </SelectContent>
             </Select>
 
-            <Select 
-              value={filters.projectId} 
-              onValueChange={(v) => setFilters({ ...filters, projectId: v })}
-            >
+            <Select
+              value={filters.projectId}
+              onValueChange={(v) => setFilters({ ...filters, projectId: v })}>
+
               <SelectTrigger className="w-[120px] h-7 text-xs">
                 <SelectValue placeholder="Prosjekt" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle</SelectItem>
-                {projects.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name.substring(0, 20)}</SelectItem>
-                ))}
+                {projects.map((p) =>
+                <SelectItem key={p.id} value={p.id}>{p.name.substring(0, 20)}</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="hidden md:inline text-xs text-slate-600">{filteredResources.length} res.</span>
-            {canEdit && !isFullscreen && (
-              <Button
-                onClick={() => setShowCreateDialog(true)}
-                size="sm"
-                className="h-7 gap-1 bg-emerald-600 hover:bg-emerald-700 text-xs px-2"
-              >
+            {canEdit && !isFullscreen &&
+            <Button
+              onClick={() => setShowCreateDialog(true)}
+              size="sm"
+              className="h-7 gap-1 bg-emerald-600 hover:bg-emerald-700 text-xs px-2">
+
                 <Plus className="h-3 w-3" />
                 <span className="hidden sm:inline">Ny</span>
               </Button>
-            )}
+            }
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="h-7 w-7 p-0"
-              title={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
-            >
+              title={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}>
+
               {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </Button>
           </div>
@@ -576,56 +576,56 @@ export default function Ressursplan() {
           "flex-1",
           isFullscreen ? "h-full overflow-hidden" : ""
         )}>
-          {filteredResources.length === 0 ? (
-            <EmptyState
-              icon={Users}
-              title="Ingen ressurser"
-              description="Legg til ansatte eller eksterne ressurser for å komme i gang"
-              actionLabel="Ny ekstern ressurs"
-              onAction={() => setShowExternalDialog(true)}
-            />
-          ) : (
-            <OptimizedResourceCalendar
-              assignments={filteredAssignments}
-              resources={filteredResources}
-              projects={projects}
-              viewMode={viewMode}
-              onAssignmentDrop={handleAssignmentDrop}
-              onAssignmentClick={(a) => {
-                setSelectedAssignment(a);
-                setShowInlineEdit(true);
-              }}
-              onAssignmentResize={handleAssignmentResize}
-              onCreateAssignment={handleQuickCreate}
-              canEdit={canEdit}
-              optimisticAssignments={optimisticAssignments}
-              conflicts={conflicts}
-              resourceColumnCollapsed={resourceColumnCollapsed}
-              onToggleResourceColumn={() => setResourceColumnCollapsed(!resourceColumnCollapsed)}
-              isFullscreen={isFullscreen}
-            />
-          )}
+          {filteredResources.length === 0 ?
+          <EmptyState
+            icon={Users}
+            title="Ingen ressurser"
+            description="Legg til ansatte eller eksterne ressurser for å komme i gang"
+            actionLabel="Ny ekstern ressurs"
+            onAction={() => setShowExternalDialog(true)} /> :
+
+
+          <OptimizedResourceCalendar
+            assignments={filteredAssignments}
+            resources={filteredResources}
+            projects={projects}
+            viewMode={viewMode}
+            onAssignmentDrop={handleAssignmentDrop}
+            onAssignmentClick={(a) => {
+              setSelectedAssignment(a);
+              setShowInlineEdit(true);
+            }}
+            onAssignmentResize={handleAssignmentResize}
+            onCreateAssignment={handleQuickCreate}
+            canEdit={canEdit}
+            optimisticAssignments={optimisticAssignments}
+            conflicts={conflicts}
+            resourceColumnCollapsed={resourceColumnCollapsed}
+            onToggleResourceColumn={() => setResourceColumnCollapsed(!resourceColumnCollapsed)}
+            isFullscreen={isFullscreen} />
+
+          }
         </div>
 
         {/* Project Legend - Only in Normal Mode */}
-        {!isFullscreen && projects.length > 0 && (
-          <Card className="border-0 shadow-sm p-3 flex-shrink-0">
+        {!isFullscreen && projects.length > 0 &&
+        <Card className="border-0 shadow-sm p-3 flex-shrink-0">
             <div className="flex flex-wrap gap-2">
               {projects.map((project, idx) => {
-                const colors = [
-                  'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
-                  'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'
-                ];
-                return (
-                  <div key={project.id} className="flex items-center gap-1.5">
+              const colors = [
+              'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
+              'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'];
+
+              return (
+                <div key={project.id} className="flex items-center gap-1.5">
                     <div className={`w-2.5 h-2.5 rounded ${colors[idx % colors.length]}`} />
                     <span className="text-xs text-slate-600 truncate max-w-[150px]">{project.name}</span>
-                  </div>
-                );
-              })}
+                  </div>);
+
+            })}
             </div>
           </Card>
-        )}
+        }
       </div>
 
       {/* Dialogs */}
@@ -636,16 +636,16 @@ export default function Ressursplan() {
         externals={externals}
         projects={projects}
         onSubmit={handleCreateAssignment}
-        isLoading={createAssignmentMutation.isPending}
-      />
+        isLoading={createAssignmentMutation.isPending} />
+
 
       <ConflictDialog
         open={showConflictDialog}
         onOpenChange={setShowConflictDialog}
         conflicts={conflicts}
         onConfirm={handleConflictConfirm}
-        resourceName={pendingAssignment?.resource_navn}
-      />
+        resourceName={pendingAssignment?.resource_navn} />
+
 
       <ExternalResourceDialog
         open={showExternalDialog}
@@ -655,8 +655,8 @@ export default function Ressursplan() {
         }}
         resource={editingExternal}
         onSubmit={handleExternalSubmit}
-        isLoading={createExternalMutation.isPending || updateExternalMutation.isPending}
-      />
+        isLoading={createExternalMutation.isPending || updateExternalMutation.isPending} />
+
 
       <InlineEditDialog
         open={showInlineEdit}
@@ -667,8 +667,8 @@ export default function Ressursplan() {
         assignment={selectedAssignment}
         projects={projects}
         onSubmit={handleInlineEdit}
-        isLoading={updateAssignmentMutation.isPending}
-      />
-    </div>
-  );
+        isLoading={updateAssignmentMutation.isPending} />
+
+    </div>);
+
 }
