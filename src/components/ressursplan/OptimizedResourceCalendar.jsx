@@ -695,6 +695,8 @@ export default function OptimizedResourceCalendar({
 
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
+    const getResourceId = (idx) => resources[idx]?.id;
+    
     return (
       <ResourceRow
         resource={resource}
@@ -715,7 +717,7 @@ export default function OptimizedResourceCalendar({
         conflicts={conflicts}
         isHoliday={isHolidayFunc}
         holidayName={getHolidayNameFunc}
-        style={{ ...style, resourceColumnCollapsed, dayWidth }}
+        style={{ ...style, resourceColumnCollapsed, dayWidth, resourceIndex: index, totalResources: resources.length, getResourceId }}
         activeDrag={activeDrag}
         onDragUpdate={setActiveDrag}
       />
