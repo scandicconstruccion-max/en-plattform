@@ -306,6 +306,11 @@ export default function Ressursplan() {
   const handleCreateAssignment = async (data) => {
     const selectedProject = data.assignment_type === 'arbeid' ? projects.find((p) => p.id === data.prosjekt_id) : null;
 
+    const convertToISO = (dateTimeLocal) => {
+      // datetime-local format is YYYY-MM-DDTHH:mm, convert to ISO string
+      return `${dateTimeLocal}:00`;
+    };
+
     const assignments = data.resource_ids.map((resourceId) => {
       const resource = [...employees, ...externals].find((r) => r.id === resourceId);
       return {
@@ -317,8 +322,8 @@ export default function Ressursplan() {
         `${resource.first_name} ${resource.last_name}` :
         resource.navn,
         assignment_type: data.assignment_type,
-        start_dato_tid: new Date(data.start_dato_tid).toISOString(),
-        slutt_dato_tid: new Date(data.slutt_dato_tid).toISOString(),
+        start_dato_tid: convertToISO(data.start_dato_tid),
+        slutt_dato_tid: convertToISO(data.slutt_dato_tid),
         rolle_pa_prosjekt: data.rolle_pa_prosjekt,
         kommentar: data.kommentar,
         status: 'planlagt',
