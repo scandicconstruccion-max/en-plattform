@@ -829,12 +829,14 @@ export default function OptimizedResourceCalendar({
                         (isConflict || dragConflict) && "ring-1 ring-white/80"
                       )}
                       style={{
+                        minHeight: 0,
                         transform: dragTransform || 'none',
                         transition: isDragging ? 'none' : 'all 0.2s',
                         opacity: isDragging ? 0.85 : 1,
                         boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
                         zIndex: isDragging ? 50 : 'auto'
                       }}
+                      title={getProjectName(assignment.prosjekt_id)}
                       onPointerDown={(e) => {
                         if (!canEdit) return;
                         e.stopPropagation();
