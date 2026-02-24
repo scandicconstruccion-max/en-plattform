@@ -1041,8 +1041,22 @@ export default function OptimizedResourceCalendar({
               style={{ overflow: 'hidden' }}>
 
               {({ index, style }) => {
-                const resource = resources[index];
-                const colWidth = resourceColumnCollapsed ? 64 : 208;
+                 const resource = resources[index];
+                 const colWidth = resourceColumnCollapsed ? 64 : 208;
+
+                 // Calculate actual allocation percentage
+                 const resourceAssignments = allAssignments.filter(a => a.resource_id === resource.id);
+                 const totalWorkHours = resourceAssignments.reduce((sum, a) => {
+                   const start = parseISO(a.start_dato_tid);
+                   const end = parseISO(a.slutt_dato_tid);
+                   const diffMs = end - start;
+                   const hours = diffMs / (1000 * 60 * 60);
+                   return sum + Math.max(0, hours);
+                 }, 0);
+                 const workDays = resourceAssignments.length > 0 ? 
+                   Math.ceil((Math.max(...resourceAssignments.map(a => parseISO(a.slutt_dato_tid))) - 
+                             Math.min(...resourceAssignments.map(a => parseISO(a.start_dato_tid)))) / (1000 * 60 * 60 * 24)) : 0;
+                 const allocPercent = workDays > 0 ? Math.round((totalWorkHours / (workDays * 8)) * 100) : 0;
 
                 return (
                   <div style={style} className="flex border-t border-slate-200">
