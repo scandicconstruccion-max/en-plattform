@@ -11,6 +11,7 @@ import CreateAssignmentDialog from '@/components/ressursplan/CreateAssignmentDia
 import ConflictDialog from '@/components/ressursplan/ConflictDialog';
 import ExternalResourceDialog from '@/components/ressursplan/ExternalResourceDialog';
 import InlineEditDialog from '@/components/ressursplan/InlineEditDialog';
+import ResourceFilters from '@/components/ressursplan/ResourceFilters';
 import { Users, UserPlus, Calendar, Grid3x3, List, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { isWithinInterval, parseISO } from 'date-fns';
@@ -32,6 +33,8 @@ export default function Ressursplan() {
     resourceType: 'all',
     projectId: 'all'
   });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [groupBy, setGroupBy] = useState('none');
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -368,6 +371,8 @@ export default function Ressursplan() {
       navn: `${e.first_name} ${e.last_name}`,
       type: 'employee',
       stilling: e.position,
+      department: e.department || 'Ingen avdeling',
+      normal_hours_per_day: e.normal_hours_per_day || 8,
       telefon: e.phone,
       epost: e.email
     })),
@@ -376,17 +381,33 @@ export default function Ressursplan() {
       navn: e.navn,
       type: 'external',
       rolle: e.rolle,
+      department: e.firma || 'Ekstern',
+      normal_hours_per_day: 8,
       firma: e.firma,
       telefon: e.telefon,
       epost: e.epost
     }))
   ];
 
-  // Apply filters
-  const filteredResources = allResources.filter(r => {
+  // Apply filters with search and grouping
+  let filteredResources = allResources.filter(r => {
     if (filters.resourceType !== 'all' && r.type !== filters.resourceType) return false;
+    if (searchQuery && !r.navn.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
+
+  // Apply grouping
+  if (groupBy === 'type') {
+    const employees = filteredResources.filter(r => r.type === 'employee');
+    const externals = filteredResources.filter(r => r.type === 'external');
+    filteredResources = [...employees, ...externals];
+  } else if (groupBy === 'department') {
+    filteredResources = filteredResources.sort((a, b) => {
+      const deptA = a.department || '';
+      const deptB = b.department || '';
+      return deptA.localeCompare(deptB);
+    });
+  }
 
   const filteredAssignments = assignments.filter(a => {
     if (filters.projectId !== 'all' && a.prosjekt_id !== filters.projectId) return false;
@@ -433,6 +454,16 @@ export default function Ressursplan() {
       />
 
       <div className="px-6 lg:px-8 py-6 space-y-6">
+        {/* Resource Filters */}
+        <ResourceFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          filterType={filters.resourceType}
+          onFilterTypeChange={(v) => setFilters({ ...filters, resourceType: v })}
+        />
+
         {/* Filters and View Mode */}
         <Card className="border-0 shadow-sm p-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -497,7 +528,7 @@ export default function Ressursplan() {
         ) : (
           <OptimizedResourceCalendar
             assignments={filteredAssignments}
-            resources={filteredAndGroupedResources}
+            resources={filteredResources}
             projects={projects}
             viewMode={viewMode}
             onAssignmentDrop={handleAssignmentDrop}
