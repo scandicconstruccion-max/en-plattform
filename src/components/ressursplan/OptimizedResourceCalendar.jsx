@@ -477,7 +477,7 @@ const ResourceRow = memo(({
               )}
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
-              onClick={(e) => isEmptyCell && handleCellClick(e, day)}
+              onClick={(e) => isEmptyCell && handleCellClick(e, day, resource.id)}
               title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}
             >
               {dayIsHoliday && dayHolidayName && (
