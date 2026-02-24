@@ -347,6 +347,24 @@ export default function Ressursplan() {
     setSelectedAssignment(null);
   };
 
+  const handleAssignmentResize = (assignment, newStartDatoTid, newSluttDatoTid) => {
+    const updatedData = {
+      start_dato_tid: newStartDatoTid,
+      slutt_dato_tid: newSluttDatoTid,
+      change_log: [
+        ...(assignment.change_log || []),
+        {
+          timestamp: new Date().toISOString(),
+          user_email: user?.email,
+          user_name: user?.full_name,
+          action: 'Resizet',
+          changes: 'Tidslengde endret via drag'
+        }
+      ]
+    };
+    updateAssignmentMutation.mutate({ id: assignment.id, data: updatedData });
+  };
+
   const handleQuickCreate = (resourceId, startTime, endTime) => {
     const resource = allResources.find(r => r.id === resourceId);
     if (!resource) return;
@@ -500,6 +518,7 @@ export default function Ressursplan() {
               setSelectedAssignment(a);
               setShowInlineEdit(true);
             }}
+            onAssignmentResize={handleAssignmentResize}
             onCreateAssignment={handleQuickCreate}
             canEdit={canEdit}
             optimisticAssignments={optimisticAssignments}

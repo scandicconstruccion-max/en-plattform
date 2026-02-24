@@ -2,10 +2,13 @@ import React, { useState, useCallback, useMemo, memo } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, subWeeks, subMonths, isSameDay, isWithinInterval, parseISO, endOfWeek, endOfMonth, eachDayOfInterval, differenceInMinutes, addMinutes } from 'date-fns';
+import { ChevronLeft, ChevronRight, MoreVertical } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { format, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, subWeeks, subMonths, isSameDay, isWithinInterval, parseISO, endOfWeek, endOfMonth, eachDayOfInterval, differenceInMinutes, addMinutes, getDay } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import AssignmentPopover from './AssignmentPopover';
+import { isNorwegianHoliday, getHolidayName } from '@/utils/norwegianHolidays';
 
 // Snap to 30-minute intervals
 const snapToInterval = (date) => {
@@ -14,7 +17,7 @@ const snapToInterval = (date) => {
   return addMinutes(new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()), snappedMinutes);
 };
 
-// Memoized assignment block component
+// Memoized assignment block component with resize handles
 const AssignmentBlock = memo(({ 
   assignment, 
   projectColor, 
@@ -22,29 +25,64 @@ const AssignmentBlock = memo(({
   canEdit, 
   onDragStart, 
   onClick,
+  onEdit,
+  onResizeStart,
   isDragging,
   isConflict
-}) => (
-  <div
-    draggable={canEdit}
-    onDragStart={onDragStart}
-    onClick={onClick}
-    className={cn(
-      "px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-all select-none touch-manipulation",
-      projectColor,
-      canEdit && "cursor-move",
-      isDragging && "opacity-50",
-      isConflict && "ring-2 ring-red-500 ring-offset-1"
-    )}
-    style={{ 
-      WebkitTouchCallout: 'none',
-      touchAction: canEdit ? 'none' : 'auto'
-    }}
-    title={`${projectName} - ${assignment.rolle_pa_prosjekt || ''}`}
-  >
-    {projectName}
-  </div>
-));
+}) => {
+  const handleResizeLeft = (e) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    onResizeStart(assignment, 'start');
+  };
+
+  const handleResizeRight = (e) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    onResizeStart(assignment, 'end');
+  };
+
+  return (
+    <AssignmentPopover 
+      assignment={assignment} 
+      projectName={projectName}
+      onEdit={onEdit}
+      canEdit={canEdit}
+    >
+      <div
+        draggable={canEdit}
+        onDragStart={onDragStart}
+        className={cn(
+          "group relative px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-all select-none touch-manipulation",
+          projectColor,
+          canEdit && "cursor-move",
+          isDragging && "opacity-50",
+          isConflict && "ring-2 ring-red-500 ring-offset-1"
+        )}
+        style={{ 
+          WebkitTouchCallout: 'none',
+          touchAction: canEdit ? 'none' : 'auto'
+        }}
+      >
+        {canEdit && (
+          <>
+            <div 
+              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity"
+              onMouseDown={handleResizeLeft}
+              onTouchStart={handleResizeLeft}
+            />
+            <div 
+              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity"
+              onMouseDown={handleResizeRight}
+              onTouchStart={handleResizeRight}
+            />
+          </>
+        )}
+        {projectName}
+      </div>
+    </AssignmentPopover>
+  );
+});
 
 AssignmentBlock.displayName = 'AssignmentBlock';
 
@@ -59,13 +97,17 @@ const ResourceRow = memo(({
   getProjectName,
   onAssignmentDrop,
   onAssignmentClick,
+  onAssignmentResize,
   onCellClick,
   draggedAssignment,
   ghostPreview,
   conflicts,
+  isHoliday,
+  holidayName,
   style
 }) => {
   const [dragStart, setDragStart] = useState(null);
+  const [resizing, setResizing] = useState(null);
 
   const getAssignmentsForDay = useCallback((day) => {
     return assignments.filter(a => {
@@ -141,6 +183,42 @@ const ResourceRow = memo(({
     e.preventDefault();
   }, [canEdit]);
 
+  const handleResizeStart = useCallback((assignment, edge) => {
+    if (!canEdit) return;
+    setResizing({ assignment, edge });
+  }, [canEdit]);
+
+  const handleResizeMove = useCallback((e, day) => {
+    if (!resizing || !canEdit) return;
+    // Visual feedback during resize can be added here
+  }, [resizing, canEdit]);
+
+  const handleResizeEnd = useCallback((e, day) => {
+    if (!resizing || !canEdit) return;
+    const { assignment, edge } = resizing;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+    const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
+    const newTime = new Date(day);
+    newTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
+    const snappedTime = snapToInterval(newTime);
+
+    if (edge === 'start') {
+      const endTime = parseISO(assignment.slutt_dato_tid);
+      if (snappedTime < endTime) {
+        onAssignmentResize(assignment, snappedTime.toISOString(), assignment.slutt_dato_tid);
+      }
+    } else {
+      const startTime = parseISO(assignment.start_dato_tid);
+      if (snappedTime > startTime) {
+        onAssignmentResize(assignment, assignment.start_dato_tid, snappedTime.toISOString());
+      }
+    }
+    
+    setResizing(null);
+  }, [resizing, canEdit, onAssignmentResize]);
+
   return (
     <div style={style} className="flex border-t border-slate-100">
       <div className="w-48 p-4 sticky left-0 bg-white z-10 border-r border-slate-100 flex-shrink-0">
@@ -166,19 +244,28 @@ const ResourceRow = memo(({
           const dayAssignments = getAssignmentsForDay(day);
           const isToday = isSameDay(day, new Date());
           const showGhost = ghostPreview && ghostPreview.resourceId === resource.id && isSameDay(day, parseISO(ghostPreview.start));
+          const dayIsHoliday = isHoliday(day);
+          const dayHolidayName = holidayName(day);
           
           return (
             <div
               key={day.toISOString()}
               className={cn(
                 "p-2 border-l border-slate-100 min-w-[120px] flex-1 relative",
-                isToday && "bg-emerald-50/50"
+                isToday && "bg-emerald-50/50",
+                dayIsHoliday && "bg-red-50/30"
               )}
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
               onMouseDown={(e) => handleCellMouseDown(e, day)}
-              onMouseUp={(e) => handleCellMouseUp(e, day)}
+              onMouseUp={(e) => resizing ? handleResizeEnd(e, day) : handleCellMouseUp(e, day)}
+              onMouseMove={(e) => handleResizeMove(e, day)}
             >
+              {dayIsHoliday && dayHolidayName && (
+                <div className="absolute top-1 left-1 text-[10px] text-red-600 font-medium pointer-events-none">
+                  {dayHolidayName}
+                </div>
+              )}
               <div className="space-y-1 min-h-[60px]">
                 {dayAssignments.map((assignment) => {
                   const isConflict = conflicts.some(c => c.id === assignment.id);
@@ -191,6 +278,8 @@ const ResourceRow = memo(({
                       canEdit={canEdit}
                       onDragStart={(e) => handleDragStart(e, assignment)}
                       onClick={() => onAssignmentClick(assignment)}
+                      onEdit={() => onAssignmentClick(assignment)}
+                      onResizeStart={handleResizeStart}
                       isDragging={draggedAssignment?.id === assignment.id}
                       isConflict={isConflict}
                     />
@@ -219,6 +308,7 @@ export default function OptimizedResourceCalendar({
   viewMode = 'week',
   onAssignmentDrop,
   onAssignmentClick,
+  onAssignmentResize,
   onCreateAssignment,
   canEdit,
   optimisticAssignments = [],
@@ -227,22 +317,36 @@ export default function OptimizedResourceCalendar({
   const [currentDate, setCurrentDate] = useState(new Date());
   const [draggedAssignment, setDraggedAssignment] = useState(null);
   const [ghostPreview, setGhostPreview] = useState(null);
+  const [showWeekends, setShowWeekends] = useState(true);
+  const [showHolidays, setShowHolidays] = useState(true);
 
   const getViewDates = useCallback(() => {
+    let dates = [];
+    
     if (viewMode === 'day') {
-      return [currentDate];
+      dates = [currentDate];
     } else if (viewMode === 'week') {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-      return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+      dates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     } else if (viewMode === 'twoweeks') {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-      return Array.from({ length: 14 }, (_, i) => addDays(weekStart, i));
+      dates = Array.from({ length: 14 }, (_, i) => addDays(weekStart, i));
     } else {
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
-      return eachDayOfInterval({ start: monthStart, end: monthEnd });
+      dates = eachDayOfInterval({ start: monthStart, end: monthEnd });
     }
-  }, [currentDate, viewMode]);
+
+    // Filter out weekends if disabled
+    if (!showWeekends) {
+      dates = dates.filter(date => {
+        const day = getDay(date);
+        return day !== 0 && day !== 6; // 0 = Sunday, 6 = Saturday
+      });
+    }
+
+    return dates;
+  }, [currentDate, viewMode, showWeekends]);
 
   const navigate = useCallback((direction) => {
     if (viewMode === 'day') {
@@ -280,6 +384,14 @@ export default function OptimizedResourceCalendar({
     onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
   }, [canEdit, onCreateAssignment]);
 
+  const isHolidayFunc = useCallback((date) => {
+    return showHolidays && isNorwegianHoliday(date);
+  }, [showHolidays]);
+
+  const getHolidayNameFunc = useCallback((date) => {
+    return showHolidays ? getHolidayName(date) : null;
+  }, [showHolidays]);
+
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
     return (
@@ -293,14 +405,17 @@ export default function OptimizedResourceCalendar({
         getProjectName={getProjectName}
         onAssignmentDrop={onAssignmentDrop}
         onAssignmentClick={onAssignmentClick}
+        onAssignmentResize={onAssignmentResize}
         onCellClick={handleCellClick}
         draggedAssignment={draggedAssignment}
         ghostPreview={ghostPreview}
         conflicts={conflicts}
+        isHoliday={isHolidayFunc}
+        holidayName={getHolidayNameFunc}
         style={style}
       />
     );
-  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, handleCellClick, draggedAssignment, ghostPreview, conflicts]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, conflicts, isHolidayFunc, getHolidayNameFunc]);
 
   return (
     <div className="space-y-4">
@@ -327,14 +442,37 @@ export default function OptimizedResourceCalendar({
               </p>
             )}
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => navigate(1)}
-            className="rounded-xl"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="rounded-xl">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuCheckboxItem
+                  checked={showWeekends}
+                  onCheckedChange={setShowWeekends}
+                >
+                  Vis helger
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={showHolidays}
+                  onCheckedChange={setShowHolidays}
+                >
+                  Vis helligdager
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate(1)}
+              className="rounded-xl"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -347,24 +485,28 @@ export default function OptimizedResourceCalendar({
               Ressurs
             </div>
             <div className="flex flex-1">
-              {viewDates.map((day) => (
-                <div
-                  key={day.toISOString()}
-                  className={cn(
-                    "text-center p-4 font-medium min-w-[120px] flex-1 border-l border-slate-100",
-                    isSameDay(day, new Date()) ? "text-emerald-600 bg-emerald-50" : "text-slate-600"
-                  )}
-                >
-                  {viewMode !== 'month' ? (
-                    <>
-                      <div className="text-xs uppercase">{format(day, 'EEE', { locale: nb })}</div>
-                      <div className="text-lg">{format(day, 'd')}</div>
-                    </>
-                  ) : (
-                    <div className="text-sm">{format(day, 'd')}</div>
-                  )}
-                </div>
-              ))}
+              {viewDates.map((day) => {
+                const dayIsHoliday = isHolidayFunc(day);
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className={cn(
+                      "text-center p-4 font-medium min-w-[120px] flex-1 border-l border-slate-100",
+                      isSameDay(day, new Date()) ? "text-emerald-600 bg-emerald-50" : "text-slate-600",
+                      dayIsHoliday && "bg-red-50/50 text-red-700"
+                    )}
+                  >
+                    {viewMode !== 'month' ? (
+                      <>
+                        <div className="text-xs uppercase">{format(day, 'EEE', { locale: nb })}</div>
+                        <div className="text-lg">{format(day, 'd')}</div>
+                      </>
+                    ) : (
+                      <div className="text-sm">{format(day, 'd')}</div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
