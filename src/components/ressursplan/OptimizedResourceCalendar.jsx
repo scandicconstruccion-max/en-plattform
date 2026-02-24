@@ -744,6 +744,10 @@ export default function OptimizedResourceCalendar({
 
 
 
+  const handleAssignmentClick = useCallback((assignment) => {
+    onAssignmentClick(assignment);
+  }, [onAssignmentClick]);
+
   const BodyRow = useCallback(({ index, style }) => {
     const resource = resources[index];
     const getResourceId = (idx) => resources[idx]?.id;
