@@ -497,7 +497,7 @@ export default function Ressursplan() {
         ) : (
           <OptimizedResourceCalendar
             assignments={filteredAssignments}
-            resources={filteredResources}
+            resources={filteredAndGroupedResources}
             projects={projects}
             viewMode={viewMode}
             onAssignmentDrop={handleAssignmentDrop}

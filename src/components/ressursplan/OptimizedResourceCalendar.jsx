@@ -230,22 +230,40 @@ const ResourceRow = memo(({
 
   return (
     <div style={style} className="flex border-t border-slate-100">
-      <div className="w-48 p-4 sticky left-0 bg-white z-10 border-r border-slate-100 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-medium text-emerald-700">
-              {resource.navn?.charAt(0) || 'R'}
-            </span>
+      <div className="w-64 p-3 sticky left-0 bg-white z-10 border-r border-slate-100 flex-shrink-0">
+        <div className="space-y-2">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-medium text-emerald-700">
+                {resource.navn?.charAt(0) || 'R'}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-slate-900 text-sm truncate">{resource.navn}</p>
+              <p className="text-xs text-slate-500 truncate">
+                {resource.type === 'employee' ? resource.stilling : resource.rolle}
+              </p>
+              {resource.department && (
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  {resource.department}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-slate-900 text-sm truncate">{resource.navn}</p>
-            <p className="text-xs text-slate-500 truncate">
-              {resource.type === 'employee' ? resource.stilling : resource.rolle}
-            </p>
+          
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Kapasitet:</span>
+            <div className={cn("px-2 py-0.5 rounded-full font-medium", capacityColor)}>
+              {capacityPercentage}%
+            </div>
           </div>
-          <div className={cn("px-2 py-1 rounded-full text-xs font-medium flex-shrink-0", capacityColor)}>
-            {capacityPercentage}%
-          </div>
+          
+          {resource.normal_hours_per_day && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Arbeidstid:</span>
+              <span className="text-slate-700 font-medium">{resource.normal_hours_per_day}t/dag</span>
+            </div>
+          )}
         </div>
       </div>
       <div className="flex flex-1">
@@ -504,7 +522,7 @@ export default function OptimizedResourceCalendar({
         <div className="overflow-x-auto">
           {/* Header */}
           <div className="flex bg-slate-50 border-b border-slate-200">
-            <div className="w-48 p-4 font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0">
+            <div className="w-64 p-4 font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0">
               Ressurs
             </div>
             <div className="flex flex-1">
