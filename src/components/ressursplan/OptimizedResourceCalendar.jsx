@@ -18,12 +18,12 @@ const snapToInterval = (date) => {
 };
 
 // Memoized assignment block component with resize handles and live drag
-const AssignmentBlock = memo(({ 
-  assignment, 
-  projectColor, 
-  projectName, 
-  canEdit, 
-  onDragStart, 
+const AssignmentBlock = memo(({
+  assignment,
+  projectColor,
+  projectName,
+  canEdit,
+  onDragStart,
   onClick,
   onResizeStart,
   isDragging,
@@ -46,16 +46,16 @@ const AssignmentBlock = memo(({
   const handleMainDragStart = (e) => {
     if (!canEdit || isResizing || isResizingLocal) return;
     e.stopPropagation();
-    
+
     const startPos = { x: e.clientX, y: e.clientY, time: Date.now() };
     let dragStarted = false;
 
     const handlePointerMove = (moveEvent) => {
       if (dragStarted) return;
-      
+
       const deltaX = Math.abs(moveEvent.clientX - startPos.x);
       const deltaY = Math.abs(moveEvent.clientY - startPos.y);
-      
+
       // Only start drag if movement > 10px
       if (deltaX > 10 || deltaY > 10) {
         dragStarted = true;
@@ -69,7 +69,7 @@ const AssignmentBlock = memo(({
     const handlePointerUp = (upEvent) => {
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
-      
+
       if (!dragStarted) {
         // Was a click, not a drag
         onClick();
@@ -112,8 +112,8 @@ const AssignmentBlock = memo(({
           opacity: isDragging ? 0.85 : 1,
           zIndex: isDragging ? 50 : 'auto'
         }}
-        title={`${absenceTypeConfig.fullLabel} – ${resource?.navn || 'Ressurs'}`}
-      >
+        title={`${absenceTypeConfig.fullLabel} – ${resource?.navn || 'Ressurs'}`}>
+
         <div
           className={cn(
             "relative h-4 rounded px-1.5 flex items-center text-[10px] font-semibold text-slate-700 truncate border border-slate-300",
@@ -122,64 +122,64 @@ const AssignmentBlock = memo(({
           style={{
             background: 'repeating-linear-gradient(45deg, white, white 10px, #e2e8f0 10px, #e2e8f0 12px)',
             backgroundClip: 'padding-box'
-          }}
-        >
+          }}>
+
           <span className="relative z-10">{shortLabel}</span>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   // Regular work assignment - full block
   return (
-     <div
-       onPointerDown={handleMainDragStart}
-       className={cn(
-         "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
-         projectColor,
-         canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
-         isDragging && "cursor-grabbing",
-         (isResizing || isResizingLocal) && "opacity-50 scale-95",
-         (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
-       )}
-       style={{
-         transform: dragTransform || 'none',
-         transition: isDragging ? 'none' : 'all 0.2s',
-         opacity: isDragging ? 0.85 : 1,
-         boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
-         willChange: isDragging ? 'transform' : 'auto',
-         zIndex: isDragging ? 50 : 'auto'
-       }}
-     >
-       {canEdit && !isDragging && (
-         <>
-           <div 
-             className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
-             onPointerDown={(e) => handleResizeStart(e, 'start')}
-             style={{ touchAction: 'none' }}
-             title="Dra for å endre starttid"
-           />
-           <div 
-             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-r"
-             onPointerDown={(e) => handleResizeStart(e, 'end')}
-             style={{ touchAction: 'none' }}
-             title="Dra for å endre sluttid"
-           />
+    <div
+      onPointerDown={handleMainDragStart}
+      className={cn(
+        "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
+        projectColor,
+        canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
+        isDragging && "cursor-grabbing",
+        (isResizing || isResizingLocal) && "opacity-50 scale-95",
+        (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
+      )}
+      style={{
+        transform: dragTransform || 'none',
+        transition: isDragging ? 'none' : 'all 0.2s',
+        opacity: isDragging ? 0.85 : 1,
+        boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
+        willChange: isDragging ? 'transform' : 'auto',
+        zIndex: isDragging ? 50 : 'auto'
+      }}>
+
+       {canEdit && !isDragging &&
+      <>
+           <div
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
+          onPointerDown={(e) => handleResizeStart(e, 'start')}
+          style={{ touchAction: 'none' }}
+          title="Dra for å endre starttid" />
+
+           <div
+          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-r"
+          onPointerDown={(e) => handleResizeStart(e, 'end')}
+          style={{ touchAction: 'none' }}
+          title="Dra for å endre sluttid" />
+
          </>
-       )}
+      }
        <span className="pointer-events-auto cursor-pointer block">
          {label}
        </span>
-     </div>
-   );
+     </div>);
+
 });
 
 AssignmentBlock.displayName = 'AssignmentBlock';
 
 // Memoized resource row component
-const ResourceRow = memo(({ 
-  resource, 
-  viewDates, 
+const ResourceRow = memo(({
+  resource,
+  viewDates,
   assignments,
   projects,
   canEdit,
@@ -204,17 +204,17 @@ const ResourceRow = memo(({
   const [resizeState, setResizeState] = useState(null);
 
   const getAssignmentsForDay = useCallback((day) => {
-    return assignments.filter(a => {
+    return assignments.filter((a) => {
       if (a.resource_id !== resource.id) return false;
       if (!a.start_dato_tid || !a.slutt_dato_tid) return false;
       try {
         const start = typeof a.start_dato_tid === 'string' ? parseISO(a.start_dato_tid) : a.start_dato_tid;
         const end = typeof a.slutt_dato_tid === 'string' ? parseISO(a.slutt_dato_tid) : a.slutt_dato_tid;
-        
+
         // Check if assignment overlaps with the day
         const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
         const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
-        
+
         return start < dayEnd && end > dayStart;
       } catch (e) {
         console.error('Error parsing dates:', a.start_dato_tid, a.slutt_dato_tid);
@@ -226,43 +226,43 @@ const ResourceRow = memo(({
   const weekAllocationPercentage = useMemo(() => {
     let totalMinutes = 0;
     const normalHoursPerWeek = (resource.normal_hours_per_day || 8) * 5; // 5 working days
-    
-    viewDates.forEach(day => {
+
+    viewDates.forEach((day) => {
       const dayAssignments = getAssignmentsForDay(day);
-      dayAssignments.forEach(a => {
+      dayAssignments.forEach((a) => {
         const start = parseISO(a.start_dato_tid);
         const end = parseISO(a.slutt_dato_tid);
         totalMinutes += differenceInMinutes(end, start);
       });
     });
-    
+
     const totalHours = totalMinutes / 60;
-    return Math.min(100, Math.round((totalHours / normalHoursPerWeek) * 100));
+    return Math.min(100, Math.round(totalHours / normalHoursPerWeek * 100));
   }, [viewDates, getAssignmentsForDay, resource.normal_hours_per_day]);
 
   const capacityPercentage = useMemo(() => {
     let totalBooked = 0;
-    viewDates.forEach(day => {
+    viewDates.forEach((day) => {
       const dayAssignments = getAssignmentsForDay(day);
       if (dayAssignments.length > 0) totalBooked++;
     });
-    return Math.round((totalBooked / viewDates.length) * 100);
+    return Math.round(totalBooked / viewDates.length * 100);
   }, [viewDates, getAssignmentsForDay]);
 
   const capacityColor = capacityPercentage === 0 ? 'bg-green-100 text-green-700' :
-                        capacityPercentage < 70 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700';
+  capacityPercentage < 70 ? 'bg-yellow-100 text-yellow-700' :
+  'bg-red-100 text-red-700';
 
   const handleDragStart = useCallback((e, assignment) => {
     if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
-    
+
     const startPos = { x: e.clientX, y: e.clientY };
     const assignmentStart = parseISO(assignment.start_dato_tid);
     const assignmentEnd = parseISO(assignment.slutt_dato_tid);
     const rowHeight = 56;
-    
+
     const dragState = {
       assignment,
       startPos,
@@ -271,42 +271,42 @@ const ResourceRow = memo(({
       currentTransform: { x: 0, y: 0 },
       conflict: false
     };
-    
+
     onDragUpdate(dragState);
-    
+
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
-      
+
       const deltaX = moveEvent.clientX - startPos.x;
       const deltaY = moveEvent.clientY - startPos.y;
-      
+
       const dayWidth = style.dayWidth || 120;
       const daysDelta = Math.round(deltaX / dayWidth);
       const rowsDelta = Math.round(deltaY / rowHeight);
-      
+
       const newStart = addDays(assignmentStart, daysDelta);
       const newEnd = addDays(assignmentEnd, daysDelta);
-      
+
       // Beregn ny ressurs basert på Y-delta
       const newResourceIndex = Math.max(0, Math.min(style.resourceIndex + rowsDelta, style.totalResources - 1));
       const newResourceId = style.getResourceId(newResourceIndex);
-      
+
       // Check conflicts
-      const hasConflict = assignments.some(a => {
+      const hasConflict = assignments.some((a) => {
         if (a.id === assignment.id) return false;
         if (a.resource_id !== newResourceId) return false;
-        
+
         const aStart = parseISO(a.start_dato_tid);
         const aEnd = parseISO(a.slutt_dato_tid);
-        
+
         return (
           isWithinInterval(newStart, { start: aStart, end: aEnd }) ||
           isWithinInterval(newEnd, { start: aStart, end: aEnd }) ||
           isWithinInterval(aStart, { start: newStart, end: newEnd }) ||
-          isWithinInterval(aEnd, { start: newStart, end: newEnd })
-        );
+          isWithinInterval(aEnd, { start: newStart, end: newEnd }));
+
       });
-      
+
       onDragUpdate({
         ...dragState,
         currentTransform: { x: deltaX, y: deltaY },
@@ -317,26 +317,26 @@ const ResourceRow = memo(({
         conflict: hasConflict
       });
     };
-    
+
     const handlePointerUp = (upEvent) => {
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
       document.body.style.cursor = '';
-      
+
       const deltaX = upEvent.clientX - startPos.x;
       const deltaY = upEvent.clientY - startPos.y;
-      
+
       const dayWidth = style.dayWidth || 120;
       const daysDelta = Math.round(deltaX / dayWidth);
       const rowsDelta = Math.round(deltaY / rowHeight);
-      
+
       if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
         const newStart = snapToInterval(addDays(assignmentStart, daysDelta));
         const newEnd = snapToInterval(addDays(assignmentEnd, daysDelta));
-        
+
         const newResourceIndex = Math.max(0, Math.min(style.resourceIndex + rowsDelta, style.totalResources - 1));
         const newResourceId = style.getResourceId(newResourceIndex);
-        
+
         onAssignmentDrop(
           assignment,
           newResourceId,
@@ -344,10 +344,10 @@ const ResourceRow = memo(({
           newEnd.toISOString()
         );
       }
-      
+
       onDragUpdate(null);
     };
-    
+
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
     document.body.style.cursor = 'grabbing';
@@ -361,7 +361,7 @@ const ResourceRow = memo(({
     const clickY = e.clientY - rect.top;
     const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
     const startTime = new Date(day);
-    startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
+    startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round(hourFraction * 8 % 1 * 60));
     const snappedStart = snapToInterval(startTime);
     const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
     onCellClick(resourceId, snappedStart, snappedEnd);
@@ -371,14 +371,14 @@ const ResourceRow = memo(({
     if (!canEdit) return;
     e.preventDefault();
     const assignment = JSON.parse(e.dataTransfer.getData('assignment'));
-    
+
     const originalStart = parseISO(assignment.start_dato_tid);
     const timeDiff = day.getTime() - new Date(originalStart.getFullYear(), originalStart.getMonth(), originalStart.getDate()).getTime();
-    
+
     const newStart = snapToInterval(new Date(originalStart.getTime() + timeDiff));
     const originalEnd = parseISO(assignment.slutt_dato_tid);
     const newEnd = snapToInterval(new Date(originalEnd.getTime() + timeDiff));
-    
+
     onAssignmentDrop(assignment, resource.id, newStart.toISOString(), newEnd.toISOString());
   }, [canEdit, resource.id, onAssignmentDrop]);
 
@@ -395,7 +395,7 @@ const ResourceRow = memo(({
     const startPos = { x: e.clientX, y: e.clientY };
     const originalStart = parseISO(assignment.start_dato_tid);
     const originalEnd = parseISO(assignment.slutt_dato_tid);
-    
+
     let currentPreviewStart = originalStart;
     let currentPreviewEnd = originalEnd;
 
@@ -403,12 +403,12 @@ const ResourceRow = memo(({
 
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
-      
+
       // Calculate time delta based on horizontal movement
       const deltaX = moveEvent.clientX - startPos.x;
       const cellDayWidth = 120; // Reference width for calculation
       const daysDelta = Math.round(deltaX / cellDayWidth);
-      
+
       let newStart = originalStart;
       let newEnd = originalEnd;
 
@@ -430,7 +430,7 @@ const ResourceRow = memo(({
       currentPreviewEnd = newEnd;
 
       // Update visual preview
-      setResizeState(prev => ({
+      setResizeState((prev) => ({
         ...prev,
         previewStart: newStart,
         previewEnd: newEnd
@@ -440,11 +440,11 @@ const ResourceRow = memo(({
     const handlePointerUp = () => {
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
-      
+
       if (currentPreviewStart && currentPreviewEnd) {
         const finalStart = snapToInterval(currentPreviewStart);
         const finalEnd = snapToInterval(currentPreviewEnd);
-        
+
         // Call resize handler
         onAssignmentResize(
           assignment,
@@ -452,7 +452,7 @@ const ResourceRow = memo(({
           finalEnd.toISOString()
         );
       }
-      
+
       setResizeState(null);
     };
 
@@ -467,46 +467,46 @@ const ResourceRow = memo(({
 
   return (
     <div style={style} className="flex border-t border-slate-200">
-      <div 
+      <div
         className={cn(
           "sticky left-0 bg-white z-10 border-r border-slate-200 flex-shrink-0",
           collapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
         )}
-        style={{ width: colWidth }}
-      >
-        {collapsed ? (
-          <div className="flex flex-col items-center gap-1">
+        style={{ width: colWidth }}>
+
+        {collapsed ?
+        <div className="flex flex-col items-center gap-1">
             <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
               <span className="text-xs font-semibold text-emerald-700">
                 {(() => {
-                  const names = resource.navn?.split(' ') || [];
-                  if (names.length >= 2) {
-                    return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                  }
-                  return resource.navn?.charAt(0) || 'R';
-                })()}
+                const names = resource.navn?.split(' ') || [];
+                if (names.length >= 2) {
+                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                }
+                return resource.navn?.charAt(0) || 'R';
+              })()}
               </span>
             </div>
             <span className={cn(
-              "px-1 py-0.5 rounded text-[9px] font-bold",
-              weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
-              weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
-              "bg-green-100 text-green-700"
-            )}>
+            "px-1 py-0.5 rounded text-[9px] font-bold",
+            weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
+            weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
+            "bg-green-100 text-green-700"
+          )}>
               {weekAllocationPercentage}%
             </span>
-          </div>
-        ) : (
-          <div className="flex items-start gap-2">
+          </div> :
+
+        <div className="flex items-start gap-2">
             <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-semibold text-emerald-700">
                 {(() => {
-                  const names = resource.navn?.split(' ') || [];
-                  if (names.length >= 2) {
-                    return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                  }
-                  return resource.navn?.charAt(0) || 'R';
-                })()}
+                const names = resource.navn?.split(' ') || [];
+                if (names.length >= 2) {
+                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                }
+                return resource.navn?.charAt(0) || 'R';
+              })()}
               </span>
             </div>
             <div className="min-w-0 flex-1">
@@ -515,11 +515,11 @@ const ResourceRow = memo(({
                   {resource.navn}
                 </p>
                 <span className={cn(
-                  "px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0",
-                  weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
-                  weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
-                  "bg-green-100 text-green-700"
-                )}>
+                "px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0",
+                weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
+                weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
+                "bg-green-100 text-green-700"
+              )}>
                   {weekAllocationPercentage}%
                 </span>
               </div>
@@ -528,17 +528,17 @@ const ResourceRow = memo(({
               </p>
             </div>
           </div>
-        )}
+        }
       </div>
       <div className="flex">
         {viewDates.map((day) => {
           const dayAssignments = getAssignmentsForDay(day);
-           const isToday = isSameDay(day, new Date());
-           const showGhost = ghostPreview && ghostPreview.resourceId === resource.id && isSameDay(day, parseISO(ghostPreview.start));
-           const dayIsHoliday = isHoliday(day);
-           const dayHolidayName = holidayName(day);
-           const isWeekend = getDay(day) === 0 || getDay(day) === 6;
-           const isEmptyCell = dayAssignments.length === 0;
+          const isToday = isSameDay(day, new Date());
+          const showGhost = ghostPreview && ghostPreview.resourceId === resource.id && isSameDay(day, parseISO(ghostPreview.start));
+          const dayIsHoliday = isHoliday(day);
+          const dayHolidayName = holidayName(day);
+          const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+          const isEmptyCell = dayAssignments.length === 0;
 
           return (
             <div
@@ -555,23 +555,23 @@ const ResourceRow = memo(({
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
               onClick={(e) => isEmptyCell && handleCellClick(e, day, resource.id)}
-              title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}
-            >
-              {dayIsHoliday && dayHolidayName && (
-                <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
+              title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}>
+
+              {dayIsHoliday && dayHolidayName &&
+              <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
                   {dayHolidayName}
                 </div>
-              )}
+              }
               <div className="space-y-1 min-h-[48px]">
                 {dayAssignments.map((assignment) => {
-                  const isConflict = conflicts.some(c => c.id === assignment.id);
+                  const isConflict = conflicts.some((c) => c.id === assignment.id);
                   const isCurrentlyResizing = resizingAssignment?.id === assignment.id;
                   const isDragging = activeDrag?.assignment?.id === assignment.id;
-                  const dragTransform = isDragging && activeDrag?.snappedTransform 
-                    ? `translate(${activeDrag.snappedTransform.x}px, ${activeDrag.snappedTransform.y}px)`
-                    : null;
+                  const dragTransform = isDragging && activeDrag?.snappedTransform ?
+                  `translate(${activeDrag.snappedTransform.x}px, ${activeDrag.snappedTransform.y}px)` :
+                  null;
                   const dragConflict = isDragging && activeDrag?.conflict;
-                  
+
                   return (
                     <AssignmentBlock
                       key={assignment.id}
@@ -588,29 +588,29 @@ const ResourceRow = memo(({
                       isConflict={isConflict}
                       dragTransform={dragTransform}
                       dragConflict={dragConflict}
-                      resource={resource}
-                    />
-                  );
+                      resource={resource} />);
+
+
                 })}
-                {showGhost && (
-                  <div className="px-2 py-1 rounded text-xs text-white truncate bg-slate-400 opacity-50 border border-dashed border-slate-600">
+                {showGhost &&
+                <div className="px-2 py-1 rounded text-xs text-white truncate bg-slate-400 opacity-50 border border-dashed border-slate-600">
                     Ny planlegging
                   </div>
-                )}
+                }
               </div>
-            </div>
-          );
+            </div>);
+
         })}
       </div>
-    </div>
-  );
+    </div>);
+
 });
 
 ResourceRow.displayName = 'ResourceRow';
 
-export default function OptimizedResourceCalendar({ 
-  assignments, 
-  resources, 
+export default function OptimizedResourceCalendar({
+  assignments,
+  resources,
   projects,
   viewMode = 'week',
   onAssignmentDrop,
@@ -636,7 +636,7 @@ export default function OptimizedResourceCalendar({
 
   const getViewDates = useCallback(() => {
     let dates = [];
-    
+
     if (viewMode === 'day') {
       dates = [currentDate];
     } else if (viewMode === 'week') {
@@ -650,18 +650,18 @@ export default function OptimizedResourceCalendar({
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
       const currentMonthDates = eachDayOfInterval({ start: monthStart, end: monthEnd });
-      
+
       // Add days from next month to reach at least 42 days (6 weeks)
       const nextMonthStart = addDays(monthEnd, 1);
       const daysToAdd = Math.max(0, 42 - currentMonthDates.length);
       const nextMonthDates = Array.from({ length: daysToAdd }, (_, i) => addDays(nextMonthStart, i));
-      
+
       dates = [...currentMonthDates, ...nextMonthDates];
     }
 
     // Filter out weekends if disabled
     if (!showWeekends) {
-      dates = dates.filter(date => {
+      dates = dates.filter((date) => {
         const day = getDay(date);
         return day !== 0 && day !== 6; // 0 = Sunday, 6 = Saturday
       });
@@ -682,20 +682,20 @@ export default function OptimizedResourceCalendar({
 
   const getProjectColor = useCallback((projectId) => {
     const colors = [
-      'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
-      'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'
-    ];
-    const index = projects.findIndex(p => p.id === projectId);
+    'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
+    'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'];
+
+    const index = projects.findIndex((p) => p.id === projectId);
     return colors[index % colors.length];
   }, [projects]);
 
   const getProjectName = useCallback((projectId) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     return project?.name || 'Ukjent';
   }, [projects]);
 
   const viewDates = useMemo(() => getViewDates(), [getViewDates]);
-  
+
   // Merge optimistic assignments
   const allAssignments = useMemo(() => {
     return [...assignments, ...optimisticAssignments];
@@ -716,20 +716,20 @@ export default function OptimizedResourceCalendar({
 
   // Dynamic day width - adjust based on view mode
   const [containerWidth, setContainerWidth] = React.useState(window.innerWidth);
-  
+
   React.useEffect(() => {
     const handleResize = () => setContainerWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  
+
   const resourceWidth = resourceColumnCollapsed ? 64 : 208;
   const availableWidth = containerWidth - resourceWidth - 16;
-  
+
   // For week/twoweeks: fit all days, for month: allow scroll
   let dayWidth;
   let totalCalendarWidth;
-  
+
   if (viewMode === 'week' || viewMode === 'twoweeks') {
     dayWidth = Math.max(80, Math.floor(availableWidth / viewDates.length));
     totalCalendarWidth = containerWidth;
@@ -743,11 +743,11 @@ export default function OptimizedResourceCalendar({
   const BodyRow = useCallback(({ index, style }) => {
     const resource = resources[index];
     const getResourceId = (idx) => resources[idx]?.id;
-    
+
     return (
       <div style={style} className="flex border-t border-slate-200 h-full">
         {viewDates.map((day) => {
-          const dayAssignments = allAssignments.filter(a => {
+          const dayAssignments = allAssignments.filter((a) => {
             if (a.resource_id !== resource.id) return false;
             if (!a.start_dato_tid || !a.slutt_dato_tid) return false;
             try {
@@ -760,7 +760,7 @@ export default function OptimizedResourceCalendar({
               return false;
             }
           });
-          
+
           const isToday = isSameDay(day, new Date());
           const dayIsHoliday = isHolidayFunc(day);
           const isWeekend = getDay(day) === 0 || getDay(day) === 6;
@@ -789,7 +789,7 @@ export default function OptimizedResourceCalendar({
                 const newEnd = snapToInterval(new Date(originalEnd.getTime() + timeDiff));
                 onAssignmentDrop(assignment, resource.id, newStart.toISOString(), newEnd.toISOString());
               }}
-              onDragOver={(e) => { if (canEdit) e.preventDefault(); }}
+              onDragOver={(e) => {if (canEdit) e.preventDefault();}}
               onClick={(e) => {
                 if (!canEdit || !isEmptyCell) return;
                 e.stopPropagation();
@@ -797,27 +797,27 @@ export default function OptimizedResourceCalendar({
                 const clickY = e.clientY - rect.top;
                 const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
                 const startTime = new Date(day);
-                startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
+                startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round(hourFraction * 8 % 1 * 60));
                 const snappedStart = snapToInterval(startTime);
                 const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
                 onCreateAssignment(resource.id, snappedStart.toISOString(), snappedEnd.toISOString());
               }}
-              title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}
-            >
-              {dayIsHoliday && (
-                <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
+              title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}>
+
+              {dayIsHoliday &&
+              <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
                   {getHolidayNameFunc(day)}
                 </div>
-              )}
+              }
               <div className="space-y-1 min-h-[48px]">
                 {dayAssignments.map((assignment) => {
-                  const isConflict = conflicts.some(c => c.id === assignment.id);
+                  const isConflict = conflicts.some((c) => c.id === assignment.id);
                   const isDragging = activeDrag?.assignment?.id === assignment.id;
-                  const dragTransform = isDragging && activeDrag?.snappedTransform 
-                    ? `translate(${activeDrag.snappedTransform.x}px, ${activeDrag.snappedTransform.y}px)`
-                    : null;
+                  const dragTransform = isDragging && activeDrag?.snappedTransform ?
+                  `translate(${activeDrag.snappedTransform.x}px, ${activeDrag.snappedTransform.y}px)` :
+                  null;
                   const dragConflict = isDragging && activeDrag?.conflict;
-                  
+
                   return (
                     <div
                       key={assignment.id}
@@ -853,20 +853,20 @@ export default function OptimizedResourceCalendar({
                             const assignmentStart = parseISO(assignment.start_dato_tid);
                             const assignmentEnd = parseISO(assignment.slutt_dato_tid);
                             const rowHeight = 56;
-                            
+
                             const handleDragMove = (dragEvent) => {
                               dragEvent.preventDefault();
                               const deltaX = dragEvent.clientX - startPos.x;
                               const deltaY = dragEvent.clientY - startPos.y;
                               const daysDelta = Math.round(deltaX / dayWidth);
                               const rowsDelta = Math.round(deltaY / rowHeight);
-                              
+
                               const newStart = addDays(assignmentStart, daysDelta);
                               const newEnd = addDays(assignmentEnd, daysDelta);
                               const newResourceIndex = Math.max(0, Math.min(index + rowsDelta, resources.length - 1));
                               const newResourceId = resources[newResourceIndex]?.id;
-                              
-                              const hasConflict = allAssignments.some(a => {
+
+                              const hasConflict = allAssignments.some((a) => {
                                 if (a.id === assignment.id) return false;
                                 if (a.resource_id !== newResourceId) return false;
                                 const aStart = parseISO(a.start_dato_tid);
@@ -875,10 +875,10 @@ export default function OptimizedResourceCalendar({
                                   isWithinInterval(newStart, { start: aStart, end: aEnd }) ||
                                   isWithinInterval(newEnd, { start: aStart, end: aEnd }) ||
                                   isWithinInterval(aStart, { start: newStart, end: newEnd }) ||
-                                  isWithinInterval(aEnd, { start: newStart, end: newEnd })
-                                );
+                                  isWithinInterval(aEnd, { start: newStart, end: newEnd }));
+
                               });
-                              
+
                               setActiveDrag({
                                 assignment,
                                 currentTransform: { x: deltaX, y: deltaY },
@@ -889,23 +889,23 @@ export default function OptimizedResourceCalendar({
                                 conflict: hasConflict
                               });
                             };
-                            
+
                             const handleDragUp = (upEvent) => {
                               document.removeEventListener('pointermove', handleDragMove);
                               document.removeEventListener('pointerup', handleDragUp);
                               document.body.style.cursor = '';
-                              
+
                               const deltaX = upEvent.clientX - startPos.x;
                               const deltaY = upEvent.clientY - startPos.y;
                               const daysDelta = Math.round(deltaX / dayWidth);
                               const rowsDelta = Math.round(deltaY / rowHeight);
-                              
+
                               if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
                                 const newStart = snapToInterval(addDays(assignmentStart, daysDelta));
                                 const newEnd = snapToInterval(addDays(assignmentEnd, daysDelta));
                                 const newResourceIndex = Math.max(0, Math.min(index + rowsDelta, resources.length - 1));
                                 const newResourceId = resources[newResourceIndex]?.id;
-                                
+
                                 onAssignmentDrop(
                                   assignment,
                                   newResourceId,
@@ -913,10 +913,10 @@ export default function OptimizedResourceCalendar({
                                   newEnd.toISOString()
                                 );
                               }
-                              
+
                               setActiveDrag(null);
                             };
-                            
+
                             document.addEventListener('pointermove', handleDragMove);
                             document.addEventListener('pointerup', handleDragUp);
                             document.body.style.cursor = 'grabbing';
@@ -933,18 +933,18 @@ export default function OptimizedResourceCalendar({
 
                         document.addEventListener('pointermove', handlePointerMove);
                         document.addEventListener('pointerup', handlePointerUp);
-                      }}
-                    >
+                      }}>
+
                       {getProjectName(assignment.prosjekt_id)}
-                    </div>
-                  );
+                    </div>);
+
                 })}
               </div>
-            </div>
-          );
+            </div>);
+
         })}
-      </div>
-    );
+      </div>);
+
   }, [resources, viewDates, allAssignments, projects, canEdit, dayWidth, conflicts, activeDrag, isHolidayFunc, getHolidayNameFunc, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onCreateAssignment]);
 
   return (
@@ -962,8 +962,8 @@ export default function OptimizedResourceCalendar({
             variant="ghost"
             size="sm"
             onClick={() => navigate(-1)}
-            className="h-7 w-7 p-0"
-          >
+            className="h-7 w-7 p-0">
+
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <h2 className="text-sm font-semibold text-slate-900">
@@ -975,8 +975,8 @@ export default function OptimizedResourceCalendar({
             variant="ghost"
             size="sm"
             onClick={() => navigate(1)}
-            className="h-7 w-7 p-0"
-          >
+            className="h-7 w-7 p-0">
+
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -989,14 +989,14 @@ export default function OptimizedResourceCalendar({
           <DropdownMenuContent align="end">
             <DropdownMenuCheckboxItem
               checked={showWeekends}
-              onCheckedChange={setShowWeekends}
-            >
+              onCheckedChange={setShowWeekends}>
+
               Vis helger
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={showHolidays}
-              onCheckedChange={setShowHolidays}
-            >
+              onCheckedChange={setShowHolidays}>
+
               Vis helligdager
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
@@ -1009,11 +1009,11 @@ export default function OptimizedResourceCalendar({
         {/* LEFT COLUMN: Fixed resource names (NOT in horizontal scroll) */}
         <div className="flex flex-col sticky left-0 z-40 bg-white flex-shrink-0">
           {/* Header Left */}
-          <div className={cn(
-            "flex-shrink-0 bg-slate-50 border-r border-b border-slate-200 flex items-center justify-between",
-            resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
-            "py-2.5"
-          )}
+          <div className="bg-slate-50 my-4 px-4 flex-shrink-0 border-r border-b border-slate-200 flex items-center justify-between w-52"
+
+
+
+
           style={{ width: resourceWidth }}>
             {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
             <Button
@@ -1021,8 +1021,8 @@ export default function OptimizedResourceCalendar({
               size="sm"
               onClick={onToggleResourceColumn}
               className="h-6 w-6 p-0 hover:bg-slate-200 rounded"
-              title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
-            >
+              title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}>
+
               <span className="text-xs font-bold text-slate-600">
                 {resourceColumnCollapsed ? '→' : '←'}
               </span>
@@ -1036,49 +1036,49 @@ export default function OptimizedResourceCalendar({
               itemCount={resources.length}
               itemSize={56}
               width={resourceWidth}
-              style={{ overflow: 'hidden' }}
-            >
+              style={{ overflow: 'hidden' }}>
+
               {({ index, style }) => {
                 const resource = resources[index];
                 const colWidth = resourceColumnCollapsed ? 64 : 208;
-                
+
                 return (
                   <div style={style} className="flex border-t border-slate-200">
-                    <div 
+                    <div
                       className={cn(
                         "bg-white border-r border-slate-200 flex-shrink-0 overflow-hidden flex items-center",
                         resourceColumnCollapsed ? "w-16 px-1.5" : "w-52 px-3"
                       )}
-                      style={{ width: colWidth, height: style.height }}
-                    >
-                      {resourceColumnCollapsed ? (
-                        <div className="flex flex-col items-center gap-1">
+                      style={{ width: colWidth, height: style.height }}>
+
+                      {resourceColumnCollapsed ?
+                      <div className="flex flex-col items-center gap-1">
                           <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
                             <span className="text-xs font-semibold text-emerald-700">
                               {(() => {
-                                const names = resource.navn?.split(' ') || [];
-                                if (names.length >= 2) {
-                                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                                }
-                                return resource.navn?.charAt(0) || 'R';
-                              })()}
+                              const names = resource.navn?.split(' ') || [];
+                              if (names.length >= 2) {
+                                return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                              }
+                              return resource.navn?.charAt(0) || 'R';
+                            })()}
                             </span>
                           </div>
                           <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">
                             {Math.round(Math.random() * 100)}%
                           </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-2">
+                        </div> :
+
+                      <div className="flex items-start gap-2">
                           <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
                             <span className="text-xs font-semibold text-emerald-700">
                               {(() => {
-                                const names = resource.navn?.split(' ') || [];
-                                if (names.length >= 2) {
-                                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                                }
-                                return resource.navn?.charAt(0) || 'R';
-                              })()}
+                              const names = resource.navn?.split(' ') || [];
+                              if (names.length >= 2) {
+                                return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                              }
+                              return resource.navn?.charAt(0) || 'R';
+                            })()}
                             </span>
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1095,24 +1095,24 @@ export default function OptimizedResourceCalendar({
                             </p>
                           </div>
                         </div>
-                      )}
+                      }
                     </div>
-                  </div>
-                );
+                  </div>);
+
               }}
             </List>
           </div>
         </div>
 
         {/* RIGHT SCROLL WRAPPER: Header + Body with horizontal scroll */}
-        <div 
+        <div
           ref={bodyScrollRef}
           className={cn(
             "flex-1 flex flex-col",
             viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden',
             'overflow-y-hidden relative'
-          )}
-        >
+          )}>
+
           {/* Header Right - Dates */}
           <div className="flex-shrink-0 flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
             {viewDates.map((day) => {
@@ -1130,15 +1130,15 @@ export default function OptimizedResourceCalendar({
                     !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
                     !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
                     isWeekend && !isToday && !dayIsHoliday && "text-slate-600 font-medium"
-                  )}
-                >
-                  {isToday && (
-                    <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
-                  )}
+                  )}>
+
+                  {isToday &&
+                  <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
+                  }
                   <div className="text-[10px] font-semibold uppercase tracking-wide relative z-10">{format(day, 'EEE', { locale: nb })}</div>
                   <div className={cn("text-sm font-bold mt-0.5 relative z-10", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
-                </div>
-              );
+                </div>);
+
             })}
           </div>
 
@@ -1148,9 +1148,9 @@ export default function OptimizedResourceCalendar({
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
               if (!isToday) return null;
-              
+
               const leftPosition = index * dayWidth;
-              
+
               return (
                 <div
                   key="today-marker"
@@ -1161,9 +1161,9 @@ export default function OptimizedResourceCalendar({
                     background: 'linear-gradient(to bottom, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)',
                     borderLeft: '2px solid rgb(16, 185, 129)',
                     borderRight: '2px solid rgb(16, 185, 129)'
-                  }}
-                />
-              );
+                  }} />);
+
+
             })}
             
             <List
@@ -1171,13 +1171,13 @@ export default function OptimizedResourceCalendar({
               itemCount={resources.length}
               itemSize={56}
               width={viewDates.length * dayWidth}
-              style={{ overflow: 'hidden' }}
-            >
+              style={{ overflow: 'hidden' }}>
+
               {BodyRow}
             </List>
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 }
