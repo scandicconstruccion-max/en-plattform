@@ -136,29 +136,37 @@ export default function Prosjektfiler() {
 
     try {
       for (const cat of PREDEFINED_CATEGORIES) {
-        await base44.entities.FileCategory.create({
-          project_id: projectId,
-          name: cat.name,
-          icon: cat.icon,
-          color: cat.color,
-          order: cat.order,
-          is_predefined: true,
-          access_level: 'alle',
-          parent_category: null
-        });
+        // Check if parent category already exists
+        const parentExists = existingCats.some(c => c.name === cat.name && !c.parent_category);
+        if (!parentExists) {
+          await base44.entities.FileCategory.create({
+            project_id: projectId,
+            name: cat.name,
+            icon: cat.icon,
+            color: cat.color,
+            order: cat.order,
+            is_predefined: true,
+            access_level: 'alle',
+            parent_category: null
+          });
+        }
 
         if (cat.children) {
           for (const child of cat.children) {
-            await base44.entities.FileCategory.create({
-              project_id: projectId,
-              name: child.name,
-              parent_category: cat.name,
-              icon: child.icon,
-              color: child.color,
-              order: child.order,
-              is_predefined: true,
-              access_level: 'alle'
-            });
+            // Check if child category already exists
+            const childExists = existingCats.some(c => c.name === child.name && c.parent_category === cat.name);
+            if (!childExists) {
+              await base44.entities.FileCategory.create({
+                project_id: projectId,
+                name: child.name,
+                parent_category: cat.name,
+                icon: child.icon,
+                color: child.color,
+                order: child.order,
+                is_predefined: true,
+                access_level: 'alle'
+              });
+            }
           }
         }
       }
