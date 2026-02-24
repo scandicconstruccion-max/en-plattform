@@ -690,7 +690,7 @@ export default function OptimizedResourceCalendar({
               itemCount={resources.length}
               itemSize={56}
               width={totalCalendarWidth}
-              style={{ overflowY: 'auto', overflowX: 'hidden' }}
+              style={{ overflow: 'hidden' }}
             >
               {Row}
             </List>
