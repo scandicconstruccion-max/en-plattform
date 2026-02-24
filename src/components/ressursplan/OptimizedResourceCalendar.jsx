@@ -211,6 +211,9 @@ const ResourceRow = memo(({
     const startPos = { x: e.clientX, y: e.clientY };
     const originalStart = parseISO(assignment.start_dato_tid);
     const originalEnd = parseISO(assignment.slutt_dato_tid);
+    
+    let currentPreviewStart = originalStart;
+    let currentPreviewEnd = originalEnd;
 
     setResizeState({ assignment, edge, startPos, originalStart, originalEnd });
 
@@ -239,6 +242,9 @@ const ResourceRow = memo(({
         }
       }
 
+      currentPreviewStart = newStart;
+      currentPreviewEnd = newEnd;
+
       // Update visual preview
       setResizeState(prev => ({
         ...prev,
@@ -251,11 +257,11 @@ const ResourceRow = memo(({
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
       
-      if (resizeState?.previewStart && resizeState?.previewEnd) {
-        const finalStart = snapToInterval(resizeState.previewStart);
-        const finalEnd = snapToInterval(resizeState.previewEnd);
+      if (currentPreviewStart && currentPreviewEnd) {
+        const finalStart = snapToInterval(currentPreviewStart);
+        const finalEnd = snapToInterval(currentPreviewEnd);
         
-        // Call resize handler instead of drop
+        // Call resize handler
         onAssignmentResize(
           assignment,
           finalStart.toISOString(),
@@ -268,7 +274,7 @@ const ResourceRow = memo(({
 
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
-  }, [canEdit, onAssignmentResize, resizeState]);
+  }, [canEdit, onAssignmentResize]);
 
   const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
   const collapsed = style.resourceColumnCollapsed;
