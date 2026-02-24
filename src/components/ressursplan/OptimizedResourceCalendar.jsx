@@ -224,6 +224,7 @@ const ResourceRow = memo(({
     const startPos = { x: e.clientX, y: e.clientY };
     const assignmentStart = parseISO(assignment.start_dato_tid);
     const assignmentEnd = parseISO(assignment.slutt_dato_tid);
+    const rowHeight = 56;
     
     const dragState = {
       assignment,
@@ -243,18 +244,20 @@ const ResourceRow = memo(({
       const deltaY = moveEvent.clientY - startPos.y;
       
       const dayWidth = style.dayWidth || 120;
-      const rowHeight = 56;
-      
       const daysDelta = Math.round(deltaX / dayWidth);
       const rowsDelta = Math.round(deltaY / rowHeight);
       
       const newStart = addDays(assignmentStart, daysDelta);
       const newEnd = addDays(assignmentEnd, daysDelta);
       
+      // Beregn ny ressurs basert på Y-delta
+      const newResourceIndex = Math.max(0, Math.min(style.resourceIndex + rowsDelta, style.totalResources - 1));
+      const newResourceId = style.getResourceId(newResourceIndex);
+      
       // Check conflicts
       const hasConflict = assignments.some(a => {
         if (a.id === assignment.id) return false;
-        if (a.resource_id !== assignment.resource_id) return false;
+        if (a.resource_id !== newResourceId) return false;
         
         const aStart = parseISO(a.start_dato_tid);
         const aEnd = parseISO(a.slutt_dato_tid);
@@ -273,6 +276,7 @@ const ResourceRow = memo(({
         snappedTransform: { x: daysDelta * dayWidth, y: rowsDelta * rowHeight },
         newStart,
         newEnd,
+        newResourceId,
         conflict: hasConflict
       });
     };
@@ -287,14 +291,18 @@ const ResourceRow = memo(({
       
       const dayWidth = style.dayWidth || 120;
       const daysDelta = Math.round(deltaX / dayWidth);
+      const rowsDelta = Math.round(deltaY / rowHeight);
       
       if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
         const newStart = snapToInterval(addDays(assignmentStart, daysDelta));
         const newEnd = snapToInterval(addDays(assignmentEnd, daysDelta));
         
+        const newResourceIndex = Math.max(0, Math.min(style.resourceIndex + rowsDelta, style.totalResources - 1));
+        const newResourceId = style.getResourceId(newResourceIndex);
+        
         onAssignmentDrop(
           assignment,
-          assignment.resource_id,
+          newResourceId,
           newStart.toISOString(),
           newEnd.toISOString()
         );
