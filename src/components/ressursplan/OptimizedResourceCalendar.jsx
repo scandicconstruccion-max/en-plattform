@@ -800,7 +800,7 @@ export default function OptimizedResourceCalendar({
                 startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
                 const snappedStart = snapToInterval(startTime);
                 const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
-                onCellClick(resource.id, snappedStart, snappedEnd);
+                onCreateAssignment(resource.id, snappedStart.toISOString(), snappedEnd.toISOString());
               }}
               title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}
             >
