@@ -49,130 +49,130 @@ export default function InlineEditDialog({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Rediger planlegging</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label>Prosjekt</Label>
-            <Select 
-              value={formData.prosjekt_id} 
-              onValueChange={(v) => setFormData({...formData, prosjekt_id: v})}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Velg prosjekt" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Rediger planlegging</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label>Start</Label>
+              <Label>Prosjekt</Label>
+              <Select 
+                value={formData.prosjekt_id} 
+                onValueChange={(v) => setFormData({...formData, prosjekt_id: v})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Velg prosjekt" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Start</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.start_dato_tid}
+                  onChange={(e) => setFormData({...formData, start_dato_tid: e.target.value})}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Slutt</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.slutt_dato_tid}
+                  onChange={(e) => setFormData({...formData, slutt_dato_tid: e.target.value})}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Rolle</Label>
               <Input
-                type="datetime-local"
-                value={formData.start_dato_tid}
-                onChange={(e) => setFormData({...formData, start_dato_tid: e.target.value})}
-                required
+                value={formData.rolle_pa_prosjekt}
+                onChange={(e) => setFormData({...formData, rolle_pa_prosjekt: e.target.value})}
+                placeholder="F.eks. Tømrer, Elektriker..."
               />
             </div>
+
             <div>
-              <Label>Slutt</Label>
-              <Input
-                type="datetime-local"
-                value={formData.slutt_dato_tid}
-                onChange={(e) => setFormData({...formData, slutt_dato_tid: e.target.value})}
-                required
+              <Label>Status</Label>
+              <Select 
+                value={formData.status} 
+                onValueChange={(v) => setFormData({...formData, status: v})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="planlagt">Planlagt</SelectItem>
+                  <SelectItem value="bekreftet">Bekreftet</SelectItem>
+                  <SelectItem value="fullfort">Fullført</SelectItem>
+                  <SelectItem value="kansellert">Kansellert</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Kommentar</Label>
+              <Textarea
+                value={formData.kommentar}
+                onChange={(e) => setFormData({...formData, kommentar: e.target.value})}
+                placeholder="Legg til notater..."
+                rows={2}
               />
             </div>
-          </div>
 
-          <div>
-            <Label>Rolle</Label>
-            <Input
-              value={formData.rolle_pa_prosjekt}
-              onChange={(e) => setFormData({...formData, rolle_pa_prosjekt: e.target.value})}
-              placeholder="F.eks. Tømrer, Elektriker..."
-            />
-          </div>
+            <div className="flex justify-between gap-3 pt-2">
+              <Button 
+                type="button" 
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Slett
+              </Button>
+              <div className="flex gap-3">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  Avbryt
+                </Button>
+                <Button type="submit" disabled={isLoading} className="bg-emerald-600 hover:bg-emerald-700">
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Lagre
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-          <div>
-            <Label>Status</Label>
-            <Select 
-              value={formData.status} 
-              onValueChange={(v) => setFormData({...formData, status: v})}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="planlagt">Planlagt</SelectItem>
-                <SelectItem value="bekreftet">Bekreftet</SelectItem>
-                <SelectItem value="fullfort">Fullført</SelectItem>
-                <SelectItem value="kansellert">Kansellert</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Kommentar</Label>
-            <Textarea
-              value={formData.kommentar}
-              onChange={(e) => setFormData({...formData, kommentar: e.target.value})}
-              placeholder="Legg til notater..."
-              rows={2}
-            />
-          </div>
-
-          <div className="flex justify-between gap-3 pt-2">
-            <Button 
-              type="button" 
-              variant="destructive"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Slett aktivitet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette denne aktiviteten? Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              onDelete();
+              setShowDeleteConfirm(false);
+              onOpenChange(false);
+            }} className="bg-red-600 hover:bg-red-700">
               Slett
-            </Button>
-            <div className="flex gap-3">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Avbryt
-              </Button>
-              <Button type="submit" disabled={isLoading} className="bg-emerald-600 hover:bg-emerald-700">
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Lagre
-              </Button>
-            </div>
+            </AlertDialogAction>
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-
-    <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Slett aktivitet?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Er du sikker på at du vil slette denne aktiviteten? Denne handlingen kan ikke angres.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="flex gap-3 justify-end">
-          <AlertDialogCancel>Avbryt</AlertDialogCancel>
-          <AlertDialogAction onClick={() => {
-            onDelete();
-            setShowDeleteConfirm(false);
-            onOpenChange(false);
-          }} className="bg-red-600 hover:bg-red-700">
-            Slett
-          </AlertDialogAction>
-        </div>
-      </AlertDialogContent>
-    </AlertDialog>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
