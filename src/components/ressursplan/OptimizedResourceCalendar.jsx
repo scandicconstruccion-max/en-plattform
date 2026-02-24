@@ -481,7 +481,7 @@ const ResourceRow = memo(({
               key={day.toISOString()}
               style={{ width: style.dayWidth }}
               className={cn(
-                "flex-shrink-0 p-1.5 border-l border-slate-200 relative hover:bg-slate-50/50 transition-colors",
+                "flex-shrink-0 p-1.5 border-l border-t border-slate-200 relative hover:bg-slate-50/50 transition-colors",
                 isWeekend && "bg-slate-100/60",
                 isToday && "bg-emerald-50/30",
                 dayIsHoliday && "bg-red-50/20"
