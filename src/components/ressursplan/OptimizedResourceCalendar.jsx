@@ -46,31 +46,38 @@ const AssignmentBlock = memo(({
   const handleMainDragStart = (e) => {
     if (!canEdit || isResizing || isResizingLocal) return;
     e.stopPropagation();
-    e.preventDefault();
     
-    // Track click start for single click detection
-    setClickStart({ x: e.clientX, y: e.clientY, time: Date.now() });
-    onDragStart(e, assignment);
-  };
+    const startPos = { x: e.clientX, y: e.clientY, time: Date.now() };
+    let dragStarted = false;
 
-  const handleClick = (e) => {
-    e.stopPropagation();
-    
-    // If we have click start position, check if this was a real drag
-    if (clickStart) {
-      const deltaX = Math.abs(e.clientX - clickStart.x);
-      const deltaY = Math.abs(e.clientY - clickStart.y);
-      const deltaTime = Date.now() - clickStart.time;
+    const handlePointerMove = (moveEvent) => {
+      if (dragStarted) return;
       
-      // If movement is minimal and time is quick, treat as click not drag
-      if (deltaX < 5 && deltaY < 5 && deltaTime < 200) {
-        onClick();
-        setClickStart(null);
-        return;
+      const deltaX = Math.abs(moveEvent.clientX - startPos.x);
+      const deltaY = Math.abs(moveEvent.clientY - startPos.y);
+      
+      // Only start drag if movement > 10px
+      if (deltaX > 10 || deltaY > 10) {
+        dragStarted = true;
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        // Start actual drag
+        onDragStart(e, assignment);
       }
-    }
-    
-    setClickStart(null);
+    };
+
+    const handlePointerUp = (upEvent) => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      
+      if (!dragStarted) {
+        // Was a click, not a drag
+        onClick();
+      }
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
   };
 
   React.useEffect(() => {
