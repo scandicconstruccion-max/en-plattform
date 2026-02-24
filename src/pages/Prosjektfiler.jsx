@@ -553,9 +553,12 @@ export default function Prosjektfiler() {
                   {/* Subcategories */}
                   {projectCategories
                     .filter((c) => c.parent_category === category.name)
-                    .filter((sub, index, self) => 
-                      index === self.findIndex((s) => s.id === sub.id)
-                    )
+                    .reduce((unique, sub) => {
+                      if (!unique.find(u => u.name === sub.name && u.parent_category === sub.parent_category)) {
+                        unique.push(sub);
+                      }
+                      return unique;
+                    }, [])
                     .map((sub) =>
               <button
                 key={`sub-${sub.id}`}
