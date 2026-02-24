@@ -127,14 +127,29 @@ export default function InlineEditDialog({
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Avbryt
+          <div className="flex justify-between gap-3 pt-2">
+            <Button 
+              type="button" 
+              variant="destructive"
+              onClick={() => {
+                if (confirm('Er du sikker på at du vil slette denne aktiviteten?')) {
+                  onDelete();
+                  onOpenChange(false);
+                }
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Slett
             </Button>
-            <Button type="submit" disabled={isLoading} className="bg-emerald-600 hover:bg-emerald-700">
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Lagre
-            </Button>
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Avbryt
+              </Button>
+              <Button type="submit" disabled={isLoading} className="bg-emerald-600 hover:bg-emerald-700">
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Lagre
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>
