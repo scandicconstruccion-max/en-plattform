@@ -875,41 +875,22 @@ export default function Avvik() {
                 className="mt-1.5 rounded-xl" />
 
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Kategori</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(v) => setFormData({ ...formData, category: v })}>
+            <div>
+              <Label>Alvorlighetsgrad</Label>
+              <Select
+                value={formData.severity}
+                onValueChange={(v) => setFormData({ ...formData, severity: v })}>
 
-                  <SelectTrigger className="mt-1.5 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sikkerhet">Sikkerhet</SelectItem>
-                    <SelectItem value="kvalitet">Kvalitet</SelectItem>
-                    <SelectItem value="miljo">Miljø</SelectItem>
-                    <SelectItem value="annet">Annet</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Alvorlighetsgrad</Label>
-                <Select
-                  value={formData.severity}
-                  onValueChange={(v) => setFormData({ ...formData, severity: v })}>
-
-                  <SelectTrigger className="mt-1.5 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lav">Lav</SelectItem>
-                    <SelectItem value="middels">Middels</SelectItem>
-                    <SelectItem value="hoy">Høy</SelectItem>
-                    <SelectItem value="kritisk">Kritisk</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lav">Lav</SelectItem>
+                  <SelectItem value="middels">Middels</SelectItem>
+                  <SelectItem value="hoy">Høy</SelectItem>
+                  <SelectItem value="kritisk">Kritisk</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Beskrivelse</Label>
