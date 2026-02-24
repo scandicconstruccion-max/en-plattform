@@ -1088,32 +1088,37 @@ export default function OptimizedResourceCalendar({
                           </span>
                         </div> :
 
-                      <div className="flex items-start gap-2">
-                          <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-semibold text-emerald-700">
-                              {(() => {
-                              const names = resource.navn?.split(' ') || [];
-                              if (names.length >= 2) {
-                                return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                              }
-                              return resource.navn?.charAt(0) || 'R';
-                            })()}
-                            </span>
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
-                                {resource.navn}
-                              </p>
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 bg-green-100 text-green-700">
-                                {Math.round(Math.random() * 100)}%
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
-                              {resource.type === 'employee' ? resource.stilling : resource.rolle}
-                            </p>
-                          </div>
-                        </div>
+                      <button
+                         onClick={() => {
+                           setSelectedResource(resource);
+                           setActivityPanelOpen(true);
+                         }}
+                         className="flex items-start gap-2 w-full hover:opacity-75 transition-opacity text-left">
+                           <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                             <span className="text-xs font-semibold text-emerald-700">
+                               {(() => {
+                               const names = resource.navn?.split(' ') || [];
+                               if (names.length >= 2) {
+                                 return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                               }
+                               return resource.navn?.charAt(0) || 'R';
+                             })()}
+                             </span>
+                           </div>
+                           <div className="min-w-0 flex-1">
+                             <div className="flex items-center gap-1.5">
+                               <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
+                                 {resource.navn}
+                               </p>
+                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 bg-green-100 text-green-700">
+                                 {allocPercent}%
+                               </span>
+                             </div>
+                             <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
+                               {resource.type === 'employee' ? resource.stilling : resource.rolle}
+                             </p>
+                           </div>
+                         </button>
                       }
                     </div>
                   </div>);
