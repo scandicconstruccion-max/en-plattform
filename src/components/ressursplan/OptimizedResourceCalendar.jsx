@@ -1046,10 +1046,10 @@ export default function OptimizedResourceCalendar({
                   <div style={style} className="flex border-t border-slate-200">
                     <div 
                       className={cn(
-                        "bg-white border-r border-slate-200 flex-shrink-0",
-                        resourceColumnCollapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
+                        "bg-white border-r border-slate-200 flex-shrink-0 overflow-hidden flex items-center",
+                        resourceColumnCollapsed ? "w-16 px-1.5" : "w-52 px-3"
                       )}
-                      style={{ width: colWidth }}
+                      style={{ width: colWidth, height: style.height }}
                     >
                       {resourceColumnCollapsed ? (
                         <div className="flex flex-col items-center gap-1">
