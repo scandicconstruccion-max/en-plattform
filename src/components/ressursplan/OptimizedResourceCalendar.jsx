@@ -822,11 +822,11 @@ export default function OptimizedResourceCalendar({
                     <div
                       key={assignment.id}
                       className={cn(
-                        "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
+                        "group relative px-1.5 py-0.5 rounded-sm text-[10px] text-white truncate select-none font-semibold flex-1 flex items-center",
                         getProjectColor(assignment.prosjekt_id),
-                        canEdit && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
+                        canEdit && "cursor-pointer hover:shadow",
                         isDragging && "cursor-grabbing",
-                        (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
+                        (isConflict || dragConflict) && "ring-1 ring-white/80"
                       )}
                       style={{
                         transform: dragTransform || 'none',
