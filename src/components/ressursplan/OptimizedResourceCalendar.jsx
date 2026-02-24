@@ -33,6 +33,7 @@ const AssignmentBlock = memo(({
   dragConflict
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
+  const [clickStart, setClickStart] = React.useState(null);
 
   const handleResizeStart = (e, edge) => {
     if (!canEdit) return;
@@ -46,7 +47,30 @@ const AssignmentBlock = memo(({
     if (!canEdit || isResizing || isResizingLocal) return;
     e.stopPropagation();
     e.preventDefault();
+    
+    // Track click start for single click detection
+    setClickStart({ x: e.clientX, y: e.clientY, time: Date.now() });
     onDragStart(e, assignment);
+  };
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    
+    // If we have click start position, check if this was a real drag
+    if (clickStart) {
+      const deltaX = Math.abs(e.clientX - clickStart.x);
+      const deltaY = Math.abs(e.clientY - clickStart.y);
+      const deltaTime = Date.now() - clickStart.time;
+      
+      // If movement is minimal and time is quick, treat as click not drag
+      if (deltaX < 5 && deltaY < 5 && deltaTime < 200) {
+        onClick();
+        setClickStart(null);
+        return;
+      }
+    }
+    
+    setClickStart(null);
   };
 
   React.useEffect(() => {
