@@ -122,13 +122,13 @@ export default function Prosjektfiler() {
 
   // Initialize categories for new projects
   useEffect(() => {
-    if (projectFilter !== 'all') {
+    if (projectFilter !== 'all' && categories.length > 0) {
       const projectCats = categories.filter((c) => c.project_id === projectFilter);
       if (projectCats.length === 0) {
         initializeCategoriesForProject(projectFilter);
       }
     }
-  }, [projectFilter, categories]);
+  }, [projectFilter]);
 
   const initializeCategoriesForProject = async (projectId) => {
     const existingCats = categories.filter((c) => c.project_id === projectId);
