@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 
 export default function InlineEditDialog({ 
   open, 
@@ -13,6 +13,7 @@ export default function InlineEditDialog({
   assignment, 
   projects,
   onSubmit, 
+  onDelete,
   isLoading 
 }) {
   const [formData, setFormData] = useState({
