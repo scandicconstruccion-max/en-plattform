@@ -577,7 +577,7 @@ export default function OptimizedResourceCalendar({
         <div className="overflow-x-auto">
           {/* Header */}
           <div className="flex bg-slate-50 border-b border-slate-200">
-            <div className="w-64 p-2 font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0">
+            <div className="w-64 px-3 py-1 text-sm font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0">
               Ressurs
             </div>
             <div className="flex flex-1">
@@ -587,18 +587,18 @@ export default function OptimizedResourceCalendar({
                   <div
                     key={day.toISOString()}
                     className={cn(
-                      "text-center p-2 font-medium min-w-[120px] flex-1 border-l border-slate-100",
+                      "text-center px-2 py-1 font-medium min-w-[120px] flex-1 border-l border-slate-100",
                       isSameDay(day, new Date()) ? "text-emerald-600 bg-emerald-50" : "text-slate-600",
                       dayIsHoliday && "bg-red-50/50 text-red-700"
                     )}
                   >
                     {viewMode !== 'month' ? (
                       <>
-                        <div className="text-xs uppercase">{format(day, 'EEE', { locale: nb })}</div>
-                        <div className="text-base font-semibold">{format(day, 'd')}</div>
+                        <div className="text-[10px] uppercase">{format(day, 'EEE', { locale: nb })}</div>
+                        <div className="text-sm font-semibold">{format(day, 'd')}</div>
                       </>
                     ) : (
-                      <div className="text-sm">{format(day, 'd')}</div>
+                      <div className="text-xs">{format(day, 'd')}</div>
                     )}
                   </div>
                 );
