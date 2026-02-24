@@ -472,7 +472,7 @@ const ResourceRow = memo(({
           "fixed bg-white z-50 border-r border-slate-200 flex-shrink-0 top-[160px]",
           collapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
         )}
-        style={{ width: colWidth, left: resourceColumnCollapsed ? 0 : 0, height: 56 }}
+        style={{ width: colWidth, height: 56 }}
       >
         {collapsed ? (
           <div className="flex flex-col items-center gap-1">
