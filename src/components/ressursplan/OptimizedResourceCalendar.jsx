@@ -474,12 +474,15 @@ const ResourceRow = memo(({
           const dayIsHoliday = isHoliday(day);
           const dayHolidayName = holidayName(day);
           
+          const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+          
           return (
             <div
               key={day.toISOString()}
               style={{ width: style.dayWidth }}
               className={cn(
                 "flex-shrink-0 p-1.5 border-l border-slate-100 relative hover:bg-slate-50/50 transition-colors",
+                isWeekend && "bg-slate-50/80",
                 isToday && "bg-emerald-50/30",
                 dayIsHoliday && "bg-red-50/20"
               )}
@@ -761,15 +764,18 @@ export default function OptimizedResourceCalendar({
               {viewDates.map((day) => {
                 const dayIsHoliday = isHolidayFunc(day);
                 const isToday = isSameDay(day, new Date());
+                const isWeekend = getDay(day) === 0 || getDay(day) === 6;
                 return (
                   <div
                     key={day.toISOString()}
                     style={{ width: dayWidth }}
                     className={cn(
                       "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100 relative",
+                      isWeekend && !isToday && "bg-slate-100",
                       isToday && "bg-emerald-100 text-emerald-900 font-bold",
                       !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
-                      !isToday && !dayIsHoliday && "text-slate-600"
+                      !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
+                      isWeekend && !isToday && !dayIsHoliday && "text-slate-500"
                     )}
                   >
                     {isToday && (
