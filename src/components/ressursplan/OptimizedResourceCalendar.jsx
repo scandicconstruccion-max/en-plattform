@@ -99,12 +99,40 @@ const AssignmentBlock = memo(({
   const label = isAbsence ? absenceTypeConfig?.fullLabel : projectName;
   const shortLabel = isAbsence ? absenceTypeConfig?.shortLabel : projectName;
 
+  // For absence types, render as thin stripe instead of full block
+  if (isAbsence) {
+    return (
+      <div
+        onPointerDown={handleMainDragStart}
+        className="group relative w-full h-5 select-none cursor-pointer"
+        style={{
+          transform: dragTransform || 'none',
+          transition: isDragging ? 'none' : 'all 0.2s',
+          opacity: isDragging ? 0.85 : 1,
+          zIndex: isDragging ? 50 : 'auto'
+        }}
+        title={`${absenceTypeConfig.fullLabel} – ${resource?.navn || 'Ressurs'}`}
+      >
+        <div
+          className={cn(
+            "relative h-4 rounded px-1.5 flex items-center text-[10px] font-semibold text-white truncate",
+            absenceTypeConfig.color,
+            (isConflict || dragConflict) && "ring-2 ring-red-500"
+          )}
+        >
+          <span>{shortLabel}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular work assignment - full block
   return (
      <div
        onPointerDown={handleMainDragStart}
        className={cn(
          "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
-         bgColor,
+         `bg-${projectColor.split('-')[1]}-500`,
          canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
          isDragging && "cursor-grabbing",
          (isResizing || isResizingLocal) && "opacity-50 scale-95",
@@ -116,7 +144,8 @@ const AssignmentBlock = memo(({
          opacity: isDragging ? 0.85 : 1,
          boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
          willChange: isDragging ? 'transform' : 'auto',
-         zIndex: isDragging ? 50 : 'auto'
+         zIndex: isDragging ? 50 : 'auto',
+         backgroundColor: projectColor.startsWith('bg-') ? `var(--color-${projectColor.split('-')[1]})` : undefined
        }}
      >
        {canEdit && !isDragging && (
