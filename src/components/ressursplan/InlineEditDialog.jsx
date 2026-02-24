@@ -134,12 +134,7 @@ export default function InlineEditDialog({
             <Button 
               type="button" 
               variant="destructive"
-              onClick={() => {
-                if (confirm('Er du sikker på at du vil slette denne aktiviteten?')) {
-                  onDelete();
-                  onOpenChange(false);
-                }
-              }}
+              onClick={() => setShowDeleteConfirm(true)}
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Slett
