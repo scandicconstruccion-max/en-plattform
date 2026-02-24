@@ -646,6 +646,7 @@ export default function OptimizedResourceCalendar({
   const [showHolidays, setShowHolidays] = useState(true);
   const [tempStartTid, setTempStartTid] = useState(currentSettings.standard_start_tid);
   const [tempSluttTid, setTempSluttTid] = useState(currentSettings.standard_slutt_tid);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
 
   const updateSettingsMutation = useMutation({
     mutationFn: (data) => {
@@ -1019,7 +1020,7 @@ export default function OptimizedResourceCalendar({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <DropdownMenu>
+        <DropdownMenu open={settingsMenuOpen} onOpenChange={setSettingsMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 px-2">
               <Settings className="h-3.5 w-3.5" />
@@ -1066,6 +1067,7 @@ export default function OptimizedResourceCalendar({
                         standard_start_tid: tempStartTid,
                         standard_slutt_tid: tempSluttTid
                       });
+                      setSettingsMenuOpen(false);
                     }}
                     disabled={updateSettingsMutation.isPending}
                     className="w-full h-6 text-xs bg-emerald-600 hover:bg-emerald-700">
