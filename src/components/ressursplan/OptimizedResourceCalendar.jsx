@@ -47,51 +47,42 @@ const AssignmentBlock = memo(({
 
   const handleMainDragStart = (e) => {
     if (!canEdit || isResizing) return;
+    e.stopPropagation();
     onDragStart(e);
   };
 
   return (
-    <AssignmentPopover 
-      assignment={assignment} 
-      projectName={projectName}
-      onEdit={onEdit}
-      canEdit={canEdit}
+    <div
+      draggable={canEdit && !isResizing}
+      onDragStart={handleMainDragStart}
+      className={cn(
+        "group relative px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-all",
+        projectColor,
+        canEdit && !isResizing && "cursor-move",
+        (isDragging || isResizing) && "opacity-50",
+        isConflict && "ring-2 ring-red-500 ring-offset-1"
+      )}
     >
-      <div
-        draggable={canEdit && !isResizing}
-        onDragStart={handleMainDragStart}
-        className={cn(
-          "group relative px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-all select-none touch-manipulation",
-          projectColor,
-          canEdit && !isResizing && "cursor-move",
-          (isDragging || isResizing) && "opacity-50",
-          isConflict && "ring-2 ring-red-500 ring-offset-1"
-        )}
-        style={{ 
-          WebkitTouchCallout: 'none',
-          touchAction: 'none',
-          userSelect: 'none'
-        }}
-      >
-        {canEdit && (
-          <>
-            <div 
-              className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-              onMouseDown={handleResizeLeft}
-              onTouchStart={handleResizeLeft}
-              draggable={false}
-            />
-            <div 
-              className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-              onMouseDown={handleResizeRight}
-              onTouchStart={handleResizeRight}
-              draggable={false}
-            />
-          </>
-        )}
+      {canEdit && (
+        <>
+          <div 
+            className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            onMouseDown={handleResizeLeft}
+            onTouchStart={handleResizeLeft}
+            draggable={false}
+          />
+          <div 
+            className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            onMouseDown={handleResizeRight}
+            onTouchStart={handleResizeRight}
+            draggable={false}
+          />
+        </>
+      )}
+      <span onClick={() => onClick()} className="pointer-events-auto">
         {projectName}
-      </div>
-    </AssignmentPopover>
+      </span>
+    </div>
   );
 });
 
