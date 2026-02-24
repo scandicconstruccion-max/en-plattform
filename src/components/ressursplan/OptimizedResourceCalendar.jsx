@@ -1081,7 +1081,7 @@ export default function OptimizedResourceCalendar({
                             </span>
                           </div>
                           <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">
-                            {Math.round(Math.random() * 100)}%
+                            {allocPercent}%
                           </span>
                         </div> :
 
