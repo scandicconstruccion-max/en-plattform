@@ -494,8 +494,13 @@ export default function Prosjektfiler() {
                 </Button>
               </div>
 
-              {projectCategories.filter((c) => !c.parent_category).map((category) =>
-            <div key={category.id}>
+              {projectCategories
+                .filter((c) => !c.parent_category)
+                .filter((category, index, self) => 
+                  index === self.findIndex((c) => c.name === category.name)
+                )
+                .map((category) =>
+            <div key={`cat-${category.id}`}>
                   <button
                 onClick={() => setSelectedCategory(category.id)}
                 className={cn(
@@ -539,9 +544,14 @@ export default function Prosjektfiler() {
                   </button>
                   
                   {/* Subcategories */}
-                  {projectCategories.filter((c) => c.parent_category === category.name).map((sub) =>
+                  {projectCategories
+                    .filter((c) => c.parent_category === category.name)
+                    .filter((sub, index, self) => 
+                      index === self.findIndex((s) => s.id === sub.id)
+                    )
+                    .map((sub) =>
               <button
-                key={sub.id}
+                key={`sub-${sub.id}`}
                 onClick={() => setSelectedCategory(sub.id)}
                 className={cn(
                   "w-full text-left px-4 py-2 pl-12 rounded-xl transition-all ml-4 mt-1",
