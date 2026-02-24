@@ -523,17 +523,10 @@ export default function OptimizedResourceCalendar({
     return showHolidays ? getHolidayName(date) : null;
   }, [showHolidays]);
 
-  // Calculate dynamic day width to fill available space
-  const dayWidth = useMemo(() => {
-    const availableWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const resourceWidth = resourceColumnCollapsed ? 64 : 208;
-    const remainingWidth = availableWidth - resourceWidth - 32; // 32px for padding/scrollbar
-    const minDayWidth = 100;
-    const calculatedWidth = Math.floor(remainingWidth / viewDates.length);
-    return Math.max(minDayWidth, calculatedWidth);
-  }, [viewDates.length, resourceColumnCollapsed]);
-
-  const totalCalendarWidth = viewDates.length * dayWidth + (resourceColumnCollapsed ? 64 : 208);
+  // Fixed day width for consistent grid
+  const dayWidth = 120;
+  const resourceWidth = resourceColumnCollapsed ? 64 : 208;
+  const totalCalendarWidth = viewDates.length * dayWidth + resourceWidth;
 
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
@@ -564,13 +557,13 @@ export default function OptimizedResourceCalendar({
 
   return (
     <div className={cn(
-      "flex flex-col",
-      isFullscreen ? "h-screen" : "h-full"
+      "flex flex-col bg-white",
+      isFullscreen ? "h-screen" : "h-[calc(100vh-240px)] min-h-[600px]"
     )}>
       {/* Compact Navigation Bar */}
       <div className={cn(
         "flex items-center justify-between bg-white border-b border-slate-200 flex-shrink-0",
-        isFullscreen ? "px-3 py-2" : "px-4 py-2.5"
+        isFullscreen ? "px-2 py-1.5" : "px-3 py-2"
       )}>
         <div className="flex items-center gap-2">
           <Button
@@ -618,17 +611,18 @@ export default function OptimizedResourceCalendar({
         </DropdownMenu>
       </div>
 
-      {/* Calendar Grid - Sticky Header with Horizontal Scroll */}
-      <div className="flex-1 overflow-hidden bg-white">
+      {/* Calendar Grid - Horizontal Scroll Only */}
+      <div className="flex-1 overflow-hidden">
         <div className="h-full flex flex-col">
           {/* Sticky Header */}
-          <div className="flex-shrink-0 sticky top-0 z-20 bg-slate-50 border-b border-slate-200">
-            <div className="flex" style={{ minWidth: totalCalendarWidth }}>
+          <div className="flex-shrink-0 overflow-x-auto overflow-y-hidden" style={{ scrollbarGutter: 'stable' }}>
+            <div className="flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
               <div className={cn(
                 "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
                 resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
                 "py-2.5"
-              )}>
+              )}
+              style={{ width: resourceWidth }}>
                 {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
                 <Button
                   variant="ghost"
@@ -665,9 +659,9 @@ export default function OptimizedResourceCalendar({
           </div>
 
           {/* Scrollable Calendar Body */}
-          <div className="flex-1 overflow-auto" style={{ minWidth: totalCalendarWidth }}>
+          <div className="flex-1 overflow-auto">
             <List
-              height={isFullscreen ? window.innerHeight - 85 : Math.min(650, resources.length * 56)}
+              height={isFullscreen ? window.innerHeight - 60 : 600}
               itemCount={resources.length}
               itemSize={56}
               width={totalCalendarWidth}

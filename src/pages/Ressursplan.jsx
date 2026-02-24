@@ -511,12 +511,12 @@ export default function Ressursplan() {
 
       <div className={cn(
         "flex-1 flex flex-col",
-        isFullscreen ? "" : "px-6 lg:px-8 py-6 space-y-3"
+        isFullscreen ? "h-full" : "px-6 lg:px-8 py-6 space-y-3"
       )}>
         {/* Ultra Compact Toolbar */}
         <div className={cn(
-          "bg-white shadow-sm flex items-center justify-between flex-shrink-0",
-          isFullscreen ? "px-3 py-1.5 border-b border-slate-200" : "rounded-lg px-4 py-2"
+          "bg-white flex items-center justify-between flex-shrink-0 border-b border-slate-200",
+          isFullscreen ? "px-2 py-1.5" : "rounded-lg px-4 py-2 shadow-sm border-0"
         )}>
           <div className="flex items-center gap-1.5">
             <Select value={viewMode} onValueChange={setViewMode}>
@@ -549,7 +549,7 @@ export default function Ressursplan() {
 
           <div className="flex items-center gap-1.5">
             <span className="hidden md:inline text-xs text-slate-600">{filteredResources.length} res.</span>
-            {canEdit && (
+            {canEdit && !isFullscreen && (
               <Button
                 onClick={() => setShowCreateDialog(true)}
                 size="sm"
@@ -571,8 +571,11 @@ export default function Ressursplan() {
           </div>
         </div>
 
-        {/* Calendar - Full Height in Fullscreen */}
-        <div className={cn("flex-1", isFullscreen && "overflow-hidden")}>
+        {/* Calendar */}
+        <div className={cn(
+          "flex-1",
+          isFullscreen ? "h-full overflow-hidden" : ""
+        )}>
           {filteredResources.length === 0 ? (
             <EmptyState
               icon={Users}
