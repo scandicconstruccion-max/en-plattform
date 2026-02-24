@@ -91,9 +91,9 @@ const AssignmentBlock = memo(({
   const isAbsence = type !== 'arbeid';
 
   const absenceConfig = {
-    syk: { color: 'bg-red-500', shortLabel: 'Syk', fullLabel: 'Syk' },
-    egenemelding: { color: 'bg-orange-500', shortLabel: 'Egm', fullLabel: 'Egenmelding' },
-    ferie: { color: 'bg-blue-500', shortLabel: 'Ferie', fullLabel: 'Ferie' }
+    syk: { shortLabel: 'Syk', fullLabel: 'Syk' },
+    egenemelding: { shortLabel: 'Egm', fullLabel: 'Egenmelding' },
+    ferie: { shortLabel: 'Ferie', fullLabel: 'Ferie' }
   };
 
   const absenceTypeConfig = absenceConfig[type];
