@@ -25,6 +25,7 @@ export default function InlineEditDialog({
     kommentar: '',
     status: 'planlagt'
   });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (assignment) {
