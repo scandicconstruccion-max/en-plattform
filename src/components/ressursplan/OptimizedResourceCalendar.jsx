@@ -278,8 +278,10 @@ const ResourceRow = memo(({
     document.body.style.cursor = 'grabbing';
   }, [canEdit, assignments, style, onDragUpdate, onAssignmentDrop]);
 
-  const handleCellClick = useCallback((e, day) => {
-    if (!canEdit || e.target !== e.currentTarget) return;
+  const handleCellClick = useCallback((e, day, resourceId) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickY = e.clientY - rect.top;
     const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
@@ -287,8 +289,8 @@ const ResourceRow = memo(({
     startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
     const snappedStart = snapToInterval(startTime);
     const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
-    onCellClick(resource.id, snappedStart, snappedEnd);
-  }, [canEdit, resource.id, onCellClick]);
+    onCellClick(resourceId, snappedStart, snappedEnd);
+  }, [canEdit, onCellClick]);
 
   const handleDrop = useCallback((e, day) => {
     if (!canEdit) return;
