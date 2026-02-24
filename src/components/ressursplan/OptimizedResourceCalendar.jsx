@@ -57,28 +57,30 @@ const AssignmentBlock = memo(({
       draggable={canEdit && !isResizing && !isResizingLocal}
       onDragStart={handleMainDragStart}
       className={cn(
-        "group relative px-2 py-1.5 rounded text-xs text-white truncate transition-all select-none",
+        "group relative px-2 py-1 rounded text-[11px] text-white truncate transition-all select-none font-medium",
         projectColor,
-        canEdit && !isResizing && !isResizingLocal && "cursor-move",
-        (isDragging || isResizing || isResizingLocal) && "opacity-50",
+        canEdit && !isResizing && !isResizingLocal && "cursor-move hover:shadow-md hover:scale-[1.02]",
+        (isDragging || isResizing || isResizingLocal) && "opacity-50 scale-95",
         isConflict && "ring-2 ring-red-500 ring-offset-1"
       )}
     >
       {canEdit && (
         <>
           <div 
-            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
+            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
             onPointerDown={(e) => handleResizeStart(e, 'start')}
             style={{ touchAction: 'none' }}
+            title="Dra for å endre starttid"
           />
           <div 
-            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
+            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-r"
             onPointerDown={(e) => handleResizeStart(e, 'end')}
             style={{ touchAction: 'none' }}
+            title="Dra for å endre sluttid"
           />
         </>
       )}
-      <span onClick={() => onClick()} className="pointer-events-auto cursor-pointer">
+      <span onClick={() => onClick()} className="pointer-events-auto cursor-pointer block">
         {projectName}
       </span>
     </div>
@@ -279,18 +281,26 @@ const ResourceRow = memo(({
   const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
   const collapsed = style.resourceColumnCollapsed;
 
+  const colWidth = collapsed ? 64 : 208;
+
   return (
-    <div style={style} className="flex border-t border-slate-100">
-      <div className={`${resourceColWidth} p-2 sticky left-0 bg-white z-10 border-r border-slate-100 flex-shrink-0`}>
+    <div style={style} className="flex border-t border-slate-50">
+      <div 
+        className={cn(
+          "sticky left-0 bg-white z-10 border-r border-slate-200 flex-shrink-0",
+          collapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
+        )}
+        style={{ width: colWidth }}
+      >
         {collapsed ? (
           <div className="flex flex-col items-center gap-1">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-              <span className="text-xs font-medium text-emerald-700">
+            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
+              <span className="text-xs font-semibold text-emerald-700">
                 {resource.navn?.charAt(0) || 'R'}
               </span>
             </div>
             <span className={cn(
-              "px-1 py-0.5 rounded text-[10px] font-medium",
+              "px-1 py-0.5 rounded text-[9px] font-bold",
               weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
               weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
               "bg-green-100 text-green-700"
@@ -299,36 +309,34 @@ const ResourceRow = memo(({
             </span>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-medium text-emerald-700">
-                  {resource.navn?.charAt(0) || 'R'}
+          <div className="flex items-start gap-2">
+            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-semibold text-emerald-700">
+                {resource.navn?.charAt(0) || 'R'}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
+                  {resource.navn}
+                </p>
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0",
+                  weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
+                  weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
+                  "bg-green-100 text-green-700"
+                )}>
+                  {weekAllocationPercentage}%
                 </span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="font-medium text-slate-900 text-xs truncate" title={resource.navn}>
-                    {resource.navn}
-                  </p>
-                  <span className={cn(
-                    "px-1 py-0.5 rounded text-[10px] font-medium flex-shrink-0",
-                    weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
-                    weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
-                    "bg-green-100 text-green-700"
-                  )}>
-                    {weekAllocationPercentage}%
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500 truncate" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
-                  {resource.type === 'employee' ? resource.stilling : resource.rolle}
-                </p>
-              </div>
+              <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
+                {resource.type === 'employee' ? resource.stilling : resource.rolle}
+              </p>
             </div>
           </div>
         )}
       </div>
-      <div className="flex flex-1">
+      <div className="flex">
         {viewDates.map((day) => {
           const dayAssignments = getAssignmentsForDay(day);
           const isToday = isSameDay(day, new Date());
@@ -340,9 +348,9 @@ const ResourceRow = memo(({
             <div
               key={day.toISOString()}
               className={cn(
-                "p-2 border-l border-slate-100 min-w-[120px] flex-1 relative",
-                isToday && "bg-emerald-50/50",
-                dayIsHoliday && "bg-red-50/30"
+                "w-[120px] flex-shrink-0 p-1.5 border-l border-slate-100 relative hover:bg-slate-50/50 transition-colors",
+                isToday && "bg-emerald-50/40",
+                dayIsHoliday && "bg-red-50/20"
               )}
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
@@ -350,11 +358,11 @@ const ResourceRow = memo(({
               onMouseUp={(e) => handleCellMouseUp(e, day)}
             >
               {dayIsHoliday && dayHolidayName && (
-                <div className="absolute top-1 left-1 text-[10px] text-red-600 font-medium pointer-events-none">
+                <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
                   {dayHolidayName}
                 </div>
               )}
-              <div className="space-y-1 min-h-[60px]">
+              <div className="space-y-1 min-h-[48px]">
                 {dayAssignments.map((assignment) => {
                   const isConflict = conflicts.some(c => c.id === assignment.id);
                   const isCurrentlyResizing = resizingAssignment?.id === assignment.id;
@@ -376,7 +384,7 @@ const ResourceRow = memo(({
                   );
                 })}
                 {showGhost && (
-                  <div className="px-2 py-1.5 rounded text-xs text-white truncate bg-slate-400 opacity-50 border-2 border-dashed border-slate-600">
+                  <div className="px-2 py-1 rounded text-xs text-white truncate bg-slate-400 opacity-50 border border-dashed border-slate-600">
                     Ny planlegging
                   </div>
                 )}
@@ -518,115 +526,123 @@ export default function OptimizedResourceCalendar({
 
   const resourceColWidth = resourceColumnCollapsed ? 'w-16' : 'w-52';
 
+  const totalCalendarWidth = viewDates.length * 120 + (resourceColumnCollapsed ? 64 : 208);
+
   return (
-    <div className={`space-y-2 ${isFullscreen ? 'h-[calc(100vh-80px)]' : ''}`}>
-      {/* Navigation */}
-      <Card className="border-0 shadow-sm p-2">
-        <div className="flex items-center justify-between">
+    <div className={cn(
+      "flex flex-col",
+      isFullscreen ? "h-screen" : "h-full"
+    )}>
+      {/* Compact Navigation Bar */}
+      <div className={cn(
+        "flex items-center justify-between bg-white border-b border-slate-200 flex-shrink-0",
+        isFullscreen ? "px-3 py-2" : "px-4 py-2.5"
+      )}>
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate(-1)}
-            className="h-7 w-7 p-0 rounded-lg"
+            className="h-7 w-7 p-0"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="text-center">
-            <h2 className="text-sm font-semibold text-slate-900">
-              {viewMode === 'day' && format(currentDate, 'd. MMM yyyy', { locale: nb })}
-              {(viewMode === 'week' || viewMode === 'twoweeks') && `Uke ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'w', { locale: nb })}`}
-              {viewMode === 'month' && format(currentDate, 'MMM yyyy', { locale: nb })}
-            </h2>
-          </div>
-          <div className="flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-lg">
-                  <MoreVertical className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuCheckboxItem
-                  checked={showWeekends}
-                  onCheckedChange={setShowWeekends}
-                >
-                  Vis helger
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={showHolidays}
-                  onCheckedChange={setShowHolidays}
-                >
-                  Vis helligdager
-                </DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(1)}
-              className="h-7 w-7 p-0 rounded-lg"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          <h2 className="text-sm font-semibold text-slate-900">
+            {viewMode === 'day' && format(currentDate, 'd. MMM yyyy', { locale: nb })}
+            {(viewMode === 'week' || viewMode === 'twoweeks') && `Uke ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'w', { locale: nb })}`}
+            {viewMode === 'month' && format(currentDate, 'MMM yyyy', { locale: nb })}
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(1)}
+            className="h-7 w-7 p-0"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
-      </Card>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 px-2">
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuCheckboxItem
+              checked={showWeekends}
+              onCheckedChange={setShowWeekends}
+            >
+              Vis helger
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={showHolidays}
+              onCheckedChange={setShowHolidays}
+            >
+              Vis helligdager
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-      {/* Calendar Grid with Virtualization */}
-      <Card className="border-0 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          {/* Header */}
-          <div className="flex bg-slate-50 border-b border-slate-200">
-            <div className={`${resourceColWidth} px-2 py-1 text-xs font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0 flex items-center justify-between`}>
-              {!resourceColumnCollapsed && <span>Ressurs</span>}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleResourceColumn}
-                className="h-5 w-5 p-0 hover:bg-slate-200"
-                title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
-              >
-                {resourceColumnCollapsed ? '→' : '←'}
-              </Button>
-            </div>
-            <div className="flex flex-1">
+      {/* Calendar Grid - Sticky Header with Horizontal Scroll */}
+      <div className="flex-1 overflow-hidden bg-white">
+        <div className="h-full flex flex-col">
+          {/* Sticky Header */}
+          <div className="flex-shrink-0 sticky top-0 z-20 bg-slate-50 border-b border-slate-200">
+            <div className="flex" style={{ minWidth: totalCalendarWidth }}>
+              <div className={cn(
+                "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
+                resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
+                "py-2.5"
+              )}>
+                {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleResourceColumn}
+                  className="h-6 w-6 p-0 hover:bg-slate-200 rounded"
+                  title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
+                >
+                  <span className="text-xs font-bold text-slate-600">
+                    {resourceColumnCollapsed ? '→' : '←'}
+                  </span>
+                </Button>
+              </div>
               {viewDates.map((day) => {
                 const dayIsHoliday = isHolidayFunc(day);
+                const isToday = isSameDay(day, new Date());
                 return (
                   <div
                     key={day.toISOString()}
                     className={cn(
-                      "text-center px-2 py-1 font-medium min-w-[120px] flex-1 border-l border-slate-100",
-                      isSameDay(day, new Date()) ? "text-emerald-600 bg-emerald-50" : "text-slate-600",
-                      dayIsHoliday && "bg-red-50/50 text-red-700"
+                      "w-[120px] flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100",
+                      isToday && "bg-emerald-50/80 text-emerald-700",
+                      !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
+                      !isToday && !dayIsHoliday && "text-slate-600"
                     )}
                   >
-                    {viewMode !== 'month' ? (
-                      <>
-                        <div className="text-[10px] uppercase">{format(day, 'EEE', { locale: nb })}</div>
-                        <div className="text-sm font-semibold">{format(day, 'd')}</div>
-                      </>
-                    ) : (
-                      <div className="text-xs">{format(day, 'd')}</div>
-                    )}
+                    <div className="text-[10px] font-semibold uppercase tracking-wide">{format(day, 'EEE', { locale: nb })}</div>
+                    <div className="text-sm font-bold mt-0.5">{format(day, 'd')}</div>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Virtualized Rows */}
-          <List
-            height={isFullscreen ? window.innerHeight - 160 : Math.min(600, resources.length * 60)}
-            itemCount={resources.length}
-            itemSize={60}
-            width="100%"
-            className="scrollbar-thin"
-          >
-            {Row}
-          </List>
+          {/* Scrollable Calendar Body */}
+          <div className="flex-1 overflow-auto" style={{ minWidth: totalCalendarWidth }}>
+            <List
+              height={isFullscreen ? window.innerHeight - 85 : Math.min(650, resources.length * 56)}
+              itemCount={resources.length}
+              itemSize={56}
+              width={totalCalendarWidth}
+              className="scrollbar-thin"
+            >
+              {Row}
+            </List>
+          </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }
