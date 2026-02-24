@@ -668,6 +668,13 @@ export default function OptimizedResourceCalendar({
       queryClient.invalidateQueries({ queryKey: ['resourcePlannerSettings'] });
     }
   });
+
+  // Synkroniser tempStartTid og tempSluttTid når currentSettings endres
+  React.useEffect(() => {
+    setTempStartTid(currentSettings.standard_start_tid);
+    setTempSluttTid(currentSettings.standard_slutt_tid);
+  }, [currentSettings.standard_start_tid, currentSettings.standard_slutt_tid]);
+
   const [resizingAssignment, setResizingAssignment] = useState(null);
   const [resizeGhost, setResizeGhost] = useState(null);
   const [activeDrag, setActiveDrag] = useState(null);
