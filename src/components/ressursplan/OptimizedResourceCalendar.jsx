@@ -713,7 +713,7 @@ export default function OptimizedResourceCalendar({
     return showHolidays ? getHolidayName(date) : null;
   }, [showHolidays]);
 
-  // Dynamic day width for week view to fill available space
+  // Dynamic day width - adjust based on view mode
   const [containerWidth, setContainerWidth] = React.useState(window.innerWidth);
   
   React.useEffect(() => {
@@ -723,13 +723,19 @@ export default function OptimizedResourceCalendar({
   }, []);
   
   const resourceWidth = resourceColumnCollapsed ? 64 : 208;
-  const availableWidth = containerWidth - resourceWidth - 16; // 16px for scrollbar
-  const dayWidth = viewMode === 'week' 
-    ? Math.max(100, Math.floor(availableWidth / viewDates.length))
-    : 120;
-  const totalCalendarWidth = viewMode === 'week'
-    ? containerWidth
-    : viewDates.length * dayWidth + resourceWidth;
+  const availableWidth = containerWidth - resourceWidth - 16;
+  
+  // For week/twoweeks: fit all days, for month: allow scroll
+  let dayWidth;
+  let totalCalendarWidth;
+  
+  if (viewMode === 'week' || viewMode === 'twoweeks') {
+    dayWidth = Math.max(80, Math.floor(availableWidth / viewDates.length));
+    totalCalendarWidth = containerWidth;
+  } else {
+    dayWidth = 120;
+    totalCalendarWidth = viewDates.length * dayWidth + resourceWidth;
+  }
 
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
