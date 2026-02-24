@@ -110,7 +110,7 @@ const AssignmentBlock = memo(({
           />
         </>
       )}
-      <span onClick={() => onClick()} className="pointer-events-auto cursor-pointer block">
+      <span onClick={(e) => { e.stopPropagation(); onClick(); }} className="pointer-events-auto cursor-pointer block">
         {label}
       </span>
     </div>
