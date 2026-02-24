@@ -745,7 +745,7 @@ export default function OptimizedResourceCalendar({
     const getResourceId = (idx) => resources[idx]?.id;
     
     return (
-      <div style={style} className="flex border-t border-slate-200">
+      <div style={style} className="flex border-t border-slate-200 h-full">
         {viewDates.map((day) => {
           const dayAssignments = allAssignments.filter(a => {
             if (a.resource_id !== resource.id) return false;
