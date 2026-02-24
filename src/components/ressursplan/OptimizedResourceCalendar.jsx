@@ -644,14 +644,17 @@ export default function OptimizedResourceCalendar({
                     key={day.toISOString()}
                     style={{ width: dayWidth }}
                     className={cn(
-                      "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100",
-                      isToday && "bg-emerald-50/80 text-emerald-700",
+                      "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100 relative",
+                      isToday && "bg-emerald-100 text-emerald-900 font-bold",
                       !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
                       !isToday && !dayIsHoliday && "text-slate-600"
                     )}
                   >
-                    <div className="text-[10px] font-semibold uppercase tracking-wide">{format(day, 'EEE', { locale: nb })}</div>
-                    <div className="text-sm font-bold mt-0.5">{format(day, 'd')}</div>
+                    {isToday && (
+                      <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
+                    )}
+                    <div className="text-[10px] font-semibold uppercase tracking-wide relative z-10">{format(day, 'EEE', { locale: nb })}</div>
+                    <div className={cn("text-sm font-bold mt-0.5 relative z-10", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
                   </div>
                 );
               })}
@@ -659,7 +662,29 @@ export default function OptimizedResourceCalendar({
           </div>
 
           {/* Scrollable Calendar Body */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative">
+            {/* Today Marker - Vertical Line */}
+            {viewDates.map((day, index) => {
+              const isToday = isSameDay(day, new Date());
+              if (!isToday) return null;
+              
+              const leftPosition = resourceWidth + (index * dayWidth);
+              
+              return (
+                <div
+                  key="today-marker"
+                  className="absolute top-0 bottom-0 pointer-events-none z-10"
+                  style={{
+                    left: leftPosition,
+                    width: dayWidth,
+                    background: 'linear-gradient(to bottom, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)',
+                    borderLeft: '2px solid rgb(16, 185, 129)',
+                    borderRight: '2px solid rgb(16, 185, 129)'
+                  }}
+                />
+              );
+            })}
+            
             <List
               height={isFullscreen ? window.innerHeight - 60 : 600}
               itemCount={resources.length}
