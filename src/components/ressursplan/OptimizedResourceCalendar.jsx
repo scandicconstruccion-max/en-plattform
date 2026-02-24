@@ -840,7 +840,11 @@ export default function OptimizedResourceCalendar({
       <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden")}>
         <div className="flex flex-col">
           {/* Sticky Header */}
-          <div className={cn("flex-shrink-0 overflow-y-hidden", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden')} style={{ scrollbarGutter: 'stable' }}>
+          <div 
+            ref={headerScrollRef}
+            onScroll={() => handleScroll('header')}
+            className={cn("flex-shrink-0 overflow-y-hidden", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden')} 
+            style={{ scrollbarGutter: 'stable' }}>
             <div className="flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
               <div className={cn(
                 "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
