@@ -664,7 +664,9 @@ export default function OptimizedResourceCalendar({
         return base44.entities.ResourcePlannerSettings.create(data);
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Optimistic update for immediate reflection
+      queryClient.setQueryData(['resourcePlannerSettings'], [data]);
       queryClient.invalidateQueries({ queryKey: ['resourcePlannerSettings'] });
     }
   });
