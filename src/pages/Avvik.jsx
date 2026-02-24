@@ -852,7 +852,7 @@ export default function Avvik() {
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <DialogContent className="sm:max-w-lg" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Registrer avvik</DialogTitle>
           </DialogHeader>
