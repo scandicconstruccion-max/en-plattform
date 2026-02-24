@@ -127,9 +127,25 @@ const AssignmentBlock = memo(({
 
           <span className="relative z-10">{shortLabel}</span>
         </div>
-      </div>);
+        </div>
 
-  }
+        <ResourceActivityPanel
+        open={activityPanelOpen}
+        onOpenChange={setActivityPanelOpen}
+        resource={selectedResource}
+        assignments={allAssignments}
+        projects={projects}
+        onActivityClick={(activity) => {
+          onAssignmentClick(activity);
+          setActivityPanelOpen(false);
+        }}
+        getProjectColor={getProjectColor}
+        getProjectName={getProjectName}
+        />
+        </>
+        );
+
+        }
 
   // Regular work assignment - full block
   return (
