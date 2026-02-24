@@ -632,6 +632,8 @@ export default function OptimizedResourceCalendar({
   const [resizingAssignment, setResizingAssignment] = useState(null);
   const [resizeGhost, setResizeGhost] = useState(null);
   const [activeDrag, setActiveDrag] = useState(null);
+  const [selectedResource, setSelectedResource] = useState(null);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
   const bodyScrollRef = React.useRef(null);
 
   const getViewDates = useCallback(() => {
