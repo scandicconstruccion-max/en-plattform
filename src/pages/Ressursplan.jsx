@@ -450,7 +450,9 @@ export default function Ressursplan() {
   });
 
   return (
-    <div className={`min-h-screen bg-slate-50 pb-20 md:pb-6 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+    <div className={cn(
+      isFullscreen ? "fixed inset-0 z-50 bg-slate-50 flex flex-col" : "min-h-screen bg-slate-50 pb-20 md:pb-6"
+    )}>
       {!isFullscreen && (
         <PageHeader
           title="Ressursplanlegger"
@@ -490,12 +492,18 @@ export default function Ressursplan() {
         />
       )}
 
-      <div className={`${isFullscreen ? 'p-2' : 'px-6 lg:px-8 py-6'} space-y-3`}>
-        {/* Compact Toolbar */}
-        <Card className="border-0 shadow-sm p-2">
-          <div className="flex items-center gap-2">
+      <div className={cn(
+        "flex-1 flex flex-col",
+        isFullscreen ? "" : "px-6 lg:px-8 py-6 space-y-3"
+      )}>
+        {/* Ultra Compact Toolbar */}
+        <div className={cn(
+          "bg-white shadow-sm flex items-center justify-between flex-shrink-0",
+          isFullscreen ? "px-3 py-1.5 border-b border-slate-200" : "rounded-lg px-4 py-2"
+        )}>
+          <div className="flex items-center gap-1.5">
             <Select value={viewMode} onValueChange={setViewMode}>
-              <SelectTrigger className="w-[100px] h-8 text-xs rounded-lg">
+              <SelectTrigger className="w-[90px] h-7 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -510,76 +518,78 @@ export default function Ressursplan() {
               value={filters.projectId} 
               onValueChange={(v) => setFilters({ ...filters, projectId: v })}
             >
-              <SelectTrigger className="w-[140px] h-8 text-xs rounded-lg">
+              <SelectTrigger className="w-[120px] h-7 text-xs">
                 <SelectValue placeholder="Prosjekt" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Alle prosjekter</SelectItem>
+                <SelectItem value="all">Alle</SelectItem>
                 {projects.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  <SelectItem key={p.id} value={p.id}>{p.name.substring(0, 20)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-
-            <div className="ml-auto flex items-center gap-2 text-xs text-slate-600">
-              <span className="hidden md:inline">{filteredResources.length} ressurs(er)</span>
-              {canEdit && (
-                <Button
-                  onClick={() => setShowCreateDialog(true)}
-                  size="sm"
-                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg"
-                >
-                  <Calendar className="h-3 w-3" />
-                  <span className="hidden sm:inline">Ny planlegging</span>
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="h-8 px-2 rounded-lg"
-                title={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
-              >
-                {isFullscreen ? '✕' : '⛶'}
-              </Button>
-            </div>
           </div>
-        </Card>
 
-        {/* Calendar */}
-        {filteredResources.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="Ingen ressurser"
-            description="Legg til ansatte eller eksterne ressurser for å komme i gang"
-            actionLabel="Ny ekstern ressurs"
-            onAction={() => setShowExternalDialog(true)}
-          />
-        ) : (
-          <OptimizedResourceCalendar
-            assignments={filteredAssignments}
-            resources={filteredResources}
-            projects={projects}
-            viewMode={viewMode}
-            onAssignmentDrop={handleAssignmentDrop}
-            onAssignmentClick={(a) => {
-              setSelectedAssignment(a);
-              setShowInlineEdit(true);
-            }}
-            onAssignmentResize={handleAssignmentResize}
-            onCreateAssignment={handleQuickCreate}
-            canEdit={canEdit}
-            optimisticAssignments={optimisticAssignments}
-            conflicts={conflicts}
-            resourceColumnCollapsed={resourceColumnCollapsed}
-            onToggleResourceColumn={() => setResourceColumnCollapsed(!resourceColumnCollapsed)}
-            isFullscreen={isFullscreen}
-          />
-        )}
+          <div className="flex items-center gap-1.5">
+            <span className="hidden md:inline text-xs text-slate-600">{filteredResources.length} res.</span>
+            {canEdit && (
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                size="sm"
+                className="h-7 gap-1 bg-emerald-600 hover:bg-emerald-700 text-xs px-2"
+              >
+                <Plus className="h-3 w-3" />
+                <span className="hidden sm:inline">Ny</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="h-7 w-7 p-0"
+              title={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+        </div>
 
-        {/* Project Legend - Only show when not in fullscreen */}
+        {/* Calendar - Full Height in Fullscreen */}
+        <div className={cn("flex-1", isFullscreen && "overflow-hidden")}>
+          {filteredResources.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Ingen ressurser"
+              description="Legg til ansatte eller eksterne ressurser for å komme i gang"
+              actionLabel="Ny ekstern ressurs"
+              onAction={() => setShowExternalDialog(true)}
+            />
+          ) : (
+            <OptimizedResourceCalendar
+              assignments={filteredAssignments}
+              resources={filteredResources}
+              projects={projects}
+              viewMode={viewMode}
+              onAssignmentDrop={handleAssignmentDrop}
+              onAssignmentClick={(a) => {
+                setSelectedAssignment(a);
+                setShowInlineEdit(true);
+              }}
+              onAssignmentResize={handleAssignmentResize}
+              onCreateAssignment={handleQuickCreate}
+              canEdit={canEdit}
+              optimisticAssignments={optimisticAssignments}
+              conflicts={conflicts}
+              resourceColumnCollapsed={resourceColumnCollapsed}
+              onToggleResourceColumn={() => setResourceColumnCollapsed(!resourceColumnCollapsed)}
+              isFullscreen={isFullscreen}
+            />
+          )}
+        </div>
+
+        {/* Project Legend - Only in Normal Mode */}
         {!isFullscreen && projects.length > 0 && (
-          <Card className="border-0 shadow-sm p-3">
+          <Card className="border-0 shadow-sm p-3 flex-shrink-0">
             <div className="flex flex-wrap gap-2">
               {projects.map((project, idx) => {
                 const colors = [
@@ -589,7 +599,7 @@ export default function Ressursplan() {
                 return (
                   <div key={project.id} className="flex items-center gap-1.5">
                     <div className={`w-2.5 h-2.5 rounded ${colors[idx % colors.length]}`} />
-                    <span className="text-xs text-slate-600">{project.name}</span>
+                    <span className="text-xs text-slate-600 truncate max-w-[150px]">{project.name}</span>
                   </div>
                 );
               })}
