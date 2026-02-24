@@ -469,7 +469,7 @@ const ResourceRow = memo(({
     <div style={style} className="flex border-t border-slate-200">
       <div 
         className={cn(
-          "sticky left-0 bg-white z-10 border-r border-slate-200 flex-shrink-0",
+          "sticky left-0 bg-white z-50 border-r border-slate-200 flex-shrink-0",
           collapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
         )}
         style={{ width: colWidth }}
