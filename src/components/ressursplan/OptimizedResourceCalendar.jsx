@@ -898,38 +898,37 @@ export default function OptimizedResourceCalendar({
 
           {/* Calendar Body - Rows */}
           <div className="flex-1 relative"
-            {/* Today Marker - Vertical Line */}
-            {viewDates.map((day, index) => {
-              const isToday = isSameDay(day, new Date());
-              if (!isToday) return null;
-              
-              const leftPosition = resourceWidth + (index * dayWidth);
-              
-              return (
-                <div
-                  key="today-marker"
-                  className="absolute top-0 bottom-0 pointer-events-none z-10"
-                  style={{
-                    left: leftPosition,
-                    width: dayWidth,
-                    background: 'linear-gradient(to bottom, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)',
-                    borderLeft: '2px solid rgb(16, 185, 129)',
-                    borderRight: '2px solid rgb(16, 185, 129)'
-                  }}
-                />
-              );
-            })}
+          {/* Today Marker - Vertical Line */}
+          {viewDates.map((day, index) => {
+            const isToday = isSameDay(day, new Date());
+            if (!isToday) return null;
             
-            <List
-              height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
-              itemCount={resources.length}
-              itemSize={56}
-              width={totalCalendarWidth}
-              style={{ overflow: 'hidden' }}
-            >
-              {Row}
-            </List>
-          </div>
+            const leftPosition = resourceWidth + (index * dayWidth);
+            
+            return (
+              <div
+                key="today-marker"
+                className="absolute top-0 bottom-0 pointer-events-none z-10"
+                style={{
+                  left: leftPosition,
+                  width: dayWidth,
+                  background: 'linear-gradient(to bottom, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)',
+                  borderLeft: '2px solid rgb(16, 185, 129)',
+                  borderRight: '2px solid rgb(16, 185, 129)'
+                }}
+              />
+            );
+          })}
+          
+          <List
+            height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
+            itemCount={resources.length}
+            itemSize={56}
+            width={totalCalendarWidth}
+            style={{ overflow: 'hidden' }}
+          >
+            {Row}
+          </List>
         </div>
       </div>
     </div>
