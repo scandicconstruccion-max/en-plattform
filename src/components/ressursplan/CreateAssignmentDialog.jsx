@@ -42,6 +42,7 @@ export default function CreateAssignmentDialog({
     prosjekt_id: '',
     resource_type: 'employee',
     resource_ids: [],
+    assignment_type: 'arbeid',
     start_dato_tid: '',
     slutt_dato_tid: '',
     rolle_pa_prosjekt: '',
@@ -67,6 +68,10 @@ export default function CreateAssignmentDialog({
       alert('Velg minst én ressurs');
       return;
     }
+    if (formData.assignment_type === 'arbeid' && !formData.prosjekt_id) {
+      alert('Velg prosjekt for arbeidsallokering');
+      return;
+    }
     onSubmit({ ...formData, resource_ids: selectedResources });
   };
 
@@ -75,6 +80,7 @@ export default function CreateAssignmentDialog({
       prosjekt_id: '',
       resource_type: 'employee',
       resource_ids: [],
+      assignment_type: 'arbeid',
       start_dato_tid: '',
       slutt_dato_tid: '',
       rolle_pa_prosjekt: '',
@@ -106,13 +112,33 @@ export default function CreateAssignmentDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label>Prosjekt *</Label>
-            <ProjectSelector
-              value={formData.prosjekt_id}
-              onChange={(v) => setFormData({ ...formData, prosjekt_id: v })}
-              className="mt-1.5 rounded-xl"
-            />
+            <Label>Type *</Label>
+            <Select
+              value={formData.assignment_type}
+              onValueChange={(v) => setFormData({ ...formData, assignment_type: v })}
+            >
+              <SelectTrigger className="mt-1.5 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="arbeid">Arbeid</SelectItem>
+                <SelectItem value="syk">Syk</SelectItem>
+                <SelectItem value="egenemelding">Egenemelding</SelectItem>
+                <SelectItem value="ferie">Ferie</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {formData.assignment_type === 'arbeid' && (
+            <div>
+              <Label>Prosjekt *</Label>
+              <ProjectSelector
+                value={formData.prosjekt_id}
+                onChange={(v) => setFormData({ ...formData, prosjekt_id: v })}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+          )}
 
           <div>
             <Label>Ressurstype *</Label>
@@ -189,15 +215,17 @@ export default function CreateAssignmentDialog({
             </div>
           </div>
 
-          <div>
-            <Label>Rolle på prosjekt</Label>
-            <Input
-              value={formData.rolle_pa_prosjekt}
-              onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
-              placeholder="f.eks. Prosjektleder, Tømrer, Montør"
-              className="mt-1.5 rounded-xl"
-            />
-          </div>
+          {formData.assignment_type === 'arbeid' && (
+            <div>
+              <Label>Rolle på prosjekt</Label>
+              <Input
+                value={formData.rolle_pa_prosjekt}
+                onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
+                placeholder="f.eks. Prosjektleder, Tømrer, Montør"
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+          )}
 
           <div>
             <Label>Kommentar</Label>

@@ -52,13 +52,32 @@ const AssignmentBlock = memo(({
     }
   }, [isResizing]);
 
+  // Assignment type colors
+  const assignmentTypeColors = {
+    arbeid: projectColor,
+    syk: 'bg-red-400',
+    egenemelding: 'bg-orange-400',
+    ferie: 'bg-blue-400'
+  };
+
+  const assignmentTypeLabels = {
+    arbeid: projectName,
+    syk: '🤒 Syk',
+    egenemelding: '📋 Egenemelding',
+    ferie: '🏖️ Ferie'
+  };
+
+  const type = assignment.assignment_type || 'arbeid';
+  const bgColor = assignmentTypeColors[type] || projectColor;
+  const label = assignmentTypeLabels[type] || projectName;
+
   return (
     <div
       draggable={canEdit && !isResizing && !isResizingLocal}
       onDragStart={handleMainDragStart}
       className={cn(
         "group relative px-2 py-1 rounded text-[11px] text-white truncate transition-all select-none font-medium",
-        projectColor,
+        bgColor,
         canEdit && !isResizing && !isResizingLocal && "cursor-move hover:shadow-md hover:scale-[1.02]",
         (isDragging || isResizing || isResizingLocal) && "opacity-50 scale-95",
         isConflict && "ring-2 ring-red-500 ring-offset-1"
@@ -81,7 +100,7 @@ const AssignmentBlock = memo(({
         </>
       )}
       <span onClick={() => onClick()} className="pointer-events-auto cursor-pointer block">
-        {projectName}
+        {label}
       </span>
     </div>
   );
