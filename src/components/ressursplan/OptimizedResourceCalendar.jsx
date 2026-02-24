@@ -17,7 +17,7 @@ const snapToInterval = (date) => {
   return addMinutes(new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()), snappedMinutes);
 };
 
-// Memoized assignment block component with resize handles
+// Memoized assignment block component with resize handles and live drag
 const AssignmentBlock = memo(({ 
   assignment, 
   projectColor, 
@@ -28,7 +28,9 @@ const AssignmentBlock = memo(({
   onResizeStart,
   isDragging,
   isConflict,
-  isResizing
+  isResizing,
+  dragTransform,
+  dragConflict
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
@@ -43,7 +45,8 @@ const AssignmentBlock = memo(({
   const handleMainDragStart = (e) => {
     if (!canEdit || isResizing || isResizingLocal) return;
     e.stopPropagation();
-    onDragStart(e);
+    e.preventDefault();
+    onDragStart(e, assignment);
   };
 
   React.useEffect(() => {
@@ -73,17 +76,25 @@ const AssignmentBlock = memo(({
 
   return (
     <div
-      draggable={canEdit && !isResizing && !isResizingLocal}
-      onDragStart={handleMainDragStart}
+      onPointerDown={handleMainDragStart}
       className={cn(
-        "group relative px-2 py-1 rounded text-[11px] text-white truncate transition-all select-none font-medium",
+        "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
         bgColor,
         canEdit && !isResizing && !isResizingLocal && "cursor-move hover:shadow-md hover:scale-[1.02]",
-        (isDragging || isResizing || isResizingLocal) && "opacity-50 scale-95",
-        isConflict && "ring-2 ring-red-500 ring-offset-1"
+        isDragging && "cursor-grabbing",
+        (isResizing || isResizingLocal) && "opacity-50 scale-95",
+        (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
       )}
+      style={{
+        transform: dragTransform || 'none',
+        transition: isDragging ? 'none' : 'all 0.2s',
+        opacity: isDragging ? 0.85 : 1,
+        boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
+        willChange: isDragging ? 'transform' : 'auto',
+        zIndex: isDragging ? 50 : 'auto'
+      }}
     >
-      {canEdit && (
+      {canEdit && !isDragging && (
         <>
           <div 
             className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
@@ -128,7 +139,9 @@ const ResourceRow = memo(({
   conflicts,
   isHoliday,
   holidayName,
-  style
+  style,
+  activeDrag,
+  onDragUpdate
 }) => {
   const [dragStart, setDragStart] = useState(null);
   const [resizeState, setResizeState] = useState(null);
@@ -175,9 +188,95 @@ const ResourceRow = memo(({
 
   const handleDragStart = useCallback((e, assignment) => {
     if (!canEdit) return;
-    e.dataTransfer.setData('assignment', JSON.stringify(assignment));
-    e.dataTransfer.effectAllowed = 'move';
-  }, [canEdit]);
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const startPos = { x: e.clientX, y: e.clientY };
+    const assignmentStart = parseISO(assignment.start_dato_tid);
+    const assignmentEnd = parseISO(assignment.slutt_dato_tid);
+    
+    const dragState = {
+      assignment,
+      startPos,
+      originalStart: assignmentStart,
+      originalEnd: assignmentEnd,
+      currentTransform: { x: 0, y: 0 },
+      conflict: false
+    };
+    
+    onDragUpdate(dragState);
+    
+    const handlePointerMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      
+      const deltaX = moveEvent.clientX - startPos.x;
+      const deltaY = moveEvent.clientY - startPos.y;
+      
+      const dayWidth = style.dayWidth || 120;
+      const rowHeight = 56;
+      
+      const daysDelta = Math.round(deltaX / dayWidth);
+      const rowsDelta = Math.round(deltaY / rowHeight);
+      
+      const newStart = addDays(assignmentStart, daysDelta);
+      const newEnd = addDays(assignmentEnd, daysDelta);
+      
+      // Check conflicts
+      const hasConflict = assignments.some(a => {
+        if (a.id === assignment.id) return false;
+        if (a.resource_id !== assignment.resource_id) return false;
+        
+        const aStart = parseISO(a.start_dato_tid);
+        const aEnd = parseISO(a.slutt_dato_tid);
+        
+        return (
+          isWithinInterval(newStart, { start: aStart, end: aEnd }) ||
+          isWithinInterval(newEnd, { start: aStart, end: aEnd }) ||
+          isWithinInterval(aStart, { start: newStart, end: newEnd }) ||
+          isWithinInterval(aEnd, { start: newStart, end: newEnd })
+        );
+      });
+      
+      onDragUpdate({
+        ...dragState,
+        currentTransform: { x: deltaX, y: deltaY },
+        snappedTransform: { x: daysDelta * dayWidth, y: rowsDelta * rowHeight },
+        newStart,
+        newEnd,
+        conflict: hasConflict
+      });
+    };
+    
+    const handlePointerUp = (upEvent) => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.body.style.cursor = '';
+      
+      const deltaX = upEvent.clientX - startPos.x;
+      const deltaY = upEvent.clientY - startPos.y;
+      
+      const dayWidth = style.dayWidth || 120;
+      const daysDelta = Math.round(deltaX / dayWidth);
+      
+      if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+        const newStart = snapToInterval(addDays(assignmentStart, daysDelta));
+        const newEnd = snapToInterval(addDays(assignmentEnd, daysDelta));
+        
+        onAssignmentDrop(
+          assignment,
+          assignment.resource_id,
+          newStart.toISOString(),
+          newEnd.toISOString()
+        );
+      }
+      
+      onDragUpdate(null);
+    };
+    
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.body.style.cursor = 'grabbing';
+  }, [canEdit, assignments, style, onDragUpdate, onAssignmentDrop]);
 
   const handleCellMouseDown = useCallback((e, day) => {
     if (!canEdit || e.target !== e.currentTarget) return;
@@ -398,6 +497,12 @@ const ResourceRow = memo(({
                 {dayAssignments.map((assignment) => {
                   const isConflict = conflicts.some(c => c.id === assignment.id);
                   const isCurrentlyResizing = resizingAssignment?.id === assignment.id;
+                  const isDragging = activeDrag?.assignment?.id === assignment.id;
+                  const dragTransform = isDragging && activeDrag?.snappedTransform 
+                    ? `translate(${activeDrag.snappedTransform.x}px, ${activeDrag.snappedTransform.y}px)`
+                    : null;
+                  const dragConflict = isDragging && activeDrag?.conflict;
+                  
                   return (
                     <AssignmentBlock
                       key={assignment.id}
@@ -405,13 +510,15 @@ const ResourceRow = memo(({
                       projectColor={getProjectColor(assignment.prosjekt_id)}
                       projectName={getProjectName(assignment.prosjekt_id)}
                       canEdit={canEdit}
-                      onDragStart={(e) => handleDragStart(e, assignment)}
+                      onDragStart={handleDragStart}
                       onClick={() => onAssignmentClick(assignment)}
                       onEdit={() => onAssignmentClick(assignment)}
                       onResizeStart={handleResizeStart}
-                      isDragging={draggedAssignment?.id === assignment.id}
+                      isDragging={isDragging}
                       isResizing={isCurrentlyResizing}
                       isConflict={isConflict}
+                      dragTransform={dragTransform}
+                      dragConflict={dragConflict}
                     />
                   );
                 })}
@@ -454,6 +561,7 @@ export default function OptimizedResourceCalendar({
   const [showHolidays, setShowHolidays] = useState(true);
   const [resizingAssignment, setResizingAssignment] = useState(null);
   const [resizeGhost, setResizeGhost] = useState(null);
+  const [activeDrag, setActiveDrag] = useState(null);
 
   const getViewDates = useCallback(() => {
     let dates = [];
@@ -563,9 +671,11 @@ export default function OptimizedResourceCalendar({
         isHoliday={isHolidayFunc}
         holidayName={getHolidayNameFunc}
         style={{ ...style, resourceColumnCollapsed, dayWidth }}
+        activeDrag={activeDrag}
+        onDragUpdate={setActiveDrag}
       />
     );
-  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed, dayWidth]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed, dayWidth, activeDrag]);
 
   return (
     <div className={cn(
