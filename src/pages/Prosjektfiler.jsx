@@ -224,15 +224,14 @@ export default function Prosjektfiler() {
 
   const projectCategories = useMemo(() => {
     const filtered = categories.filter((c) => c.project_id === projectFilter && canAccess(c.access_level));
-    // Remove duplicates based on id
-    const uniqueCategories = filtered.reduce((acc, current) => {
-      const exists = acc.find(item => item.id === current.id);
-      if (!exists) {
-        acc.push(current);
+    // Remove duplicates based on id using Map for better performance
+    const uniqueMap = new Map();
+    filtered.forEach(cat => {
+      if (!uniqueMap.has(cat.id)) {
+        uniqueMap.set(cat.id, cat);
       }
-      return acc;
-    }, []);
-    return uniqueCategories;
+    });
+    return Array.from(uniqueMap.values());
   }, [categories, projectFilter, userAccessLevel]);
 
   const getFilesCountForCategory = (categoryId) => {
