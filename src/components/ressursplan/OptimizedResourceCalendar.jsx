@@ -1220,6 +1220,7 @@ export default function OptimizedResourceCalendar({
         getProjectColor={getProjectColor}
         getProjectName={getProjectName}
         />
+        </>
         );
 
         }
