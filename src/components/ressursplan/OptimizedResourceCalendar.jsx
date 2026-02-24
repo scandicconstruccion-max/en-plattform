@@ -469,7 +469,7 @@ const ResourceRow = memo(({
     <div style={style} className="flex border-t border-slate-200">
       <div 
         className={cn(
-          "sticky left-0 top-0 bg-white z-50 border-r border-slate-200 flex-shrink-0",
+          "sticky left-0 bg-white z-10 border-r border-slate-200 flex-shrink-0",
           collapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
         )}
         style={{ width: colWidth }}
@@ -837,7 +837,7 @@ export default function OptimizedResourceCalendar({
       </div>
 
       {/* Calendar Grid - Horizontal Scroll Only for Month View */}
-      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden relative")}>
+      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden")}>
         <div className="flex flex-col">
           {/* Sticky Header */}
           <div 
@@ -847,7 +847,7 @@ export default function OptimizedResourceCalendar({
             style={{ scrollbarGutter: 'stable' }}>
             <div className="flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
               <div className={cn(
-                "flex-shrink-0 sticky left-0 z-50 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
+                "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
                 resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
                 "py-2.5"
               )}
@@ -902,9 +902,9 @@ export default function OptimizedResourceCalendar({
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
               if (!isToday) return null;
-
-              const leftPosition = (index * dayWidth);
-
+              
+              const leftPosition = resourceWidth + (index * dayWidth);
+              
               return (
                 <div
                   key="today-marker"
@@ -919,18 +919,16 @@ export default function OptimizedResourceCalendar({
                 />
               );
             })}
-
-            <div style={{ marginLeft: resourceWidth }}>
-              <List
-                height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
-                itemCount={resources.length}
-                itemSize={56}
-                width={totalCalendarWidth - resourceWidth}
-                style={{ overflow: 'hidden' }}
-              >
-                {Row}
-              </List>
-            </div>
+            
+            <List
+              height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
+              itemCount={resources.length}
+              itemSize={56}
+              width={totalCalendarWidth}
+              style={{ overflow: 'hidden' }}
+            >
+              {Row}
+            </List>
           </div>
         </div>
       </div>
