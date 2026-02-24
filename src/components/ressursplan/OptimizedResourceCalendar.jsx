@@ -558,7 +558,7 @@ export default function OptimizedResourceCalendar({
   return (
     <div className={cn(
       "flex flex-col bg-white",
-      isFullscreen ? "h-screen" : "h-[calc(100vh-240px)] min-h-[600px]"
+      isFullscreen ? "h-screen" : ""
     )}>
       {/* Compact Navigation Bar */}
       <div className={cn(
@@ -612,8 +612,8 @@ export default function OptimizedResourceCalendar({
       </div>
 
       {/* Calendar Grid - Horizontal Scroll Only */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col">
+      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden")}>
+        <div className="flex flex-col">
           {/* Sticky Header */}
           <div className="flex-shrink-0 overflow-x-auto overflow-y-hidden" style={{ scrollbarGutter: 'stable' }}>
             <div className="flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
@@ -662,7 +662,7 @@ export default function OptimizedResourceCalendar({
           </div>
 
           {/* Scrollable Calendar Body */}
-          <div className="flex-1 overflow-hidden relative">
+          <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden relative")}
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
@@ -686,7 +686,7 @@ export default function OptimizedResourceCalendar({
             })}
             
             <List
-              height={isFullscreen ? window.innerHeight - 60 : Math.min(resources.length * 56, 800)}
+              height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
               itemCount={resources.length}
               itemSize={56}
               width={totalCalendarWidth}
