@@ -897,14 +897,15 @@ export default function OptimizedResourceCalendar({
           <div 
             ref={bodyScrollRef}
             onScroll={() => handleScroll('body')}
-            className={cn(isFullscreen ? "flex-1" : "", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden', "overflow-y-hidden relative")}>
+            className={cn(isFullscreen ? "flex-1" : "", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden', "overflow-y-hidden relative")}
+            style={{ marginLeft: resourceWidth }}>
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
               if (!isToday) return null;
-              
-              const leftPosition = resourceWidth + (index * dayWidth);
-              
+
+              const leftPosition = (index * dayWidth);
+
               return (
                 <div
                   key="today-marker"
@@ -919,12 +920,12 @@ export default function OptimizedResourceCalendar({
                 />
               );
             })}
-            
+
             <List
               height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
               itemCount={resources.length}
               itemSize={56}
-              width={totalCalendarWidth}
+              width={totalCalendarWidth - resourceWidth}
               style={{ overflow: 'hidden' }}
             >
               {Row}
