@@ -662,7 +662,7 @@ export default function OptimizedResourceCalendar({
           </div>
 
           {/* Scrollable Calendar Body */}
-          <div className="flex-1 overflow-auto relative">
+          <div className="flex-1 overflow-x-auto overflow-y-hidden relative">
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
@@ -690,7 +690,7 @@ export default function OptimizedResourceCalendar({
               itemCount={resources.length}
               itemSize={56}
               width={totalCalendarWidth}
-              className="scrollbar-thin"
+              style={{ overflowY: 'auto', overflowX: 'hidden' }}
             >
               {Row}
             </List>
