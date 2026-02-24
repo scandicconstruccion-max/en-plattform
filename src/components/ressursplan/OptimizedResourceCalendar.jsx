@@ -897,8 +897,7 @@ export default function OptimizedResourceCalendar({
           <div 
             ref={bodyScrollRef}
             onScroll={() => handleScroll('body')}
-            className={cn(isFullscreen ? "flex-1" : "", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden', "overflow-y-hidden relative")}
-            style={{ marginLeft: resourceWidth }}>
+            className={cn(isFullscreen ? "flex-1" : "", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden', "overflow-y-hidden relative")}>
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
