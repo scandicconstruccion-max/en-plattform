@@ -100,7 +100,7 @@ const AssignmentBlock = memo(({
   const label = isAbsence ? absenceTypeConfig?.fullLabel : projectName;
   const shortLabel = isAbsence ? absenceTypeConfig?.shortLabel : projectName;
 
-  // For absence types, render as thin stripe instead of full block
+  // For absence types, render as thin stripe with diagonal stripes pattern
   if (isAbsence) {
     return (
       <div
@@ -116,12 +116,15 @@ const AssignmentBlock = memo(({
       >
         <div
           className={cn(
-            "relative h-4 rounded px-1.5 flex items-center text-[10px] font-semibold text-white truncate",
-            absenceTypeConfig.color,
+            "relative h-4 rounded px-1.5 flex items-center text-[10px] font-semibold text-slate-700 truncate border border-slate-300",
             (isConflict || dragConflict) && "ring-2 ring-red-500"
           )}
+          style={{
+            background: 'repeating-linear-gradient(45deg, white, white 10px, #e2e8f0 10px, #e2e8f0 12px)',
+            backgroundClip: 'padding-box'
+          }}
         >
-          <span>{shortLabel}</span>
+          <span className="relative z-10">{shortLabel}</span>
         </div>
       </div>
     );
