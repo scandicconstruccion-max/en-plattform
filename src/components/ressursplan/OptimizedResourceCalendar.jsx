@@ -33,7 +33,6 @@ const AssignmentBlock = memo(({
   dragConflict
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
-  const [clickStart, setClickStart] = React.useState(null);
 
   const handleResizeStart = (e, edge) => {
     if (!canEdit) return;
@@ -108,7 +107,6 @@ const AssignmentBlock = memo(({
   return (
      <div
        onPointerDown={handleMainDragStart}
-       onPointerUp={handleClick}
        className={cn(
          "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
          bgColor,
