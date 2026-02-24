@@ -769,9 +769,9 @@ export default function OptimizedResourceCalendar({
           return (
             <div
               key={day.toISOString()}
-              style={{ width: dayWidth }}
+              style={{ width: dayWidth, height: '100%' }}
               className={cn(
-                "flex-shrink-0 p-1.5 border-l border-slate-200 relative transition-colors",
+                "flex-shrink-0 p-1.5 border-l border-slate-200 relative transition-colors flex flex-col",
                 isWeekend && "bg-slate-100/60",
                 isToday && "bg-emerald-50/30",
                 dayIsHoliday && "bg-red-50/20",
