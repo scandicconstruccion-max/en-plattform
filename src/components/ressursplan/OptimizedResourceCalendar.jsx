@@ -837,7 +837,7 @@ export default function OptimizedResourceCalendar({
       </div>
 
       {/* Calendar Grid - Horizontal Scroll Only for Month View */}
-      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden")}>
+      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden relative")}>
         <div className="flex flex-col">
           {/* Sticky Header */}
           <div 
