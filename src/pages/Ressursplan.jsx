@@ -304,55 +304,22 @@ export default function Ressursplan() {
   };
 
   const handleCreateAssignment = async (data) => {
-    const selectedProject = data.assignment_type === 'arbeid' ? projects.find((p) => p.id === data.prosjekt_id) : null;
-
     const convertToISO = (dateTimeLocal) => {
-      // datetime-local format is YYYY-MM-DDTHH:mm, parse it properly for the user's timezone
       const [date, time] = dateTimeLocal.split('T');
       const [year, month, day] = date.split('-');
       const [hours, minutes] = time.split(':');
-      // Create date in user's local timezone, then convert to ISO
       const localDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
       return localDate.toISOString();
     };
 
-    const assignments = data.resource_ids.map((resourceId) => {
-      const resource = [...employees, ...externals].find((r) => r.id === resourceId);
-      return {
-        prosjekt_id: data.prosjekt_id || 'N/A',
-        prosjekt_navn: selectedProject?.name || data.assignment_type,
-        resource_type: data.resource_type,
-        resource_id: resourceId,
-        resource_navn: data.resource_type === 'employee' ?
-        `${resource.first_name} ${resource.last_name}` :
-        resource.navn,
-        assignment_type: data.assignment_type,
-        start_dato_tid: convertToISO(data.start_dato_tid),
-        slutt_dato_tid: convertToISO(data.slutt_dato_tid),
-        rolle_pa_prosjekt: data.rolle_pa_prosjekt,
-        kommentar: data.kommentar,
-        status: 'planlagt',
-        opprettet_av: user?.email,
-        opprettet_av_navn: user?.full_name,
-        change_log: [{
-          timestamp: new Date().toISOString(),
-          user_email: user?.email,
-          user_name: user?.full_name,
-          action: 'Opprettet',
-          changes: `Ny ${data.assignment_type} opprettet`
-        }]
-      };
-    });
+    const formattedData = {
+      ...data,
+      start_dato_tid: convertToISO(data.start_dato_tid),
+      slutt_dato_tid: convertToISO(data.slutt_dato_tid),
+      assignment_type: data.assignment_type || 'arbeid'
+    };
 
-    try {
-      await Promise.all(assignments.map((a) => base44.entities.ResourceAssignment.create(a)));
-      await queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
-      setShowCreateDialog(false);
-      toast.success('Ressursplanlegging opprettet');
-    } catch (error) {
-      console.error('Feil ved opprettelse:', error);
-      toast.error('Kunne ikke opprette planlegging');
-    }
+    createAssignmentMutation.mutate(formattedData);
   };
 
   const handleExternalSubmit = (formData) => {
