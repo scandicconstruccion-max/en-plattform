@@ -1219,8 +1219,7 @@ export default function OptimizedResourceCalendar({
         onActivityClick={handleAssignmentClick}
         getProjectColor={getProjectColor}
         getProjectName={getProjectName}
-        />
-        </>
-        );
-
-        }
+      />
+    </>
+  );
+}
