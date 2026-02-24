@@ -576,6 +576,7 @@ const ResourceRow = memo(({
                       isConflict={isConflict}
                       dragTransform={dragTransform}
                       dragConflict={dragConflict}
+                      resource={resource}
                     />
                   );
                 })}
