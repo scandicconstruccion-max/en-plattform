@@ -301,23 +301,39 @@ export default function Ressursplan() {
     setConflicts([]);
   };
 
-  const handleCreateAssignment = (formData) => {
-    // Check for conflicts for each resource
-    let allConflicts = [];
-    for (const resourceId of formData.resource_ids) {
-      const resourceConflicts = checkConflicts(resourceId, formData.start_dato_tid, formData.slutt_dato_tid);
-      if (resourceConflicts.length > 0) {
-        allConflicts = [...allConflicts, ...resourceConflicts];
-      }
-    }
+  const handleCreateAssignment = async (data) => {
+    const selectedProject = data.assignment_type === 'arbeid' ? projects.find(p => p.id === data.prosjekt_id) : null;
 
-    if (allConflicts.length > 0) {
-      setConflicts(allConflicts);
-      setPendingAssignment(formData);
-      setShowConflictDialog(true);
-    } else {
-      createAssignmentMutation.mutate(formData);
-    }
+    const assignments = data.resource_ids.map(resourceId => {
+      const resource = [...employees, ...externals].find(r => r.id === resourceId);
+      return {
+        prosjekt_id: data.prosjekt_id || 'N/A',
+        prosjekt_navn: selectedProject?.name || data.assignment_type,
+        resource_type: data.resource_type,
+        resource_id: resourceId,
+        resource_navn: data.resource_type === 'employee'
+          ? `${resource.first_name} ${resource.last_name}`
+          : resource.navn,
+        assignment_type: data.assignment_type,
+        start_dato_tid: new Date(data.start_dato_tid).toISOString(),
+        slutt_dato_tid: new Date(data.slutt_dato_tid).toISOString(),
+        rolle_pa_prosjekt: data.rolle_pa_prosjekt,
+        kommentar: data.kommentar,
+        status: 'planlagt',
+        opprettet_av: user?.email,
+        opprettet_av_navn: user?.full_name,
+        change_log: [{
+          timestamp: new Date().toISOString(),
+          user_email: user?.email,
+          user_name: user?.full_name,
+          action: 'Opprettet',
+          changes: `Ny ${data.assignment_type} opprettet`
+        }]
+      };
+    });
+
+    await Promise.all(assignments.map(a => createAssignmentMutation.mutateAsync(a)));
+    setShowCreateDialog(false);
   };
 
   const handleExternalSubmit = (formData) => {
