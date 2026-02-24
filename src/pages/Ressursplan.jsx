@@ -307,8 +307,8 @@ export default function Ressursplan() {
     const selectedProject = data.assignment_type === 'arbeid' ? projects.find((p) => p.id === data.prosjekt_id) : null;
 
     const convertToISO = (dateTimeLocal) => {
-      // datetime-local format is YYYY-MM-DDTHH:mm, convert to ISO string
-      return `${dateTimeLocal}:00`;
+      // datetime-local format is YYYY-MM-DDTHH:mm, convert to ISO string with Z
+      return new Date(`${dateTimeLocal}:00`).toISOString();
     };
 
     const assignments = data.resource_ids.map((resourceId) => {
@@ -339,10 +339,15 @@ export default function Ressursplan() {
       };
     });
 
-    await Promise.all(assignments.map((a) => base44.entities.ResourceAssignment.create(a)));
-    queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
-    setShowCreateDialog(false);
-    toast.success('Ressursplanlegging opprettet');
+    try {
+      await Promise.all(assignments.map((a) => base44.entities.ResourceAssignment.create(a)));
+      await queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
+      setShowCreateDialog(false);
+      toast.success('Ressursplanlegging opprettet');
+    } catch (error) {
+      console.error('Feil ved opprettelse:', error);
+      toast.error('Kunne ikke opprette planlegging');
+    }
   };
 
   const handleExternalSubmit = (formData) => {
