@@ -207,9 +207,19 @@ const ResourceRow = memo(({
     return assignments.filter(a => {
       if (a.resource_id !== resource.id) return false;
       if (!a.start_dato_tid || !a.slutt_dato_tid) return false;
-      const start = parseISO(a.start_dato_tid);
-      const end = parseISO(a.slutt_dato_tid);
-      return isWithinInterval(day, { start, end });
+      try {
+        const start = typeof a.start_dato_tid === 'string' ? parseISO(a.start_dato_tid) : a.start_dato_tid;
+        const end = typeof a.slutt_dato_tid === 'string' ? parseISO(a.slutt_dato_tid) : a.slutt_dato_tid;
+        
+        // Check if assignment overlaps with the day
+        const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+        const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+        
+        return start < dayEnd && end > dayStart;
+      } catch (e) {
+        console.error('Error parsing dates:', a.start_dato_tid, a.slutt_dato_tid);
+        return false;
+      }
     });
   }, [assignments, resource.id]);
 
