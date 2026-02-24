@@ -847,7 +847,7 @@ export default function OptimizedResourceCalendar({
             style={{ scrollbarGutter: 'stable' }}>
             <div className="flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
               <div className={cn(
-                "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
+                "flex-shrink-0 sticky left-0 z-50 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
                 resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
                 "py-2.5"
               )}
