@@ -1206,7 +1206,19 @@ export default function OptimizedResourceCalendar({
             </List>
           </div>
         </div>
-      </div>
-    </div>);
+        </div>
+        </div>
 
-}
+        <ResourceActivityPanel
+        open={activityPanelOpen}
+        onOpenChange={setActivityPanelOpen}
+        resource={selectedResource}
+        assignments={allAssignments}
+        projects={projects}
+        onActivityClick={handleAssignmentClick}
+        getProjectColor={getProjectColor}
+        getProjectName={getProjectName}
+        />
+        );
+
+        }
