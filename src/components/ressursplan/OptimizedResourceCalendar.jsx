@@ -278,30 +278,17 @@ const ResourceRow = memo(({
     document.body.style.cursor = 'grabbing';
   }, [canEdit, assignments, style, onDragUpdate, onAssignmentDrop]);
 
-  const handleCellMouseDown = useCallback((e, day) => {
+  const handleCellClick = useCallback((e, day) => {
     if (!canEdit || e.target !== e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const clickY = e.clientY - rect.top;
-    const hourFraction = clickY / rect.height;
+    const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
     const startTime = new Date(day);
     startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
-    setDragStart({ day, startTime: snapToInterval(startTime), rect });
-  }, [canEdit]);
-
-  const handleCellMouseUp = useCallback((e, day) => {
-    if (!dragStart || !canEdit) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const hourFraction = clickY / rect.height;
-    const endTime = new Date(day);
-    endTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
-    const snappedEnd = snapToInterval(endTime);
-    
-    if (differenceInMinutes(snappedEnd, dragStart.startTime) >= 30) {
-      onCellClick(resource.id, dragStart.startTime, snappedEnd);
-    }
-    setDragStart(null);
-  }, [dragStart, canEdit, resource.id, onCellClick]);
+    const snappedStart = snapToInterval(startTime);
+    const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
+    onCellClick(resource.id, snappedStart, snappedEnd);
+  }, [canEdit, resource.id, onCellClick]);
 
   const handleDrop = useCallback((e, day) => {
     if (!canEdit) return;
