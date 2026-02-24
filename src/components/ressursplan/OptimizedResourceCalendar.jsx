@@ -8,7 +8,7 @@ import { format, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, subWee
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import AssignmentPopover from './AssignmentPopover';
-import { isNorwegianHoliday, getHolidayName } from '@/lib/norwegianHolidays';
+import { isNorwegianHoliday, getHolidayName } from './norwegianHolidays';
 
 // Snap to 30-minute intervals
 const snapToInterval = (date) => {
