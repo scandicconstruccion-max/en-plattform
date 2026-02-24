@@ -12,11 +12,12 @@ import ConflictDialog from '@/components/ressursplan/ConflictDialog';
 import ExternalResourceDialog from '@/components/ressursplan/ExternalResourceDialog';
 import InlineEditDialog from '@/components/ressursplan/InlineEditDialog';
 import ResourceFilters from '@/components/ressursplan/ResourceFilters';
-import { Users, UserPlus, Calendar, Grid3x3, List, Settings } from 'lucide-react';
+import { Users, UserPlus, Calendar, Grid3x3, List, Settings, Plus, Maximize2, Minimize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { isWithinInterval, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { cn } from '@/lib/utils';
 
 export default function Ressursplan() {
   const [viewMode, setViewMode] = useState('week');
