@@ -686,7 +686,7 @@ export default function OptimizedResourceCalendar({
             })}
             
             <List
-              height={isFullscreen ? window.innerHeight - 60 : 600}
+              height={isFullscreen ? window.innerHeight - 60 : Math.min(resources.length * 56, 800)}
               itemCount={resources.length}
               itemSize={56}
               width={totalCalendarWidth}
