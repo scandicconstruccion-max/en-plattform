@@ -920,15 +920,17 @@ export default function OptimizedResourceCalendar({
               );
             })}
 
-            <List
-              height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
-              itemCount={resources.length}
-              itemSize={56}
-              width={totalCalendarWidth - resourceWidth}
-              style={{ overflow: 'hidden' }}
-            >
-              {Row}
-            </List>
+            <div style={{ marginLeft: resourceWidth }}>
+              <List
+                height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
+                itemCount={resources.length}
+                itemSize={56}
+                width={totalCalendarWidth - resourceWidth}
+                style={{ overflow: 'hidden' }}
+              >
+                {Row}
+              </List>
+            </div>
           </div>
         </div>
       </div>
