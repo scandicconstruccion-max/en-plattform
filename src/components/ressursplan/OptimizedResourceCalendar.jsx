@@ -603,7 +603,7 @@ export default function OptimizedResourceCalendar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 px-2">
-              <MoreVertical className="h-3.5 w-3.5" />
+              <Settings className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
