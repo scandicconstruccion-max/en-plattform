@@ -157,5 +157,27 @@ export default function InlineEditDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Slett aktivitet?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Er du sikker på at du vil slette denne aktiviteten? Denne handlingen kan ikke angres.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex gap-3 justify-end">
+          <AlertDialogCancel>Avbryt</AlertDialogCancel>
+          <AlertDialogAction onClick={() => {
+            onDelete();
+            setShowDeleteConfirm(false);
+            onOpenChange(false);
+          }} className="bg-red-600 hover:bg-red-700">
+            Slett
+          </AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
