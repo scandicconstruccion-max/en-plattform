@@ -25,61 +25,60 @@ const AssignmentBlock = memo(({
   canEdit, 
   onDragStart, 
   onClick,
-  onEdit,
   onResizeStart,
   isDragging,
   isConflict,
   isResizing
 }) => {
-  const handleResizeLeft = (e) => {
-    if (!canEdit) return;
-    e.stopPropagation();
-    e.preventDefault();
-    onResizeStart(e, assignment, 'start');
-  };
+  const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
-  const handleResizeRight = (e) => {
+  const handleResizeStart = (e, edge) => {
     if (!canEdit) return;
     e.stopPropagation();
     e.preventDefault();
-    onResizeStart(e, assignment, 'end');
+    setIsResizingLocal(true);
+    onResizeStart(e, assignment, edge);
   };
 
   const handleMainDragStart = (e) => {
-    if (!canEdit || isResizing) return;
+    if (!canEdit || isResizing || isResizingLocal) return;
     e.stopPropagation();
     onDragStart(e);
   };
 
+  React.useEffect(() => {
+    if (!isResizing) {
+      setIsResizingLocal(false);
+    }
+  }, [isResizing]);
+
   return (
     <div
-      draggable={canEdit && !isResizing}
+      draggable={canEdit && !isResizing && !isResizingLocal}
       onDragStart={handleMainDragStart}
       className={cn(
-        "group relative px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-all",
+        "group relative px-2 py-1.5 rounded text-xs text-white truncate transition-all select-none",
         projectColor,
-        canEdit && !isResizing && "cursor-move",
-        (isDragging || isResizing) && "opacity-50",
+        canEdit && !isResizing && !isResizingLocal && "cursor-move",
+        (isDragging || isResizing || isResizingLocal) && "opacity-50",
         isConflict && "ring-2 ring-red-500 ring-offset-1"
       )}
     >
       {canEdit && (
         <>
           <div 
-            className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-            onMouseDown={handleResizeLeft}
-            onTouchStart={handleResizeLeft}
-            draggable={false}
+            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
+            onPointerDown={(e) => handleResizeStart(e, 'start')}
+            style={{ touchAction: 'none' }}
           />
           <div 
-            className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-            onMouseDown={handleResizeRight}
-            onTouchStart={handleResizeRight}
-            draggable={false}
+            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
+            onPointerDown={(e) => handleResizeStart(e, 'end')}
+            style={{ touchAction: 'none' }}
           />
         </>
       )}
-      <span onClick={() => onClick()} className="pointer-events-auto">
+      <span onClick={() => onClick()} className="pointer-events-auto cursor-pointer">
         {projectName}
       </span>
     </div>
@@ -208,33 +207,71 @@ const ResourceRow = memo(({
     if (!canEdit) return;
     e.stopPropagation();
     e.preventDefault();
-    
-    const startResize = (clientY) => {
-      setResizeState({ assignment, edge, startY: clientY });
-      onAssignmentResize(assignment, edge, 'start');
+
+    const startPos = { x: e.clientX, y: e.clientY };
+    const originalStart = parseISO(assignment.start_dato_tid);
+    const originalEnd = parseISO(assignment.slutt_dato_tid);
+
+    setResizeState({ assignment, edge, startPos, originalStart, originalEnd });
+    onAssignmentResize(assignment, edge, 'start');
+
+    const handlePointerMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      
+      // Calculate time delta based on horizontal movement
+      const deltaX = moveEvent.clientX - startPos.x;
+      const dayWidth = 120; // Min width per day
+      const daysDelta = Math.round(deltaX / dayWidth);
+      
+      let newStart = originalStart;
+      let newEnd = originalEnd;
+
+      if (edge === 'start') {
+        newStart = addDays(originalStart, daysDelta);
+        // Ensure minimum 30 minute duration
+        if (differenceInMinutes(originalEnd, newStart) < 30) {
+          newStart = addMinutes(originalEnd, -30);
+        }
+      } else if (edge === 'end') {
+        newEnd = addDays(originalEnd, daysDelta);
+        // Ensure minimum 30 minute duration
+        if (differenceInMinutes(newEnd, originalStart) < 30) {
+          newEnd = addMinutes(originalStart, 30);
+        }
+      }
+
+      // Update visual preview
+      setResizeState(prev => ({
+        ...prev,
+        previewStart: newStart,
+        previewEnd: newEnd
+      }));
     };
 
-    if (e.type === 'mousedown') {
-      startResize(e.clientY);
+    const handlePointerUp = () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
       
-      const handleMouseMove = (moveEvent) => {
-        if (!resizeState) return;
-        // Preview is handled by parent
-      };
+      if (resizeState?.previewStart && resizeState?.previewEnd) {
+        const finalStart = snapToInterval(resizeState.previewStart);
+        const finalEnd = snapToInterval(resizeState.previewEnd);
+        
+        // Call parent with updated times
+        onAssignmentDrop(
+          assignment,
+          assignment.resource_id,
+          finalStart.toISOString(),
+          finalEnd.toISOString()
+        );
+      }
+      
+      setResizeState(null);
+      onAssignmentResize(assignment, edge, 'end');
+    };
 
-      const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        setResizeState(null);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    } else if (e.type === 'touchstart') {
-      const touch = e.touches[0];
-      startResize(touch.clientY);
-    }
-  }, [canEdit, onAssignmentResize]);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+  }, [canEdit, onAssignmentResize, onAssignmentDrop, resizeState]);
 
   return (
     <div style={style} className="flex border-t border-slate-100">
