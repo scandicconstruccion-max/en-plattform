@@ -307,8 +307,13 @@ export default function Ressursplan() {
     const selectedProject = data.assignment_type === 'arbeid' ? projects.find((p) => p.id === data.prosjekt_id) : null;
 
     const convertToISO = (dateTimeLocal) => {
-      // datetime-local format is YYYY-MM-DDTHH:mm, convert to ISO string with Z
-      return new Date(`${dateTimeLocal}:00`).toISOString();
+      // datetime-local format is YYYY-MM-DDTHH:mm, parse it properly for the user's timezone
+      const [date, time] = dateTimeLocal.split('T');
+      const [year, month, day] = date.split('-');
+      const [hours, minutes] = time.split(':');
+      // Create date in user's local timezone, then convert to ISO
+      const localDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
+      return localDate.toISOString();
     };
 
     const assignments = data.resource_ids.map((resourceId) => {
