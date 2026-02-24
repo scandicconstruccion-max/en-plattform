@@ -662,7 +662,7 @@ export default function OptimizedResourceCalendar({
           </div>
 
           {/* Scrollable Calendar Body */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden relative">
+          <div className="flex-1 overflow-hidden relative">
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
