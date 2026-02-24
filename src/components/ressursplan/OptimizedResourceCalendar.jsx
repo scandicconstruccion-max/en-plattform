@@ -969,12 +969,11 @@ export default function OptimizedResourceCalendar({
   }, [resources, viewDates, allAssignments, projects, canEdit, dayWidth, conflicts, activeDrag, isHolidayFunc, getHolidayNameFunc, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onCreateAssignment]);
 
   return (
-     <>
-     <div className={cn(
-       "flex flex-col bg-white",
-       isFullscreen ? "h-screen" : ""
-     )}>
-       {/* Compact Navigation Bar */}
+    <div className={cn(
+      "flex flex-col bg-white",
+      isFullscreen ? "h-screen" : ""
+    )}>
+      {/* Compact Navigation Bar */}
       <div className={cn(
         "flex items-center justify-between bg-white border-b border-slate-200 flex-shrink-0",
         isFullscreen ? "px-2 py-1.5" : "px-3 py-2"
