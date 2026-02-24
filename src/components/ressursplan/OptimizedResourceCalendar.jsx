@@ -836,68 +836,68 @@ export default function OptimizedResourceCalendar({
         </DropdownMenu>
       </div>
 
-      {/* Calendar Grid - Horizontal Scroll Only for Month View */}
-      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden")}>
-        <div className="flex flex-col">
-          {/* Sticky Header */}
-          <div 
-            ref={headerScrollRef}
-            onScroll={() => handleScroll('header')}
-            className={cn("flex-shrink-0 overflow-y-hidden", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden')} 
-            style={{ scrollbarGutter: 'stable' }}>
-            <div className="flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
-              <div className={cn(
-                "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
-                resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
-                "py-2.5"
-              )}
-              style={{ width: resourceWidth }}>
-                {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onToggleResourceColumn}
-                  className="h-6 w-6 p-0 hover:bg-slate-200 rounded"
-                  title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
-                >
-                  <span className="text-xs font-bold text-slate-600">
-                    {resourceColumnCollapsed ? '→' : '←'}
-                  </span>
-                </Button>
-              </div>
-              {viewDates.map((day) => {
-                const dayIsHoliday = isHolidayFunc(day);
-                const isToday = isSameDay(day, new Date());
-                const isWeekend = getDay(day) === 0 || getDay(day) === 6;
-                return (
-                  <div
-                    key={day.toISOString()}
-                    style={{ width: dayWidth }}
-                    className={cn(
-                      "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-200 relative",
-                      isWeekend && !isToday && "bg-slate-200/70",
-                      isToday && "bg-emerald-100 text-emerald-900 font-bold",
-                      !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
-                      !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
-                      isWeekend && !isToday && !dayIsHoliday && "text-slate-600 font-medium"
-                    )}
-                  >
-                    {isToday && (
-                      <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
-                    )}
-                    <div className="text-[10px] font-semibold uppercase tracking-wide relative z-10">{format(day, 'EEE', { locale: nb })}</div>
-                    <div className={cn("text-sm font-bold mt-0.5 relative z-10", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
-                  </div>
-                );
-              })}
+      {/* Calendar Grid - Master Scroll Container */}
+      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden flex flex-col")}>
+        
+        {/* Header + Body Wrapper with shared scroll */}
+        <div 
+          ref={bodyScrollRef}
+          className={cn(
+            "flex-1 flex flex-col",
+            viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden',
+            'overflow-y-hidden relative'
+          )}
+        >
+          {/* Header Row - Inside Scroll Container */}
+          <div className="flex-shrink-0 flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
+            <div className={cn(
+              "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
+              resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
+              "py-2.5"
+            )}
+            style={{ width: resourceWidth }}>
+              {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleResourceColumn}
+                className="h-6 w-6 p-0 hover:bg-slate-200 rounded"
+                title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
+              >
+                <span className="text-xs font-bold text-slate-600">
+                  {resourceColumnCollapsed ? '→' : '←'}
+                </span>
+              </Button>
             </div>
+            {viewDates.map((day) => {
+              const dayIsHoliday = isHolidayFunc(day);
+              const isToday = isSameDay(day, new Date());
+              const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+              return (
+                <div
+                  key={day.toISOString()}
+                  style={{ width: dayWidth }}
+                  className={cn(
+                    "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-200 relative",
+                    isWeekend && !isToday && "bg-slate-200/70",
+                    isToday && "bg-emerald-100 text-emerald-900 font-bold",
+                    !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
+                    !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
+                    isWeekend && !isToday && !dayIsHoliday && "text-slate-600 font-medium"
+                  )}
+                >
+                  {isToday && (
+                    <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
+                  )}
+                  <div className="text-[10px] font-semibold uppercase tracking-wide relative z-10">{format(day, 'EEE', { locale: nb })}</div>
+                  <div className={cn("text-sm font-bold mt-0.5 relative z-10", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Scrollable Calendar Body */}
-          <div 
-            ref={bodyScrollRef}
-            onScroll={() => handleScroll('body')}
-            className={cn(isFullscreen ? "flex-1" : "", viewMode === 'month' ? 'overflow-x-auto' : 'overflow-x-hidden', "overflow-y-hidden relative")}>
+          {/* Calendar Body - Rows */}
+          <div className="flex-1 relative"
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
