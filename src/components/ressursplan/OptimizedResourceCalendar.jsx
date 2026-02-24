@@ -1173,7 +1173,7 @@ export default function OptimizedResourceCalendar({
               width={viewDates.length * dayWidth}
               style={{ overflow: 'hidden' }}
             >
-              {Row}
+              {BodyRow}
             </List>
           </div>
         </div>
