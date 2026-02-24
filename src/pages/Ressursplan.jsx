@@ -334,8 +334,10 @@ export default function Ressursplan() {
       };
     });
 
-    await Promise.all(assignments.map((a) => createAssignmentMutation.mutateAsync(a)));
+    await Promise.all(assignments.map((a) => base44.entities.ResourceAssignment.create(a)));
+    queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
     setShowCreateDialog(false);
+    toast.success('Ressursplanlegging opprettet');
   };
 
   const handleExternalSubmit = (formData) => {
