@@ -28,18 +28,26 @@ const AssignmentBlock = memo(({
   onEdit,
   onResizeStart,
   isDragging,
-  isConflict
+  isConflict,
+  isResizing
 }) => {
   const handleResizeLeft = (e) => {
     if (!canEdit) return;
     e.stopPropagation();
-    onResizeStart(assignment, 'start');
+    e.preventDefault();
+    onResizeStart(e, assignment, 'start');
   };
 
   const handleResizeRight = (e) => {
     if (!canEdit) return;
     e.stopPropagation();
-    onResizeStart(assignment, 'end');
+    e.preventDefault();
+    onResizeStart(e, assignment, 'end');
+  };
+
+  const handleMainDragStart = (e) => {
+    if (!canEdit || isResizing) return;
+    onDragStart(e);
   };
 
   return (
@@ -50,31 +58,34 @@ const AssignmentBlock = memo(({
       canEdit={canEdit}
     >
       <div
-        draggable={canEdit}
-        onDragStart={onDragStart}
+        draggable={canEdit && !isResizing}
+        onDragStart={handleMainDragStart}
         className={cn(
           "group relative px-2 py-1.5 rounded text-xs text-white truncate cursor-pointer hover:opacity-90 transition-all select-none touch-manipulation",
           projectColor,
-          canEdit && "cursor-move",
-          isDragging && "opacity-50",
+          canEdit && !isResizing && "cursor-move",
+          (isDragging || isResizing) && "opacity-50",
           isConflict && "ring-2 ring-red-500 ring-offset-1"
         )}
         style={{ 
           WebkitTouchCallout: 'none',
-          touchAction: canEdit ? 'none' : 'auto'
+          touchAction: 'none',
+          userSelect: 'none'
         }}
       >
         {canEdit && (
           <>
             <div 
-              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
               onMouseDown={handleResizeLeft}
               onTouchStart={handleResizeLeft}
+              draggable={false}
             />
             <div 
-              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity z-10"
               onMouseDown={handleResizeRight}
               onTouchStart={handleResizeRight}
+              draggable={false}
             />
           </>
         )}
@@ -101,13 +112,15 @@ const ResourceRow = memo(({
   onCellClick,
   draggedAssignment,
   ghostPreview,
+  resizingAssignment,
+  resizeGhost,
   conflicts,
   isHoliday,
   holidayName,
   style
 }) => {
   const [dragStart, setDragStart] = useState(null);
-  const [resizing, setResizing] = useState(null);
+  const [resizeState, setResizeState] = useState(null);
 
   const getAssignmentsForDay = useCallback((day) => {
     return assignments.filter(a => {
@@ -183,41 +196,37 @@ const ResourceRow = memo(({
     e.preventDefault();
   }, [canEdit]);
 
-  const handleResizeStart = useCallback((assignment, edge) => {
+  const handleResizeStart = useCallback((e, assignment, edge) => {
     if (!canEdit) return;
-    setResizing({ assignment, edge });
-  }, [canEdit]);
-
-  const handleResizeMove = useCallback((e, day) => {
-    if (!resizing || !canEdit) return;
-    // Visual feedback during resize can be added here
-  }, [resizing, canEdit]);
-
-  const handleResizeEnd = useCallback((e, day) => {
-    if (!resizing || !canEdit) return;
-    const { assignment, edge } = resizing;
+    e.stopPropagation();
+    e.preventDefault();
     
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
-    const newTime = new Date(day);
-    newTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
-    const snappedTime = snapToInterval(newTime);
+    const startResize = (clientY) => {
+      setResizeState({ assignment, edge, startY: clientY });
+      onAssignmentResize(assignment, edge, 'start');
+    };
 
-    if (edge === 'start') {
-      const endTime = parseISO(assignment.slutt_dato_tid);
-      if (snappedTime < endTime) {
-        onAssignmentResize(assignment, snappedTime.toISOString(), assignment.slutt_dato_tid);
-      }
-    } else {
-      const startTime = parseISO(assignment.start_dato_tid);
-      if (snappedTime > startTime) {
-        onAssignmentResize(assignment, assignment.start_dato_tid, snappedTime.toISOString());
-      }
+    if (e.type === 'mousedown') {
+      startResize(e.clientY);
+      
+      const handleMouseMove = (moveEvent) => {
+        if (!resizeState) return;
+        // Preview is handled by parent
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        setResizeState(null);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    } else if (e.type === 'touchstart') {
+      const touch = e.touches[0];
+      startResize(touch.clientY);
     }
-    
-    setResizing(null);
-  }, [resizing, canEdit, onAssignmentResize]);
+  }, [canEdit, onAssignmentResize]);
 
   return (
     <div style={style} className="flex border-t border-slate-100">
@@ -258,8 +267,7 @@ const ResourceRow = memo(({
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
               onMouseDown={(e) => handleCellMouseDown(e, day)}
-              onMouseUp={(e) => resizing ? handleResizeEnd(e, day) : handleCellMouseUp(e, day)}
-              onMouseMove={(e) => handleResizeMove(e, day)}
+              onMouseUp={(e) => handleCellMouseUp(e, day)}
             >
               {dayIsHoliday && dayHolidayName && (
                 <div className="absolute top-1 left-1 text-[10px] text-red-600 font-medium pointer-events-none">
@@ -269,6 +277,7 @@ const ResourceRow = memo(({
               <div className="space-y-1 min-h-[60px]">
                 {dayAssignments.map((assignment) => {
                   const isConflict = conflicts.some(c => c.id === assignment.id);
+                  const isCurrentlyResizing = resizingAssignment?.id === assignment.id;
                   return (
                     <AssignmentBlock
                       key={assignment.id}
@@ -281,6 +290,7 @@ const ResourceRow = memo(({
                       onEdit={() => onAssignmentClick(assignment)}
                       onResizeStart={handleResizeStart}
                       isDragging={draggedAssignment?.id === assignment.id}
+                      isResizing={isCurrentlyResizing}
                       isConflict={isConflict}
                     />
                   );
@@ -319,6 +329,8 @@ export default function OptimizedResourceCalendar({
   const [ghostPreview, setGhostPreview] = useState(null);
   const [showWeekends, setShowWeekends] = useState(true);
   const [showHolidays, setShowHolidays] = useState(true);
+  const [resizingAssignment, setResizingAssignment] = useState(null);
+  const [resizeGhost, setResizeGhost] = useState(null);
 
   const getViewDates = useCallback(() => {
     let dates = [];
@@ -384,6 +396,15 @@ export default function OptimizedResourceCalendar({
     onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
   }, [canEdit, onCreateAssignment]);
 
+  const handleResizeUpdate = useCallback((assignment, edge, action) => {
+    if (action === 'start') {
+      setResizingAssignment(assignment);
+    } else if (action === 'end') {
+      setResizingAssignment(null);
+      setResizeGhost(null);
+    }
+  }, []);
+
   const isHolidayFunc = useCallback((date) => {
     return showHolidays && isNorwegianHoliday(date);
   }, [showHolidays]);
@@ -405,17 +426,19 @@ export default function OptimizedResourceCalendar({
         getProjectName={getProjectName}
         onAssignmentDrop={onAssignmentDrop}
         onAssignmentClick={onAssignmentClick}
-        onAssignmentResize={onAssignmentResize}
+        onAssignmentResize={handleResizeUpdate}
         onCellClick={handleCellClick}
         draggedAssignment={draggedAssignment}
         ghostPreview={ghostPreview}
+        resizingAssignment={resizingAssignment}
+        resizeGhost={resizeGhost}
         conflicts={conflicts}
         isHoliday={isHolidayFunc}
         holidayName={getHolidayNameFunc}
         style={style}
       />
     );
-  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, conflicts, isHolidayFunc, getHolidayNameFunc]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, handleResizeUpdate, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc]);
 
   return (
     <div className="space-y-4">

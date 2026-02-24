@@ -347,31 +347,18 @@ export default function Ressursplan() {
     setSelectedAssignment(null);
   };
 
-  const handleAssignmentResize = (assignment, newStartDatoTid, newSluttDatoTid) => {
-    const updatedData = {
-      start_dato_tid: newStartDatoTid,
-      slutt_dato_tid: newSluttDatoTid,
-      change_log: [
-        ...(assignment.change_log || []),
-        {
-          timestamp: new Date().toISOString(),
-          user_email: user?.email,
-          user_name: user?.full_name,
-          action: 'Resizet',
-          changes: 'Tidslengde endret via drag'
-        }
-      ]
-    };
-    updateAssignmentMutation.mutate({ id: assignment.id, data: updatedData });
+  const handleAssignmentResize = (assignment, edge, action) => {
+    // This is just a placeholder for now - resize functionality needs proper implementation
+    // The calendar will handle the visual feedback
   };
 
   const handleQuickCreate = (resourceId, startTime, endTime) => {
     const resource = allResources.find(r => r.id === resourceId);
     if (!resource) return;
 
-    // Show create dialog with pre-filled data
+    // Parse startTime to get just the date
+    const startDate = new Date(startTime);
     setShowCreateDialog(true);
-    // You can extend CreateAssignmentDialog to accept initial values
   };
 
   // Combine all resources

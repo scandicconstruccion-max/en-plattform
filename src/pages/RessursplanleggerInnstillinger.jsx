@@ -5,8 +5,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import PageHeader from '@/components/shared/PageHeader';
-import { Settings, Users, ChevronLeft } from 'lucide-react';
+import { Settings, Users, ChevronLeft, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -30,6 +31,33 @@ export default function RessursplanleggerInnstillinger() {
     queryKey: ['resourcePlannerPermissions'],
     queryFn: () => base44.entities.ResourcePlannerPermission.list(),
     initialData: []
+  });
+
+  const { data: settings = [] } = useQuery({
+    queryKey: ['resourcePlannerSettings'],
+    queryFn: () => base44.entities.ResourcePlannerSettings.list(),
+    initialData: []
+  });
+
+  const currentSettings = settings[0] || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
+
+  const [timeSettings, setTimeSettings] = useState({
+    standard_start_tid: currentSettings.standard_start_tid,
+    standard_slutt_tid: currentSettings.standard_slutt_tid
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: (data) => {
+      if (settings[0]) {
+        return base44.entities.ResourcePlannerSettings.update(settings[0].id, data);
+      } else {
+        return base44.entities.ResourcePlannerSettings.create(data);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resourcePlannerSettings'] });
+      toast.success('Innstillinger lagret');
+    }
   });
 
   const createPermissionMutation = useMutation({
@@ -120,6 +148,49 @@ export default function RessursplanleggerInnstillinger() {
           <ChevronLeft className="h-4 w-4" />
           Tilbake til ressursplanlegger
         </Button>
+
+        <Card className="border-0 shadow-sm p-6 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <Clock className="h-5 w-5 text-emerald-700" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Standard arbeidstid</h3>
+              <p className="text-sm text-slate-600">
+                Nye ressursallokeringer får automatisk disse tidene
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 max-w-md">
+            <div>
+              <Label>Starttid</Label>
+              <Input
+                type="time"
+                value={timeSettings.standard_start_tid}
+                onChange={(e) => setTimeSettings({ ...timeSettings, standard_start_tid: e.target.value })}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+            <div>
+              <Label>Sluttid</Label>
+              <Input
+                type="time"
+                value={timeSettings.standard_slutt_tid}
+                onChange={(e) => setTimeSettings({ ...timeSettings, standard_slutt_tid: e.target.value })}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={() => updateSettingsMutation.mutate(timeSettings)}
+            disabled={updateSettingsMutation.isPending}
+            className="mt-4 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+          >
+            {updateSettingsMutation.isPending ? 'Lagrer...' : 'Lagre innstillinger'}
+          </Button>
+        </Card>
 
         <Card className="border-0 shadow-sm p-6">
           <div className="space-y-6">

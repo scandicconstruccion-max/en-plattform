@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import ProjectSelector from '@/components/shared/ProjectSelector';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { format } from 'date-fns';
 
 export default function CreateAssignmentDialog({
   open,
@@ -15,8 +18,26 @@ export default function CreateAssignmentDialog({
   externals,
   projects,
   onSubmit,
-  isLoading
+  isLoading,
+  initialStartDate = null
 }) {
+  const { data: settings = [] } = useQuery({
+    queryKey: ['resourcePlannerSettings'],
+    queryFn: () => base44.entities.ResourcePlannerSettings.list(),
+    initialData: []
+  });
+
+  const currentSettings = settings[0] || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
+
+  const getDefaultDateTime = (dateOverride = null) => {
+    const date = dateOverride || new Date();
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return {
+      start: `${dateStr}T${currentSettings.standard_start_tid}`,
+      end: `${dateStr}T${currentSettings.standard_slutt_tid}`
+    };
+  };
+
   const [formData, setFormData] = useState({
     prosjekt_id: '',
     resource_type: 'employee',
@@ -28,6 +49,17 @@ export default function CreateAssignmentDialog({
   });
 
   const [selectedResources, setSelectedResources] = useState([]);
+
+  useEffect(() => {
+    if (open) {
+      const defaults = getDefaultDateTime(initialStartDate);
+      setFormData(prev => ({
+        ...prev,
+        start_dato_tid: defaults.start,
+        slutt_dato_tid: defaults.end
+      }));
+    }
+  }, [open, initialStartDate, currentSettings.standard_start_tid, currentSettings.standard_slutt_tid]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
