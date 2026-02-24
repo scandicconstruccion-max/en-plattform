@@ -515,8 +515,6 @@ export default function OptimizedResourceCalendar({
     onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
   }, [canEdit, onCreateAssignment]);
 
-
-
   const isHolidayFunc = useCallback((date) => {
     return showHolidays && isNorwegianHoliday(date);
   }, [showHolidays]);
@@ -524,6 +522,18 @@ export default function OptimizedResourceCalendar({
   const getHolidayNameFunc = useCallback((date) => {
     return showHolidays ? getHolidayName(date) : null;
   }, [showHolidays]);
+
+  // Calculate dynamic day width to fill available space
+  const dayWidth = useMemo(() => {
+    const availableWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const resourceWidth = resourceColumnCollapsed ? 64 : 208;
+    const remainingWidth = availableWidth - resourceWidth - 32; // 32px for padding/scrollbar
+    const minDayWidth = 100;
+    const calculatedWidth = Math.floor(remainingWidth / viewDates.length);
+    return Math.max(minDayWidth, calculatedWidth);
+  }, [viewDates.length, resourceColumnCollapsed]);
+
+  const totalCalendarWidth = viewDates.length * dayWidth + (resourceColumnCollapsed ? 64 : 208);
 
   const Row = useCallback(({ index, style }) => {
     const resource = resources[index];
@@ -551,21 +561,6 @@ export default function OptimizedResourceCalendar({
       />
     );
   }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed, dayWidth]);
-
-  const resourceColWidth = resourceColumnCollapsed ? 'w-16' : 'w-52';
-
-  // Calculate dynamic day width to fill available space
-  const getOptimalDayWidth = useCallback(() => {
-    const availableWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const resourceWidth = resourceColumnCollapsed ? 64 : 208;
-    const remainingWidth = availableWidth - resourceWidth - 32; // 32px for padding/scrollbar
-    const minDayWidth = 100;
-    const calculatedWidth = Math.floor(remainingWidth / viewDates.length);
-    return Math.max(minDayWidth, calculatedWidth);
-  }, [viewDates.length, resourceColumnCollapsed]);
-
-  const dayWidth = getOptimalDayWidth();
-  const totalCalendarWidth = viewDates.length * dayWidth + (resourceColumnCollapsed ? 64 : 208);
 
   return (
     <div className={cn(
