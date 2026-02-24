@@ -86,23 +86,18 @@ const AssignmentBlock = memo(({
   }, [isResizing]);
 
   // Assignment type colors
-  const assignmentTypeColors = {
-    arbeid: projectColor,
-    syk: 'bg-red-400',
-    egenemelding: 'bg-orange-400',
-    ferie: 'bg-blue-400'
-  };
-
-  const assignmentTypeLabels = {
-    arbeid: projectName,
-    syk: '🤒 Syk',
-    egenemelding: '📋 Egenemelding',
-    ferie: '🏖️ Ferie'
-  };
-
   const type = assignment.assignment_type || 'arbeid';
-  const bgColor = assignmentTypeColors[type] || projectColor;
-  const label = assignmentTypeLabels[type] || projectName;
+  const isAbsence = type !== 'arbeid';
+
+  const absenceConfig = {
+    syk: { color: 'bg-red-500', shortLabel: 'Syk', fullLabel: 'Syk' },
+    egenemelding: { color: 'bg-orange-500', shortLabel: 'Egm', fullLabel: 'Egenmelding' },
+    ferie: { color: 'bg-blue-500', shortLabel: 'Ferie', fullLabel: 'Ferie' }
+  };
+
+  const absenceTypeConfig = absenceConfig[type];
+  const label = isAbsence ? absenceTypeConfig?.fullLabel : projectName;
+  const shortLabel = isAbsence ? absenceTypeConfig?.shortLabel : projectName;
 
   return (
      <div
