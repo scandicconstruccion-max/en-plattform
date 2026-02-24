@@ -123,6 +123,23 @@ const ResourceRow = memo(({
     });
   }, [assignments, resource.id]);
 
+  const weekAllocationPercentage = useMemo(() => {
+    let totalMinutes = 0;
+    const normalHoursPerWeek = (resource.normal_hours_per_day || 8) * 5; // 5 working days
+    
+    viewDates.forEach(day => {
+      const dayAssignments = getAssignmentsForDay(day);
+      dayAssignments.forEach(a => {
+        const start = parseISO(a.start_dato_tid);
+        const end = parseISO(a.slutt_dato_tid);
+        totalMinutes += differenceInMinutes(end, start);
+      });
+    });
+    
+    const totalHours = totalMinutes / 60;
+    return Math.min(100, Math.round((totalHours / normalHoursPerWeek) * 100));
+  }, [viewDates, getAssignmentsForDay, resource.normal_hours_per_day]);
+
   const capacityPercentage = useMemo(() => {
     let totalBooked = 0;
     viewDates.forEach(day => {
@@ -230,7 +247,17 @@ const ResourceRow = memo(({
               </span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-medium text-slate-900 text-sm truncate">{resource.navn}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-slate-900 text-sm truncate">{resource.navn}</p>
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded text-xs font-medium",
+                  weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
+                  weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
+                  "bg-green-100 text-green-700"
+                )}>
+                  {weekAllocationPercentage}%
+                </span>
+              </div>
               <p className="text-xs text-slate-500 truncate">
                 {resource.type === 'employee' ? resource.stilling : resource.rolle}
               </p>
