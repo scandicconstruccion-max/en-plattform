@@ -469,15 +469,12 @@ const ResourceRow = memo(({
       <div className="flex">
         {viewDates.map((day) => {
           const dayAssignments = getAssignmentsForDay(day);
-          const isToday = isSameDay(day, new Date());
-          const showGhost = ghostPreview && ghostPreview.resourceId === resource.id && isSameDay(day, parseISO(ghostPreview.start));
-          const dayIsHoliday = isHoliday(day);
-          const dayHolidayName = holidayName(day);
-          
-          const isWeekend = getDay(day) === 0 || getDay(day) === 6;
-          
-          const dayAssignments = getAssignmentsForDay(day);
-          const isEmptyCell = dayAssignments.length === 0;
+           const isToday = isSameDay(day, new Date());
+           const showGhost = ghostPreview && ghostPreview.resourceId === resource.id && isSameDay(day, parseISO(ghostPreview.start));
+           const dayIsHoliday = isHoliday(day);
+           const dayHolidayName = holidayName(day);
+           const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+           const isEmptyCell = dayAssignments.length === 0;
 
           return (
             <div
