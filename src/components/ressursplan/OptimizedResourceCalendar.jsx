@@ -99,46 +99,47 @@ const AssignmentBlock = memo(({
   const label = assignmentTypeLabels[type] || projectName;
 
   return (
-    <div
-      onPointerDown={handleMainDragStart}
-      className={cn(
-        "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
-        bgColor,
-        canEdit && !isResizing && !isResizingLocal && "cursor-move hover:shadow-md hover:scale-[1.02]",
-        isDragging && "cursor-grabbing",
-        (isResizing || isResizingLocal) && "opacity-50 scale-95",
-        (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
-      )}
-      style={{
-        transform: dragTransform || 'none',
-        transition: isDragging ? 'none' : 'all 0.2s',
-        opacity: isDragging ? 0.85 : 1,
-        boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
-        willChange: isDragging ? 'transform' : 'auto',
-        zIndex: isDragging ? 50 : 'auto'
-      }}
-    >
-      {canEdit && !isDragging && (
-        <>
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
-            onPointerDown={(e) => handleResizeStart(e, 'start')}
-            style={{ touchAction: 'none' }}
-            title="Dra for å endre starttid"
-          />
-          <div 
-            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-r"
-            onPointerDown={(e) => handleResizeStart(e, 'end')}
-            style={{ touchAction: 'none' }}
-            title="Dra for å endre sluttid"
-          />
-        </>
-      )}
-      <span onClick={(e) => { e.stopPropagation(); onClick(); }} className="pointer-events-auto cursor-pointer block">
-        {label}
-      </span>
-    </div>
-  );
+     <div
+       onPointerDown={handleMainDragStart}
+       onPointerUp={handleClick}
+       className={cn(
+         "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
+         bgColor,
+         canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
+         isDragging && "cursor-grabbing",
+         (isResizing || isResizingLocal) && "opacity-50 scale-95",
+         (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
+       )}
+       style={{
+         transform: dragTransform || 'none',
+         transition: isDragging ? 'none' : 'all 0.2s',
+         opacity: isDragging ? 0.85 : 1,
+         boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
+         willChange: isDragging ? 'transform' : 'auto',
+         zIndex: isDragging ? 50 : 'auto'
+       }}
+     >
+       {canEdit && !isDragging && (
+         <>
+           <div 
+             className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
+             onPointerDown={(e) => handleResizeStart(e, 'start')}
+             style={{ touchAction: 'none' }}
+             title="Dra for å endre starttid"
+           />
+           <div 
+             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-r"
+             onPointerDown={(e) => handleResizeStart(e, 'end')}
+             style={{ touchAction: 'none' }}
+             title="Dra for å endre sluttid"
+           />
+         </>
+       )}
+       <span className="pointer-events-auto cursor-pointer block">
+         {label}
+       </span>
+     </div>
+   );
 });
 
 AssignmentBlock.displayName = 'AssignmentBlock';
