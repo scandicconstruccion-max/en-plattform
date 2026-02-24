@@ -243,8 +243,8 @@ const ResourceRow = memo(({
       
       // Calculate time delta based on horizontal movement
       const deltaX = moveEvent.clientX - startPos.x;
-      const dayWidth = 120; // Min width per day
-      const daysDelta = Math.round(deltaX / dayWidth);
+      const cellDayWidth = 120; // Reference width for calculation
+      const daysDelta = Math.round(deltaX / cellDayWidth);
       
       let newStart = originalStart;
       let newEnd = originalEnd;
@@ -366,8 +366,9 @@ const ResourceRow = memo(({
           return (
             <div
               key={day.toISOString()}
+              style={{ width: style.dayWidth }}
               className={cn(
-                "w-[120px] flex-shrink-0 p-1.5 border-l border-slate-100 relative hover:bg-slate-50/50 transition-colors",
+                "flex-shrink-0 p-1.5 border-l border-slate-100 relative hover:bg-slate-50/50 transition-colors",
                 isToday && "bg-emerald-50/40",
                 dayIsHoliday && "bg-red-50/20"
               )}
@@ -454,9 +455,17 @@ export default function OptimizedResourceCalendar({
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
       dates = Array.from({ length: 14 }, (_, i) => addDays(weekStart, i));
     } else {
+      // Month view: show current month + enough days from next month to fill the screen
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
-      dates = eachDayOfInterval({ start: monthStart, end: monthEnd });
+      const currentMonthDates = eachDayOfInterval({ start: monthStart, end: monthEnd });
+      
+      // Add days from next month to reach at least 42 days (6 weeks)
+      const nextMonthStart = addDays(monthEnd, 1);
+      const daysToAdd = Math.max(0, 42 - currentMonthDates.length);
+      const nextMonthDates = Array.from({ length: daysToAdd }, (_, i) => addDays(nextMonthStart, i));
+      
+      dates = [...currentMonthDates, ...nextMonthDates];
     }
 
     // Filter out weekends if disabled
@@ -538,14 +547,25 @@ export default function OptimizedResourceCalendar({
         conflicts={conflicts}
         isHoliday={isHolidayFunc}
         holidayName={getHolidayNameFunc}
-        style={{ ...style, resourceColumnCollapsed }}
+        style={{ ...style, resourceColumnCollapsed, dayWidth }}
       />
     );
-  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onAssignmentResize, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed, dayWidth]);
 
   const resourceColWidth = resourceColumnCollapsed ? 'w-16' : 'w-52';
 
-  const totalCalendarWidth = viewDates.length * 120 + (resourceColumnCollapsed ? 64 : 208);
+  // Calculate dynamic day width to fill available space
+  const getOptimalDayWidth = useCallback(() => {
+    const availableWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const resourceWidth = resourceColumnCollapsed ? 64 : 208;
+    const remainingWidth = availableWidth - resourceWidth - 32; // 32px for padding/scrollbar
+    const minDayWidth = 100;
+    const calculatedWidth = Math.floor(remainingWidth / viewDates.length);
+    return Math.max(minDayWidth, calculatedWidth);
+  }, [viewDates.length, resourceColumnCollapsed]);
+
+  const dayWidth = getOptimalDayWidth();
+  const totalCalendarWidth = viewDates.length * dayWidth + (resourceColumnCollapsed ? 64 : 208);
 
   return (
     <div className={cn(
@@ -633,8 +653,9 @@ export default function OptimizedResourceCalendar({
                 return (
                   <div
                     key={day.toISOString()}
+                    style={{ width: dayWidth }}
                     className={cn(
-                      "w-[120px] flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100",
+                      "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-100",
                       isToday && "bg-emerald-50/80 text-emerald-700",
                       !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
                       !isToday && !dayIsHoliday && "text-slate-600"
