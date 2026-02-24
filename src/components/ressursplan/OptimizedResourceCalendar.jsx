@@ -273,53 +273,57 @@ const ResourceRow = memo(({
     document.addEventListener('pointerup', handlePointerUp);
   }, [canEdit, onAssignmentResize, onAssignmentDrop, resizeState]);
 
+  const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
+  const collapsed = style.resourceColumnCollapsed;
+
   return (
     <div style={style} className="flex border-t border-slate-100">
-      <div className="w-64 p-3 sticky left-0 bg-white z-10 border-r border-slate-100 flex-shrink-0">
-        <div className="space-y-2">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-medium text-emerald-700">
+      <div className={`${resourceColWidth} p-2 sticky left-0 bg-white z-10 border-r border-slate-100 flex-shrink-0`}>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+              <span className="text-xs font-medium text-emerald-700">
                 {resource.navn?.charAt(0) || 'R'}
               </span>
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-slate-900 text-sm truncate">{resource.navn}</p>
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded text-xs font-medium",
-                  weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
-                  weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
-                  "bg-green-100 text-green-700"
-                )}>
-                  {weekAllocationPercentage}%
+            <span className={cn(
+              "px-1 py-0.5 rounded text-[10px] font-medium",
+              weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
+              weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
+              "bg-green-100 text-green-700"
+            )}>
+              {weekAllocationPercentage}%
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex items-start gap-2">
+              <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-medium text-emerald-700">
+                  {resource.navn?.charAt(0) || 'R'}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 truncate">
-                {resource.type === 'employee' ? resource.stilling : resource.rolle}
-              </p>
-              {resource.department && (
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  {resource.department}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium text-slate-900 text-xs truncate" title={resource.navn}>
+                    {resource.navn}
+                  </p>
+                  <span className={cn(
+                    "px-1 py-0.5 rounded text-[10px] font-medium flex-shrink-0",
+                    weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
+                    weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
+                    "bg-green-100 text-green-700"
+                  )}>
+                    {weekAllocationPercentage}%
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 truncate" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
+                  {resource.type === 'employee' ? resource.stilling : resource.rolle}
                 </p>
-              )}
+              </div>
             </div>
           </div>
-          
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Kapasitet:</span>
-            <div className={cn("px-2 py-0.5 rounded-full font-medium", capacityColor)}>
-              {capacityPercentage}%
-            </div>
-          </div>
-          
-          {resource.normal_hours_per_day && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Arbeidstid:</span>
-              <span className="text-slate-700 font-medium">{resource.normal_hours_per_day}t/dag</span>
-            </div>
-          )}
-        </div>
+        )}
       </div>
       <div className="flex flex-1">
         {viewDates.map((day) => {
@@ -395,7 +399,10 @@ export default function OptimizedResourceCalendar({
   onCreateAssignment,
   canEdit,
   optimisticAssignments = [],
-  conflicts = []
+  conflicts = [],
+  resourceColumnCollapsed = false,
+  onToggleResourceColumn,
+  isFullscreen = false
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [draggedAssignment, setDraggedAssignment] = useState(null);
@@ -508,41 +515,38 @@ export default function OptimizedResourceCalendar({
         conflicts={conflicts}
         isHoliday={isHolidayFunc}
         holidayName={getHolidayNameFunc}
-        style={style}
+        style={{ ...style, resourceColumnCollapsed }}
       />
     );
-  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, handleResizeUpdate, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, handleResizeUpdate, handleCellClick, draggedAssignment, ghostPreview, resizingAssignment, resizeGhost, conflicts, isHolidayFunc, getHolidayNameFunc, resourceColumnCollapsed]);
+
+  const resourceColWidth = resourceColumnCollapsed ? 'w-16' : 'w-52';
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-2 ${isFullscreen ? 'h-[calc(100vh-80px)]' : ''}`}>
       {/* Navigation */}
-      <Card className="border-0 shadow-sm p-4">
+      <Card className="border-0 shadow-sm p-2">
         <div className="flex items-center justify-between">
           <Button
-            variant="outline"
-            size="icon"
+            variant="ghost"
+            size="sm"
             onClick={() => navigate(-1)}
-            className="rounded-xl"
+            className="h-7 w-7 p-0 rounded-lg"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="text-center">
-            <h2 className="font-semibold text-slate-900">
-              {viewMode === 'day' && format(currentDate, 'd. MMMM yyyy', { locale: nb })}
-              {(viewMode === 'week' || viewMode === 'twoweeks') && `Uke ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'w', { locale: nb })} - ${format(currentDate, 'yyyy')}`}
-              {viewMode === 'month' && format(currentDate, 'MMMM yyyy', { locale: nb })}
+            <h2 className="text-sm font-semibold text-slate-900">
+              {viewMode === 'day' && format(currentDate, 'd. MMM yyyy', { locale: nb })}
+              {(viewMode === 'week' || viewMode === 'twoweeks') && `Uke ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'w', { locale: nb })}`}
+              {viewMode === 'month' && format(currentDate, 'MMM yyyy', { locale: nb })}
             </h2>
-            {(viewMode === 'week' || viewMode === 'twoweeks') && (
-              <p className="text-sm text-slate-500">
-                {format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'd. MMM', { locale: nb })} - {format(viewMode === 'twoweeks' ? addDays(startOfWeek(currentDate, { weekStartsOn: 1 }), 13) : endOfWeek(currentDate, { weekStartsOn: 1 }), 'd. MMM', { locale: nb })}
-              </p>
-            )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-xl">
-                  <MoreVertical className="h-4 w-4" />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-lg">
+                  <MoreVertical className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -561,10 +565,10 @@ export default function OptimizedResourceCalendar({
               </DropdownMenuContent>
             </DropdownMenu>
             <Button
-              variant="outline"
-              size="icon"
+              variant="ghost"
+              size="sm"
               onClick={() => navigate(1)}
-              className="rounded-xl"
+              className="h-7 w-7 p-0 rounded-lg"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -577,8 +581,17 @@ export default function OptimizedResourceCalendar({
         <div className="overflow-x-auto">
           {/* Header */}
           <div className="flex bg-slate-50 border-b border-slate-200">
-            <div className="w-64 px-3 py-1 text-sm font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0">
-              Ressurs
+            <div className={`${resourceColWidth} px-2 py-1 text-xs font-medium text-slate-600 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 flex-shrink-0 flex items-center justify-between`}>
+              {!resourceColumnCollapsed && <span>Ressurs</span>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleResourceColumn}
+                className="h-5 w-5 p-0 hover:bg-slate-200"
+                title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
+              >
+                {resourceColumnCollapsed ? '→' : '←'}
+              </Button>
             </div>
             <div className="flex flex-1">
               {viewDates.map((day) => {
@@ -608,9 +621,9 @@ export default function OptimizedResourceCalendar({
 
           {/* Virtualized Rows */}
           <List
-            height={Math.min(600, resources.length * 80)}
+            height={isFullscreen ? window.innerHeight - 160 : Math.min(600, resources.length * 60)}
             itemCount={resources.length}
-            itemSize={80}
+            itemSize={60}
             width="100%"
             className="scrollbar-thin"
           >

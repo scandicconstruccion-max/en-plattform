@@ -35,6 +35,8 @@ export default function Ressursplan() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [groupBy, setGroupBy] = useState('none');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [resourceColumnCollapsed, setResourceColumnCollapsed] = useState(false);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -415,103 +417,88 @@ export default function Ressursplan() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 md:pb-6">
-      <PageHeader
-        title="Ressursplanlegger"
-        subtitle="Planlegg ressurser på tvers av prosjekter"
-        actions={
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={() => navigate(createPageUrl('Innstillinger'))}
-              className="gap-2 rounded-xl"
-            >
-              <Settings className="h-4 w-4" />
-              Innstillinger
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditingExternal(null);
-                setShowExternalDialog(true);
-              }}
-              className="gap-2 rounded-xl"
-            >
-              <UserPlus className="h-4 w-4" />
-              Ny ekstern
-            </Button>
-            {canEdit && (
+    <div className={`min-h-screen bg-slate-50 pb-20 md:pb-6 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      {!isFullscreen && (
+        <PageHeader
+          title="Ressursplanlegger"
+          subtitle="Planlegg ressurser på tvers av prosjekter"
+          actions={
+            <div className="flex gap-2 flex-wrap">
               <Button
-                onClick={() => setShowCreateDialog(true)}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                variant="outline"
+                onClick={() => navigate(createPageUrl('Innstillinger'))}
+                className="gap-2 rounded-xl"
               >
-                <Calendar className="h-4 w-4" />
-                Ny planlegging
+                <Settings className="h-4 w-4" />
+                <span className="hidden lg:inline">Innstillinger</span>
               </Button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="px-6 lg:px-8 py-6 space-y-6">
-        {/* Resource Filters */}
-        <ResourceFilters
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          groupBy={groupBy}
-          onGroupByChange={setGroupBy}
-          filterType={filters.resourceType}
-          onFilterTypeChange={(v) => setFilters({ ...filters, resourceType: v })}
-        />
-
-        {/* Filters and View Mode */}
-        <Card className="border-0 shadow-sm p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex-1 flex items-center gap-3">
-              <Select value={viewMode} onValueChange={setViewMode}>
-                <SelectTrigger className="w-[140px] rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="day">Dag</SelectItem>
-                  <SelectItem value="week">Uke</SelectItem>
-                  <SelectItem value="twoweeks">2 uker</SelectItem>
-                  <SelectItem value="month">Måned</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select 
-                value={filters.resourceType} 
-                onValueChange={(v) => setFilters({ ...filters, resourceType: v })}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingExternal(null);
+                  setShowExternalDialog(true);
+                }}
+                className="gap-2 rounded-xl"
               >
-                <SelectTrigger className="w-[160px] rounded-xl">
-                  <SelectValue placeholder="Ressurstype" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle ressurser</SelectItem>
-                  <SelectItem value="employee">Ansatte</SelectItem>
-                  <SelectItem value="external">Eksterne</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select 
-                value={filters.projectId} 
-                onValueChange={(v) => setFilters({ ...filters, projectId: v })}
-              >
-                <SelectTrigger className="w-[180px] rounded-xl">
-                  <SelectValue placeholder="Prosjekt" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle prosjekter</SelectItem>
-                  {projects.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <UserPlus className="h-4 w-4" />
+                <span className="hidden lg:inline">Ny ekstern</span>
+              </Button>
+              {canEdit && (
+                <Button
+                  onClick={() => setShowCreateDialog(true)}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ny planlegging</span>
+                </Button>
+              )}
             </div>
+          }
+        />
+      )}
 
-            <div className="text-sm text-slate-600">
-              {filteredResources.length} ressurs(er) • {filteredAssignments.length} planlegging(er)
+      <div className={`${isFullscreen ? 'p-2' : 'px-6 lg:px-8 py-6'} space-y-3`}>
+        {/* Compact Toolbar */}
+        <Card className="border-0 shadow-sm p-2">
+          <div className="flex items-center gap-2">
+            <Select value={viewMode} onValueChange={setViewMode}>
+              <SelectTrigger className="w-[100px] h-8 text-xs rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Dag</SelectItem>
+                <SelectItem value="week">Uke</SelectItem>
+                <SelectItem value="twoweeks">2 uker</SelectItem>
+                <SelectItem value="month">Måned</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select 
+              value={filters.projectId} 
+              onValueChange={(v) => setFilters({ ...filters, projectId: v })}
+            >
+              <SelectTrigger className="w-[140px] h-8 text-xs rounded-lg">
+                <SelectValue placeholder="Prosjekt" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle prosjekter</SelectItem>
+                {projects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="ml-auto flex items-center gap-2 text-xs text-slate-600">
+              <span className="hidden md:inline">{filteredResources.length} ressurs(er)</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="h-8 px-2 rounded-lg"
+                title={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
+              >
+                {isFullscreen ? '✕' : '⛶'}
+              </Button>
             </div>
           </div>
         </Card>
@@ -541,23 +528,25 @@ export default function Ressursplan() {
             canEdit={canEdit}
             optimisticAssignments={optimisticAssignments}
             conflicts={conflicts}
+            resourceColumnCollapsed={resourceColumnCollapsed}
+            onToggleResourceColumn={() => setResourceColumnCollapsed(!resourceColumnCollapsed)}
+            isFullscreen={isFullscreen}
           />
         )}
 
-        {/* Project Legend */}
-        {projects.length > 0 && (
-          <Card className="border-0 shadow-sm p-4">
-            <h3 className="font-medium text-slate-900 mb-3">Prosjekter</h3>
-            <div className="flex flex-wrap gap-3">
+        {/* Project Legend - Only show when not in fullscreen */}
+        {!isFullscreen && projects.length > 0 && (
+          <Card className="border-0 shadow-sm p-3">
+            <div className="flex flex-wrap gap-2">
               {projects.map((project, idx) => {
                 const colors = [
                   'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
                   'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'
                 ];
                 return (
-                  <div key={project.id} className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded ${colors[idx % colors.length]}`} />
-                    <span className="text-sm text-slate-600">{project.name}</span>
+                  <div key={project.id} className="flex items-center gap-1.5">
+                    <div className={`w-2.5 h-2.5 rounded ${colors[idx % colors.length]}`} />
+                    <span className="text-xs text-slate-600">{project.name}</span>
                   </div>
                 );
               })}
