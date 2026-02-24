@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, memo } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { format, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, subWeeks, subMonths, isSameDay, isWithinInterval, parseISO, endOfWeek, endOfMonth, eachDayOfInterval, differenceInMinutes, addMinutes, getDay } from 'date-fns';
@@ -10,6 +11,8 @@ import { cn } from '@/lib/utils';
 import AssignmentPopover from './AssignmentPopover';
 import { isNorwegianHoliday, getHolidayName } from './norwegianHolidays';
 import ResourceActivityPanel from './ResourceActivityPanel';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
 
 // Snap to 30-minute intervals
 const snapToInterval = (date) => {
@@ -626,11 +629,36 @@ export default function OptimizedResourceCalendar({
   onToggleResourceColumn,
   isFullscreen = false
 }) {
+  const queryClient = useQueryClient();
+  
+  const { data: settings = [] } = useQuery({
+    queryKey: ['resourcePlannerSettings'],
+    queryFn: () => base44.entities.ResourcePlannerSettings.list(),
+    initialData: []
+  });
+
+  const currentSettings = settings[0] || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [draggedAssignment, setDraggedAssignment] = useState(null);
   const [ghostPreview, setGhostPreview] = useState(null);
   const [showWeekends, setShowWeekends] = useState(true);
   const [showHolidays, setShowHolidays] = useState(true);
+  const [tempStartTid, setTempStartTid] = useState(currentSettings.standard_start_tid);
+  const [tempSluttTid, setTempSluttTid] = useState(currentSettings.standard_slutt_tid);
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: (data) => {
+      if (settings[0]) {
+        return base44.entities.ResourcePlannerSettings.update(settings[0].id, data);
+      } else {
+        return base44.entities.ResourcePlannerSettings.create(data);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resourcePlannerSettings'] });
+    }
+  });
   const [resizingAssignment, setResizingAssignment] = useState(null);
   const [resizeGhost, setResizeGhost] = useState(null);
   const [activeDrag, setActiveDrag] = useState(null);
@@ -997,19 +1025,55 @@ export default function OptimizedResourceCalendar({
               <Settings className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuCheckboxItem
-              checked={showWeekends}
-              onCheckedChange={setShowWeekends}>
-
-              Vis helger
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={showHolidays}
-              onCheckedChange={setShowHolidays}>
-
-              Vis helligdager
-            </DropdownMenuCheckboxItem>
+          <DropdownMenuContent align="end" className="w-64 p-3">
+            <div className="space-y-3">
+              <DropdownMenuCheckboxItem
+                checked={showWeekends}
+                onCheckedChange={setShowWeekends}>
+                Vis helger
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={showHolidays}
+                onCheckedChange={setShowHolidays}>
+                Vis helligdager
+              </DropdownMenuCheckboxItem>
+              
+              <div className="border-t border-slate-200 pt-3">
+                <p className="text-xs font-semibold text-slate-700 mb-2">Standard arbeidstid</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs text-slate-600">Fra</label>
+                    <Input
+                      type="time"
+                      value={tempStartTid}
+                      onChange={(e) => setTempStartTid(e.target.value)}
+                      className="mt-1 h-7 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600">Til</label>
+                    <Input
+                      type="time"
+                      value={tempSluttTid}
+                      onChange={(e) => setTempSluttTid(e.target.value)}
+                      className="mt-1 h-7 text-xs"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      updateSettingsMutation.mutate({
+                        standard_start_tid: tempStartTid,
+                        standard_slutt_tid: tempSluttTid
+                      });
+                    }}
+                    disabled={updateSettingsMutation.isPending}
+                    className="w-full h-6 text-xs bg-emerald-600 hover:bg-emerald-700">
+                    Lagre
+                  </Button>
+                </div>
+              </div>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
