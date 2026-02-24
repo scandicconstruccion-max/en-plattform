@@ -477,20 +477,7 @@ const ResourceRow = memo(({
               )}
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
-              onMouseDown={(e) => handleCellMouseDown(e, day)}
-              onMouseUp={(e) => handleCellMouseUp(e, day)}
-              onClick={(e) => {
-                if (isEmptyCell && canEdit && e.target === e.currentTarget) {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const clickY = e.clientY - rect.top;
-                  const hourFraction = clickY / rect.height;
-                  const startTime = new Date(day);
-                  startTime.setHours(8 + Math.floor(hourFraction * 8), Math.round((hourFraction * 8 % 1) * 60));
-                  const snappedStart = snapToInterval(startTime);
-                  const snappedEnd = snapToInterval(addMinutes(snappedStart, 60));
-                  onCellClick(resource.id, snappedStart, snappedEnd);
-                }
-              }}
+              onClick={(e) => isEmptyCell && handleCellClick(e, day)}
               title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}
             >
               {dayIsHoliday && dayHolidayName && (
