@@ -9,6 +9,7 @@ import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import AssignmentPopover from './AssignmentPopover';
 import { isNorwegianHoliday, getHolidayName } from './norwegianHolidays';
+import ResourceActivityPanel from './ResourceActivityPanel';
 
 // Snap to 30-minute intervals
 const snapToInterval = (date) => {
