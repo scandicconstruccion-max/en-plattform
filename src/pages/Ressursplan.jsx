@@ -490,6 +490,16 @@ export default function Ressursplan() {
 
             <div className="ml-auto flex items-center gap-2 text-xs text-slate-600">
               <span className="hidden md:inline">{filteredResources.length} ressurs(er)</span>
+              {canEdit && (
+                <Button
+                  onClick={() => setShowCreateDialog(true)}
+                  size="sm"
+                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg"
+                >
+                  <Calendar className="h-3 w-3" />
+                  <span className="hidden sm:inline">Ny planlegging</span>
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
