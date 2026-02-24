@@ -653,15 +653,22 @@ export default function Ressursplan() {
 
 
       <InlineEditDialog
-        open={showInlineEdit}
-        onOpenChange={(open) => {
-          setShowInlineEdit(open);
-          if (!open) setSelectedAssignment(null);
-        }}
-        assignment={selectedAssignment}
-        projects={projects}
-        onSubmit={handleInlineEdit}
-        isLoading={updateAssignmentMutation.isPending} />
+         open={showInlineEdit}
+         onOpenChange={(open) => {
+           setShowInlineEdit(open);
+           if (!open) setSelectedAssignment(null);
+         }}
+         assignment={selectedAssignment}
+         projects={projects}
+         onSubmit={handleInlineEdit}
+         onDelete={() => {
+           if (selectedAssignment) {
+             deleteAssignmentMutation.mutate(selectedAssignment.id);
+             setShowInlineEdit(false);
+             setSelectedAssignment(null);
+           }
+         }}
+         isLoading={updateAssignmentMutation.isPending} />
 
     </div>);
 
