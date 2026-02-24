@@ -19,7 +19,8 @@ export default function CreateAssignmentDialog({
   projects,
   onSubmit,
   isLoading,
-  initialStartDate = null
+  initialStartDate = null,
+  prefilledData = null
 }) {
   const { data: settings = [] } = useQuery({
     queryKey: ['resourcePlannerSettings'],
@@ -52,15 +53,40 @@ export default function CreateAssignmentDialog({
   const [selectedResources, setSelectedResources] = useState([]);
 
   useEffect(() => {
-    if (open) {
-      const defaults = getDefaultDateTime(initialStartDate);
-      setFormData(prev => ({
-        ...prev,
-        start_dato_tid: defaults.start,
-        slutt_dato_tid: defaults.end
-      }));
-    }
-  }, [open, initialStartDate, currentSettings.standard_start_tid, currentSettings.standard_slutt_tid]);
+     if (open) {
+       if (prefilledData) {
+         // Pre-fill from cell click data
+         const startTime = typeof prefilledData.startTime === 'string' 
+           ? prefilledData.startTime 
+           : prefilledData.startTime.toISOString();
+         const endTime = typeof prefilledData.endTime === 'string' 
+           ? prefilledData.endTime 
+           : prefilledData.endTime.toISOString();
+
+         // Convert ISO to datetime-local format
+         const startLocal = startTime.substring(0, 16);
+         const endLocal = endTime.substring(0, 16);
+
+         setFormData(prev => ({
+           ...prev,
+           resource_type: prefilledData.resourceType,
+           start_dato_tid: startLocal,
+           slutt_dato_tid: endLocal
+         }));
+
+         // Pre-select the resource
+         setSelectedResources([prefilledData.resourceId]);
+       } else {
+         // Default behavior
+         const defaults = getDefaultDateTime(initialStartDate);
+         setFormData(prev => ({
+           ...prev,
+           start_dato_tid: defaults.start,
+           slutt_dato_tid: defaults.end
+         }));
+       }
+     }
+   }, [open, prefilledData, initialStartDate, currentSettings.standard_start_tid, currentSettings.standard_slutt_tid]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
