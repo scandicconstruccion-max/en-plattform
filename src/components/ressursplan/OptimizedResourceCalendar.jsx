@@ -369,7 +369,7 @@ const ResourceRow = memo(({
               style={{ width: style.dayWidth }}
               className={cn(
                 "flex-shrink-0 p-1.5 border-l border-slate-100 relative hover:bg-slate-50/50 transition-colors",
-                isToday && "bg-emerald-50/40",
+                isToday && "bg-emerald-50/30",
                 dayIsHoliday && "bg-red-50/20"
               )}
               onDrop={(e) => handleDrop(e, day)}
