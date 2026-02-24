@@ -827,10 +827,108 @@ export default function OptimizedResourceCalendar({
         </DropdownMenu>
       </div>
 
-      {/* Calendar Grid - Master Scroll Container */}
-      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden flex flex-col")}>
+      {/* Calendar Grid - Master Container */}
+      <div className={cn(isFullscreen ? "flex-1" : "", "overflow-hidden flex")}>
         
-        {/* Header + Body Wrapper with shared scroll */}
+        {/* LEFT COLUMN: Fixed resource names (NOT in horizontal scroll) */}
+        <div className="flex flex-col sticky left-0 z-40 bg-white flex-shrink-0">
+          {/* Header Left */}
+          <div className={cn(
+            "flex-shrink-0 bg-slate-50 border-r border-b border-slate-200 flex items-center justify-between",
+            resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
+            "py-2.5"
+          )}
+          style={{ width: resourceWidth }}>
+            {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleResourceColumn}
+              className="h-6 w-6 p-0 hover:bg-slate-200 rounded"
+              title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
+            >
+              <span className="text-xs font-bold text-slate-600">
+                {resourceColumnCollapsed ? '→' : '←'}
+              </span>
+            </Button>
+          </div>
+          
+          {/* Body Left - Resource names */}
+          <div className="flex-1 overflow-y-hidden">
+            <List
+              height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
+              itemCount={resources.length}
+              itemSize={56}
+              width={resourceWidth}
+              style={{ overflow: 'hidden' }}
+            >
+              {({ index, style }) => {
+                const resource = resources[index];
+                const colWidth = resourceColumnCollapsed ? 64 : 208;
+                
+                return (
+                  <div style={style} className="flex border-t border-slate-200">
+                    <div 
+                      className={cn(
+                        "bg-white border-r border-slate-200 flex-shrink-0",
+                        resourceColumnCollapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
+                      )}
+                      style={{ width: colWidth }}
+                    >
+                      {resourceColumnCollapsed ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-emerald-700">
+                              {(() => {
+                                const names = resource.navn?.split(' ') || [];
+                                if (names.length >= 2) {
+                                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                                }
+                                return resource.navn?.charAt(0) || 'R';
+                              })()}
+                            </span>
+                          </div>
+                          <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">
+                            {Math.round(Math.random() * 100)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2">
+                          <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-semibold text-emerald-700">
+                              {(() => {
+                                const names = resource.navn?.split(' ') || [];
+                                if (names.length >= 2) {
+                                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                                }
+                                return resource.navn?.charAt(0) || 'R';
+                              })()}
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
+                                {resource.navn}
+                              </p>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 bg-green-100 text-green-700">
+                                {Math.round(Math.random() * 100)}%
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
+                              {resource.type === 'employee' ? resource.stilling : resource.rolle}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }}
+            </List>
+          </div>
+        </div>
+
+        {/* RIGHT SCROLL WRAPPER: Header + Body with horizontal scroll */}
         <div 
           ref={bodyScrollRef}
           className={cn(
@@ -839,27 +937,8 @@ export default function OptimizedResourceCalendar({
             'overflow-y-hidden relative'
           )}
         >
-          {/* Header Row - Inside Scroll Container */}
+          {/* Header Right - Dates */}
           <div className="flex-shrink-0 flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
-            <div className={cn(
-              "flex-shrink-0 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 flex items-center justify-between",
-              resourceColumnCollapsed ? "w-16 px-2" : "w-52 px-3",
-              "py-2.5"
-            )}
-            style={{ width: resourceWidth }}>
-              {!resourceColumnCollapsed && <span className="text-xs font-semibold text-slate-700">Ressurs</span>}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleResourceColumn}
-                className="h-6 w-6 p-0 hover:bg-slate-200 rounded"
-                title={resourceColumnCollapsed ? 'Utvid' : 'Kollaps'}
-              >
-                <span className="text-xs font-bold text-slate-600">
-                  {resourceColumnCollapsed ? '→' : '←'}
-                </span>
-              </Button>
-            </div>
             {viewDates.map((day) => {
               const dayIsHoliday = isHolidayFunc(day);
               const isToday = isSameDay(day, new Date());
@@ -887,14 +966,14 @@ export default function OptimizedResourceCalendar({
             })}
           </div>
 
-          {/* Calendar Body - Rows */}
+          {/* Body Right - Grid + Activities */}
           <div className="flex-1 relative">
             {/* Today Marker - Vertical Line */}
             {viewDates.map((day, index) => {
               const isToday = isSameDay(day, new Date());
               if (!isToday) return null;
               
-              const leftPosition = resourceWidth + (index * dayWidth);
+              const leftPosition = index * dayWidth;
               
               return (
                 <div
@@ -915,7 +994,7 @@ export default function OptimizedResourceCalendar({
               height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
               itemCount={resources.length}
               itemSize={56}
-              width={totalCalendarWidth}
+              width={viewDates.length * dayWidth}
               style={{ overflow: 'hidden' }}
             >
               {Row}
