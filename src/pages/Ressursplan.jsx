@@ -38,6 +38,7 @@ export default function Ressursplan() {
   const [groupBy, setGroupBy] = useState('none');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [resourceColumnCollapsed, setResourceColumnCollapsed] = useState(false);
+  const [cellClickData, setCellClickData] = useState(null);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -408,13 +409,18 @@ export default function Ressursplan() {
   };
 
   const handleQuickCreate = (resourceId, startTime, endTime) => {
-    const resource = allResources.find((r) => r.id === resourceId);
-    if (!resource) return;
+     const resource = allResources.find((r) => r.id === resourceId);
+     if (!resource) return;
 
-    // Parse startTime to get just the date
-    const startDate = new Date(startTime);
-    setShowCreateDialog(true);
-  };
+     // Pre-fill dialog with cell click data
+     setCellClickData({
+       resourceId,
+       resourceType: resource.type,
+       startTime,
+       endTime
+     });
+     setShowCreateDialog(true);
+   };
 
   // Combine all resources
   const allResources = [
@@ -630,13 +636,17 @@ export default function Ressursplan() {
 
       {/* Dialogs */}
       <CreateAssignmentDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-        employees={employees}
-        externals={externals}
-        projects={projects}
-        onSubmit={handleCreateAssignment}
-        isLoading={createAssignmentMutation.isPending} />
+         open={showCreateDialog}
+         onOpenChange={(open) => {
+           setShowCreateDialog(open);
+           if (!open) setCellClickData(null);
+         }}
+         employees={employees}
+         externals={externals}
+         projects={projects}
+         onSubmit={handleCreateAssignment}
+         isLoading={createAssignmentMutation.isPending}
+         prefilledData={cellClickData} />
 
 
       <ConflictDialog
