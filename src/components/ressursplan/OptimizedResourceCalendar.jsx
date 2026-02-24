@@ -133,7 +133,7 @@ const AssignmentBlock = memo(({
        onPointerDown={handleMainDragStart}
        className={cn(
          "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
-         `bg-${projectColor.split('-')[1]}-500`,
+         projectColor,
          canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
          isDragging && "cursor-grabbing",
          (isResizing || isResizingLocal) && "opacity-50 scale-95",
@@ -145,8 +145,7 @@ const AssignmentBlock = memo(({
          opacity: isDragging ? 0.85 : 1,
          boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
          willChange: isDragging ? 'transform' : 'auto',
-         zIndex: isDragging ? 50 : 'auto',
-         backgroundColor: projectColor.startsWith('bg-') ? `var(--color-${projectColor.split('-')[1]})` : undefined
+         zIndex: isDragging ? 50 : 'auto'
        }}
      >
        {canEdit && !isDragging && (
