@@ -208,22 +208,34 @@ const AssignmentBlock = memo(({
        {canEdit && !isDragging &&
       <>
            <div
-          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/70 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
+          className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/50 opacity-20 group-hover:opacity-100 transition-opacity z-20 touch-none flex items-center justify-center"
           onPointerDown={(e) => handleResizeStart(e, 'start')}
           style={{ 
             touchAction: 'none',
             background: isResizingLocal ? 'rgba(255,255,255,0.5)' : undefined
           }}
-          title="Dra for å endre starttid" />
+          title="Dra for å endre starttid">
+            <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-60">
+              <div className="w-0.5 h-1 bg-white rounded-full" />
+              <div className="w-0.5 h-1 bg-white rounded-full" />
+              <div className="w-0.5 h-1 bg-white rounded-full" />
+            </div>
+          </div>
 
            <div
-          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/70 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
+          className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/50 opacity-20 group-hover:opacity-100 transition-opacity z-20 touch-none flex items-center justify-center"
           onPointerDown={(e) => handleResizeStart(e, 'end')}
           style={{ 
             touchAction: 'none',
             background: isResizingLocal ? 'rgba(255,255,255,0.5)' : undefined
           }}
-          title="Dra for å endre sluttid" />
+          title="Dra for å endre sluttid">
+            <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-60">
+              <div className="w-0.5 h-1 bg-white rounded-full" />
+              <div className="w-0.5 h-1 bg-white rounded-full" />
+              <div className="w-0.5 h-1 bg-white rounded-full" />
+            </div>
+          </div>
 
          </>
       }
