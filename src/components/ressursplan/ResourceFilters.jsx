@@ -12,11 +12,14 @@ export default function ResourceFilters({
   onGroupByChange,
   filterType,
   onFilterTypeChange,
-  departments = []
+  departments = [],
+  competencyFilter,
+  onCompetencyFilterChange,
+  availableCompetencies = []
 }) {
   return (
     <Card className="border-0 shadow-sm p-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="relative">
           <Label className="mb-2 block text-sm font-medium text-slate-700">Søk ressurs</Label>
           <div className="relative">
@@ -57,6 +60,23 @@ export default function ResourceFilters({
             </SelectContent>
           </Select>
         </div>
+
+        {availableCompetencies.length > 0 && (
+          <div>
+            <Label className="mb-2 block text-sm font-medium text-slate-700">Kompetanse</Label>
+            <Select value={competencyFilter || 'all'} onValueChange={onCompetencyFilterChange}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Alle kompetanser" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle kompetanser</SelectItem>
+                {availableCompetencies.map((comp) => (
+                  <SelectItem key={comp} value={comp}>{comp}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     </Card>
   );
