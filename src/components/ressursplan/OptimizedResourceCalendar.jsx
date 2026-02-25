@@ -54,7 +54,9 @@ const AssignmentBlock = memo(({
   dragConflict,
   resource,
   resizePreview,
-  dayWidth
+  dayWidth,
+  isMultiple = false,
+  hasTopBorder = false
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
@@ -172,7 +174,11 @@ const AssignmentBlock = memo(({
     return (
       <div
         onPointerDown={handleMainDragStart}
-        className="group relative w-full h-5 select-none cursor-pointer"
+        className={cn(
+          "group relative select-none cursor-pointer m-0.5",
+          isMultiple && "flex-1",
+          hasTopBorder && "border-t border-white"
+        )}
         style={{
           transform: dragTransform || 'none',
           transition: isDragging ? 'none' : 'all 0.2s',
@@ -183,7 +189,7 @@ const AssignmentBlock = memo(({
 
         <div
           className={cn(
-            "relative h-4 rounded px-1.5 flex items-center text-[10px] font-semibold text-slate-700 truncate border border-slate-300",
+            "relative h-full rounded-sm px-1.5 flex items-center text-[10px] font-semibold text-slate-700 truncate border border-slate-300",
             (isConflict || dragConflict) && "ring-2 ring-red-500"
           )}
           style={{
@@ -205,9 +211,11 @@ const AssignmentBlock = memo(({
     <div
       onPointerDown={handleMainDragStart}
       className={cn(
-        "group relative px-2 py-1 rounded text-[11px] text-white truncate select-none font-medium",
+        "group relative px-1.5 py-1 rounded-sm text-[10px] text-white truncate select-none font-medium m-0.5",
         projectColor,
-        canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
+        isMultiple && "flex-1",
+        hasTopBorder && "border-t border-white",
+        canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md",
         isDragging && "cursor-grabbing",
         (isResizing || isResizingLocal) && "opacity-70",
         (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
@@ -225,38 +233,38 @@ const AssignmentBlock = memo(({
        {canEdit && !isDragging &&
       <>
            <div
-          className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/50 opacity-20 group-hover:opacity-100 transition-opacity z-20 touch-none flex items-center justify-center"
+          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none flex items-center justify-center"
           onPointerDown={(e) => handleResizeStart(e, 'start')}
           style={{ 
             touchAction: 'none',
             background: isResizingLocal ? 'rgba(255,255,255,0.5)' : undefined
           }}
           title="Dra for å endre starttid">
-            <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-60">
-              <div className="w-0.5 h-1 bg-white rounded-full" />
-              <div className="w-0.5 h-1 bg-white rounded-full" />
-              <div className="w-0.5 h-1 bg-white rounded-full" />
+            <div className="flex flex-col gap-0.5 opacity-60">
+              <div className="w-0.5 h-0.5 bg-white rounded-full" />
+              <div className="w-0.5 h-0.5 bg-white rounded-full" />
+              <div className="w-0.5 h-0.5 bg-white rounded-full" />
             </div>
           </div>
 
            <div
-          className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/50 opacity-20 group-hover:opacity-100 transition-opacity z-20 touch-none flex items-center justify-center"
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none flex items-center justify-center"
           onPointerDown={(e) => handleResizeStart(e, 'end')}
           style={{ 
             touchAction: 'none',
             background: isResizingLocal ? 'rgba(255,255,255,0.5)' : undefined
           }}
           title="Dra for å endre sluttid">
-            <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-60">
-              <div className="w-0.5 h-1 bg-white rounded-full" />
-              <div className="w-0.5 h-1 bg-white rounded-full" />
-              <div className="w-0.5 h-1 bg-white rounded-full" />
+            <div className="flex flex-col gap-0.5 opacity-60">
+              <div className="w-0.5 h-0.5 bg-white rounded-full" />
+              <div className="w-0.5 h-0.5 bg-white rounded-full" />
+              <div className="w-0.5 h-0.5 bg-white rounded-full" />
             </div>
           </div>
 
          </>
       }
-       <span className="pointer-events-auto cursor-pointer block">
+       <span className="pointer-events-auto cursor-pointer block leading-tight flex items-center h-full">
          {label}
        </span>
      </div>);
@@ -607,7 +615,7 @@ const ResourceRow = memo(({
               key={day.toISOString()}
               style={{ width: style.dayWidth }}
               className={cn(
-                "flex-shrink-0 p-1.5 border-l border-t border-slate-200 relative transition-colors",
+                "flex-shrink-0 p-0.5 border-l border-t border-slate-200 relative transition-colors",
                 isWeekend && "bg-slate-100/60",
                 isToday && "bg-emerald-50/30",
                 dayIsHoliday && "bg-red-50/20",
@@ -633,12 +641,12 @@ const ResourceRow = memo(({
               title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}>
 
               {dayIsHoliday && dayHolidayName &&
-              <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none">
+              <div className="absolute top-0.5 left-0.5 text-[9px] text-red-600 font-semibold pointer-events-none z-10">
                   {dayHolidayName}
                 </div>
               }
-              <div className="space-y-1 min-h-[48px]">
-                {dayAssignments.map((assignment) => {
+              <div className="flex flex-col h-full">
+                {dayAssignments.map((assignment, idx) => {
                   const isConflict = conflicts.some((c) => c.id === assignment.id);
                   const isCurrentlyResizing = activeResize?.assignment?.id === assignment.id;
                   const isDragging = activeDrag?.assignment?.id === assignment.id;
@@ -665,12 +673,14 @@ const ResourceRow = memo(({
                       dragConflict={dragConflict}
                       resource={resource}
                       resizePreview={isCurrentlyResizing ? activeResize : null}
-                      dayWidth={style.dayWidth} />);
+                      dayWidth={style.dayWidth}
+                      isMultiple={dayAssignments.length > 1}
+                      hasTopBorder={idx > 0} />);
 
 
                 })}
                 {showGhost &&
-                <div className="px-2 py-1 rounded text-xs text-white truncate bg-slate-400 opacity-50 border border-dashed border-slate-600">
+                <div className="flex-1 m-0.5 rounded text-xs text-white truncate bg-slate-400 opacity-50 border border-dashed border-slate-600 flex items-center justify-center">
                     Ny planlegging
                   </div>
                 }
