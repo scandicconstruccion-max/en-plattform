@@ -359,10 +359,13 @@ const ResourceRow = memo(({
     document.body.style.cursor = 'grabbing';
   }, [canEdit, assignments, style, onDragUpdate, onAssignmentDrop]);
 
-  const handleCellClick = useCallback((resourceId, snappedStart, snappedEnd) => {
-    if (!canEdit) return;
-    onCreateAssignment(resourceId, snappedStart.toISOString(), snappedEnd.toISOString());
-  }, [canEdit, onCreateAssignment]);
+  const snapToInterval = (date) => {
+    const minutes = date.getMinutes();
+    const snappedMinutes = Math.round(minutes / 30) * 30;
+    const newDate = new Date(date);
+    newDate.setMinutes(snappedMinutes, 0, 0);
+    return newDate;
+  };
 
   const handleDrop = useCallback((e, day) => {
     if (!canEdit) return;
