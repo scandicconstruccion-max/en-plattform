@@ -205,9 +205,75 @@ export default function CreateAssignmentDialog({
             </Select>
           </div>
 
+          {formData.assignment_type === 'arbeid' && (
+            <div>
+              <Label>Nødvendige kompetanser (valgfritt)</Label>
+              <p className="text-xs text-slate-500 mt-1 mb-2">
+                Velg kompetanser - ressurslisten oppdateres basert på match
+              </p>
+              
+              <Select
+                value=""
+                onValueChange={(value) => {
+                  if (!requiredCompetencies.includes(value)) {
+                    setRequiredCompetencies([...requiredCompetencies, value]);
+                  }
+                }}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Velg kompetanse..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {competencies
+                    .filter(c => !requiredCompetencies.includes(c.name))
+                    .map((comp) => (
+                      <SelectItem key={comp.id} value={comp.name}>
+                        {comp.name}
+                      </SelectItem>
+                    ))
+                  }
+                  {competencies.filter(c => !requiredCompetencies.includes(c.name)).length === 0 && (
+                    <div className="px-2 py-1.5 text-sm text-slate-500">
+                      Alle kompetanser er valgt
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+
+              {requiredCompetencies.length > 0 && (
+                <div className="mt-3">
+                  <div className="flex flex-wrap gap-2">
+                    {requiredCompetencies.map((comp, idx) => (
+                      <Badge
+                        key={idx}
+                        className="bg-blue-100 text-blue-700 px-3 py-1 flex items-center gap-2"
+                      >
+                        {comp}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRequiredCompetencies(requiredCompetencies.filter((_, i) => i !== idx));
+                          }}
+                          className="hover:text-blue-900"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  {formData.resource_type === 'employee' && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      💡 Ressurser med alle kompetanser markeres med grønn badge
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <Label>Velg ressurser * (kan velge flere)</Label>
-            <div className="mt-2 border rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
+            <div className="mt-2 border rounded-xl p-4 space-y-2">
               {availableResources.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Ingen {formData.resource_type === 'employee' ? 'ansatte' : 'eksterne ressurser'} tilgjengelig
@@ -315,82 +381,15 @@ export default function CreateAssignmentDialog({
           </div>
 
           {formData.assignment_type === 'arbeid' && (
-            <>
-              {/* Competency Requirements - moved up */}
-              <div>
-                <Label>Nødvendige kompetanser (valgfritt)</Label>
-                <p className="text-xs text-slate-500 mt-1 mb-2">
-                  Velg kompetanser - ressurslisten oppdateres basert på match
-                </p>
-                
-                <Select
-                  value=""
-                  onValueChange={(value) => {
-                    if (!requiredCompetencies.includes(value)) {
-                      setRequiredCompetencies([...requiredCompetencies, value]);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Velg kompetanse..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {competencies
-                      .filter(c => !requiredCompetencies.includes(c.name))
-                      .map((comp) => (
-                        <SelectItem key={comp.id} value={comp.name}>
-                          {comp.name}
-                        </SelectItem>
-                      ))
-                    }
-                    {competencies.filter(c => !requiredCompetencies.includes(c.name)).length === 0 && (
-                      <div className="px-2 py-1.5 text-sm text-slate-500">
-                        Alle kompetanser er valgt
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-
-                {requiredCompetencies.length > 0 && (
-                  <div className="mt-3">
-                    <div className="flex flex-wrap gap-2">
-                      {requiredCompetencies.map((comp, idx) => (
-                        <Badge
-                          key={idx}
-                          className="bg-blue-100 text-blue-700 px-3 py-1 flex items-center gap-2"
-                        >
-                          {comp}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRequiredCompetencies(requiredCompetencies.filter((_, i) => i !== idx));
-                            }}
-                            className="hover:text-blue-900"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                    {formData.resource_type === 'employee' && (
-                      <p className="text-xs text-slate-500 mt-2">
-                        💡 Ressurser med alle kompetanser markeres med grønn badge
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Label>Rolle på prosjekt</Label>
-                <Input
-                  value={formData.rolle_pa_prosjekt}
-                  onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
-                  placeholder="f.eks. Prosjektleder, Tømrer, Montør"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-            </>
+            <div>
+              <Label>Rolle på prosjekt</Label>
+              <Input
+                value={formData.rolle_pa_prosjekt}
+                onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
+                placeholder="f.eks. Prosjektleder, Tømrer, Montør"
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
           )}
 
           <div>
