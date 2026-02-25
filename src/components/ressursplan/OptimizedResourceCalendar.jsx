@@ -43,6 +43,7 @@ const AssignmentBlock = memo(({
     if (!canEdit) return;
     e.stopPropagation();
     e.preventDefault();
+    console.log('🔧 Resize started:', edge, assignment.id);
     setIsResizingLocal(true);
     onResizeStart(e, assignment, edge);
   };
@@ -159,15 +160,21 @@ const AssignmentBlock = memo(({
        {canEdit && !isDragging &&
       <>
            <div
-          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-l"
+          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/70 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
           onPointerDown={(e) => handleResizeStart(e, 'start')}
-          style={{ touchAction: 'none' }}
+          style={{ 
+            touchAction: 'none',
+            background: isResizingLocal ? 'rgba(255,255,255,0.5)' : undefined
+          }}
           title="Dra for å endre starttid" />
 
            <div
-          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none rounded-r"
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/70 opacity-0 group-hover:opacity-100 transition-opacity z-20 touch-none"
           onPointerDown={(e) => handleResizeStart(e, 'end')}
-          style={{ touchAction: 'none' }}
+          style={{ 
+            touchAction: 'none',
+            background: isResizingLocal ? 'rgba(255,255,255,0.5)' : undefined
+          }}
           title="Dra for å endre sluttid" />
 
          </>
@@ -384,15 +391,27 @@ const ResourceRow = memo(({
     e.stopPropagation();
     e.preventDefault();
 
+    console.log('📏 handleResizeStart called:', edge, assignment.id);
+
     const startPos = { x: e.clientX };
     const originalStart = parseISO(assignment.start_dato_tid);
     const originalEnd = parseISO(assignment.slutt_dato_tid);
     const dayWidth = style.dayWidth || 120;
 
-    setActiveResize({ assignment, edge, originalStart, originalEnd });
+    const resizeInfo = { 
+      assignment, 
+      edge, 
+      originalStart, 
+      originalEnd,
+      previewStart: originalStart,
+      previewEnd: originalEnd
+    };
+    
+    setActiveResize(resizeInfo);
 
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
+      console.log('📐 Resize move detected');
 
       const deltaX = moveEvent.clientX - startPos.x;
       const daysDelta = Math.round(deltaX / dayWidth);
@@ -412,21 +431,29 @@ const ResourceRow = memo(({
         }
       }
 
-      setActiveResize(prev => ({
-        ...prev,
+      setActiveResize({
+        ...resizeInfo,
         previewStart: newStart,
         previewEnd: newEnd
-      }));
+      });
     };
 
     const handlePointerUp = () => {
+      console.log('✅ Resize ended');
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
       document.body.style.cursor = '';
 
-      if (activeResize?.previewStart && activeResize?.previewEnd) {
-        const finalStart = snapToInterval(activeResize.previewStart);
-        const finalEnd = snapToInterval(activeResize.previewEnd);
+      const currentResize = activeResize || resizeInfo;
+      
+      if (currentResize?.previewStart && currentResize?.previewEnd) {
+        const finalStart = snapToInterval(currentResize.previewStart);
+        const finalEnd = snapToInterval(currentResize.previewEnd);
+
+        console.log('💾 Saving resize:', { 
+          start: finalStart.toISOString(), 
+          end: finalEnd.toISOString() 
+        });
 
         onAssignmentResize(
           assignment,
