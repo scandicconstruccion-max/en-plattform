@@ -207,6 +207,7 @@ const ResourceRow = memo(({
 }) => {
   const [dragStart, setDragStart] = useState(null);
   const [resizeState, setResizeState] = useState(null);
+  const [activeResize, setActiveResize] = useState(null);
 
   const getAssignmentsForDay = useCallback((day) => {
     return assignments.filter((a) => {
