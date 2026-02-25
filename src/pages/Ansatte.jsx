@@ -75,6 +75,12 @@ export default function Ansatte() {
     queryFn: () => base44.entities.Employee.list('-created_date'),
   });
 
+  const { data: competencies = [] } = useQuery({
+    queryKey: ['competencies'],
+    queryFn: () => base44.entities.Competency.filter({ is_active: true }),
+    initialData: []
+  });
+
   const isAdmin = user?.role === 'admin';
   const canViewSalary = isAdmin;
 
@@ -557,46 +563,40 @@ export default function Ansatte() {
                   </p>
                   
                   {/* Add new competency */}
-                  <div className="flex gap-2 mb-4">
-                    <Input
-                      value={competencyInput}
-                      onChange={(e) => setCompetencyInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && competencyInput.trim()) {
-                          e.preventDefault();
-                          if (!formData.competencies.includes(competencyInput.trim())) {
-                            setFormData({
-                              ...formData,
-                              competencies: [...formData.competencies, competencyInput.trim()]
-                            });
-                          }
-                          setCompetencyInput('');
-                        }
-                      }}
-                      placeholder="Skriv inn kompetanse (f.eks. Tømrer, Elektriker)"
-                      className="rounded-xl"
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (competencyInput.trim() && !formData.competencies.includes(competencyInput.trim())) {
-                          setFormData({
-                            ...formData,
-                            competencies: [...formData.competencies, competencyInput.trim()]
-                          });
-                          setCompetencyInput('');
-                        }
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Legg til
-                    </Button>
-                  </div>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      if (!formData.competencies.includes(value)) {
+                        setFormData({
+                          ...formData,
+                          competencies: [...formData.competencies, value]
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Velg kompetanse fra listen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {competencies
+                        .filter(c => !formData.competencies.includes(c.name))
+                        .map((comp) => (
+                          <SelectItem key={comp.id} value={comp.name}>
+                            {comp.name}
+                          </SelectItem>
+                        ))
+                      }
+                      {competencies.filter(c => !formData.competencies.includes(c.name)).length === 0 && (
+                        <div className="px-2 py-1.5 text-sm text-slate-500">
+                          Alle kompetanser er valgt
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
 
                   {/* Display competencies */}
                   {formData.competencies.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 mt-4">
                       {formData.competencies.map((comp, idx) => (
                         <Badge
                           key={idx}
@@ -619,7 +619,7 @@ export default function Ansatte() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic mt-4">
                       Ingen kompetanser lagt til ennå
                     </p>
                   )}
