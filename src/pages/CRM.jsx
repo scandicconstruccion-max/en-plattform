@@ -1,530 +1,408 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import { Users, Search, Mail, Phone, MapPin, Building2, Tag, Edit, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import CustomerDialog from '@/components/crm/CustomerDialog';
+import QuoteFollowUpDialog from '@/components/crm/QuoteFollowUpDialog';
+import QuoteFollowUpDetail from '@/components/crm/QuoteFollowUpDetail';
+import { 
+  Users, 
+  Search, 
+  FileText, 
+  TrendingUp,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  XCircle
+} from 'lucide-react';
+import { format, parseISO, isAfter, isBefore, addDays } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
 export default function CRM() {
-  const [showDialog, setShowDialog] = useState(false);
-  const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [activeTab, setActiveTab] = useState('quotes');
   const [search, setSearch] = useState('');
-  const [editMode, setEditMode] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    org_number: '',
-    contact_person: '',
-    email: '',
-    phone: '',
-    address: '',
-    notes: '',
-    tags: []
-  });
-  const [tagInput, setTagInput] = useState('');
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
+  const [showQuoteDialog, setShowQuoteDialog] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedQuote, setSelectedQuote] = useState(null);
+  const [phaseFilter, setPhaseFilter] = useState('all');
 
-  const queryClient = useQueryClient();
-
-  const { data: customers = [], isLoading } = useQuery({
+  const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => base44.entities.Customer.list('-created_date'),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Customer.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setShowDialog(false);
-      resetForm();
-    },
+  const { data: quotes = [] } = useQuery({
+    queryKey: ['quoteFollowUps'],
+    queryFn: () => base44.entities.QuoteFollowUp.list('-next_followup_date'),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Customer.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setShowDetailDialog(false);
-      setEditMode(false);
-    },
+  const { data: activities = [] } = useQuery({
+    queryKey: ['followUpActivities'],
+    queryFn: () => base44.entities.FollowUpActivity.list('-activity_date'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Customer.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setShowDetailDialog(false);
-    },
-  });
+  const getFollowUpIndicator = (quote) => {
+    if (quote.phase === 'godkjent' || quote.phase === 'avslatt') {
+      return null;
+    }
+    if (!quote.next_followup_date) {
+      return { color: 'bg-gray-400', text: 'Ikke planlagt' };
+    }
+    const followUpDate = parseISO(quote.next_followup_date);
+    const today = new Date();
+    const tomorrow = addDays(today, 1);
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      org_number: '',
-      contact_person: '',
-      email: '',
-      phone: '',
-      address: '',
-      notes: '',
-      tags: []
-    });
-    setTagInput('');
-    setEditMode(false);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (editMode && selectedCustomer) {
-      updateMutation.mutate({ id: selectedCustomer.id, data: formData });
+    if (isBefore(followUpDate, today)) {
+      return { color: 'bg-red-500', text: 'Forfalt', urgent: true };
+    } else if (isBefore(followUpDate, tomorrow)) {
+      return { color: 'bg-amber-500', text: 'I dag', urgent: true };
+    } else if (isBefore(followUpDate, addDays(today, 3))) {
+      return { color: 'bg-yellow-500', text: 'Denne uken' };
     } else {
-      createMutation.mutate(formData);
+      return { color: 'bg-green-500', text: 'Planlagt' };
     }
   };
 
-  const handleEdit = () => {
-    setFormData({
-      name: selectedCustomer.name || '',
-      org_number: selectedCustomer.org_number || '',
-      contact_person: selectedCustomer.contact_person || '',
-      email: selectedCustomer.email || '',
-      phone: selectedCustomer.phone || '',
-      address: selectedCustomer.address || '',
-      notes: selectedCustomer.notes || '',
-      tags: selectedCustomer.tags || []
-    });
-    setEditMode(true);
-  };
-
-  const handleAddTag = (e) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault();
-      if (!formData.tags.includes(tagInput.trim())) {
-        setFormData({
-          ...formData,
-          tags: [...formData.tags, tagInput.trim()]
-        });
-      }
-      setTagInput('');
+  const getPhaseIcon = (phase) => {
+    switch (phase) {
+      case 'godkjent': return <CheckCircle2 className="h-4 w-4" />;
+      case 'avslatt': return <XCircle className="h-4 w-4" />;
+      case 'under_vurdering': return <Clock className="h-4 w-4" />;
+      default: return <FileText className="h-4 w-4" />;
     }
   };
 
-  const handleRemoveTag = (tag) => {
-    setFormData({
-      ...formData,
-      tags: formData.tags.filter(t => t !== tag)
-    });
+  const getPhaseColor = (phase) => {
+    switch (phase) {
+      case 'godkjent': return 'bg-green-100 text-green-700';
+      case 'avslatt': return 'bg-red-100 text-red-700';
+      case 'under_vurdering': return 'bg-blue-100 text-blue-700';
+      case 'sendt': return 'bg-amber-100 text-amber-700';
+      case 'utarbeidet': return 'bg-slate-100 text-slate-700';
+      case 'utlopt': return 'bg-gray-100 text-gray-700';
+      default: return 'bg-slate-100 text-slate-700';
+    }
   };
+
+  const getPhaseLabel = (phase) => {
+    const labels = {
+      utarbeidet: 'Utarbeidet',
+      sendt: 'Sendt',
+      under_vurdering: 'Under vurdering',
+      godkjent: 'Godkjent',
+      avslatt: 'Avslått',
+      utlopt: 'Utløpt'
+    };
+    return labels[phase] || phase;
+  };
+
+  const filteredQuotes = quotes.filter(q => {
+    const matchesSearch = q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+                         q.quote_reference?.toLowerCase().includes(search.toLowerCase());
+    const matchesPhase = phaseFilter === 'all' || q.phase === phaseFilter;
+    return matchesSearch && matchesPhase;
+  });
 
   const filteredCustomers = customers.filter(c => {
     return c.name?.toLowerCase().includes(search.toLowerCase()) ||
-           c.contact_person?.toLowerCase().includes(search.toLowerCase()) ||
-           c.email?.toLowerCase().includes(search.toLowerCase());
+           c.contact_person?.toLowerCase().includes(search.toLowerCase());
   });
+
+  const stats = {
+    total: quotes.length,
+    active: quotes.filter(q => !['godkjent', 'avslatt', 'utlopt'].includes(q.phase)).length,
+    won: quotes.filter(q => q.phase === 'godkjent').length,
+    overdue: quotes.filter(q => {
+      if (!q.next_followup_date || ['godkjent', 'avslatt'].includes(q.phase)) return false;
+      return isBefore(parseISO(q.next_followup_date), new Date());
+    }).length
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
-        title="CRM"
-        subtitle={`${customers.length} kunder totalt`}
-        onAdd={() => {
-          resetForm();
-          setShowDialog(true);
-        }}
-        addLabel="Ny kunde"
+        title="CRM & Tilbudsoppfølging"
+        subtitle={`${stats.total} tilbud totalt • ${stats.active} aktive • ${stats.won} vunnet`}
       />
 
+      {/* Stats */}
       <div className="px-6 lg:px-8 py-6">
-        {/* Search */}
-        <div className="relative max-w-md mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Søk etter kunde..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 rounded-xl border-slate-200"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <FileText className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
+                <p className="text-sm text-slate-500">Totalt tilbud</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{stats.active}</p>
+                <p className="text-sm text-slate-500">Aktive tilbud</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{stats.won}</p>
+                <p className="text-sm text-slate-500">Vunnet</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{stats.overdue}</p>
+                <p className="text-sm text-slate-500">Forfalt oppfølging</p>
+              </div>
+            </div>
+          </Card>
         </div>
 
-        {/* Customers Grid */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1,2,3].map(i => (
-              <Card key={i} className="p-6 animate-pulse">
-                <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
-                <div className="h-4 bg-slate-200 rounded w-1/2" />
-              </Card>
-            ))}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <TabsList className="bg-white border shadow-sm">
+              <TabsTrigger value="quotes">Tilbudsoppfølging</TabsTrigger>
+              <TabsTrigger value="customers">Kunder</TabsTrigger>
+            </TabsList>
+            
+            <div className="flex gap-3">
+              {activeTab === 'quotes' && (
+                <Button 
+                  onClick={() => setShowQuoteDialog(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Nytt tilbud
+                </Button>
+              )}
+              {activeTab === 'customers' && (
+                <Button 
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    setShowCustomerDialog(true);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  Ny kunde
+                </Button>
+              )}
+            </div>
           </div>
-        ) : filteredCustomers.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="Ingen kunder"
-            description="Bygg opp kunderegisteret ditt"
-            actionLabel="Ny kunde"
-            onAction={() => {
-              resetForm();
-              setShowDialog(true);
-            }}
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredCustomers.map((customer) => (
-              <Card
-                key={customer.id}
-                className="p-6 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all"
-                onClick={() => {
-                  setSelectedCustomer(customer);
-                  setShowDetailDialog(true);
+
+          {/* Search & Filter */}
+          <div className="flex gap-4 mb-6">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder={activeTab === 'quotes' ? 'Søk etter tilbud...' : 'Søk etter kunde...'}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 rounded-xl border-slate-200"
+              />
+            </div>
+            {activeTab === 'quotes' && (
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant={phaseFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPhaseFilter('all')}
+                  className="rounded-xl"
+                >
+                  Alle
+                </Button>
+                <Button
+                  variant={phaseFilter === 'sendt' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPhaseFilter('sendt')}
+                  className="rounded-xl"
+                >
+                  Sendt
+                </Button>
+                <Button
+                  variant={phaseFilter === 'under_vurdering' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPhaseFilter('under_vurdering')}
+                  className="rounded-xl"
+                >
+                  Under vurdering
+                </Button>
+                <Button
+                  variant={phaseFilter === 'godkjent' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPhaseFilter('godkjent')}
+                  className="rounded-xl"
+                >
+                  Godkjent
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <TabsContent value="quotes" className="mt-0">
+            {filteredQuotes.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="Ingen tilbud"
+                description="Start med å registrere ditt første tilbud"
+                actionLabel="Nytt tilbud"
+                onAction={() => setShowQuoteDialog(true)}
+              />
+            ) : (
+              <div className="space-y-3">
+                {filteredQuotes.map((quote) => {
+                  const indicator = getFollowUpIndicator(quote);
+                  return (
+                    <Card
+                      key={quote.id}
+                      className="p-5 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all"
+                      onClick={() => setSelectedQuote(quote)}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold text-slate-900 truncate">
+                                  {quote.customer_name}
+                                </h3>
+                                <Badge className={`${getPhaseColor(quote.phase)} flex items-center gap-1`}>
+                                  {getPhaseIcon(quote.phase)}
+                                  {getPhaseLabel(quote.phase)}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-slate-500 mb-2">
+                                Ref: {quote.quote_reference} • {quote.quote_amount?.toLocaleString('nb-NO')} kr
+                              </p>
+                              {quote.description && (
+                                <p className="text-sm text-slate-600 mb-3 line-clamp-2">
+                                  {quote.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4 text-xs text-slate-500">
+                                <span>Sendt: {format(parseISO(quote.sent_date), 'dd.MM.yyyy', { locale: nb })}</span>
+                                <span>•</span>
+                                <span>Ansvarlig: {quote.responsible_name || quote.responsible_user}</span>
+                              </div>
+                            </div>
+                            {indicator && (
+                              <div className="flex flex-col items-end gap-2">
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium text-white ${indicator.color} flex items-center gap-1.5`}>
+                                  <Clock className="h-3 w-3" />
+                                  {indicator.text}
+                                </div>
+                                {quote.next_followup_date && (
+                                  <span className="text-xs text-slate-500">
+                                    {format(parseISO(quote.next_followup_date), 'dd.MM.yyyy', { locale: nb })}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="customers" className="mt-0">
+            {filteredCustomers.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Ingen kunder"
+                description="Bygg opp kunderegisteret ditt"
+                actionLabel="Ny kunde"
+                onAction={() => {
+                  setSelectedCustomer(null);
+                  setShowCustomerDialog(true);
                 }}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <Building2 className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-slate-900 truncate">{customer.name}</h3>
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredCustomers.map((customer) => (
+                  <Card
+                    key={customer.id}
+                    className="p-5 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all"
+                    onClick={() => {
+                      setSelectedCustomer(customer);
+                      setShowCustomerDialog(true);
+                    }}
+                  >
+                    <h3 className="font-semibold text-slate-900 mb-1">{customer.name}</h3>
                     {customer.contact_person && (
-                      <p className="text-sm text-slate-500 mt-1">{customer.contact_person}</p>
+                      <p className="text-sm text-slate-500 mb-2">{customer.contact_person}</p>
                     )}
-                    <div className="mt-3 space-y-1.5">
-                      {customer.email && (
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                          <Mail className="h-3.5 w-3.5" />
-                          <span className="truncate">{customer.email}</span>
-                        </div>
-                      )}
-                      {customer.phone && (
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                          <Phone className="h-3.5 w-3.5" />
-                          <span>{customer.phone}</span>
-                        </div>
-                      )}
-                    </div>
+                    {customer.email && (
+                      <p className="text-sm text-slate-600">{customer.email}</p>
+                    )}
+                    {customer.phone && (
+                      <p className="text-sm text-slate-600">{customer.phone}</p>
+                    )}
                     {customer.tags?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-3">
                         {customer.tags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs bg-slate-100 text-slate-600">
+                          <Badge key={tag} variant="secondary" className="text-xs">
                             {tag}
                           </Badge>
                         ))}
-                        {customer.tags.length > 3 && (
-                          <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-600">
-                            +{customer.tags.length - 3}
-                          </Badge>
-                        )}
                       </div>
                     )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
-      {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Ny kunde</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label>Firmanavn *</Label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                placeholder="Navn på firma eller person"
-                required
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Org.nummer</Label>
-                <Input
-                  value={formData.org_number}
-                  onChange={(e) => setFormData({...formData, org_number: e.target.value})}
-                  placeholder="123 456 789"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-              <div>
-                <Label>Kontaktperson</Label>
-                <Input
-                  value={formData.contact_person}
-                  onChange={(e) => setFormData({...formData, contact_person: e.target.value})}
-                  placeholder="Navn"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>E-post</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  placeholder="kunde@firma.no"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-              <div>
-                <Label>Telefon</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                  placeholder="+47 123 45 678"
-                  className="mt-1.5 rounded-xl"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Adresse</Label>
-              <Input
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-                placeholder="Gate, postnummer, sted"
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div>
-              <Label>Tags</Label>
-              <Input
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={handleAddTag}
-                placeholder="Trykk Enter for å legge til"
-                className="mt-1.5 rounded-xl"
-              />
-              {formData.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {formData.tags.map((tag) => (
-                    <Badge 
-                      key={tag} 
-                      variant="secondary" 
-                      className="bg-emerald-100 text-emerald-700 cursor-pointer"
-                      onClick={() => handleRemoveTag(tag)}
-                    >
-                      {tag} ×
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <Label>Notater</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                placeholder="Tilleggsinformasjon..."
-                rows={2}
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {createMutation.isPending ? 'Lagrer...' : 'Opprett kunde'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Dialogs */}
+      <CustomerDialog
+        open={showCustomerDialog}
+        onOpenChange={setShowCustomerDialog}
+        customer={selectedCustomer}
+        onCustomerChange={setSelectedCustomer}
+      />
 
-      {/* Detail Dialog */}
-      <Dialog open={showDetailDialog} onOpenChange={(open) => {
-        setShowDetailDialog(open);
-        if (!open) {
-          setEditMode(false);
-          setSelectedCustomer(null);
-        }
-      }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editMode ? 'Rediger kunde' : selectedCustomer?.name}</DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            editMode ? (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Same form fields as create */}
-                <div>
-                  <Label>Firmanavn *</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    required
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Org.nummer</Label>
-                    <Input
-                      value={formData.org_number}
-                      onChange={(e) => setFormData({...formData, org_number: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>Kontaktperson</Label>
-                    <Input
-                      value={formData.contact_person}
-                      onChange={(e) => setFormData({...formData, contact_person: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>E-post</Label>
-                    <Input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>Telefon</Label>
-                    <Input
-                      value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Adresse</Label>
-                  <Input
-                    value={formData.address}
-                    onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Notater</Label>
-                  <Textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                    rows={2}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setEditMode(false)} className="rounded-xl">
-                    Avbryt
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={updateMutation.isPending}
-                    className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-                  >
-                    {updateMutation.isPending ? 'Lagrer...' : 'Lagre endringer'}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  {selectedCustomer.contact_person && (
-                    <div className="flex items-center gap-3">
-                      <Users className="h-4 w-4 text-slate-400" />
-                      <span>{selectedCustomer.contact_person}</span>
-                    </div>
-                  )}
-                  {selectedCustomer.email && (
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-4 w-4 text-slate-400" />
-                      <a href={`mailto:${selectedCustomer.email}`} className="text-emerald-600 hover:underline">
-                        {selectedCustomer.email}
-                      </a>
-                    </div>
-                  )}
-                  {selectedCustomer.phone && (
-                    <div className="flex items-center gap-3">
-                      <Phone className="h-4 w-4 text-slate-400" />
-                      <a href={`tel:${selectedCustomer.phone}`} className="text-emerald-600 hover:underline">
-                        {selectedCustomer.phone}
-                      </a>
-                    </div>
-                  )}
-                  {selectedCustomer.address && (
-                    <div className="flex items-center gap-3">
-                      <MapPin className="h-4 w-4 text-slate-400" />
-                      <span>{selectedCustomer.address}</span>
-                    </div>
-                  )}
-                  {selectedCustomer.org_number && (
-                    <div className="flex items-center gap-3">
-                      <Building2 className="h-4 w-4 text-slate-400" />
-                      <span>Org.nr: {selectedCustomer.org_number}</span>
-                    </div>
-                  )}
-                </div>
+      <QuoteFollowUpDialog
+        open={showQuoteDialog}
+        onOpenChange={setShowQuoteDialog}
+        customers={customers}
+      />
 
-                {selectedCustomer.tags?.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {selectedCustomer.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="bg-emerald-100 text-emerald-700">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {selectedCustomer.notes && (
-                  <div>
-                    <Label className="text-slate-500">Notater</Label>
-                    <p className="mt-1 text-slate-600">{selectedCustomer.notes}</p>
-                  </div>
-                )}
-
-                <div className="flex justify-between pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => deleteMutation.mutate(selectedCustomer.id)}
-                    disabled={deleteMutation.isPending}
-                    className="text-red-600 border-red-200 hover:bg-red-50 rounded-xl"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Slett
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleEdit}
-                    className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Rediger
-                  </Button>
-                </div>
-              </div>
-            )
-          )}
-        </DialogContent>
-      </Dialog>
+      {selectedQuote && (
+        <QuoteFollowUpDetail
+          open={!!selectedQuote}
+          onOpenChange={(open) => !open && setSelectedQuote(null)}
+          quote={selectedQuote}
+          activities={activities.filter(a => a.quote_followup_id === selectedQuote.id)}
+        />
+      )}
     </div>
   );
 }

@@ -69,6 +69,7 @@ import HMS from './pages/HMS';
 import HMSHandbok from './pages/HMSHandbok';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
+import Kompetanser from './pages/Kompetanser';
 import Lonnsgrunnlag from './pages/Lonnsgrunnlag';
 import MinBedrift from './pages/MinBedrift';
 import Mottakskontroll from './pages/Mottakskontroll';
@@ -90,7 +91,6 @@ import SjekklisteMaler from './pages/SjekklisteMaler';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import Kompetanser from './pages/Kompetanser';
 import __Layout from './Layout.jsx';
 
 
@@ -117,6 +117,7 @@ export const PAGES = {
     "HMSHandbok": HMSHandbok,
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
+    "Kompetanser": Kompetanser,
     "Lonnsgrunnlag": Lonnsgrunnlag,
     "MinBedrift": MinBedrift,
     "Mottakskontroll": Mottakskontroll,
@@ -138,7 +139,6 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "Kompetanser": Kompetanser,
 }
 
 export const pagesConfig = {
