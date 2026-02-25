@@ -223,7 +223,7 @@ export default function CreateAssignmentDialog({
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Velg kompetanse..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[200px] overflow-y-auto">
                   {competencies
                     .filter(c => !requiredCompetencies.includes(c.name))
                     .map((comp) => (
