@@ -203,7 +203,8 @@ const ResourceRow = memo(({
   holidayName,
   style,
   activeDrag,
-  onDragUpdate
+  onDragUpdate,
+  currentSettings
 }) => {
   const [dragStart, setDragStart] = useState(null);
   const [resizeState, setResizeState] = useState(null);
