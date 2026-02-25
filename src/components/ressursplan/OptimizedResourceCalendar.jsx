@@ -175,8 +175,7 @@ const AssignmentBlock = memo(({
       <div
         onPointerDown={handleMainDragStart}
         className={cn(
-          "group relative select-none cursor-pointer m-0.5",
-          isMultiple && "flex-1",
+          "group relative select-none cursor-pointer m-0.5 flex-1",
           hasTopBorder && "border-t border-white"
         )}
         style={{
@@ -211,9 +210,8 @@ const AssignmentBlock = memo(({
     <div
       onPointerDown={handleMainDragStart}
       className={cn(
-        "group relative px-1.5 py-1 rounded-sm text-[10px] text-white truncate select-none font-medium m-0.5",
+        "group relative px-1.5 py-1 rounded-sm text-[10px] text-white truncate select-none font-medium m-0.5 flex-1",
         projectColor,
-        isMultiple && "flex-1",
         hasTopBorder && "border-t border-white",
         canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md",
         isDragging && "cursor-grabbing",
