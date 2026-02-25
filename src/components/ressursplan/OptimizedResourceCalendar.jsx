@@ -1041,6 +1041,13 @@ export default function OptimizedResourceCalendar({
 
             <ChevronRight className="h-4 w-4" />
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentDate(new Date())}
+            className="h-7 px-3 text-xs">
+            I dag
+          </Button>
         </div>
         <DropdownMenu open={settingsMenuOpen} onOpenChange={setSettingsMenuOpen}>
           <DropdownMenuTrigger asChild>
