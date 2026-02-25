@@ -575,7 +575,7 @@ const ResourceRow = memo(({
               <div className="space-y-1 min-h-[48px]">
                 {dayAssignments.map((assignment) => {
                   const isConflict = conflicts.some((c) => c.id === assignment.id);
-                  const isCurrentlyResizing = resizingAssignment?.id === assignment.id;
+                  const isCurrentlyResizing = activeResize?.assignment?.id === assignment.id;
                   const isDragging = activeDrag?.assignment?.id === assignment.id;
                   const dragTransform = isDragging && activeDrag?.snappedTransform ?
                   `translate(${activeDrag.snappedTransform.x}px, ${activeDrag.snappedTransform.y}px)` :
