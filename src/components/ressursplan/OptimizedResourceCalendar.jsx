@@ -21,6 +21,23 @@ const snapToInterval = (date) => {
   return addMinutes(new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()), snappedMinutes);
 };
 
+// Snap to day boundaries (for resize)
+const snapToDayBoundary = (date, edge, settings) => {
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  
+  if (edge === 'start') {
+    // Snap to start of workday
+    const [hours, minutes] = (settings.standard_start_tid || '07:00').split(':');
+    dayStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  } else {
+    // Snap to end of workday
+    const [hours, minutes] = (settings.standard_slutt_tid || '15:30').split(':');
+    dayStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  }
+  
+  return dayStart;
+};
+
 // Memoized assignment block component with resize handles and live drag
 const AssignmentBlock = memo(({
   assignment,
@@ -479,13 +496,14 @@ const ResourceRow = memo(({
       let newEnd = originalEnd;
 
       if (edge === 'start') {
-        // Resize left edge - adjust start date and snap
+        // Resize left edge - snap to day boundary (start of workday)
         const candidateStart = addDays(originalStart, daysDelta);
-        newStart = snapToInterval(candidateStart);
+        newStart = snapToDayBoundary(candidateStart, 'start', currentSettings);
         
-        // Minimum 30 minutes duration
-        if (differenceInMinutes(originalEnd, newStart) < 30) {
-          newStart = addMinutes(originalEnd, -30);
+        // Ensure start is before end
+        if (newStart >= originalEnd) {
+          newStart = addDays(originalEnd, -1);
+          newStart = snapToDayBoundary(newStart, 'start', currentSettings);
         }
         newEnd = originalEnd; // End stays fixed
         
@@ -495,13 +513,14 @@ const ResourceRow = memo(({
           newStart: format(newStart, 'yyyy-MM-dd HH:mm')
         });
       } else if (edge === 'end') {
-        // Resize right edge - adjust end date and snap
+        // Resize right edge - snap to day boundary (end of workday)
         const candidateEnd = addDays(originalEnd, daysDelta);
-        newEnd = snapToInterval(candidateEnd);
+        newEnd = snapToDayBoundary(candidateEnd, 'end', currentSettings);
         
-        // Minimum 30 minutes duration
-        if (differenceInMinutes(newEnd, originalStart) < 30) {
-          newEnd = addMinutes(originalStart, 30);
+        // Ensure end is after start
+        if (newEnd <= originalStart) {
+          newEnd = addDays(originalStart, 1);
+          newEnd = snapToDayBoundary(newEnd, 'end', currentSettings);
         }
         newStart = originalStart; // Start stays fixed
         
