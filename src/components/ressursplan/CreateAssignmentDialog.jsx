@@ -30,6 +30,12 @@ export default function CreateAssignmentDialog({
     initialData: []
   });
 
+  const { data: competencies = [] } = useQuery({
+    queryKey: ['competencies'],
+    queryFn: () => base44.entities.Competency.filter({ is_active: true }),
+    initialData: []
+  });
+
   const currentSettings = settings[0] || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
 
   const getDefaultDateTime = (dateOverride = null) => {
