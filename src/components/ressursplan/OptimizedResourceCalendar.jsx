@@ -613,7 +613,7 @@ const ResourceRow = memo(({
           return (
             <div
               key={day.toISOString()}
-              style={{ width: style.dayWidth }}
+              style={{ width: style.dayWidth, height: '56px' }}
               className={cn(
                 "flex-shrink-0 p-0.5 border-l border-t border-slate-200 relative transition-colors",
                 isWeekend && "bg-slate-100/60",
@@ -645,7 +645,7 @@ const ResourceRow = memo(({
                   {dayHolidayName}
                 </div>
               }
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col h-full gap-0">
                 {dayAssignments.map((assignment, idx) => {
                   const isConflict = conflicts.some((c) => c.id === assignment.id);
                   const isCurrentlyResizing = activeResize?.assignment?.id === assignment.id;
