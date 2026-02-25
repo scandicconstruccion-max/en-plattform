@@ -244,15 +244,78 @@ export default function CreateAssignmentDialog({
           </div>
 
           {formData.assignment_type === 'arbeid' && (
-            <div>
-              <Label>Rolle på prosjekt</Label>
-              <Input
-                value={formData.rolle_pa_prosjekt}
-                onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
-                placeholder="f.eks. Prosjektleder, Tømrer, Montør"
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
+            <>
+              <div>
+                <Label>Rolle på prosjekt</Label>
+                <Input
+                  value={formData.rolle_pa_prosjekt}
+                  onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
+                  placeholder="f.eks. Prosjektleder, Tømrer, Montør"
+                  className="mt-1.5 rounded-xl"
+                />
+              </div>
+
+              {/* Required Competencies */}
+              <div>
+                <Label>Nødvendige kompetanser (valgfritt)</Label>
+                <p className="text-xs text-slate-500 mt-1 mb-2">
+                  Definer hvilke kompetanser som kreves for denne aktiviteten
+                </p>
+                
+                <div className="flex gap-2 mb-3">
+                  <Input
+                    value={competencyInput}
+                    onChange={(e) => setCompetencyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && competencyInput.trim()) {
+                        e.preventDefault();
+                        if (!requiredCompetencies.includes(competencyInput.trim())) {
+                          setRequiredCompetencies([...requiredCompetencies, competencyInput.trim()]);
+                        }
+                        setCompetencyInput('');
+                      }
+                    }}
+                    placeholder="f.eks. Tømrer, Elektriker"
+                    className="rounded-xl"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (competencyInput.trim() && !requiredCompetencies.includes(competencyInput.trim())) {
+                        setRequiredCompetencies([...requiredCompetencies, competencyInput.trim()]);
+                        setCompetencyInput('');
+                      }
+                    }}
+                    variant="outline"
+                    className="rounded-xl"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {requiredCompetencies.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {requiredCompetencies.map((comp, idx) => (
+                      <Badge
+                        key={idx}
+                        className="bg-blue-100 text-blue-700 px-3 py-1 flex items-center gap-2"
+                      >
+                        {comp}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRequiredCompetencies(requiredCompetencies.filter((_, i) => i !== idx));
+                          }}
+                          className="hover:text-blue-900"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
           <div>
