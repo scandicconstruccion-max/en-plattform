@@ -474,6 +474,7 @@ const ResourceRow = memo(({
     const originalStart = parseISO(assignment.start_dato_tid);
     const originalEnd = parseISO(assignment.slutt_dato_tid);
     const dayWidth = style.dayWidth || 120;
+    const settings = style.settings || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
 
     const resizeInfo = { 
       assignment, 
@@ -498,12 +499,12 @@ const ResourceRow = memo(({
       if (edge === 'start') {
         // Resize left edge - snap to day boundary (start of workday)
         const candidateStart = addDays(originalStart, daysDelta);
-        newStart = snapToDayBoundary(candidateStart, 'start', currentSettings);
+        newStart = snapToDayBoundary(candidateStart, 'start', settings);
         
         // Ensure start is before end
         if (newStart >= originalEnd) {
           newStart = addDays(originalEnd, -1);
-          newStart = snapToDayBoundary(newStart, 'start', currentSettings);
+          newStart = snapToDayBoundary(newStart, 'start', settings);
         }
         newEnd = originalEnd; // End stays fixed
         
@@ -515,12 +516,12 @@ const ResourceRow = memo(({
       } else if (edge === 'end') {
         // Resize right edge - snap to day boundary (end of workday)
         const candidateEnd = addDays(originalEnd, daysDelta);
-        newEnd = snapToDayBoundary(candidateEnd, 'end', currentSettings);
+        newEnd = snapToDayBoundary(candidateEnd, 'end', settings);
         
         // Ensure end is after start
         if (newEnd <= originalStart) {
           newEnd = addDays(originalStart, 1);
-          newEnd = snapToDayBoundary(newEnd, 'end', currentSettings);
+          newEnd = snapToDayBoundary(newEnd, 'end', settings);
         }
         newStart = originalStart; // Start stays fixed
         
@@ -858,7 +859,8 @@ export default function OptimizedResourceCalendar({
       resourceColumnCollapsed,
       resourceIndex: index,
       totalResources: resources.length,
-      getResourceId
+      getResourceId,
+      settings: currentSettings
     };
 
     return (
