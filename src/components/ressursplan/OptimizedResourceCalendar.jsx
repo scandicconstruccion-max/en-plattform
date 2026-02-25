@@ -35,7 +35,9 @@ const AssignmentBlock = memo(({
   isResizing,
   dragTransform,
   dragConflict,
-  resource
+  resource,
+  resizePreview,
+  dayWidth
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
@@ -91,6 +93,32 @@ const AssignmentBlock = memo(({
     }
   }, [isResizing]);
 
+  // Calculate visual width during resize
+  const getVisualStyle = () => {
+    if (!isResizingLocal || !resizePreview) return {};
+    
+    const originalStart = parseISO(assignment.start_dato_tid);
+    const originalEnd = parseISO(assignment.slutt_dato_tid);
+    const previewStart = resizePreview.previewStart;
+    const previewEnd = resizePreview.previewEnd;
+    
+    // Calculate new width based on preview dates
+    const originalDays = differenceInMinutes(originalEnd, originalStart) / (24 * 60);
+    const previewDays = differenceInMinutes(previewEnd, previewStart) / (24 * 60);
+    const newWidth = previewDays * dayWidth;
+    
+    console.log('🎨 Visual resize:', { 
+      originalDays: originalDays.toFixed(2), 
+      previewDays: previewDays.toFixed(2),
+      newWidth: newWidth.toFixed(1)
+    });
+    
+    return {
+      width: `${newWidth}px`,
+      transition: 'none'
+    };
+  };
+
   // Assignment type colors
   const type = assignment.assignment_type || 'arbeid';
   const isAbsence = type !== 'arbeid';
@@ -137,6 +165,8 @@ const AssignmentBlock = memo(({
         }
 
   // Regular work assignment - full block
+  const visualStyle = getVisualStyle();
+  
   return (
     <div
       onPointerDown={handleMainDragStart}
@@ -145,16 +175,17 @@ const AssignmentBlock = memo(({
         projectColor,
         canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md hover:scale-[1.02]",
         isDragging && "cursor-grabbing",
-        (isResizing || isResizingLocal) && "opacity-50 scale-95",
+        (isResizing || isResizingLocal) && "opacity-70",
         (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
       )}
       style={{
         transform: dragTransform || 'none',
-        transition: isDragging ? 'none' : 'all 0.2s',
+        transition: isDragging || isResizingLocal ? 'none' : 'all 0.2s',
         opacity: isDragging ? 0.85 : 1,
         boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.2)' : undefined,
-        willChange: isDragging ? 'transform' : 'auto',
-        zIndex: isDragging ? 50 : 'auto'
+        willChange: isDragging || isResizingLocal ? 'transform, width' : 'auto',
+        zIndex: isDragging ? 50 : 'auto',
+        ...visualStyle
       }}>
 
        {canEdit && !isDragging &&
@@ -548,7 +579,9 @@ const ResourceRow = memo(({
                       isConflict={isConflict}
                       dragTransform={dragTransform}
                       dragConflict={dragConflict}
-                      resource={resource} />);
+                      resource={resource}
+                      resizePreview={isCurrentlyResizing ? activeResize : null}
+                      dayWidth={style.dayWidth} />);
 
 
                 })}
