@@ -51,6 +51,8 @@ export default function CreateAssignmentDialog({
   });
 
   const [selectedResources, setSelectedResources] = useState([]);
+  const [competencyInput, setCompetencyInput] = useState('');
+  const [requiredCompetencies, setRequiredCompetencies] = useState([]);
 
   useEffect(() => {
      if (open) {

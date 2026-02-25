@@ -3,7 +3,7 @@ import { FixedSizeList as List } from 'react-window';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, AlertTriangle } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { format, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, subWeeks, subMonths, isSameDay, isWithinInterval, parseISO, endOfWeek, endOfMonth, eachDayOfInterval, differenceInMinutes, addMinutes, getDay } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -56,7 +56,8 @@ const AssignmentBlock = memo(({
   resizePreview,
   dayWidth,
   isMultiple = false,
-  hasTopBorder = false
+  hasTopBorder = false,
+  hasCompetencyIssue = false
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
@@ -216,7 +217,8 @@ const AssignmentBlock = memo(({
         canEdit && !isResizing && !isResizingLocal && "cursor-pointer hover:shadow-md",
         isDragging && "cursor-grabbing",
         (isResizing || isResizingLocal) && "opacity-70",
-        (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1"
+        (isConflict || dragConflict) && "ring-2 ring-red-500 ring-offset-1",
+        hasCompetencyIssue && "ring-2 ring-orange-500 ring-offset-1"
       )}
       style={{
         transform: dragTransform || 'none',
@@ -262,8 +264,11 @@ const AssignmentBlock = memo(({
 
          </>
       }
-       <span className="pointer-events-auto cursor-pointer block leading-tight flex items-center h-full">
-         {label}
+       <span className="pointer-events-auto cursor-pointer block leading-tight flex items-center justify-between h-full">
+         <span className="truncate flex-1">{label}</span>
+         {hasCompetencyIssue && (
+           <AlertTriangle className="h-3 w-3 flex-shrink-0 ml-1" title="Mangler nødvendige kompetanser" />
+         )}
        </span>
      </div>);
 

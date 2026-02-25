@@ -24,7 +24,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Trash2, DollarSign, Lock } from 'lucide-react';
+import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Trash2, DollarSign, Lock, Plus, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -58,8 +58,10 @@ export default function Ansatte() {
     emergency_contact_name: '',
     emergency_contact_phone: '',
     notes: '',
-    is_active: true
+    is_active: true,
+    competencies: []
   });
+  const [competencyInput, setCompetencyInput] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -127,8 +129,10 @@ export default function Ansatte() {
       emergency_contact_name: '',
       emergency_contact_phone: '',
       notes: '',
-      is_active: true
+      is_active: true,
+      competencies: []
     });
+    setCompetencyInput('');
   };
 
   const handleEdit = (employee) => {
@@ -157,7 +161,8 @@ export default function Ansatte() {
       emergency_contact_name: employee.emergency_contact_name || '',
       emergency_contact_phone: employee.emergency_contact_phone || '',
       notes: employee.notes || '',
-      is_active: employee.is_active !== false
+      is_active: employee.is_active !== false,
+      competencies: employee.competencies || []
     });
     setShowDialog(true);
   };
@@ -351,10 +356,11 @@ export default function Ansatte() {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <Tabs defaultValue="personal" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="personal">Personalia</TabsTrigger>
                 <TabsTrigger value="employment">Ansettelse</TabsTrigger>
-                {canViewSalary && <TabsTrigger value="salary">Lønnsinnstillinger</TabsTrigger>}
+                <TabsTrigger value="competencies">Kompetanser</TabsTrigger>
+                {canViewSalary && <TabsTrigger value="salary">Lønn</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="personal" className="space-y-6 mt-6">
@@ -540,6 +546,83 @@ export default function Ansatte() {
                     rows={3}
                     className="mt-1.5 rounded-xl"
                   />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="competencies" className="space-y-6 mt-6">
+                <div>
+                  <h4 className="font-medium text-slate-900 dark:text-white mb-3">Kompetanser</h4>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    Definer hvilke kompetanser denne ansatte har for ressursplanlegging
+                  </p>
+                  
+                  {/* Add new competency */}
+                  <div className="flex gap-2 mb-4">
+                    <Input
+                      value={competencyInput}
+                      onChange={(e) => setCompetencyInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && competencyInput.trim()) {
+                          e.preventDefault();
+                          if (!formData.competencies.includes(competencyInput.trim())) {
+                            setFormData({
+                              ...formData,
+                              competencies: [...formData.competencies, competencyInput.trim()]
+                            });
+                          }
+                          setCompetencyInput('');
+                        }
+                      }}
+                      placeholder="Skriv inn kompetanse (f.eks. Tømrer, Elektriker)"
+                      className="rounded-xl"
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (competencyInput.trim() && !formData.competencies.includes(competencyInput.trim())) {
+                          setFormData({
+                            ...formData,
+                            competencies: [...formData.competencies, competencyInput.trim()]
+                          });
+                          setCompetencyInput('');
+                        }
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Legg til
+                    </Button>
+                  </div>
+
+                  {/* Display competencies */}
+                  {formData.competencies.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.competencies.map((comp, idx) => (
+                        <Badge
+                          key={idx}
+                          className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 text-sm flex items-center gap-2"
+                        >
+                          {comp}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                competencies: formData.competencies.filter((_, i) => i !== idx)
+                              });
+                            }}
+                            className="hover:text-emerald-900"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                      Ingen kompetanser lagt til ennå
+                    </p>
+                  )}
                 </div>
               </TabsContent>
 

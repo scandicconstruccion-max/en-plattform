@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Plus, X } from 'lucide-react';
 
 export default function EditAssignmentDialog({
   open,
@@ -20,6 +22,8 @@ export default function EditAssignmentDialog({
     kommentar: '',
     status: 'planlagt'
   });
+  const [competencyInput, setCompetencyInput] = useState('');
+  const [requiredCompetencies, setRequiredCompetencies] = useState([]);
 
   useEffect(() => {
     if (assignment) {
@@ -30,12 +34,17 @@ export default function EditAssignmentDialog({
         kommentar: assignment.kommentar || '',
         status: assignment.status || 'planlagt'
       });
+      setRequiredCompetencies(assignment.required_competencies || []);
+      setCompetencyInput('');
     }
   }, [assignment, open]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit({
+      ...formData,
+      required_competencies: requiredCompetencies
+    });
   };
 
   if (!assignment) return null;
@@ -106,6 +115,69 @@ export default function EditAssignmentDialog({
               className="mt-1.5 rounded-xl"
             />
           </div>
+
+          {/* Required Competencies */}
+          {assignment?.assignment_type === 'arbeid' && (
+            <div>
+              <Label>Nødvendige kompetanser</Label>
+              <p className="text-xs text-slate-500 mt-1 mb-2">
+                Kompetanser som kreves for denne aktiviteten
+              </p>
+              
+              <div className="flex gap-2 mb-3">
+                <Input
+                  value={competencyInput}
+                  onChange={(e) => setCompetencyInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && competencyInput.trim()) {
+                      e.preventDefault();
+                      if (!requiredCompetencies.includes(competencyInput.trim())) {
+                        setRequiredCompetencies([...requiredCompetencies, competencyInput.trim()]);
+                      }
+                      setCompetencyInput('');
+                    }
+                  }}
+                  placeholder="f.eks. Tømrer, Elektriker"
+                  className="rounded-xl"
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (competencyInput.trim() && !requiredCompetencies.includes(competencyInput.trim())) {
+                      setRequiredCompetencies([...requiredCompetencies, competencyInput.trim()]);
+                      setCompetencyInput('');
+                    }
+                  }}
+                  variant="outline"
+                  className="rounded-xl"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {requiredCompetencies.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {requiredCompetencies.map((comp, idx) => (
+                    <Badge
+                      key={idx}
+                      className="bg-blue-100 text-blue-700 px-3 py-1 flex items-center gap-2"
+                    >
+                      {comp}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRequiredCompetencies(requiredCompetencies.filter((_, i) => i !== idx));
+                        }}
+                        className="hover:text-blue-900"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <Label>Kommentar</Label>
