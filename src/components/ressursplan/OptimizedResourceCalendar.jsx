@@ -525,9 +525,15 @@ const ResourceRow = memo(({
           finalStart.toISOString(),
           finalEnd.toISOString()
         );
+        
+        // Keep activeResize for a brief moment to prevent visual jump
+        // until React Query cache updates
+        setTimeout(() => {
+          setActiveResize(null);
+        }, 50);
+      } else {
+        setActiveResize(null);
       }
-
-      setActiveResize(null);
     };
 
     document.addEventListener('pointermove', handlePointerMove);
