@@ -754,7 +754,7 @@ export default function OptimizedResourceCalendar({
   const handleCellClick = useCallback((resourceId, startTime, endTime) => {
     if (!canEdit) return;
     onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
-  }, [canEdit, onCreateAssignment, currentSettings]);
+  }, [canEdit, onCreateAssignment]);
 
   const isHolidayFunc = useCallback((date) => {
     return showHolidays && isNorwegianHoliday(date);
