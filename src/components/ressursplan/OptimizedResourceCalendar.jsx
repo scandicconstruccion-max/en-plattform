@@ -1006,7 +1006,7 @@ export default function OptimizedResourceCalendar({
         })}
       </div>);
 
-  }, [resources, viewDates, allAssignments, projects, canEdit, dayWidth, conflicts, activeDrag, isHolidayFunc, getHolidayNameFunc, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onCreateAssignment]);
+  }, [resources, viewDates, allAssignments, projects, canEdit, dayWidth, conflicts, activeDrag, isHolidayFunc, getHolidayNameFunc, getProjectColor, getProjectName, onAssignmentDrop, onAssignmentClick, onCreateAssignment, currentSettings]);
 
   return (
     <>
