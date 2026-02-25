@@ -11,7 +11,7 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { format } from 'date-fns';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Calendar } from 'lucide-react';
 
 export default function CreateAssignmentDialog({
   open,
@@ -49,7 +49,9 @@ export default function CreateAssignmentDialog({
     start_dato_tid: '',
     slutt_dato_tid: '',
     rolle_pa_prosjekt: '',
-    kommentar: ''
+    kommentar: '',
+    include_saturday: currentSettings.default_include_saturday || false,
+    include_sunday: currentSettings.default_include_sunday || false
   });
 
   const [selectedResources, setSelectedResources] = useState([]);
@@ -102,7 +104,11 @@ export default function CreateAssignmentDialog({
       alert('Velg prosjekt for arbeidsallokering');
       return;
     }
-    onSubmit({ ...formData, resource_ids: selectedResources });
+    onSubmit({ 
+      ...formData, 
+      resource_ids: selectedResources,
+      required_competencies: requiredCompetencies
+    });
   };
 
   const resetForm = () => {
@@ -114,9 +120,13 @@ export default function CreateAssignmentDialog({
       start_dato_tid: '',
       slutt_dato_tid: '',
       rolle_pa_prosjekt: '',
-      kommentar: ''
+      kommentar: '',
+      include_saturday: currentSettings.default_include_saturday || false,
+      include_sunday: currentSettings.default_include_sunday || false
     });
     setSelectedResources([]);
+    setRequiredCompetencies([]);
+    setCompetencyInput('');
   };
 
   const handleClose = (open) => {
@@ -242,6 +252,39 @@ export default function CreateAssignmentDialog({
                 required
                 className="mt-1.5 rounded-xl"
               />
+            </div>
+          </div>
+
+          {/* Weekend Inclusion Options */}
+          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="h-4 w-4 text-slate-600" />
+              <Label className="text-sm font-medium">Helgedager</Label>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Som standard hoppes helger over. Huk av for å inkludere spesifikke helgedager i aktiviteten.
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="include_saturday"
+                  checked={formData.include_saturday}
+                  onCheckedChange={(checked) => setFormData({ ...formData, include_saturday: checked })}
+                />
+                <label htmlFor="include_saturday" className="text-sm cursor-pointer">
+                  Inkluder lørdag
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="include_sunday"
+                  checked={formData.include_sunday}
+                  onCheckedChange={(checked) => setFormData({ ...formData, include_sunday: checked })}
+                />
+                <label htmlFor="include_sunday" className="text-sm cursor-pointer">
+                  Inkluder søndag
+                </label>
+              </div>
             </div>
           </div>
 

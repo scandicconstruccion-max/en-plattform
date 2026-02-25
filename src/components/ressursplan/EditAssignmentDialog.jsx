@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, X, Calendar } from 'lucide-react';
 
 export default function EditAssignmentDialog({
   open,
@@ -20,7 +21,9 @@ export default function EditAssignmentDialog({
     slutt_dato_tid: '',
     rolle_pa_prosjekt: '',
     kommentar: '',
-    status: 'planlagt'
+    status: 'planlagt',
+    include_saturday: false,
+    include_sunday: false
   });
   const [competencyInput, setCompetencyInput] = useState('');
   const [requiredCompetencies, setRequiredCompetencies] = useState([]);
@@ -32,7 +35,9 @@ export default function EditAssignmentDialog({
         slutt_dato_tid: assignment.slutt_dato_tid ? assignment.slutt_dato_tid.slice(0, 16) : '',
         rolle_pa_prosjekt: assignment.rolle_pa_prosjekt || '',
         kommentar: assignment.kommentar || '',
-        status: assignment.status || 'planlagt'
+        status: assignment.status || 'planlagt',
+        include_saturday: assignment.include_saturday || false,
+        include_sunday: assignment.include_sunday || false
       });
       setRequiredCompetencies(assignment.required_competencies || []);
       setCompetencyInput('');
@@ -85,6 +90,39 @@ export default function EditAssignmentDialog({
                 required
                 className="mt-1.5 rounded-xl"
               />
+            </div>
+          </div>
+
+          {/* Weekend Inclusion Options */}
+          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="h-4 w-4 text-slate-600" />
+              <Label className="text-sm font-medium">Helgedager</Label>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Som standard hoppes helger over. Huk av for å inkludere spesifikke helgedager i aktiviteten.
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="edit_include_saturday"
+                  checked={formData.include_saturday}
+                  onCheckedChange={(checked) => setFormData({ ...formData, include_saturday: checked })}
+                />
+                <label htmlFor="edit_include_saturday" className="text-sm cursor-pointer">
+                  Inkluder lørdag
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="edit_include_sunday"
+                  checked={formData.include_sunday}
+                  onCheckedChange={(checked) => setFormData({ ...formData, include_sunday: checked })}
+                />
+                <label htmlFor="edit_include_sunday" className="text-sm cursor-pointer">
+                  Inkluder søndag
+                </label>
+              </div>
             </div>
           </div>
 
