@@ -45,6 +45,7 @@ const moduleIcons = {
   ansatte: Users,
   minbedrift: Building2,
   brukeradmin: UserCog,
+  kompetanser: ShieldAlert,
   hms: ShieldAlert,
   sja: ClipboardCheck,
   ruh: AlertCircle,
@@ -75,6 +76,7 @@ const moduleLabels = {
   ansatte: 'Ansatte',
   minbedrift: 'Min bedrift',
   brukeradmin: 'Brukere',
+  kompetanser: 'Kompetanser',
   hms: 'HMS & Risiko',
   sja: 'SJA',
   ruh: 'RUH',
@@ -106,6 +108,7 @@ const modulePages = {
   ansatte: 'Ansatte',
   minbedrift: 'MinBedrift',
   brukeradmin: 'BrukerAdmin',
+  kompetanser: 'Kompetanser',
   hms: 'HMS',
   sja: 'SJA',
   ruh: 'RUH',
@@ -157,7 +160,7 @@ export default function Layout({ children, currentPageName }) {
     },
     {
       title: 'SALG & ADMIN',
-      modules: ['crm', 'minbedrift', 'brukeradmin']
+      modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser']
     }
   ];
 

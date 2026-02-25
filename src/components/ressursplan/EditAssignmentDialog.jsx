@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, X, Calendar } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
 
 export default function EditAssignmentDialog({
   open,
@@ -16,6 +18,11 @@ export default function EditAssignmentDialog({
   onSubmit,
   isLoading
 }) {
+  const { data: competencies = [] } = useQuery({
+    queryKey: ['competencies'],
+    queryFn: () => base44.entities.Competency.filter({ is_active: true }),
+    initialData: []
+  });
   const [formData, setFormData] = useState({
     start_dato_tid: '',
     slutt_dato_tid: '',
@@ -159,42 +166,39 @@ export default function EditAssignmentDialog({
             <div>
               <Label>Nødvendige kompetanser</Label>
               <p className="text-xs text-slate-500 mt-1 mb-2">
-                Kompetanser som kreves for denne aktiviteten
+                Velg kompetanser som kreves for denne aktiviteten
               </p>
               
-              <div className="flex gap-2 mb-3">
-                <Input
-                  value={competencyInput}
-                  onChange={(e) => setCompetencyInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && competencyInput.trim()) {
-                      e.preventDefault();
-                      if (!requiredCompetencies.includes(competencyInput.trim())) {
-                        setRequiredCompetencies([...requiredCompetencies, competencyInput.trim()]);
-                      }
-                      setCompetencyInput('');
-                    }
-                  }}
-                  placeholder="f.eks. Tømrer, Elektriker"
-                  className="rounded-xl"
-                />
-                <Button
-                  type="button"
-                  onClick={() => {
-                    if (competencyInput.trim() && !requiredCompetencies.includes(competencyInput.trim())) {
-                      setRequiredCompetencies([...requiredCompetencies, competencyInput.trim()]);
-                      setCompetencyInput('');
-                    }
-                  }}
-                  variant="outline"
-                  className="rounded-xl"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              <Select
+                value=""
+                onValueChange={(value) => {
+                  if (!requiredCompetencies.includes(value)) {
+                    setRequiredCompetencies([...requiredCompetencies, value]);
+                  }
+                }}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Velg kompetanse..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {competencies
+                    .filter(c => !requiredCompetencies.includes(c.name))
+                    .map((comp) => (
+                      <SelectItem key={comp.id} value={comp.name}>
+                        {comp.name}
+                      </SelectItem>
+                    ))
+                  }
+                  {competencies.filter(c => !requiredCompetencies.includes(c.name)).length === 0 && (
+                    <div className="px-2 py-1.5 text-sm text-slate-500">
+                      Alle kompetanser er valgt
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
 
               {requiredCompetencies.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mt-3">
                   {requiredCompetencies.map((comp, idx) => (
                     <Badge
                       key={idx}
