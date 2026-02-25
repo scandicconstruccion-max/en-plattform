@@ -417,7 +417,8 @@ export default function Ressursplan() {
     department: e.department || 'Ingen avdeling',
     normal_hours_per_day: e.normal_hours_per_day || 8,
     telefon: e.phone,
-    epost: e.email
+    epost: e.email,
+    competencies: e.competencies || []
   })),
   ...externals.map((e) => ({
     id: e.id,
@@ -428,7 +429,8 @@ export default function Ressursplan() {
     normal_hours_per_day: 8,
     firma: e.firma,
     telefon: e.telefon,
-    epost: e.epost
+    epost: e.epost,
+    competencies: []
   }))];
 
 
