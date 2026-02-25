@@ -11,6 +11,8 @@ import EmptyState from '@/components/shared/EmptyState';
 import CustomerDialog from '@/components/crm/CustomerDialog';
 import QuoteFollowUpDialog from '@/components/crm/QuoteFollowUpDialog';
 import QuoteFollowUpDetail from '@/components/crm/QuoteFollowUpDetail';
+import FetchQuoteDialog from '@/components/crm/FetchQuoteDialog';
+import UploadQuoteDialog from '@/components/crm/UploadQuoteDialog';
 import { 
   Users, 
   Search, 
@@ -29,6 +31,8 @@ export default function CRM() {
   const [search, setSearch] = useState('');
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [showQuoteDialog, setShowQuoteDialog] = useState(false);
+  const [showFetchQuoteDialog, setShowFetchQuoteDialog] = useState(false);
+  const [showUploadQuoteDialog, setShowUploadQuoteDialog] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [phaseFilter, setPhaseFilter] = useState('all');
@@ -46,6 +50,11 @@ export default function CRM() {
   const { data: activities = [] } = useQuery({
     queryKey: ['followUpActivities'],
     queryFn: () => base44.entities.FollowUpActivity.list('-activity_date'),
+  });
+
+  const { data: existingQuotes = [] } = useQuery({
+    queryKey: ['quotes'],
+    queryFn: () => base44.entities.Quote.list('-created_date'),
   });
 
   const getFollowUpIndicator = (quote) => {
@@ -190,13 +199,23 @@ export default function CRM() {
             
             <div className="flex gap-3">
               {activeTab === 'quotes' && (
-                <Button 
-                  onClick={() => setShowQuoteDialog(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Nytt tilbud
-                </Button>
+                <>
+                  <Button 
+                    onClick={() => setShowFetchQuoteDialog(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Hent tilbud
+                  </Button>
+                  <Button 
+                    onClick={() => setShowUploadQuoteDialog(true)}
+                    variant="outline"
+                    className="rounded-xl"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Last opp tilbud
+                  </Button>
+                </>
               )}
               {activeTab === 'customers' && (
                 <Button 
@@ -392,6 +411,19 @@ export default function CRM() {
       <QuoteFollowUpDialog
         open={showQuoteDialog}
         onOpenChange={setShowQuoteDialog}
+        customers={customers}
+      />
+
+      <FetchQuoteDialog
+        open={showFetchQuoteDialog}
+        onOpenChange={setShowFetchQuoteDialog}
+        existingQuotes={existingQuotes}
+        customers={customers}
+      />
+
+      <UploadQuoteDialog
+        open={showUploadQuoteDialog}
+        onOpenChange={setShowUploadQuoteDialog}
         customers={customers}
       />
 
