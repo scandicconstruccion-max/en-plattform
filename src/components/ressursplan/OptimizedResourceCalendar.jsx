@@ -450,69 +450,6 @@ const ResourceRow = memo(({
 
   return (
     <div style={style} className="flex border-t border-slate-200">
-      <div
-        className={cn(
-          "sticky left-0 bg-white z-10 border-r border-slate-200 flex-shrink-0",
-          collapsed ? "w-16 px-1.5 py-2" : "w-52 px-3 py-2"
-        )}
-        style={{ width: colWidth }}>
-
-        {collapsed ?
-        <div className="flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
-              <span className="text-xs font-semibold text-emerald-700">
-                {(() => {
-                const names = resource.navn?.split(' ') || [];
-                if (names.length >= 2) {
-                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                }
-                return resource.navn?.charAt(0) || 'R';
-              })()}
-              </span>
-            </div>
-            <span className={cn(
-            "px-1 py-0.5 rounded text-[9px] font-bold",
-            weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
-            weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
-            "bg-green-100 text-green-700"
-          )}>
-              {weekAllocationPercentage}%
-            </span>
-          </div> :
-
-        <div className="flex items-start gap-2">
-            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-semibold text-emerald-700">
-                {(() => {
-                const names = resource.navn?.split(' ') || [];
-                if (names.length >= 2) {
-                  return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                }
-                return resource.navn?.charAt(0) || 'R';
-              })()}
-              </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
-                  {resource.navn}
-                </p>
-                <span className={cn(
-                "px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0",
-                weekAllocationPercentage >= 100 ? "bg-red-100 text-red-700" :
-                weekAllocationPercentage >= 80 ? "bg-amber-100 text-amber-700" :
-                "bg-green-100 text-green-700"
-              )}>
-                  {weekAllocationPercentage}%
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
-                {resource.type === 'employee' ? resource.stilling : resource.rolle}
-              </p>
-            </div>
-          </div>
-        }
-      </div>
       <div className="flex">
         {viewDates.map((day) => {
           const dayAssignments = getAssignmentsForDay(day);
