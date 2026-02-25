@@ -389,45 +389,35 @@ const ResourceRow = memo(({
     e.stopPropagation();
     e.preventDefault();
 
-    const startPos = { x: e.clientX, y: e.clientY };
+    const startPos = { x: e.clientX };
     const originalStart = parseISO(assignment.start_dato_tid);
     const originalEnd = parseISO(assignment.slutt_dato_tid);
+    const dayWidth = style.dayWidth || 120;
 
-    let currentPreviewStart = originalStart;
-    let currentPreviewEnd = originalEnd;
-
-    setResizeState({ assignment, edge, startPos, originalStart, originalEnd });
+    setActiveResize({ assignment, edge, originalStart, originalEnd });
 
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
 
-      // Calculate time delta based on horizontal movement
       const deltaX = moveEvent.clientX - startPos.x;
-      const cellDayWidth = 120; // Reference width for calculation
-      const daysDelta = Math.round(deltaX / cellDayWidth);
+      const daysDelta = Math.round(deltaX / dayWidth);
 
       let newStart = originalStart;
       let newEnd = originalEnd;
 
       if (edge === 'start') {
         newStart = addDays(originalStart, daysDelta);
-        // Ensure minimum 30 minute duration
         if (differenceInMinutes(originalEnd, newStart) < 30) {
           newStart = addMinutes(originalEnd, -30);
         }
       } else if (edge === 'end') {
         newEnd = addDays(originalEnd, daysDelta);
-        // Ensure minimum 30 minute duration
         if (differenceInMinutes(newEnd, originalStart) < 30) {
           newEnd = addMinutes(originalStart, 30);
         }
       }
 
-      currentPreviewStart = newStart;
-      currentPreviewEnd = newEnd;
-
-      // Update visual preview
-      setResizeState((prev) => ({
+      setActiveResize(prev => ({
         ...prev,
         previewStart: newStart,
         previewEnd: newEnd
@@ -437,12 +427,12 @@ const ResourceRow = memo(({
     const handlePointerUp = () => {
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
+      document.body.style.cursor = '';
 
-      if (currentPreviewStart && currentPreviewEnd) {
-        const finalStart = snapToInterval(currentPreviewStart);
-        const finalEnd = snapToInterval(currentPreviewEnd);
+      if (activeResize?.previewStart && activeResize?.previewEnd) {
+        const finalStart = snapToInterval(activeResize.previewStart);
+        const finalEnd = snapToInterval(activeResize.previewEnd);
 
-        // Call resize handler
         onAssignmentResize(
           assignment,
           finalStart.toISOString(),
@@ -450,12 +440,13 @@ const ResourceRow = memo(({
         );
       }
 
-      setResizeState(null);
+      setActiveResize(null);
     };
 
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
-  }, [canEdit, onAssignmentResize]);
+    document.body.style.cursor = 'ew-resize';
+  }, [canEdit, onAssignmentResize, style.dayWidth, activeResize]);
 
   const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
   const collapsed = style.resourceColumnCollapsed;
