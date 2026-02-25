@@ -316,7 +316,19 @@ const ResourceRow = memo(({
         const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
         const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
 
-        return start < dayEnd && end > dayStart;
+        const overlaps = start < dayEnd && end > dayStart;
+        if (!overlaps) return false;
+
+        // Check weekend inclusion
+        const dayOfWeek = getDay(day);
+        const isSaturday = dayOfWeek === 6;
+        const isSunday = dayOfWeek === 0;
+
+        // If it's a weekend day, check if the assignment includes that specific day
+        if (isSaturday && !a.include_saturday) return false;
+        if (isSunday && !a.include_sunday) return false;
+
+        return true;
       } catch (e) {
         console.error('Error parsing dates:', a.start_dato_tid, a.slutt_dato_tid);
         return false;
