@@ -93,7 +93,7 @@ const AssignmentBlock = memo(({
     }
   }, [isResizing]);
 
-  // Calculate visual width during resize
+  // Calculate visual style during resize (both position and width)
   const getVisualStyle = () => {
     if (!isResizingLocal || !resizePreview) return {};
     
@@ -101,22 +101,39 @@ const AssignmentBlock = memo(({
     const originalEnd = parseISO(assignment.slutt_dato_tid);
     const previewStart = resizePreview.previewStart;
     const previewEnd = resizePreview.previewEnd;
+    const edge = resizePreview.edge;
     
-    // Calculate new width based on preview dates
-    const originalDays = differenceInMinutes(originalEnd, originalStart) / (24 * 60);
-    const previewDays = differenceInMinutes(previewEnd, previewStart) / (24 * 60);
-    const newWidth = previewDays * dayWidth;
+    // Calculate duration in days (fractional)
+    const previewDurationHours = differenceInMinutes(previewEnd, previewStart) / 60;
+    const previewDurationDays = previewDurationHours / 24;
+    const newWidth = previewDurationDays * dayWidth;
     
-    console.log('🎨 Visual resize:', { 
-      originalDays: originalDays.toFixed(2), 
-      previewDays: previewDays.toFixed(2),
-      newWidth: newWidth.toFixed(1)
-    });
+    const style = { transition: 'none' };
     
-    return {
-      width: `${newWidth}px`,
-      transition: 'none'
-    };
+    // If resizing left edge, also adjust position
+    if (edge === 'start') {
+      const daysDiff = differenceInMinutes(previewStart, originalStart) / (24 * 60);
+      const leftOffset = daysDiff * dayWidth;
+      
+      style.transform = `translateX(${leftOffset}px)`;
+      style.width = `${newWidth}px`;
+      
+      console.log('🎨 Resize START:', { 
+        leftOffset: leftOffset.toFixed(1),
+        newWidth: newWidth.toFixed(1),
+        previewDays: previewDurationDays.toFixed(2)
+      });
+    } else {
+      // Resizing right edge - only width changes
+      style.width = `${newWidth}px`;
+      
+      console.log('🎨 Resize END:', { 
+        newWidth: newWidth.toFixed(1),
+        previewDays: previewDurationDays.toFixed(2)
+      });
+    }
+    
+    return style;
   };
 
   // Assignment type colors
@@ -422,7 +439,7 @@ const ResourceRow = memo(({
     e.stopPropagation();
     e.preventDefault();
 
-    console.log('📏 handleResizeStart called:', edge, assignment.id);
+    console.log('📏 Resize started:', edge, assignment.id);
 
     const startPos = { x: e.clientX };
     const originalStart = parseISO(assignment.start_dato_tid);
@@ -442,7 +459,6 @@ const ResourceRow = memo(({
 
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
-      console.log('📐 Resize move detected');
 
       const deltaX = moveEvent.clientX - startPos.x;
       const daysDelta = Math.round(deltaX / dayWidth);
@@ -451,15 +467,33 @@ const ResourceRow = memo(({
       let newEnd = originalEnd;
 
       if (edge === 'start') {
+        // Resize left edge - adjust start date
         newStart = addDays(originalStart, daysDelta);
+        // Minimum 30 minutes duration
         if (differenceInMinutes(originalEnd, newStart) < 30) {
           newStart = addMinutes(originalEnd, -30);
         }
+        newEnd = originalEnd; // End stays fixed
+        
+        console.log('📐 Resize START move:', {
+          deltaX,
+          daysDelta,
+          newStart: format(newStart, 'yyyy-MM-dd HH:mm')
+        });
       } else if (edge === 'end') {
+        // Resize right edge - adjust end date
+        newStart = originalStart; // Start stays fixed
         newEnd = addDays(originalEnd, daysDelta);
+        // Minimum 30 minutes duration
         if (differenceInMinutes(newEnd, originalStart) < 30) {
           newEnd = addMinutes(originalStart, 30);
         }
+        
+        console.log('📐 Resize END move:', {
+          deltaX,
+          daysDelta,
+          newEnd: format(newEnd, 'yyyy-MM-dd HH:mm')
+        });
       }
 
       setActiveResize({
@@ -475,15 +509,15 @@ const ResourceRow = memo(({
       document.removeEventListener('pointerup', handlePointerUp);
       document.body.style.cursor = '';
 
-      const currentResize = activeResize || resizeInfo;
-      
-      if (currentResize?.previewStart && currentResize?.previewEnd) {
-        const finalStart = snapToInterval(currentResize.previewStart);
-        const finalEnd = snapToInterval(currentResize.previewEnd);
+      // Use the latest state
+      if (activeResize?.previewStart && activeResize?.previewEnd) {
+        const finalStart = snapToInterval(activeResize.previewStart);
+        const finalEnd = snapToInterval(activeResize.previewEnd);
 
-        console.log('💾 Saving resize:', { 
-          start: finalStart.toISOString(), 
-          end: finalEnd.toISOString() 
+        console.log('💾 Commit resize to DB:', { 
+          edge,
+          start: format(finalStart, 'yyyy-MM-dd HH:mm'), 
+          end: format(finalEnd, 'yyyy-MM-dd HH:mm')
         });
 
         onAssignmentResize(
@@ -499,7 +533,7 @@ const ResourceRow = memo(({
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
     document.body.style.cursor = 'ew-resize';
-  }, [canEdit, onAssignmentResize, style.dayWidth, activeResize]);
+  }, [canEdit, onAssignmentResize, style.dayWidth]);
 
   const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
   const collapsed = style.resourceColumnCollapsed;
