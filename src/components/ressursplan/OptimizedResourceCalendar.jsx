@@ -476,16 +476,18 @@ const ResourceRow = memo(({
     const dayWidth = style.dayWidth || 120;
     const settings = style.settings || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
 
-    const resizeInfo = { 
-      assignment, 
-      edge, 
-      originalStart, 
-      originalEnd,
+    let latestPreview = {
       previewStart: originalStart,
       previewEnd: originalEnd
     };
     
-    setActiveResize(resizeInfo);
+    setActiveResize({ 
+      assignment, 
+      edge, 
+      originalStart, 
+      originalEnd,
+      ...latestPreview
+    });
 
     const handlePointerMove = (moveEvent) => {
       moveEvent.preventDefault();
@@ -532,10 +534,17 @@ const ResourceRow = memo(({
         });
       }
 
-      setActiveResize({
-        ...resizeInfo,
+      latestPreview = {
         previewStart: newStart,
         previewEnd: newEnd
+      };
+
+      setActiveResize({
+        assignment,
+        edge,
+        originalStart,
+        originalEnd,
+        ...latestPreview
       });
     };
 
@@ -545,10 +554,10 @@ const ResourceRow = memo(({
       document.removeEventListener('pointerup', handlePointerUp);
       document.body.style.cursor = '';
 
-      // Use the latest state (already snapped in handlePointerMove)
-      if (activeResize?.previewStart && activeResize?.previewEnd) {
-        const finalStart = activeResize.previewStart;
-        const finalEnd = activeResize.previewEnd;
+      // Use latestPreview from closure, not state
+      if (latestPreview.previewStart && latestPreview.previewEnd) {
+        const finalStart = latestPreview.previewStart;
+        const finalEnd = latestPreview.previewEnd;
 
         console.log('💾 Commit resize to DB:', { 
           edge,
@@ -565,7 +574,7 @@ const ResourceRow = memo(({
         // Keep activeResize briefly to prevent jump before React Query optimistic update renders
         setTimeout(() => {
           setActiveResize(null);
-        }, 100);
+        }, 50);
       } else {
         setActiveResize(null);
       }
@@ -574,7 +583,7 @@ const ResourceRow = memo(({
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
     document.body.style.cursor = 'ew-resize';
-  }, [canEdit, onAssignmentResize, style.dayWidth]);
+  }, [canEdit, onAssignmentResize, style.dayWidth, style.settings]);
 
   const resourceColWidth = style.resourceColumnCollapsed ? 'w-16' : 'w-52';
   const collapsed = style.resourceColumnCollapsed;
