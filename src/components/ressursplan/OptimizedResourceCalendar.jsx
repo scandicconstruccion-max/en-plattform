@@ -479,8 +479,10 @@ const ResourceRow = memo(({
       let newEnd = originalEnd;
 
       if (edge === 'start') {
-        // Resize left edge - adjust start date
-        newStart = addDays(originalStart, daysDelta);
+        // Resize left edge - adjust start date and snap
+        const candidateStart = addDays(originalStart, daysDelta);
+        newStart = snapToInterval(candidateStart);
+        
         // Minimum 30 minutes duration
         if (differenceInMinutes(originalEnd, newStart) < 30) {
           newStart = addMinutes(originalEnd, -30);
@@ -493,13 +495,15 @@ const ResourceRow = memo(({
           newStart: format(newStart, 'yyyy-MM-dd HH:mm')
         });
       } else if (edge === 'end') {
-        // Resize right edge - adjust end date
-        newStart = originalStart; // Start stays fixed
-        newEnd = addDays(originalEnd, daysDelta);
+        // Resize right edge - adjust end date and snap
+        const candidateEnd = addDays(originalEnd, daysDelta);
+        newEnd = snapToInterval(candidateEnd);
+        
         // Minimum 30 minutes duration
         if (differenceInMinutes(newEnd, originalStart) < 30) {
           newEnd = addMinutes(originalStart, 30);
         }
+        newStart = originalStart; // Start stays fixed
         
         console.log('📐 Resize END move:', {
           deltaX,
@@ -521,10 +525,10 @@ const ResourceRow = memo(({
       document.removeEventListener('pointerup', handlePointerUp);
       document.body.style.cursor = '';
 
-      // Use the latest state
+      // Use the latest state (already snapped in handlePointerMove)
       if (activeResize?.previewStart && activeResize?.previewEnd) {
-        const finalStart = snapToInterval(activeResize.previewStart);
-        const finalEnd = snapToInterval(activeResize.previewEnd);
+        const finalStart = activeResize.previewStart;
+        const finalEnd = activeResize.previewEnd;
 
         console.log('💾 Commit resize to DB:', { 
           edge,
@@ -538,11 +542,10 @@ const ResourceRow = memo(({
           finalEnd.toISOString()
         );
         
-        // Keep activeResize for a brief moment to prevent visual jump
-        // until React Query cache updates
+        // Keep activeResize briefly to prevent jump before React Query optimistic update renders
         setTimeout(() => {
           setActiveResize(null);
-        }, 50);
+        }, 100);
       } else {
         setActiveResize(null);
       }
