@@ -739,9 +739,9 @@ export default function OptimizedResourceCalendar({
     return [...assignments, ...optimisticAssignments];
   }, [assignments, optimisticAssignments]);
 
-  const handleCellClick = useCallback((resourceId, startTime, endTime) => {
+  const handleCellClick = useCallback((resourceId, snappedStart, snappedEnd) => {
     if (!canEdit) return;
-    onCreateAssignment(resourceId, startTime.toISOString(), endTime.toISOString());
+    onCreateAssignment(resourceId, snappedStart.toISOString(), snappedEnd.toISOString());
   }, [canEdit, onCreateAssignment]);
 
   const isHolidayFunc = useCallback((date) => {
