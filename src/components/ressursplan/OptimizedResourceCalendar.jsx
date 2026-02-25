@@ -358,27 +358,10 @@ const ResourceRow = memo(({
     document.body.style.cursor = 'grabbing';
   }, [canEdit, assignments, style, onDragUpdate, onAssignmentDrop]);
 
-  const handleCellClick = useCallback((e, day, resourceId) => {
+  const handleCellClick = useCallback((resourceId, snappedStart, snappedEnd) => {
     if (!canEdit) return;
-    e.stopPropagation();
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const hourFraction = Math.max(0, Math.min(1, clickY / rect.height));
-
-    const [startHour, startMin] = currentSettings.standard_start_tid.split(':').map(Number);
-    const [endHour, endMin] = currentSettings.standard_slutt_tid.split(':').map(Number);
-
-    const startTime = new Date(day);
-    startTime.setHours(startHour, startMin);
-    const snappedStart = snapToInterval(startTime);
-
-    const endTime = new Date(day);
-    endTime.setHours(endHour, endMin);
-    const snappedEnd = snapToInterval(endTime);
-
-    onCellClick(resourceId, snappedStart, snappedEnd);
-  }, [canEdit, onCellClick, currentSettings]);
+    onCreateAssignment(resourceId, snappedStart.toISOString(), snappedEnd.toISOString());
+  }, [canEdit, onCreateAssignment]);
 
   const handleDrop = useCallback((e, day) => {
     if (!canEdit) return;
