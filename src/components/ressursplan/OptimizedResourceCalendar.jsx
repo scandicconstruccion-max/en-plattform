@@ -551,7 +551,20 @@ const ResourceRow = memo(({
               )}
               onDrop={(e) => handleDrop(e, day)}
               onDragOver={handleDragOver}
-              onClick={(e) => isEmptyCell && handleCellClick(e, day, resource.id)}
+              onClick={(e) => {
+                if (!isEmptyCell || !canEdit) return;
+                e.stopPropagation();
+                
+                const startTime = new Date(day);
+                startTime.setHours(7, 0);
+                const snappedStart = snapToInterval(startTime);
+                
+                const endTime = new Date(day);
+                endTime.setHours(15, 30);
+                const snappedEnd = snapToInterval(endTime);
+                
+                onCellClick(resource.id, snappedStart, snappedEnd);
+              }}
               title={isEmptyCell && canEdit ? "Klikk for å opprette aktivitet" : ""}>
 
               {dayIsHoliday && dayHolidayName &&
