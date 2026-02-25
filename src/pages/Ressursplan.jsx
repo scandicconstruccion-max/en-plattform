@@ -388,6 +388,7 @@ export default function Ressursplan() {
       });
       setShowConflictDialog(true);
     } else {
+      // Optimistic update - UI updates immediately
       updateAssignmentMutation.mutate({ id: assignment.id, data: updatedData });
     }
   };
