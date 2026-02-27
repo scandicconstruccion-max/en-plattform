@@ -72,6 +72,7 @@ export default function Tilbud() {
     valid_until: ''
   });
   const [attachments, setAttachments] = useState([]);
+  const [showNewCustomerDialog, setShowNewCustomerDialog] = useState(false);
 
   const queryClient = useQueryClient();
 
