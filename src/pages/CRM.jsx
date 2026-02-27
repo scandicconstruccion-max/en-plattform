@@ -383,7 +383,7 @@ export default function CRM() {
                   setShowCustomerDialog(true);
                 }}
               />
-            ) : (
+            ) : customerView === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredCustomers.map((customer) => (
                   <Card
@@ -413,6 +413,42 @@ export default function CRM() {
                         ))}
                       </div>
                     )}
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredCustomers.map((customer) => (
+                  <Card
+                    key={customer.id}
+                    className="px-5 py-3 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all"
+                    onClick={() => {
+                      setSelectedCustomer(customer);
+                      setShowCustomerDialog(true);
+                    }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <span className="text-emerald-700 text-sm font-semibold">
+                          {customer.name?.charAt(0)?.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-4 gap-1 md:gap-4">
+                        <span className="font-semibold text-slate-900 truncate">{customer.name}</span>
+                        <span className="text-sm text-slate-500 truncate">{customer.contact_person || '—'}</span>
+                        <span className="text-sm text-slate-500 truncate">{customer.email || '—'}</span>
+                        <span className="text-sm text-slate-500 truncate">{customer.phone || '—'}</span>
+                      </div>
+                      {customer.tags?.length > 0 && (
+                        <div className="hidden md:flex gap-1">
+                          {customer.tags.slice(0, 2).map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </Card>
                 ))}
               </div>
