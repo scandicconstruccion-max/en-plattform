@@ -120,18 +120,18 @@ export default function Prosjekter() {
 
       <div className="px-6 lg:px-8 py-6">
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Søk etter prosjekt eller kunde..."
+              placeholder="Søk etter prosjekt..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 rounded-xl border-slate-200"
+              className="pl-10 h-9 rounded-xl border-slate-200 text-sm"
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+            <SelectTrigger className="w-full sm:w-44 rounded-xl h-9">
               <SelectValue placeholder="Alle statuser" />
             </SelectTrigger>
             <SelectContent>
@@ -142,6 +142,22 @@ export default function Prosjekter() {
               <SelectItem value="fullfort">Fullført</SelectItem>
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-1 ml-auto">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100'}`}
+              title="Rutenett"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100'}`}
+              title="Liste"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Projects Grid */}
