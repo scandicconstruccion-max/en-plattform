@@ -207,17 +207,20 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
               onClick={() => setShowQuickNote(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Ny oppfølging
             </Button>
-            {quote.documents?.length > 0 && (
-              <a href={quote.documents[0]} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" variant="outline" className="rounded-lg text-xs h-8">
-                  <ExternalLink className="h-3.5 w-3.5 mr-1" /> Åpne dokument
-                </Button>
-              </a>
-            )}
             <Button size="sm" variant="outline" className="rounded-lg text-xs h-8"
               onClick={() => { setNewPhase(quote.phase); setShowPhaseEdit(true); }}>
               <Edit className="h-3.5 w-3.5 mr-1" /> Endre fase
             </Button>
+            <Button size="sm" variant="outline" className="rounded-lg text-xs h-8"
+              onClick={() => setShowDocs(!showDocs)}>
+              <FolderOpen className="h-3.5 w-3.5 mr-1" />
+              Dokumenter {quote.documents?.length > 0 && `(${quote.documents.length})`}
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-lg text-xs h-8"
+              onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              <Upload className="h-3.5 w-3.5 mr-1" /> {uploading ? 'Laster opp...' : 'Last opp'}
+            </Button>
+            <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadFile} />
             <div className="ml-auto">
               <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg text-xs h-8"
                 onClick={() => deleteMutation.mutate(quote.id)} disabled={deleteMutation.isPending}>
