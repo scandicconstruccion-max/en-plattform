@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, UserPlus, ChevronDown, X } from 'lucide-react';
+import { UserPlus, ChevronDown } from 'lucide-react';
 
-// Inline new-customer form inside a dialog
 function NewCustomerDialog({ open, onOpenChange, onCreated }) {
   const [form, setForm] = useState({ name: '', contact_person: '', email: '', phone: '' });
   const queryClient = useQueryClient();
@@ -81,18 +80,19 @@ function NewCustomerDialog({ open, onOpenChange, onCreated }) {
   );
 }
 
-export default function CustomerSelector({ customers = [], onSelect }) {
-  const [search, setSearch] = useState('');
+// This component replaces the "Kundenavn" input field entirely.
+// It shows a text input that also opens a dropdown with matching customers.
+export default function CustomerSelector({ customers = [], value, onChange, onSelect }) {
   const [open, setOpen] = useState(false);
   const [showNewDialog, setShowNewDialog] = useState(false);
-  const [selected, setSelected] = useState(null);
   const ref = useRef(null);
 
-  const filtered = customers.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.contact_person?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = value
+    ? customers.filter(c =>
+        c.name?.toLowerCase().includes(value.toLowerCase()) ||
+        c.contact_person?.toLowerCase().includes(value.toLowerCase())
+      )
+    : customers;
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -103,52 +103,36 @@ export default function CustomerSelector({ customers = [], onSelect }) {
   }, []);
 
   const handleSelect = (customer) => {
-    setSelected(customer);
-    setSearch('');
     setOpen(false);
     onSelect(customer);
   };
 
   const handleCreated = (customer) => {
-    handleSelect(customer);
-  };
-
-  const handleClear = () => {
-    setSelected(null);
-    onSelect(null);
+    onSelect(customer);
   };
 
   return (
     <>
       <div ref={ref} className="relative">
-        <Label>Velg kunde</Label>
-        <div className="mt-1.5 relative">
-          {selected ? (
-            <div className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-emerald-50">
-              <span className="flex-1 text-sm font-medium text-emerald-800">{selected.name}</span>
-              <button onClick={handleClear} className="text-slate-400 hover:text-slate-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <div
-              className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 cursor-pointer hover:border-emerald-300 transition-colors bg-white"
-              onClick={() => setOpen(true)}
-            >
-              <Search className="h-4 w-4 text-slate-400 flex-shrink-0" />
-              <input
-                className="flex-1 text-sm outline-none bg-transparent placeholder:text-slate-400"
-                placeholder="Søk etter registrert kunde..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setOpen(true); }}
-                onFocus={() => setOpen(true)}
-              />
-              <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
-            </div>
-          )}
+        <div className="flex items-center border border-input rounded-md bg-transparent shadow-sm focus-within:ring-1 focus-within:ring-ring">
+          <input
+            className="flex h-9 w-full px-3 py-1 text-base bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            placeholder="Kundenavn *"
+            value={value}
+            required
+            onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+          />
+          <button
+            type="button"
+            className="pr-2 text-slate-400 hover:text-slate-600"
+            onClick={() => setOpen(o => !o)}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
         </div>
 
-        {open && !selected && (
+        {open && (
           <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
             <div className="max-h-52 overflow-y-auto">
               {filtered.length === 0 && (
