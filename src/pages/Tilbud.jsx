@@ -122,6 +122,8 @@ export default function Tilbud() {
       queryClient.invalidateQueries({ queryKey: ['quotes'] });
       setSelectedQuotes([]);
       setDeleteDialogOpen(false);
+      setShowDetailDialog(false);
+      setSelectedQuote(null);
       toast.success('Tilbud slettet');
     },
     onError: () => {
