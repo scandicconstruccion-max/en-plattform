@@ -60,6 +60,7 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
   const [newFollowUpDate, setNewFollowUpDate] = useState(quote?.next_followup_date || '');
   const [showDocs, setShowDocs] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const fileInputRef = useRef(null);
 
   const queryClient = useQueryClient();
