@@ -61,6 +61,9 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
   const [showDocs, setShowDocs] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showQuotePreview, setShowQuotePreview] = useState(false);
+  const [internalQuote, setInternalQuote] = useState(null);
+  const [loadingQuote, setLoadingQuote] = useState(false);
   const fileInputRef = useRef(null);
 
   const queryClient = useQueryClient();
