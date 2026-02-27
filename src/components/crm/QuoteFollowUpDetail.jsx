@@ -252,7 +252,7 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
                     onClick={handleOpenQuotePreview}
                     className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors font-semibold"
                   >
-                    <FileText className="h-3.5 w-3.5" /> {quote.quote_reference}
+                    <ExternalLink className="h-4 w-4" /> {quote.quote_reference}
                   </button>
                 ) : (
                   <span className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> {quote.quote_reference}</span>
