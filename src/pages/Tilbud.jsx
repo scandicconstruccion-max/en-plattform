@@ -598,31 +598,25 @@ export default function Tilbud() {
             </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Customer Selector */}
-            <CustomerSelector
-              customers={customers}
-              onSelect={(customer) => {
-                if (customer) {
-                  setFormData(prev => ({
-                    ...prev,
-                    customer_name: customer.name || '',
-                    customer_email: customer.email || '',
-                    customer_phone: customer.phone || '',
-                  }));
-                } else {
-                  setFormData(prev => ({ ...prev, customer_name: '', customer_email: '', customer_phone: '' }));
-                }
-              }}
-            />
-
             {/* Customer Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Kundenavn *</Label>
-                <Input
+                <CustomerSelector
+                  customers={customers}
                   value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  required />
+                  onChange={(val) => setFormData(prev => ({ ...prev, customer_name: val }))}
+                  onSelect={(customer) => {
+                    if (customer) {
+                      setFormData(prev => ({
+                        ...prev,
+                        customer_name: customer.name || '',
+                        customer_email: customer.email || '',
+                        customer_phone: customer.phone || '',
+                      }));
+                    }
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label>E-post</Label>
