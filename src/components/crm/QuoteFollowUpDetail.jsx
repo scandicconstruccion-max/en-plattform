@@ -141,6 +141,26 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
   const latestActivity = sortedActivities[0];
 
   return (
+    <>
+    <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Slett oppfølging</AlertDialogTitle>
+          <AlertDialogDescription>
+            Er du sikker på at du vil slette oppfølgingen for <strong>{quote.customer_name}</strong> ({quote.quote_reference})? Dette kan ikke angres.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Avbryt</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-red-600 hover:bg-red-700"
+            onClick={() => deleteMutation.mutate(quote.id)}
+          >
+            Slett
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-full p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden">
 
