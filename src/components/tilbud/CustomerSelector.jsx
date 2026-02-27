@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { UserPlus, ChevronDown } from 'lucide-react';
 
-function NewCustomerDialog({ open, onOpenChange, onCreated }) {
+export function NewCustomerDialog({ open, onOpenChange, onCreated }) {
   const [form, setForm] = useState({ name: '', contact_person: '', email: '', phone: '' });
   const queryClient = useQueryClient();
 
@@ -80,11 +80,9 @@ function NewCustomerDialog({ open, onOpenChange, onCreated }) {
   );
 }
 
-// This component replaces the "Kundenavn" input field entirely.
-// It shows a text input that also opens a dropdown with matching customers.
-export default function CustomerSelector({ customers = [], value, onChange, onSelect }) {
+// onRequestNewCustomer: called when user clicks "Opprett ny kunde" - parent handles the dialog
+export default function CustomerSelector({ customers = [], value, onChange, onSelect, onRequestNewCustomer }) {
   const [open, setOpen] = useState(false);
-  const [showNewDialog, setShowNewDialog] = useState(false);
   const ref = useRef(null);
 
   const filtered = value
@@ -107,70 +105,58 @@ export default function CustomerSelector({ customers = [], value, onChange, onSe
     onSelect(customer);
   };
 
-  const handleCreated = (customer) => {
-    onSelect(customer);
-  };
-
   return (
-    <>
-      <div ref={ref} className="relative">
-        <div className="flex items-center border border-input rounded-md bg-transparent shadow-sm focus-within:ring-1 focus-within:ring-ring">
-          <input
-            className="flex h-9 w-full px-3 py-1 text-base bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-            placeholder="Kundenavn *"
-            value={value}
-            required
-            onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-          />
-          <button
-            type="button"
-            className="pr-2 text-slate-400 hover:text-slate-600"
-            onClick={() => setOpen(o => !o)}
-          >
-            <ChevronDown className="h-4 w-4" />
-          </button>
-        </div>
-
-        {open && (
-          <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-            <div className="max-h-52 overflow-y-auto">
-              {filtered.length === 0 && (
-                <p className="text-sm text-slate-400 px-4 py-3">Ingen kunder funnet</p>
-              )}
-              {filtered.map(c => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                  onClick={() => handleSelect(c)}
-                >
-                  <p className="text-sm font-medium text-slate-900">{c.name}</p>
-                  {(c.contact_person || c.email) && (
-                    <p className="text-xs text-slate-400">{[c.contact_person, c.email].filter(Boolean).join(' • ')}</p>
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="border-t border-slate-100 p-2">
-              <button
-                type="button"
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-medium"
-                onClick={() => { setOpen(false); setShowNewDialog(true); }}
-              >
-                <UserPlus className="h-4 w-4" />
-                Opprett ny kunde
-              </button>
-            </div>
-          </div>
-        )}
+    <div ref={ref} className="relative">
+      <div className="flex items-center border border-input rounded-md bg-transparent shadow-sm focus-within:ring-1 focus-within:ring-ring">
+        <input
+          className="flex h-9 w-full px-3 py-1 text-base bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+          placeholder="Kundenavn *"
+          value={value}
+          required
+          onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+        />
+        <button
+          type="button"
+          className="pr-2 text-slate-400 hover:text-slate-600"
+          onClick={() => setOpen(o => !o)}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
       </div>
 
-      <NewCustomerDialog
-        open={showNewDialog}
-        onOpenChange={setShowNewDialog}
-        onCreated={handleCreated}
-      />
-    </>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 && (
+              <p className="text-sm text-slate-400 px-4 py-3">Ingen kunder funnet</p>
+            )}
+            {filtered.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
+                onClick={() => handleSelect(c)}
+              >
+                <p className="text-sm font-medium text-slate-900">{c.name}</p>
+                {(c.contact_person || c.email) && (
+                  <p className="text-xs text-slate-400">{[c.contact_person, c.email].filter(Boolean).join(' • ')}</p>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-slate-100 p-2">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-medium"
+              onClick={() => { setOpen(false); onRequestNewCustomer?.(); }}
+            >
+              <UserPlus className="h-4 w-4" />
+              Opprett ny kunde
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
