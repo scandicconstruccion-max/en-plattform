@@ -119,18 +119,7 @@ export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, c
       c.email === selectedQuote.customer_email
     );
 
-    // Generate PDF from the quote and upload it as a document
-    let documents = [];
-    try {
-      const pdfBlob = await generateQuotePDFBlob(selectedQuote);
-      const file = new File([pdfBlob], `Tilbud-${selectedQuote.quote_number || 'ukjent'}.pdf`, { type: 'application/pdf' });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      documents = [file_url];
-    } catch (err) {
-      console.error('PDF upload failed', err);
-    }
-
-    createMutation.mutate({
+    const baseData = {
       customer_id: customer?.id || '',
       customer_name: selectedQuote.customer_name,
       quote_reference: selectedQuote.quote_number,
@@ -141,8 +130,32 @@ export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, c
       next_followup_date: formData.next_followup_date,
       internal_quote_id: selectedQuote.id,
       description: selectedQuote.project_description,
-      documents
+      documents: []
+    };
+
+    // Close dialog immediately
+    onOpenChange(false);
+    setSelectedQuote(null);
+    setSearch('');
+    setFormData({ phase: 'sendt', next_followup_date: '' });
+
+    // Create the follow-up first without PDF
+    const created = await base44.entities.QuoteFollowUp.create({
+      ...baseData,
+      responsible_name: user?.full_name || user?.email
     });
+    queryClient.invalidateQueries({ queryKey: ['quoteFollowUps'] });
+
+    // Then upload PDF in background and update
+    try {
+      const pdfBlob = await generateQuotePDFBlob(selectedQuote);
+      const file = new File([pdfBlob], `Tilbud-${selectedQuote.quote_number || 'ukjent'}.pdf`, { type: 'application/pdf' });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await base44.entities.QuoteFollowUp.update(created.id, { documents: [file_url] });
+      queryClient.invalidateQueries({ queryKey: ['quoteFollowUps'] });
+    } catch (err) {
+      console.error('PDF upload failed', err);
+    }
   };
 
   const filteredQuotes = existingQuotes.filter(q => {
