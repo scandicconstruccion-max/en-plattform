@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Search, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, customers }) {
   const [selectedQuote, setSelectedQuote] = useState(null);
