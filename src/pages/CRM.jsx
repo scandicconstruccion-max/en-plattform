@@ -21,7 +21,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  XCircle
+  XCircle,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, addDays } from 'date-fns';
 import { nb } from 'date-fns/locale';
