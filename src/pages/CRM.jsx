@@ -246,6 +246,24 @@ export default function CRM() {
                 className="pl-10 rounded-xl border-slate-200"
               />
             </div>
+            {activeTab === 'customers' && (
+              <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setCustomerView('grid')}
+                  className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerView === 'grid' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                  Rubrikker
+                </button>
+                <button
+                  onClick={() => setCustomerView('list')}
+                  className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerView === 'list' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                >
+                  <List className="h-4 w-4" />
+                  Linjer
+                </button>
+              </div>
+            )}
             {activeTab === 'quotes' && (
               <div className="flex gap-2 flex-wrap">
                 <Button
