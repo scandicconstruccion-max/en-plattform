@@ -14,6 +14,71 @@ import { nb } from 'date-fns/locale';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
+const generateQuotePDFBlob = async (quote) => {
+  const element = document.createElement('div');
+  element.style.position = 'absolute';
+  element.style.left = '-9999px';
+  element.innerHTML = `
+    <div style="padding: 40px; font-family: Arial, sans-serif; max-width: 800px; background: white;">
+      <div style="border-bottom: 3px solid #10b981; padding-bottom: 20px; margin-bottom: 30px;">
+        <h2 style="color: #1e293b; margin: 0 0 5px 0; font-size: 24px;">Tilbud ${quote.quote_number || ''}</h2>
+        <p style="color: #64748b; margin: 0;">${format(new Date(), 'd. MMMM yyyy', { locale: nb })}</p>
+      </div>
+      <div style="margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 8px;">
+        <h3 style="color: #1e293b; margin: 0 0 10px 0;">Kunde</h3>
+        <p style="margin: 3px 0;"><strong>${quote.customer_name}</strong></p>
+        ${quote.customer_email ? `<p style="margin: 3px 0; color: #64748b;">${quote.customer_email}</p>` : ''}
+        ${quote.customer_phone ? `<p style="margin: 3px 0; color: #64748b;">${quote.customer_phone}</p>` : ''}
+      </div>
+      ${quote.project_description ? `<div style="margin-bottom: 30px;"><h3 style="color: #1e293b; margin: 0 0 10px 0;">Prosjektbeskrivelse</h3><p style="color: #334155; line-height: 1.6;">${quote.project_description}</p></div>` : ''}
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+        <thead><tr style="background: #10b981; color: white;">
+          <th style="padding: 12px; text-align: left;">Beskrivelse</th>
+          <th style="padding: 12px; text-align: center;">Mengde</th>
+          <th style="padding: 12px; text-align: center;">Enhet</th>
+          <th style="padding: 12px; text-align: right;">Enhetspris</th>
+          <th style="padding: 12px; text-align: right;">Sum</th>
+        </tr></thead>
+        <tbody>
+          ${(quote.items || []).map(item => `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 12px;">${item.description}</td>
+              <td style="padding: 12px; text-align: center;">${item.quantity}</td>
+              <td style="padding: 12px; text-align: center;">${item.unit || 'stk'}</td>
+              <td style="padding: 12px; text-align: right;">${(item.unit_price || 0).toLocaleString('nb-NO')} kr</td>
+              <td style="padding: 12px; text-align: right; font-weight: 600;">${((item.quantity || 0) * (item.unit_price || 0)).toLocaleString('nb-NO')} kr</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <div style="text-align: right; padding: 20px; background: #f8fafc; border-radius: 8px;">
+        <p style="margin: 8px 0;">Subtotal: <strong>${(quote.total_amount || 0).toLocaleString('nb-NO')} kr</strong></p>
+        <p style="margin: 8px 0;">MVA (25%): <strong>${(quote.vat_amount || 0).toLocaleString('nb-NO')} kr</strong></p>
+        <p style="margin: 0; font-size: 18px;">Totalt: <strong>${((quote.total_amount || 0) + (quote.vat_amount || 0)).toLocaleString('nb-NO')} kr</strong></p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(element);
+  const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+  document.body.removeChild(element);
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const imgWidth = 210;
+  const pageHeight = 297;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let heightLeft = imgHeight;
+  let position = 0;
+  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+  return pdf.output('blob');
+};
+
 export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, customers }) {
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [search, setSearch] = useState('');
@@ -45,15 +110,25 @@ export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, c
     },
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedQuote) return;
 
-    // Find customer
     const customer = customers.find(c => 
       c.name === selectedQuote.customer_name || 
       c.email === selectedQuote.customer_email
     );
+
+    // Generate PDF from the quote and upload it as a document
+    let documents = [];
+    try {
+      const pdfBlob = await generateQuotePDFBlob(selectedQuote);
+      const file = new File([pdfBlob], `Tilbud-${selectedQuote.quote_number || 'ukjent'}.pdf`, { type: 'application/pdf' });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      documents = [file_url];
+    } catch (err) {
+      console.error('PDF upload failed', err);
+    }
 
     createMutation.mutate({
       customer_id: customer?.id || '',
@@ -65,7 +140,8 @@ export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, c
       phase: formData.phase,
       next_followup_date: formData.next_followup_date,
       internal_quote_id: selectedQuote.id,
-      description: selectedQuote.project_description
+      description: selectedQuote.project_description,
+      documents
     });
   };
 
