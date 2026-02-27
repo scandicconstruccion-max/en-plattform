@@ -225,7 +225,7 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadFile} />
             <div className="ml-auto">
               <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg text-xs h-8"
-                onClick={() => deleteMutation.mutate(quote.id)} disabled={deleteMutation.isPending}>
+                onClick={() => setShowDeleteConfirm(true)} disabled={deleteMutation.isPending}>
                 <Trash2 className="h-3.5 w-3.5 mr-1" /> Slett
               </Button>
             </div>
