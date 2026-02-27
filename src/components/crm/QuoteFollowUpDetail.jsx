@@ -183,7 +183,16 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-slate-900 truncate">{quote.customer_name}</h2>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-sm text-slate-500">
-                <span className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> {quote.quote_reference}</span>
+                {quote.internal_quote_id ? (
+                  <button
+                    onClick={handleOpenQuotePreview}
+                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> {quote.quote_reference}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> {quote.quote_reference}</span>
+                )}
                 {quote.quote_amount && (
                   <span className="font-semibold text-slate-800">{quote.quote_amount.toLocaleString('nb-NO')} kr</span>
                 )}
