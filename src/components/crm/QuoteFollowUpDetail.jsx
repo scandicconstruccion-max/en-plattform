@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Calendar, MessageSquare, Phone, Mail, FileText, Plus, Edit, Trash2,
-  Clock, CheckCircle2, AlertTriangle, User, TrendingUp, ExternalLink, X
+  Clock, CheckCircle2, AlertTriangle, User, TrendingUp, ExternalLink, X,
+  Upload, Paperclip, Download, FolderOpen
 } from 'lucide-react';
 import { format, parseISO, differenceInDays, isToday, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
