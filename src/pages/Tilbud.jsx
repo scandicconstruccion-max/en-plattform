@@ -617,6 +617,7 @@ export default function Tilbud() {
                       }));
                     }
                   }}
+                  onRequestNewCustomer={() => setShowNewCustomerDialog(true)}
                 />
               </div>
               <div className="space-y-2">
