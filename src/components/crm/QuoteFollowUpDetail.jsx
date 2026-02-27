@@ -233,6 +233,57 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
         {/* SCROLLABLE CONTENT */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-slate-50">
 
+          {/* DOCUMENTS PANEL */}
+          {showDocs && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                  <Paperclip className="h-4 w-4 text-slate-400" />
+                  Dokumenter
+                  <span className="text-xs text-slate-400 font-normal">({quote.documents?.length || 0} filer)</span>
+                </h3>
+                <Button size="sm" variant="outline" className="rounded-lg text-xs h-7"
+                  onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  <Upload className="h-3.5 w-3.5 mr-1" /> Last opp ny
+                </Button>
+              </div>
+              {!quote.documents?.length ? (
+                <div className="px-4 py-8 text-center">
+                  <Paperclip className="h-10 w-10 text-slate-200 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400">Ingen dokumenter lastet opp</p>
+                  <Button size="sm" className="mt-3 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-xs h-8"
+                    onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                    <Upload className="h-3.5 w-3.5 mr-1" /> Last opp dokument
+                  </Button>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {quote.documents.map((doc, idx) => {
+                    const filename = doc.split('/').pop()?.split('?')[0] || `Dokument ${idx + 1}`;
+                    return (
+                      <div key={idx} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                          <FileText className="h-4 w-4 text-blue-500" />
+                        </div>
+                        <span className="flex-1 text-sm text-slate-700 truncate">{decodeURIComponent(filename)}</span>
+                        <a href={doc} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="outline" className="rounded-lg text-xs h-7 gap-1">
+                            <ExternalLink className="h-3.5 w-3.5" /> Åpne
+                          </Button>
+                        </a>
+                        <a href={doc} download>
+                          <Button size="sm" variant="ghost" className="rounded-lg text-xs h-7 text-slate-500">
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ACTION CARD - Neste handling */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
