@@ -33,6 +33,7 @@ export default function Prosjekter() {
   const [showDialog, setShowDialog] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('grid');
   const [formData, setFormData] = useState({
     name: '',
     project_number: '',
