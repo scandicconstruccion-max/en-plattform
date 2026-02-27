@@ -118,6 +118,17 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
     updateMutation.mutate({ id: quote.id, data: { follow_up_completed: true, next_followup_date: '' } });
   };
 
+  const handleUploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const currentDocs = quote.documents || [];
+    updateMutation.mutate({ id: quote.id, data: { documents: [...currentDocs, file_url] } });
+    setUploading(false);
+    e.target.value = '';
+  };
+
   if (!quote) return null;
 
   const phaseConfig = PHASE_CONFIG[quote.phase] || PHASE_CONFIG.sendt;
