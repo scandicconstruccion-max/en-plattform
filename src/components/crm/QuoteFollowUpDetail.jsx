@@ -173,6 +173,70 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog open={showQuotePreview} onOpenChange={setShowQuotePreview}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tilbud {quote.quote_reference}</DialogTitle>
+          </DialogHeader>
+          {loadingQuote ? (
+            <div className="py-12 text-center text-slate-400">Laster tilbud...</div>
+          ) : !internalQuote ? (
+            <div className="py-12 text-center text-slate-400">Tilbudet ble ikke funnet.</div>
+          ) : (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 rounded-xl p-4">
+                <div><p className="text-slate-400 text-xs mb-1">Kunde</p><p className="font-medium">{internalQuote.customer_name}</p></div>
+                <div><p className="text-slate-400 text-xs mb-1">Tilbudsnummer</p><p className="font-medium">{internalQuote.quote_number}</p></div>
+                {internalQuote.customer_email && <div><p className="text-slate-400 text-xs mb-1">E-post</p><p>{internalQuote.customer_email}</p></div>}
+                {internalQuote.customer_phone && <div><p className="text-slate-400 text-xs mb-1">Telefon</p><p>{internalQuote.customer_phone}</p></div>}
+                {internalQuote.valid_until && <div><p className="text-slate-400 text-xs mb-1">Gyldig til</p><p>{format(new Date(internalQuote.valid_until), 'dd.MM.yyyy')}</p></div>}
+              </div>
+              {internalQuote.project_description && (
+                <div>
+                  <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide font-semibold">Prosjektbeskrivelse</p>
+                  <p className="text-slate-700">{internalQuote.project_description}</p>
+                </div>
+              )}
+              {internalQuote.items?.length > 0 && (
+                <div>
+                  <p className="text-slate-400 text-xs mb-2 uppercase tracking-wide font-semibold">Linjer</p>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-emerald-600 text-white text-xs">
+                        <th className="text-left px-3 py-2 rounded-tl-lg">Beskrivelse</th>
+                        <th className="text-center px-3 py-2">Mengde</th>
+                        <th className="text-center px-3 py-2">Enhet</th>
+                        <th className="text-right px-3 py-2">Enhetspris</th>
+                        <th className="text-right px-3 py-2 rounded-tr-lg">Sum</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {internalQuote.items.map((item, idx) => (
+                        <tr key={idx} className="border-b border-slate-100">
+                          <td className="px-3 py-2 text-slate-700">{item.description}</td>
+                          <td className="px-3 py-2 text-center text-slate-600">{item.quantity}</td>
+                          <td className="px-3 py-2 text-center text-slate-600">{item.unit || 'stk'}</td>
+                          <td className="px-3 py-2 text-right text-slate-600">{item.unit_price?.toLocaleString('nb-NO')} kr</td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-800">{(item.quantity * item.unit_price)?.toLocaleString('nb-NO')} kr</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="bg-slate-50 rounded-xl px-4 py-3 text-right space-y-1">
+                <div className="flex justify-between text-slate-600"><span>Subtotal:</span><span>{(internalQuote.total_amount || 0).toLocaleString('nb-NO')} kr</span></div>
+                <div className="flex justify-between text-slate-600"><span>MVA (25%):</span><span>{(internalQuote.vat_amount || 0).toLocaleString('nb-NO')} kr</span></div>
+                <div className="flex justify-between font-bold text-slate-900 text-base border-t border-slate-200 pt-1 mt-1">
+                  <span>Totalt:</span>
+                  <span>{((internalQuote.total_amount || 0) + (internalQuote.vat_amount || 0)).toLocaleString('nb-NO')} kr</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-full p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden">
 
