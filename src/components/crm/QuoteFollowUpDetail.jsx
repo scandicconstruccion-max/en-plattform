@@ -510,5 +510,6 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
