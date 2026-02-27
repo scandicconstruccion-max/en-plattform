@@ -593,6 +593,23 @@ export default function Tilbud() {
             </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Customer Selector */}
+            <CustomerSelector
+              customers={customers}
+              onSelect={(customer) => {
+                if (customer) {
+                  setFormData(prev => ({
+                    ...prev,
+                    customer_name: customer.name || '',
+                    customer_email: customer.email || '',
+                    customer_phone: customer.phone || '',
+                  }));
+                } else {
+                  setFormData(prev => ({ ...prev, customer_name: '', customer_email: '', customer_phone: '' }));
+                }
+              }}
+            />
+
             {/* Customer Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -601,7 +618,6 @@ export default function Tilbud() {
                   value={formData.customer_name}
                   onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
                   required />
-
               </div>
               <div className="space-y-2">
                 <Label>E-post</Label>
@@ -609,14 +625,12 @@ export default function Tilbud() {
                   type="email"
                   value={formData.customer_email}
                   onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })} />
-
               </div>
               <div className="space-y-2">
                 <Label>Telefon</Label>
                 <Input
                   value={formData.customer_phone}
                   onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })} />
-
               </div>
               <div className="space-y-2">
                 <Label>Gyldig til</Label>
@@ -624,7 +638,6 @@ export default function Tilbud() {
                   type="date"
                   value={formData.valid_until}
                   onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })} />
-
               </div>
             </div>
 
