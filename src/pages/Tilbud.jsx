@@ -931,6 +931,20 @@ export default function Tilbud() {
         </DialogContent>
       </Dialog>
 
+      {/* New Customer Dialog */}
+      <NewCustomerDialog
+        open={showNewCustomerDialog}
+        onOpenChange={setShowNewCustomerDialog}
+        onCreated={(customer) => {
+          setFormData(prev => ({
+            ...prev,
+            customer_name: customer.name || '',
+            customer_email: customer.email || '',
+            customer_phone: customer.phone || '',
+          }));
+        }}
+      />
+
       {/* Send Email Dialog */}
       <SendEmailDialog
         open={showEmailDialog}
