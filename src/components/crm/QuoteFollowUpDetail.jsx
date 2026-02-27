@@ -140,7 +140,7 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-full p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-5xl w-full p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden">
 
         {/* STICKY HEADER */}
         <div className="flex-shrink-0 bg-white border-b px-6 pt-5 pb-4">
