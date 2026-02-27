@@ -296,7 +296,7 @@ export default function CRM() {
                   onClick={() => setPhaseFilter('godkjent')}
                   className="rounded-xl"
                 >
-                  Godkjent
+                  Vunnet
                 </Button>
               </div>
             )}
