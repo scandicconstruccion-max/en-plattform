@@ -178,13 +178,10 @@ export default function Prosjekter() {
             actionLabel="Nytt prosjekt"
             onAction={() => setShowDialog(true)}
           />
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProjects.map((project) => (
-              <Link
-                key={project.id}
-                to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
-              >
+              <Link key={project.id} to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}>
                 <Card className="p-6 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
@@ -200,16 +197,10 @@ export default function Prosjekter() {
                   )}
                   <div className="space-y-2 text-sm text-slate-500">
                     {project.client_name && (
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        {project.client_name}
-                      </div>
+                      <div className="flex items-center gap-2"><Users className="h-4 w-4" />{project.client_name}</div>
                     )}
                     {project.address && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        {project.address}
-                      </div>
+                      <div className="flex items-center gap-2"><MapPin className="h-4 w-4" />{project.address}</div>
                     )}
                     {project.start_date && (
                       <div className="flex items-center gap-2">
@@ -217,6 +208,45 @@ export default function Prosjekter() {
                         {format(new Date(project.start_date), 'd. MMM yyyy', { locale: nb })}
                       </div>
                     )}
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredProjects.map((project) => (
+              <Link key={project.id} to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}>
+                <Card className="px-4 py-3 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group">
+                  <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-200 transition-colors">
+                      <Building2 className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-slate-900 group-hover:text-emerald-600 transition-colors truncate">
+                          {project.name}
+                        </span>
+                        {project.project_number && (
+                          <span className="text-xs text-slate-400">#{project.project_number}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-slate-500 mt-0.5 flex-wrap">
+                        {project.client_name && (
+                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{project.client_name}</span>
+                        )}
+                        {project.address && (
+                          <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{project.address}</span>
+                        )}
+                        {project.start_date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {format(new Date(project.start_date), 'd. MMM yyyy', { locale: nb })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <StatusBadge status={project.status} />
                   </div>
                 </Card>
               </Link>
