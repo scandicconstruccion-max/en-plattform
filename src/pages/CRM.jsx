@@ -38,6 +38,7 @@ export default function CRM() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [phaseFilter, setPhaseFilter] = useState('all');
+  const [customerView, setCustomerView] = useState('grid');
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
