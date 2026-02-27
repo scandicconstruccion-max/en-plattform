@@ -46,6 +46,7 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
 import { FileSpreadsheet, Search, Plus, Trash2, User, Mail, Phone, Download, Send, ChevronDown, ChevronUp, Copy, FileEdit, X, CheckCircle, FileText } from 'lucide-react';
+import CustomerSelector from '@/components/tilbud/CustomerSelector';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
