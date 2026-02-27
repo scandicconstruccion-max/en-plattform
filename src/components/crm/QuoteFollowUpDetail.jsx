@@ -250,7 +250,7 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
                 {quote.internal_quote_id ? (
                   <button
                     onClick={handleOpenQuotePreview}
-                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
+                    className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors font-semibold"
                   >
                     <FileText className="h-3.5 w-3.5" /> {quote.quote_reference}
                   </button>
