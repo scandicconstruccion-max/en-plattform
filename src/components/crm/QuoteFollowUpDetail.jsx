@@ -592,6 +592,13 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
               <p className="text-sm text-slate-700">{quote.description}</p>
             </div>
           )}
+
+          {/* Close button */}
+          <div className="flex justify-end pb-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>
+              Lukk
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
