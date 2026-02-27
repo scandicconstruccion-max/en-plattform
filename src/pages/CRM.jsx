@@ -221,34 +221,16 @@ export default function CRM() {
                 </>
               )}
               {activeTab === 'customers' && (
-                <div className="flex items-center gap-2">
-                  <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => setCustomerView('grid')}
-                      className={`p-2 transition-colors ${customerView === 'grid' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
-                      title="Rubrikker"
-                    >
-                      <LayoutGrid className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setCustomerView('list')}
-                      className={`p-2 transition-colors ${customerView === 'list' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
-                      title="Linjer"
-                    >
-                      <List className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <Button 
-                    onClick={() => {
-                      setSelectedCustomer(null);
-                      setShowCustomerDialog(true);
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-                  >
-                    <Users className="h-4 w-4 mr-2" />
-                    Ny kunde
-                  </Button>
-                </div>
+                <Button 
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    setShowCustomerDialog(true);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  Ny kunde
+                </Button>
               )}
             </div>
           </div>
