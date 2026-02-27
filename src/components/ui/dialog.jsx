@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -37,11 +38,6 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       {...props}>
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         {children}
-      </div>
-      <div className="flex-shrink-0 border-t px-6 py-3 flex justify-center">
-        <DialogPrimitive.Close className="px-6 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-          Lukk
-        </DialogPrimitive.Close>
       </div>
       <DialogPrimitive.Close
         className="absolute right-4 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground bg-background">
