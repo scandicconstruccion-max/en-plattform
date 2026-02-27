@@ -123,6 +123,15 @@ export default function QuoteFollowUpDetail({ open, onOpenChange, quote, activit
     updateMutation.mutate({ id: quote.id, data: { follow_up_completed: true, next_followup_date: '' } });
   };
 
+  const handleOpenQuotePreview = async () => {
+    if (!quote.internal_quote_id) return;
+    setLoadingQuote(true);
+    setShowQuotePreview(true);
+    const q = await base44.entities.Quote.filter({ id: quote.internal_quote_id });
+    setInternalQuote(q?.[0] || null);
+    setLoadingQuote(false);
+  };
+
   const handleUploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
