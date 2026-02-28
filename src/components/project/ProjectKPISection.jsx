@@ -182,7 +182,7 @@ export default function ProjectKPISection({ projectId, userRole }) {
       title: 'Registrerte timer',
       value: formatNumber(registeredHours),
       status: getHourStatus(),
-      link: createPageUrl(`Timelister?project_id=${projectId}`)
+      link: `${createPageUrl('Timelister')}?project_id=${projectId}`
     },
     {
       title: 'Timeravvik',
@@ -212,14 +212,14 @@ export default function ProjectKPISection({ projectId, userRole }) {
       title: 'Åpne avvik',
       value: formatNumber(openDeviations),
       status: openDeviations > 5 ? 'warning' : openDeviations > 0 ? 'neutral' : 'good',
-      link: createPageUrl(`Avvik?project_id=${projectId}`)
+      link: `${createPageUrl('Avvik')}?project_id=${projectId}`
     },
     {
       title: 'Sjekklister',
       value: formatNumber(openChecklists),
       subtitle: 'Ikke fullførte',
       status: openChecklists > 0 ? 'neutral' : 'good',
-      link: createPageUrl(`Sjekklister?project_id=${projectId}`)
+      link: `${createPageUrl('Sjekklister')}?project_id=${projectId}`
     }
   ];
 
