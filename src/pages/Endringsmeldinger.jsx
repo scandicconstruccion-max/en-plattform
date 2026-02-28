@@ -462,7 +462,7 @@ export default function Endringsmeldinger() {
               moduleType="change"
             />
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-4 flex-wrap">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
               </Button>
@@ -471,7 +471,16 @@ export default function Endringsmeldinger() {
                 disabled={createMutation.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
               >
-                {createMutation.isPending ? 'Lagrer...' : 'Opprett'}
+                {createMutation.isPending && !sendAfterCreate ? 'Lagrer...' : 'Opprett'}
+              </Button>
+              <Button
+                type="button"
+                disabled={createMutation.isPending || !formData.project_id}
+                onClick={(e) => handleSubmit(e, true)}
+                className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2"
+              >
+                <Send className="h-4 w-4" />
+                {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send'}
               </Button>
             </div>
           </form>
