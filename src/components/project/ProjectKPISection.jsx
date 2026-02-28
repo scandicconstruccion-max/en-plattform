@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 
 const formatAmount = (amount) => {
   if (!amount && amount !== 0) return '0 Kr.';
