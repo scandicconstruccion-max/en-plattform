@@ -136,7 +136,8 @@ export default function Endringsmeldinger() {
       project_id: '',
       change_type: 'tillegg',
       amount: '',
-      status: 'utkast'
+      status: 'utkast',
+      customer_email: ''
     });
     setAttachments([]);
   };
