@@ -158,9 +158,9 @@ export default function ProjectKPISection({ projectId, userRole }) {
 
   const openChecklists = checklists.filter(c => c.status !== 'fullfort').length;
 
-  const timelisterUrl = `${createPageUrl('Timelister')}?project_id=${projectId}`;
-  const avvikUrl = `${createPageUrl('Avvik')}?project_id=${projectId}`;
-  const sjekklisterUrl = `${createPageUrl('Sjekklister')}?project_id=${projectId}`;
+  const timelisterUrl = `/Timelister?project_id=${projectId}`;
+  const avvikUrl = `/Avvik?project_id=${projectId}`;
+  const sjekklisterUrl = `/Sjekklister?project_id=${projectId}`;
 
   const kpis = [
     {
