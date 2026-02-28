@@ -162,14 +162,14 @@ export default function SendEmailDialog({
             {customers.length > 0 && (
               <Select
                 onValueChange={(val) => setEmail(val)}
-                value={customers.find(c => c.email === email)?.id || ''}
+                value={email}
               >
                 <SelectTrigger className="mt-1.5 rounded-xl">
                   <SelectValue placeholder="Velg kunde fra liste..." />
                 </SelectTrigger>
                 <SelectContent>
                   {customers.filter(c => c.email).map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
+                    <SelectItem key={customer.id} value={customer.email}>
                       {customer.name} – {customer.email}
                     </SelectItem>
                   ))}
