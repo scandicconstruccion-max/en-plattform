@@ -4,6 +4,8 @@ import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -16,9 +18,10 @@ import EmptyState from '@/components/shared/EmptyState';
 import { BefaringStatusBadge } from '@/components/befaring/BefaringStatusBadge';
 import BefaringForm from '@/components/befaring/BefaringForm';
 import BefaringDetaljer from '@/components/befaring/BefaringDetaljer';
+import CustomerDialog from '@/components/crm/CustomerDialog';
 import { 
   ClipboardCheck, Search, Calendar, Building2, 
-  ChevronRight, Filter, Users
+  ChevronRight, Filter, Users, LayoutGrid, List
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
