@@ -305,11 +305,7 @@ ${base44.auth.me().then((u) => u.full_name)}
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowSendDialog(false);
-      toast.success('Faktura sendt');
-      // Automatisk tilbake til hovedsiden
-      setTimeout(() => {
-        navigate(createPageUrl('Faktura'));
-      }, 1000);
+      setShowSentConfirmDialog(true);
     }
   });
 
