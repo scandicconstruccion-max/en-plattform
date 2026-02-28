@@ -10,21 +10,19 @@ import PageHeader from '@/components/shared/PageHeader';
 import { Building2, CreditCard, Check, MapPin, Phone, Mail, FileText, Globe, User, Users2, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const grunnpakkeModules = ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms'];
+const grunnpakkePrice = 109;
+
 const availableModules = [
-  { key: 'dashboard', name: 'Dashboard', description: 'Oversikt og statistikk', price: 0, required: true },
-  { key: 'prosjekter', name: 'Prosjekter', description: 'Prosjektadministrasjon', price: 299 },
-  { key: 'avvik', name: 'Avvik', description: 'Avvikshåndtering og HMS', price: 199 },
-  { key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Endringshåndtering', price: 149 },
-  { key: 'timelister', name: 'Timelister', description: 'Timeføring og rapportering', price: 199 },
-  { key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumentasjon', price: 149 },
-  { key: 'sjekklister', name: 'Sjekklister', description: 'Kvalitetskontroll', price: 149 },
-  { key: 'tilbud', name: 'Tilbud', description: 'Tilbudsadministrasjon', price: 249 },
-  { key: 'bestillinger', name: 'Bestillinger', description: 'Innkjøp og bestillinger', price: 199 },
-  { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', price: 99 },
-  { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning og allokering', price: 249 },
-  { key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', price: 199 },
-  { key: 'kalender', name: 'Kalender', description: 'Hendelser og møter', price: 99 },
-  { key: 'ansatte', name: 'Ansatte', description: 'Personaladministrasjon', price: 199 },
+  { key: 'tilbud', name: 'Tilbudsmodul', description: 'Tilbudsadministrasjon', price: 29 },
+  { key: 'timelister', name: 'Timelister', description: 'Timeføring og rapportering', price: 39 },
+  { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning og allokering', price: 89 },
+  { key: 'kalender', name: 'Kalender', description: 'Hendelser og møter', price: 12 },
+  { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', price: 89 },
+  { key: 'befaring', name: 'Befaring', description: 'Befaringer og oppfølging', price: 49 },
+  { key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumentasjon', price: 79 },
+  { key: 'fdv', name: 'FDV', description: 'Forvaltning, drift og vedlikehold', price: 109 },
+  { key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', price: 149 },
 ];
 
 export default function MinBedrift() {
