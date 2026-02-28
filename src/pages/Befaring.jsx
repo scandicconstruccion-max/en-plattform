@@ -367,7 +367,108 @@ export default function Befaring() {
             })}
           </div>
         )}
+        </div>
+          </TabsContent>
+
+          <TabsContent value="customers" className="mt-0">
+            <div className="flex gap-4 mb-5">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Søk etter kunde..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  className="pl-10 rounded-xl border-slate-200 dark:border-slate-700 dark:bg-slate-900"
+                />
+              </div>
+              <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setCustomerView('grid')}
+                  className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerView === 'grid' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                >
+                  <LayoutGrid className="h-4 w-4" /> Rubrikker
+                </button>
+                <button
+                  onClick={() => setCustomerView('list')}
+                  className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerView === 'list' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                >
+                  <List className="h-4 w-4" /> Linjer
+                </button>
+              </div>
+            </div>
+
+            {filteredCustomers.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Ingen kunder"
+                description="Bygg opp kunderegisteret ditt"
+                actionLabel="Ny kunde"
+                onAction={() => { setSelectedCustomer(null); setShowCustomerDialog(true); }}
+              />
+            ) : customerView === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredCustomers.map((customer) => (
+                  <Card
+                    key={customer.id}
+                    className="p-5 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all dark:bg-slate-900"
+                    onClick={() => { setSelectedCustomer(customer); setShowCustomerDialog(true); }}
+                  >
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">{customer.name}</h3>
+                    {customer.contact_person && <p className="text-sm text-slate-500 mb-2">{customer.contact_person}</p>}
+                    {customer.email && <p className="text-sm text-slate-600 dark:text-slate-400">{customer.email}</p>}
+                    {customer.phone && <p className="text-sm text-slate-600 dark:text-slate-400">{customer.phone}</p>}
+                    {customer.tags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-3">
+                        {customer.tags.slice(0, 3).map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredCustomers.map((customer) => (
+                  <Card
+                    key={customer.id}
+                    className="px-5 py-3 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all dark:bg-slate-900"
+                    onClick={() => { setSelectedCustomer(customer); setShowCustomerDialog(true); }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <span className="text-emerald-700 text-sm font-semibold">
+                          {customer.name?.charAt(0)?.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-4 gap-1 md:gap-4">
+                        <span className="font-semibold text-slate-900 dark:text-white truncate">{customer.name}</span>
+                        <span className="text-sm text-slate-500 truncate">{customer.contact_person || '—'}</span>
+                        <span className="text-sm text-slate-500 truncate">{customer.email || '—'}</span>
+                        <span className="text-sm text-slate-500 truncate">{customer.phone || '—'}</span>
+                      </div>
+                      {customer.tags?.length > 0 && (
+                        <div className="hidden md:flex gap-1">
+                          {customer.tags.slice(0, 2).map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
+
+      <CustomerDialog
+        open={showCustomerDialog}
+        onOpenChange={setShowCustomerDialog}
+        customer={selectedCustomer}
+        onCustomerChange={setSelectedCustomer}
+      />
 
       {/* Form Dialog */}
       <BefaringForm
