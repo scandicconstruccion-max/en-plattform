@@ -86,6 +86,7 @@ const availableModules = [
 
 export default function MinBedrift() {
   const queryClient = useQueryClient();
+  const [infoPopup, setInfoPopup] = useState(null);
 
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
