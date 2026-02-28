@@ -137,7 +137,7 @@ export default function Prosjekter() {
             <SelectContent>
               <SelectItem value="all">Alle statuser</SelectItem>
               <SelectItem value="planlagt">Planlagt</SelectItem>
-              <SelectItem value="aktiv">Aktiv</SelectItem>
+              <SelectItem value="aktiv">Påbegynt</SelectItem>
               <SelectItem value="pause">På pause</SelectItem>
               <SelectItem value="fullfort">Fullført</SelectItem>
             </SelectContent>
