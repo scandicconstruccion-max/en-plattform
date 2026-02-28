@@ -48,7 +48,7 @@ const statusColors = {
 
 const statusLabels = {
   ny: 'Ny',
-  aktiv: 'Aktiv',
+  aktiv: 'Påbegynt',
   pause: 'På pause',
   fullfort: 'Fullført',
   lukket: 'Lukket',
