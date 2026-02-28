@@ -223,12 +223,12 @@ export default function KPISection() {
       {isExpanded && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {kpiData.map((kpi, index) => (
-            <Link key={index} to={kpi.link} onClick={(e) => {
+            <Link key={index} to={kpi.link} className="h-full" onClick={(e) => {
               if (kpi.isInvoiceCard && e.target.closest('.toggle-invoice-view')) {
                 e.preventDefault();
               }
             }}>
-              <Card className={`border shadow-sm p-5 hover:shadow-md transition-all cursor-pointer ${statusColors[kpi.status]}`}>
+              <Card className={`border shadow-sm p-5 hover:shadow-md transition-all cursor-pointer h-full ${statusColors[kpi.status]}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-1 mb-2">
