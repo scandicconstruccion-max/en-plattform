@@ -15,7 +15,11 @@ const grunnpakkePrice = 109;
 
 const availableModules = [
   { key: 'tilbud', name: 'Tilbudsmodul', description: 'Tilbudsadministrasjon', price: 29 },
+  { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', price: 39 },
+  { key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Endringshåndtering', price: 29 },
+  { key: 'faktura', name: 'Faktura', description: 'Fakturering og betalinger', price: 49 },
   { key: 'timelister', name: 'Timelister', description: 'Timeføring og rapportering', price: 39 },
+  { key: 'ansatte', name: 'Ansatte', description: 'Personaladministrasjon', price: 19 },
   { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning og allokering', price: 89 },
   { key: 'kalender', name: 'Kalender', description: 'Hendelser og møter', price: 12 },
   { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', price: 89 },
