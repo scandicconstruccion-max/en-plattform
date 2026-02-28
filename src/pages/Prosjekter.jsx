@@ -39,13 +39,20 @@ export default function Prosjekter() {
     project_number: '',
     description: '',
     client_name: '',
+    client_contact: '',
+    client_email: '',
+    client_phone: '',
     address: '',
     start_date: '',
     end_date: '',
     status: 'planlagt',
     budget: '',
     project_manager: '',
-    project_manager_name: ''
+    project_manager_name: '',
+    project_manager_phone: '',
+    subcontractors: [],
+    architects: [],
+    consultants: []
   });
 
   const queryClient = useQueryClient();
@@ -84,13 +91,20 @@ export default function Prosjekter() {
       project_number: '',
       description: '',
       client_name: '',
+      client_contact: '',
+      client_email: '',
+      client_phone: '',
       address: '',
       start_date: '',
       end_date: '',
       status: 'planlagt',
       budget: '',
       project_manager: '',
-      project_manager_name: ''
+      project_manager_name: '',
+      project_manager_phone: '',
+      subcontractors: [],
+      architects: [],
+      consultants: []
     });
   };
 
@@ -256,8 +270,8 @@ export default function Prosjekter() {
       </div>
 
       {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg">
+       <Dialog open={showDialog} onOpenChange={setShowDialog}>
+         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nytt prosjekt</DialogTitle>
           </DialogHeader>
@@ -381,8 +395,309 @@ export default function Prosjekter() {
                   className="mt-1.5 rounded-xl"
                 />
               </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
+              </div>
+
+              <div className="border-t pt-4">
+              <h4 className="font-medium text-slate-900 mb-3">Prosjektleder</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>Navn</Label>
+                  <Input
+                    value={formData.project_manager_name}
+                    onChange={(e) => setFormData({...formData, project_manager_name: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>E-post</Label>
+                  <Input
+                    type="email"
+                    value={formData.project_manager}
+                    onChange={(e) => setFormData({...formData, project_manager: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Telefon</Label>
+                  <Input
+                    value={formData.project_manager_phone}
+                    onChange={(e) => setFormData({...formData, project_manager_phone: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+              </div>
+
+              <div className="border-t pt-4">
+              <h4 className="font-medium text-slate-900 mb-3">Kunde</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Kundenavn</Label>
+                  <Input
+                    value={formData.client_name}
+                    onChange={(e) => setFormData({...formData, client_name: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Kontaktperson</Label>
+                  <Input
+                    value={formData.client_contact}
+                    onChange={(e) => setFormData({...formData, client_contact: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>E-post</Label>
+                  <Input
+                    type="email"
+                    value={formData.client_email}
+                    onChange={(e) => setFormData({...formData, client_email: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label>Telefon</Label>
+                  <Input
+                    value={formData.client_phone}
+                    onChange={(e) => setFormData({...formData, client_phone: e.target.value})}
+                    className="mt-1.5 rounded-xl"
+                  />
+                </div>
+              </div>
+              </div>
+
+              <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-slate-900">Underentreprenører</h4>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setFormData({...formData, subcontractors: [...formData.subcontractors, { name: '', trade: '', contact_person: '', phone: '', email: '' }]})}
+                  className="rounded-xl"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Legg til
+                </Button>
+              </div>
+              {formData.subcontractors.map((sub, index) => (
+                <div key={index} className="grid grid-cols-6 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
+                  <Input
+                    placeholder="Firma"
+                    value={sub.name}
+                    onChange={(e) => {
+                      const newSubs = [...formData.subcontractors];
+                      newSubs[index].name = e.target.value;
+                      setFormData({...formData, subcontractors: newSubs});
+                    }}
+                    className="col-span-2 rounded-lg"
+                  />
+                  <Input
+                    placeholder="Fag"
+                    value={sub.trade}
+                    onChange={(e) => {
+                      const newSubs = [...formData.subcontractors];
+                      newSubs[index].trade = e.target.value;
+                      setFormData({...formData, subcontractors: newSubs});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <Input
+                    placeholder="Kontakt"
+                    value={sub.contact_person}
+                    onChange={(e) => {
+                      const newSubs = [...formData.subcontractors];
+                      newSubs[index].contact_person = e.target.value;
+                      setFormData({...formData, subcontractors: newSubs});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <Input
+                    placeholder="Telefon"
+                    value={sub.phone}
+                    onChange={(e) => {
+                      const newSubs = [...formData.subcontractors];
+                      newSubs[index].phone = e.target.value;
+                      setFormData({...formData, subcontractors: newSubs});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <div className="flex gap-1">
+                    <Input
+                      placeholder="E-post"
+                      value={sub.email}
+                      onChange={(e) => {
+                        const newSubs = [...formData.subcontractors];
+                        newSubs[index].email = e.target.value;
+                        setFormData({...formData, subcontractors: newSubs});
+                      }}
+                      className="rounded-lg flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFormData({...formData, subcontractors: formData.subcontractors.filter((_, i) => i !== index)})}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              </div>
+
+              <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-slate-900">Arkitekter</h4>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setFormData({...formData, architects: [...formData.architects, { company: '', contact_person: '', phone: '', email: '' }]})}
+                  className="rounded-xl"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Legg til
+                </Button>
+              </div>
+              {formData.architects.map((arch, index) => (
+                <div key={index} className="grid grid-cols-5 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
+                  <Input
+                    placeholder="Firma"
+                    value={arch.company}
+                    onChange={(e) => {
+                      const newArchs = [...formData.architects];
+                      newArchs[index].company = e.target.value;
+                      setFormData({...formData, architects: newArchs});
+                    }}
+                    className="col-span-2 rounded-lg"
+                  />
+                  <Input
+                    placeholder="Kontakt"
+                    value={arch.contact_person}
+                    onChange={(e) => {
+                      const newArchs = [...formData.architects];
+                      newArchs[index].contact_person = e.target.value;
+                      setFormData({...formData, architects: newArchs});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <Input
+                    placeholder="Telefon"
+                    value={arch.phone}
+                    onChange={(e) => {
+                      const newArchs = [...formData.architects];
+                      newArchs[index].phone = e.target.value;
+                      setFormData({...formData, architects: newArchs});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <div className="flex gap-1">
+                    <Input
+                      placeholder="E-post"
+                      value={arch.email}
+                      onChange={(e) => {
+                        const newArchs = [...formData.architects];
+                        newArchs[index].email = e.target.value;
+                        setFormData({...formData, architects: newArchs});
+                      }}
+                      className="rounded-lg flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFormData({...formData, architects: formData.architects.filter((_, i) => i !== index)})}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              </div>
+
+              <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-slate-900">Rådgivende ingeniører</h4>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setFormData({...formData, consultants: [...formData.consultants, { company: '', discipline: '', contact_person: '', phone: '', email: '' }]})}
+                  className="rounded-xl"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Legg til
+                </Button>
+              </div>
+              {formData.consultants.map((cons, index) => (
+                <div key={index} className="grid grid-cols-6 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
+                  <Input
+                    placeholder="Firma"
+                    value={cons.company}
+                    onChange={(e) => {
+                      const newCons = [...formData.consultants];
+                      newCons[index].company = e.target.value;
+                      setFormData({...formData, consultants: newCons});
+                    }}
+                    className="col-span-2 rounded-lg"
+                  />
+                  <Input
+                    placeholder="Fagområde"
+                    value={cons.discipline}
+                    onChange={(e) => {
+                      const newCons = [...formData.consultants];
+                      newCons[index].discipline = e.target.value;
+                      setFormData({...formData, consultants: newCons});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <Input
+                    placeholder="Kontakt"
+                    value={cons.contact_person}
+                    onChange={(e) => {
+                      const newCons = [...formData.consultants];
+                      newCons[index].contact_person = e.target.value;
+                      setFormData({...formData, consultants: newCons});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <Input
+                    placeholder="Telefon"
+                    value={cons.phone}
+                    onChange={(e) => {
+                      const newCons = [...formData.consultants];
+                      newCons[index].phone = e.target.value;
+                      setFormData({...formData, consultants: newCons});
+                    }}
+                    className="rounded-lg"
+                  />
+                  <div className="flex gap-1">
+                    <Input
+                      placeholder="E-post"
+                      value={cons.email}
+                      onChange={(e) => {
+                        const newCons = [...formData.consultants];
+                        newCons[index].email = e.target.value;
+                        setFormData({...formData, consultants: newCons});
+                      }}
+                      className="rounded-lg flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFormData({...formData, consultants: formData.consultants.filter((_, i) => i !== index)})}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
               </Button>
