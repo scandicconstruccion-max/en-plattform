@@ -37,6 +37,7 @@ const befaringTypeLabels = {
 };
 
 export default function Befaring() {
+  const [activeTab, setActiveTab] = useState('befaringer');
   const [showForm, setShowForm] = useState(false);
   const [selectedBefaring, setSelectedBefaring] = useState(null);
   const [editingBefaring, setEditingBefaring] = useState(null);
@@ -44,6 +45,10 @@ export default function Befaring() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerView, setCustomerView] = useState('grid');
+  const [customerSearch, setCustomerSearch] = useState('');
 
   const queryClient = useQueryClient();
 
