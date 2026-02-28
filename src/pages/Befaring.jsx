@@ -461,8 +461,6 @@ export default function Befaring() {
             )}
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
 
       <CustomerDialog
         open={showCustomerDialog}
@@ -471,7 +469,6 @@ export default function Befaring() {
         onCustomerChange={setSelectedCustomer}
       />
 
-      {/* Form Dialog */}
       <BefaringForm
         open={showForm}
         onOpenChange={setShowForm}
@@ -480,6 +477,7 @@ export default function Befaring() {
         onSubmit={handleSubmit}
         isEdit={!!editingBefaring}
       />
+      </div>
     </div>
   );
 }
