@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageHeader from '@/components/shared/PageHeader';
-import { Building2, CreditCard, Check, MapPin, Phone, Mail, FileText, Globe, User, Users2, DollarSign } from 'lucide-react';
+import { Building2, CreditCard, Check, MapPin, Phone, Mail, FileText, Globe, User, Users2, DollarSign, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const grunnpakkeModules = ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms'];
