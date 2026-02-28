@@ -65,24 +65,24 @@ const moduleInfo = {
   crm: {
     title: 'CRM',
     body: 'Hold oversikt over alle kunder, leads og oppfølgingsaktiviteter. Prosjektlederen ser hvem som skal følges opp, hvilke tilbud som er sendt og hva som er avtalt. Ingen kunder faller mellom stolene. Henger direkte mot Tilbudsmodul og Prosjekter.'
-  },
+  }
 };
 
 const availableModules = [
-  { key: 'tilbud', name: 'Tilbudsmodul', description: 'Tilbudsadministrasjon', price: 29 },
-  { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', price: 39 },
-  { key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Endringshåndtering', price: 29 },
-  { key: 'faktura', name: 'Faktura', description: 'Fakturering og betalinger', price: 49 },
-  { key: 'timelister', name: 'Timelister', description: 'Timeføring og rapportering', price: 39 },
-  { key: 'ansatte', name: 'Ansatte', description: 'Personaladministrasjon', price: 19 },
-  { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning og allokering', price: 89 },
-  { key: 'kalender', name: 'Kalender', description: 'Hendelser og møter', price: 12 },
-  { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', price: 89 },
-  { key: 'befaring', name: 'Befaring', description: 'Befaringer og oppfølging', price: 49 },
-  { key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumentasjon', price: 79 },
-  { key: 'fdv', name: 'FDV', description: 'Forvaltning, drift og vedlikehold', price: 109 },
-  { key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', price: 149 },
-];
+{ key: 'tilbud', name: 'Tilbudsmodul', description: 'Tilbudsadministrasjon', price: 29 },
+{ key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', price: 39 },
+{ key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Endringshåndtering', price: 29 },
+{ key: 'faktura', name: 'Faktura', description: 'Fakturering og betalinger', price: 49 },
+{ key: 'timelister', name: 'Timelister', description: 'Timeføring og rapportering', price: 39 },
+{ key: 'ansatte', name: 'Ansatte', description: 'Personaladministrasjon', price: 19 },
+{ key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning og allokering', price: 89 },
+{ key: 'kalender', name: 'Kalender', description: 'Hendelser og møter', price: 12 },
+{ key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', price: 89 },
+{ key: 'befaring', name: 'Befaring', description: 'Befaringer og oppfølging', price: 49 },
+{ key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumentasjon', price: 79 },
+{ key: 'fdv', name: 'FDV', description: 'Forvaltning, drift og vedlikehold', price: 109 },
+{ key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', price: 149 }];
+
 
 export default function MinBedrift() {
   const queryClient = useQueryClient();
@@ -90,11 +90,11 @@ export default function MinBedrift() {
 
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
-    queryFn: () => base44.entities.Company.list(),
+    queryFn: () => base44.entities.Company.list()
   });
 
   const company = companies[0];
-  const activeModules = company?.active_modules || availableModules.map(m => m.key);
+  const activeModules = company?.active_modules || availableModules.map((m) => m.key);
 
   const updateCompanyMutation = useMutation({
     mutationFn: async (data) => {
@@ -106,24 +106,24 @@ export default function MinBedrift() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['companies'] });
-    },
+    }
   });
 
   const toggleModule = (moduleKey) => {
-    const module = availableModules.find(m => m.key === moduleKey);
+    const module = availableModules.find((m) => m.key === moduleKey);
     if (module?.required) return;
 
-    const newModules = activeModules.includes(moduleKey)
-      ? activeModules.filter(m => m !== moduleKey)
-      : [...activeModules, moduleKey];
+    const newModules = activeModules.includes(moduleKey) ?
+    activeModules.filter((m) => m !== moduleKey) :
+    [...activeModules, moduleKey];
 
     updateCompanyMutation.mutate({ active_modules: newModules });
   };
 
   const calculateMonthlyPrice = () => {
-    const addons = availableModules
-      .filter(m => activeModules.includes(m.key))
-      .reduce((sum, m) => sum + m.price, 0);
+    const addons = availableModules.
+    filter((m) => activeModules.includes(m.key)).
+    reduce((sum, m) => sum + m.price, 0);
     return grunnpakkePrice + addons;
   };
 
@@ -131,8 +131,8 @@ export default function MinBedrift() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <PageHeader
         title="Min bedrift"
-        subtitle="Administrer bedriftsinformasjon og moduler"
-      />
+        subtitle="Administrer bedriftsinformasjon og moduler" />
+
 
       <div className="px-6 lg:px-8 py-6">
         <Tabs defaultValue="info" className="space-y-6">
@@ -157,8 +157,8 @@ export default function MinBedrift() {
                     value={company?.name || ''}
                     placeholder="Ditt firma AS"
                     className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                    onChange={(e) => updateCompanyMutation.mutate({ name: e.target.value })}
-                  />
+                    onChange={(e) => updateCompanyMutation.mutate({ name: e.target.value })} />
+
                 </div>
                 <div>
                   <Label className="dark:text-slate-300">Organisasjonsnummer</Label>
@@ -166,8 +166,8 @@ export default function MinBedrift() {
                     value={company?.org_number || ''}
                     placeholder="123 456 789"
                     className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                    onChange={(e) => updateCompanyMutation.mutate({ org_number: e.target.value })}
-                  />
+                    onChange={(e) => updateCompanyMutation.mutate({ org_number: e.target.value })} />
+
                 </div>
                 <div className="md:col-span-2">
                   <Label className="dark:text-slate-300">Adresse</Label>
@@ -175,8 +175,8 @@ export default function MinBedrift() {
                     value={company?.address || ''}
                     placeholder="Gate 1, 0000 Sted"
                     className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                    onChange={(e) => updateCompanyMutation.mutate({ address: e.target.value })}
-                  />
+                    onChange={(e) => updateCompanyMutation.mutate({ address: e.target.value })} />
+
                 </div>
                 <div>
                   <Label className="dark:text-slate-300">Telefon</Label>
@@ -184,8 +184,8 @@ export default function MinBedrift() {
                     value={company?.phone || ''}
                     placeholder="+47 123 45 678"
                     className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                    onChange={(e) => updateCompanyMutation.mutate({ phone: e.target.value })}
-                  />
+                    onChange={(e) => updateCompanyMutation.mutate({ phone: e.target.value })} />
+
                 </div>
                 <div>
                   <Label className="dark:text-slate-300">E-post</Label>
@@ -193,8 +193,8 @@ export default function MinBedrift() {
                     value={company?.email || ''}
                     placeholder="post@firma.no"
                     className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                    onChange={(e) => updateCompanyMutation.mutate({ email: e.target.value })}
-                  />
+                    onChange={(e) => updateCompanyMutation.mutate({ email: e.target.value })} />
+
                 </div>
               </div>
 
@@ -218,8 +218,8 @@ export default function MinBedrift() {
                         value={company?.ceo_name || ''}
                         placeholder="Ola Nordmann"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ ceo_name: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ ceo_name: e.target.value })} />
+
                     </div>
                     <div>
                       <Label className="dark:text-slate-300">Telefon</Label>
@@ -227,8 +227,8 @@ export default function MinBedrift() {
                         value={company?.ceo_phone || ''}
                         placeholder="+47 123 45 678"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ ceo_phone: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ ceo_phone: e.target.value })} />
+
                     </div>
                     <div>
                       <Label className="dark:text-slate-300">E-post</Label>
@@ -236,8 +236,8 @@ export default function MinBedrift() {
                         value={company?.ceo_email || ''}
                         placeholder="daglig.leder@firma.no"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ ceo_email: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ ceo_email: e.target.value })} />
+
                     </div>
                   </div>
                 </div>
@@ -255,8 +255,8 @@ export default function MinBedrift() {
                         value={company?.chairman_name || ''}
                         placeholder="Kari Hansen"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ chairman_name: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ chairman_name: e.target.value })} />
+
                     </div>
                     <div>
                       <Label className="dark:text-slate-300">Telefon</Label>
@@ -264,8 +264,8 @@ export default function MinBedrift() {
                         value={company?.chairman_phone || ''}
                         placeholder="+47 123 45 678"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ chairman_phone: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ chairman_phone: e.target.value })} />
+
                     </div>
                     <div>
                       <Label className="dark:text-slate-300">E-post</Label>
@@ -273,8 +273,8 @@ export default function MinBedrift() {
                         value={company?.chairman_email || ''}
                         placeholder="styreformann@firma.no"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ chairman_email: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ chairman_email: e.target.value })} />
+
                     </div>
                   </div>
                 </div>
@@ -292,8 +292,8 @@ export default function MinBedrift() {
                         value={company?.finance_contact_name || ''}
                         placeholder="Per Jensen"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_name: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_name: e.target.value })} />
+
                     </div>
                     <div>
                       <Label className="dark:text-slate-300">Telefon</Label>
@@ -301,8 +301,8 @@ export default function MinBedrift() {
                         value={company?.finance_contact_phone || ''}
                         placeholder="+47 123 45 678"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_phone: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_phone: e.target.value })} />
+
                     </div>
                     <div>
                       <Label className="dark:text-slate-300">E-post</Label>
@@ -310,51 +310,51 @@ export default function MinBedrift() {
                         value={company?.finance_contact_email || ''}
                         placeholder="okonomi@firma.no"
                         className="mt-1.5 rounded-xl dark:bg-slate-800 dark:border-slate-700"
-                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_email: e.target.value })}
-                      />
+                        onChange={(e) => updateCompanyMutation.mutate({ finance_contact_email: e.target.value })} />
+
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Summary */}
-              {company?.name && (
-                <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-800 rounded-xl">
+              {company?.name &&
+              <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-800 rounded-xl">
                   <h3 className="font-medium text-slate-900 dark:text-white mb-4">Sammendrag</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    {company.name && (
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                    {company.name &&
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <Building2 className="h-4 w-4" />
                         {company.name}
                       </div>
-                    )}
-                    {company.org_number && (
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                  }
+                    {company.org_number &&
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <FileText className="h-4 w-4" />
                         Org.nr: {company.org_number}
                       </div>
-                    )}
-                    {company.address && (
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                  }
+                    {company.address &&
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <MapPin className="h-4 w-4" />
                         {company.address}
                       </div>
-                    )}
-                    {company.phone && (
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                  }
+                    {company.phone &&
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <Phone className="h-4 w-4" />
                         {company.phone}
                       </div>
-                    )}
-                    {company.email && (
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                  }
+                    {company.email &&
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <Mail className="h-4 w-4" />
                         {company.email}
                       </div>
-                    )}
+                  }
                   </div>
                 </div>
-              )}
+              }
             </Card>
           </TabsContent>
 
@@ -374,11 +374,11 @@ export default function MinBedrift() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {['Dashboard', 'Prosjekter', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko'].map(name => (
-                  <span key={name} className="inline-flex items-center gap-1 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-lg">
+                {['Dashboard', 'Prosjekter', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko'].map((name) =>
+                <span key={name} className="inline-flex items-center gap-1 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-lg">
                     <Check className="h-3 w-3" /> {name}
                   </span>
-                ))}
+                )}
               </div>
             </Card>
 
@@ -405,22 +405,22 @@ export default function MinBedrift() {
                       key={module.key}
                       className={cn(
                         "p-4 rounded-xl border-2 cursor-pointer transition-all select-none",
-                        isActive 
-                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20" 
-                          : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                        isActive ?
+                        "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20" :
+                        "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
                       )}
-                      onClick={() => toggleModule(module.key)}
-                    >
+                      onClick={() => toggleModule(module.key)}>
+
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <h3 className="font-medium text-slate-900 dark:text-white">{module.name}</h3>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setInfoPopup(module.key); }}
+                              onClick={(e) => {e.stopPropagation();setInfoPopup(module.key);}}
                               className="flex-shrink-0 text-slate-400 hover:text-emerald-600 transition-colors"
-                              title="Mer info"
-                            >
-                              <Info className="h-3.5 w-3.5" />
+                              title="Mer info">
+
+                              <Info className="text-emerald-600 lucide lucide-info h-3.5 w-3.5" />
                             </button>
                           </div>
                           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
@@ -428,28 +428,28 @@ export default function MinBedrift() {
                             {module.price} kr/mnd
                           </p>
                         </div>
-                        {isActive && (
-                          <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                        {isActive &&
+                        <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
                             <Check className="h-4 w-4 text-white" />
                           </div>
-                        )}
+                        }
                       </div>
-                    </div>
-                  );
+                    </div>);
+
                 })}
               </div>
 
               {/* Info popup */}
-              {infoPopup && moduleInfo[infoPopup] && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setInfoPopup(null)}>
+              {infoPopup && moduleInfo[infoPopup] &&
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setInfoPopup(null)}>
                   <div
-                    className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 relative"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 relative"
+                  onClick={(e) => e.stopPropagation()}>
+
                     <button
-                      onClick={() => setInfoPopup(null)}
-                      className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                    >
+                    onClick={() => setInfoPopup(null)}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+
                       <X className="h-5 w-5" />
                     </button>
                     <div className="flex items-center gap-2 mb-3">
@@ -464,11 +464,11 @@ export default function MinBedrift() {
                     </div>
                   </div>
                 </div>
-              )}
+              }
             </Card>
           </TabsContent>
         </Tabs>
       </div>
-    </div>
-  );
+    </div>);
+
 }
