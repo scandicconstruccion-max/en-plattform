@@ -462,6 +462,7 @@ export default function Befaring() {
           </TabsContent>
         </Tabs>
       </div>
+    </div>
 
       <CustomerDialog
         open={showCustomerDialog}
