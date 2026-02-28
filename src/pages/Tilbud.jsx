@@ -708,6 +708,7 @@ export default function Tilbud() {
             </div>
           </>
         }
+      </> }
       </div>
 
       {/* Create Dialog */}
