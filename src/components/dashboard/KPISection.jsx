@@ -9,7 +9,10 @@ import { createPageUrl } from '@/utils';
 import { formatAmount } from '@/components/shared/formatNumber';
 
 export default function KPISection() {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const stored = localStorage.getItem('kpiSectionExpanded');
+    return stored === null ? true : stored === 'true';
+  });
   const [invoiceView, setInvoiceView] = useState('month');
 
   const { data: projects = [] } = useQuery({
