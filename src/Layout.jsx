@@ -229,12 +229,13 @@ export default function Layout({ children, currentPageName }) {
               
 
 
-              {!sidebarCollapsed &&
-            <div className="flex flex-col">
+              {sidebarCollapsed ?
+                <span className="text-green-700 text-xl font-bold dark:text-white">EP</span> :
+                <div className="flex flex-col">
                   <span className="text-green-700 text-2xl font-bold dark:text-white">En Plattform</span>
                   <span className="text-green-700 text-sm font-semibold dark:text-slate-400 italic">Av håndverkeren,            for håndverkeren</span>
                 </div>
-            }
+              }
             </div>
           </div>
         }
