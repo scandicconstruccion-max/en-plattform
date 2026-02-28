@@ -148,6 +148,14 @@ export default function ProjectKPISection({ projectId, userRole }) {
     return 'good';
   };
 
+  const { data: checklists = [] } = useQuery({
+    queryKey: ['projectChecklists', projectId],
+    queryFn: () => base44.entities.Checklist.filter({ project_id: projectId }),
+    enabled: !!projectId
+  });
+
+  const openChecklists = checklists.filter(c => c.status !== 'fullfort').length;
+
   const kpis = [
     {
       title: 'Kontraktsverdi',
@@ -173,7 +181,8 @@ export default function ProjectKPISection({ projectId, userRole }) {
     {
       title: 'Registrerte timer',
       value: formatNumber(registeredHours),
-      status: getHourStatus()
+      status: getHourStatus(),
+      link: createPageUrl(`Timelister?project_id=${projectId}`)
     },
     {
       title: 'Timeravvik',
@@ -202,7 +211,15 @@ export default function ProjectKPISection({ projectId, userRole }) {
     {
       title: 'Åpne avvik',
       value: formatNumber(openDeviations),
-      status: openDeviations > 5 ? 'warning' : openDeviations > 0 ? 'neutral' : 'good'
+      status: openDeviations > 5 ? 'warning' : openDeviations > 0 ? 'neutral' : 'good',
+      link: createPageUrl(`Avvik?project_id=${projectId}`)
+    },
+    {
+      title: 'Sjekklister',
+      value: formatNumber(openChecklists),
+      subtitle: 'Ikke fullførte',
+      status: openChecklists > 0 ? 'neutral' : 'good',
+      link: createPageUrl(`Sjekklister?project_id=${projectId}`)
     }
   ];
 
