@@ -156,6 +156,10 @@ export default function ProjectKPISection({ projectId, userRole }) {
 
   const openChecklists = checklists.filter(c => c.status !== 'fullfort').length;
 
+  const timelisterUrl = `${createPageUrl('Timelister')}?project_id=${projectId}`;
+  const avvikUrl = `${createPageUrl('Avvik')}?project_id=${projectId}`;
+  const sjekklisterUrl = `${createPageUrl('Sjekklister')}?project_id=${projectId}`;
+
   const kpis = [
     {
       title: 'Kontraktsverdi',
@@ -182,7 +186,7 @@ export default function ProjectKPISection({ projectId, userRole }) {
       title: 'Registrerte timer',
       value: formatNumber(registeredHours),
       status: getHourStatus(),
-      link: `${createPageUrl('Timelister')}?project_id=${projectId}`
+      link: timelisterUrl
     },
     {
       title: 'Timeravvik',
@@ -212,14 +216,14 @@ export default function ProjectKPISection({ projectId, userRole }) {
       title: 'Åpne avvik',
       value: formatNumber(openDeviations),
       status: openDeviations > 5 ? 'warning' : openDeviations > 0 ? 'neutral' : 'good',
-      link: `${createPageUrl('Avvik')}?project_id=${projectId}`
+      link: avvikUrl
     },
     {
       title: 'Sjekklister',
       value: formatNumber(openChecklists),
       subtitle: 'Ikke fullførte',
       status: openChecklists > 0 ? 'neutral' : 'good',
-      link: `${createPageUrl('Sjekklister')}?project_id=${projectId}`
+      link: sjekklisterUrl
     }
   ];
 
