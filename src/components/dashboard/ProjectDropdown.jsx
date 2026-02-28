@@ -17,6 +17,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 
 export default function ProjectDropdown() {
   const [selectedProject, setSelectedProject] = useState(null);
+  const navigate = useNavigate();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
