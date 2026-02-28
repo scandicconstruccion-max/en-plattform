@@ -114,10 +114,49 @@ export default function Tilbud() {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Quote.create(data),
-    onSuccess: () => {
+    onSuccess: async (createdQuote) => {
       queryClient.invalidateQueries({ queryKey: ['quotes'] });
       setShowDialog(false);
       resetForm();
+      if (sendAfterCreate) {
+        setSendAfterCreate(false);
+        // Send e-post direkte uten å åpne SendEmailDialog
+        const email = createdQuote.customer_email;
+        if (!email) {
+          toast.error('Ingen e-postadresse på kunden – tilbudet ble opprettet men ikke sendt.');
+          return;
+        }
+        try {
+          let approvalToken = `tilbud-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          await base44.entities.Quote.update(createdQuote.id, { approval_token: approvalToken });
+          const approvalUrl = `${window.location.origin}/approve-quote?token=${approvalToken}`;
+          const { generateQuoteEmailHTML } = await import('@/components/shared/generateEmailHTML');
+          const htmlBody = generateQuoteEmailHTML({ ...createdQuote, approval_token: approvalToken }, approvalUrl);
+          await base44.integrations.Core.SendEmail({
+            to: email,
+            subject: `Tilbud: ${createdQuote.quote_number}`,
+            body: htmlBody
+          });
+          const now = new Date().toISOString();
+          await base44.entities.Quote.update(createdQuote.id, {
+            sent_to_customer: true,
+            sent_date: now,
+            sent_to_email: email,
+            delivery_confirmed: true,
+            delivery_confirmed_date: now,
+            approval_token: approvalToken,
+            status: 'sendt'
+          });
+          queryClient.invalidateQueries({ queryKey: ['quotes'] });
+          toast.success(`Tilbud ${createdQuote.quote_number} er sendt til ${email}`, {
+            duration: 6000
+          });
+        } catch (error) {
+          toast.error('Tilbudet ble opprettet, men e-post kunne ikke sendes: ' + error.message);
+        }
+      } else {
+        setSendAfterCreate(false);
+      }
     }
   });
 
