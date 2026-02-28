@@ -64,6 +64,9 @@ import { nb } from 'date-fns/locale';
 export default function Avvik() {
   const [showDialog, setShowDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showSentConfirmDialog, setShowSentConfirmDialog] = useState(false);
+  const [sendAfterCreate, setSendAfterCreate] = useState(false);
+  const [justCreatedDeviation, setJustCreatedDeviation] = useState(null);
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showBulkEmailDialog, setShowBulkEmailDialog] = useState(false);

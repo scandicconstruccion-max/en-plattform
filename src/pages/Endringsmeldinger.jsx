@@ -44,6 +44,9 @@ import {
 export default function Endringsmeldinger() {
   const [showDialog, setShowDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showSentConfirmDialog, setShowSentConfirmDialog] = useState(false);
+  const [sendAfterCreate, setSendAfterCreate] = useState(false);
+  const [justCreatedChange, setJustCreatedChange] = useState(null);
   const [selectedChange, setSelectedChange] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
