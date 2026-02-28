@@ -35,6 +35,11 @@ export default function SendEmailDialog({
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
 
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => base44.entities.Customer.list(),
+  });
+
   React.useEffect(() => {
     if (open && item) {
       setEmail(defaultEmail || item.customer_email || item.sent_to_email || '');
