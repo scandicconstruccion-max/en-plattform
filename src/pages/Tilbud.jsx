@@ -927,8 +927,15 @@ export default function Tilbud() {
                 type="submit"
                 disabled={createMutation.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
-
-                {createMutation.isPending ? 'Lagrer...' : 'Opprett tilbud'}
+                {createMutation.isPending && !sendAfterCreate ? 'Lagrer...' : 'Opprett tilbud'}
+              </Button>
+              <Button
+                type="button"
+                disabled={createMutation.isPending || !formData.customer_email}
+                onClick={(e) => handleSubmit(e, true)}
+                className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2">
+                <Send className="h-4 w-4" />
+                {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send tilbud'}
               </Button>
             </div>
           </form>
