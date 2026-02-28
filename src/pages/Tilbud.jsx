@@ -140,13 +140,15 @@ export default function Tilbud() {
             approval_token: approvalToken,
             status: 'sendt'
           };
-          await base44.functions.invoke('sendQuoteEmail', {
-            quoteId: createdQuote.id,
+          const res = await base44.functions.invoke('sendEmail', {
             toEmail: email,
-            subject: `Tilbud: ${createdQuote.quote_number}`,
-            htmlBody,
+            subject: `Tilbud #${createdQuote.quote_number}`,
+            body: htmlBody,
+            entityType: 'Quote',
+            entityId: createdQuote.id,
             updateData
           });
+          if (res?.data?.error) throw new Error(res.data.error);
           queryClient.invalidateQueries({ queryKey: ['quotes'] });
           toast.success(`Tilbud ${createdQuote.quote_number} er sendt til ${email}`, { duration: 6000 });
         } catch (error) {
