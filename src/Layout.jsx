@@ -31,7 +31,7 @@ const moduleIcons = {
   endringsmeldinger: FileText,
   timelister: Clock,
   bildedok: Camera,
-    sjekklister: CheckSquare,
+  sjekklister: CheckSquare,
   tilbud: FileSpreadsheet,
   ordre: FileText,
   faktura: FileText,
@@ -139,30 +139,30 @@ export default function Layout({ children, currentPageName }) {
 
   // Module sections
   const moduleSections = [
-    {
-      title: 'GRUNNPAKKE',
-      modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
-    },
-    {
-      separator: true
-    },
-    {
-      title: 'ØKONOMI & KONTRAKT',
-      modules: ['tilbud', 'ordre', 'endringsmeldinger', 'faktura']
-    },
-    {
-      title: 'PERSONELL & RESSURSER',
-      modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat']
-    },
-    {
-      title: 'DOKUMENTASJON & OVERLEVERING',
-      modules: ['befaring', 'bildedok', 'fdv']
-    },
-    {
-      title: 'SALG & ADMIN',
-      modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser']
-    }
-  ];
+  {
+    title: 'GRUNNPAKKE',
+    modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
+  },
+  {
+    separator: true
+  },
+  {
+    title: 'ØKONOMI & KONTRAKT',
+    modules: ['tilbud', 'ordre', 'endringsmeldinger', 'faktura']
+  },
+  {
+    title: 'PERSONELL & RESSURSER',
+    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat']
+  },
+  {
+    title: 'DOKUMENTASJON & OVERLEVERING',
+    modules: ['befaring', 'bildedok', 'fdv']
+  },
+  {
+    title: 'SALG & ADMIN',
+    modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser']
+  }];
+
 
 
   useEffect(() => {
@@ -230,12 +230,12 @@ export default function Layout({ children, currentPageName }) {
 
 
               {sidebarCollapsed ?
-                <span className="text-green-700 text-xl font-bold dark:text-white">EP</span> :
-                <div className="flex flex-col">
+            <span className="text-green-700 text-3xl font-bold dark:text-white">EP</span> :
+            <div className="flex flex-col">
                   <span className="text-green-700 text-2xl font-bold dark:text-white">En Plattform</span>
                   <span className="text-green-700 text-sm font-semibold dark:text-slate-400 italic">Av håndverkeren,            for håndverkeren</span>
                 </div>
-              }
+            }
             </div>
           </div>
         }
@@ -258,18 +258,18 @@ export default function Layout({ children, currentPageName }) {
         <nav className={cn("p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]", sidebarCollapsed && "px-2")}>
           {moduleSections.map((section, sectionIndex) => {
             if (section.separator) {
-              return !sidebarCollapsed && (
-                <div key={`separator-${sectionIndex}`} className="my-4 border-t border-slate-200 dark:border-slate-700" />
-              );
+              return !sidebarCollapsed &&
+              <div key={`separator-${sectionIndex}`} className="my-4 border-t border-slate-200 dark:border-slate-700" />;
+
             }
 
             return (
               <div key={sectionIndex} className="mb-6">
-                {!sidebarCollapsed && section.title && (
-                  <div className="px-4 mb-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                {!sidebarCollapsed && section.title &&
+                <div className="px-4 mb-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     {section.title}
                   </div>
-                )}
+                }
                 <div className="space-y-1">
                   {section.modules.map((moduleKey) => {
                     if (!user || !hasModuleAccess(user, moduleKey)) return null;
@@ -295,12 +295,12 @@ export default function Layout({ children, currentPageName }) {
 
                         <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600 dark:text-emerald-400")} />
                         {!sidebarCollapsed && label}
-                      </Link>
-                    );
+                      </Link>);
+
                   })}
                 </div>
-              </div>
-            );
+              </div>);
+
           })}
         </nav>
 
