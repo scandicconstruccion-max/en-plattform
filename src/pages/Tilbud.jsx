@@ -76,6 +76,11 @@ export default function Tilbud() {
   });
   const [attachments, setAttachments] = useState([]);
   const [showNewCustomerDialog, setShowNewCustomerDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState('quotes');
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerView, setCustomerView] = useState('grid');
+  const [customerSearch, setCustomerSearch] = useState('');
 
   const queryClient = useQueryClient();
 
