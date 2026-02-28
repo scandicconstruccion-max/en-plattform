@@ -72,6 +72,16 @@ export default function Befaring() {
     queryFn: () => base44.entities.Employee.list(),
   });
 
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => base44.entities.Customer.list('-created_date'),
+  });
+
+  const filteredCustomers = customers.filter(c =>
+    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.contact_person?.toLowerCase().includes(customerSearch.toLowerCase())
+  );
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Befaring.create({ ...data, status: 'utkast' }),
     onSuccess: () => {
