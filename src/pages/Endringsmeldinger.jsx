@@ -461,6 +461,33 @@ export default function Endringsmeldinger() {
                 className="mt-1.5 rounded-xl"
               />
             </div>
+            <div>
+              <Label>Mottaker e-post (kunde)</Label>
+              {customers.filter(c => c.email).length > 0 && (
+                <Select
+                  value={formData.customer_email}
+                  onValueChange={(v) => setFormData({...formData, customer_email: v})}
+                >
+                  <SelectTrigger className="mt-1.5 rounded-xl">
+                    <SelectValue placeholder="Velg kunde fra liste..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.filter(c => c.email).map((customer) => (
+                      <SelectItem key={customer.id} value={customer.email}>
+                        {customer.name} – {customer.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Input
+                type="email"
+                value={formData.customer_email}
+                onChange={(e) => setFormData({...formData, customer_email: e.target.value})}
+                placeholder="kunde@firma.no"
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
 
             {/* File Upload Section */}
             <FileUploadSection
