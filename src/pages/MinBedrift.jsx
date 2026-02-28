@@ -62,6 +62,10 @@ const moduleInfo = {
     title: 'FDV',
     body: 'Når bygget er ferdig, leverer du en komplett FDV-dokumentasjon digitalt til kunden – med utstyrslister, serviceavtaler og vedlikeholdsplaner. Det gjør deg mer profesjonell og gir kunden trygghet. Kobles mot Prosjektfiler og Bildedokumentasjon.'
   },
+  grunnpakke: {
+    title: 'Grunnpakke',
+    body: 'Grunnpakken er kjernen i plattformen og tilfredsstiller lovpålagte krav til kontroll, oppfølging og HMS for håndverksbedrifter. Med Dashboard, Prosjekter og Prosjektfiler får du full oversikt over alle pågående oppdrag. Sjekklister og Avvik sikrer systematisk kvalitetskontroll og sporbarhet, mens HMS & Risiko-modulen dekker myndighetskravene til helse, miljø og sikkerhet – inkludert SJA, RUH og risikoanalyser. Alt du trenger for å drifte trygt og lovlig er inkludert fra dag én.'
+  },
   crm: {
     title: 'CRM',
     body: 'Hold oversikt over alle kunder, leads og oppfølgingsaktiviteter. Prosjektlederen ser hvem som skal følges opp, hvilke tilbud som er sendt og hva som er avtalt. Du kan sette opp varsler for oppfølging slik at ingen kunde eller lead glemmes, og full aktivitetshistorikk gir deg alltid oversikt over hva som har blitt gjort og sagt. Ingen kunder faller mellom stolene. Henger direkte mot Tilbudsmodul og Prosjekter.'
