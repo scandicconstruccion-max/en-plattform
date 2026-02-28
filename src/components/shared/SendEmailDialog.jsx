@@ -105,7 +105,7 @@ export default function SendEmailDialog({
         delivery_confirmed: true,
         delivery_confirmed_date: now,
         ...(approvalToken ? { approval_token: approvalToken } : {}),
-        ...(type === 'tilbud' || type === 'ordre' ? { status: 'sendt' } : {})
+        ...(type === 'tilbud' || type === 'ordre' || type === 'endringsmelding' ? { status: 'sendt' } : {})
       };
 
       const entityTypeMap = { tilbud: 'Quote', ordre: 'Order', avvik: 'Deviation', endringsmelding: 'ChangeNotification' };
