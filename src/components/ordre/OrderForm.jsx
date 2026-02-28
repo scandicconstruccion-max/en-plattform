@@ -18,9 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Send } from 'lucide-react';
 
-export default function OrderForm({ open, onOpenChange, onSubmit }) {
+export default function OrderForm({ open, onOpenChange, onSubmit, onSubmitAndSend }) {
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_email: '',
@@ -70,19 +70,25 @@ export default function OrderForm({ open, onOpenChange, onSubmit }) {
     setFormData({...formData, items: newItems});
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e, andSend = false) => {
     e.preventDefault();
     const totalAmount = formData.items.reduce((sum, item) => sum + (item.total || 0), 0);
     const vatAmount = totalAmount * 0.25;
     
-    onSubmit({
+    const data = {
       ...formData,
       order_number: `ORD-${Date.now()}`,
       total_amount: totalAmount,
       vat_amount: vatAmount,
       source_type: 'manual',
       approval_token: crypto.randomUUID()
-    });
+    };
+
+    if (andSend && onSubmitAndSend) {
+      onSubmitAndSend(data);
+    } else {
+      onSubmit(data);
+    }
   };
 
   const selectCustomer = (customerId) => {
@@ -260,13 +266,24 @@ export default function OrderForm({ open, onOpenChange, onSubmit }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4 flex-wrap">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
               Avbryt
             </Button>
             <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
               Opprett ordre
             </Button>
+            {onSubmitAndSend && (
+              <Button
+                type="button"
+                disabled={!formData.customer_email}
+                onClick={(e) => handleSubmit(e, true)}
+                className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Opprett og send
+              </Button>
+            )}
           </div>
         </form>
       </DialogContent>
