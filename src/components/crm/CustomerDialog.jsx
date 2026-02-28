@@ -18,6 +18,7 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
     email: '',
     phone: '',
     address: '',
+    website: '',
     notes: '',
     tags: []
   });
@@ -34,6 +35,7 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
         email: customer.email || '',
         phone: customer.phone || '',
         address: customer.address || '',
+        website: customer.website || '',
         notes: customer.notes || '',
         tags: customer.tags || []
       });
@@ -77,6 +79,7 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
       email: '',
       phone: '',
       address: '',
+      website: '',
       notes: '',
       tags: []
     });
@@ -150,6 +153,13 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
                 <div className="flex items-center gap-3">
                   <MapPin className="h-4 w-4 text-slate-400" />
                   <span>{customer.address}</span>
+                </div>
+              )}
+              {customer.website && (
+                <div className="flex items-center gap-3">
+                  <a href={customer.website} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
+                    {customer.website}
+                  </a>
                 </div>
               )}
               {customer.org_number && (
@@ -257,6 +267,15 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
                 value={formData.address}
                 onChange={(e) => setFormData({...formData, address: e.target.value})}
                 placeholder="Gate, postnummer, sted"
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+            <div>
+              <Label>Hjemmeside</Label>
+              <Input
+                value={formData.website}
+                onChange={(e) => setFormData({...formData, website: e.target.value})}
+                placeholder="https://www.eksempel.no"
                 className="mt-1.5 rounded-xl"
               />
             </div>
