@@ -370,6 +370,12 @@ export default function MinBedrift() {
                   <div className="flex items-center gap-2 mb-1">
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Grunnpakke</h2>
                     <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">Alltid inkludert</span>
+                    <button
+                      onClick={() => setInfoPopup('grunnpakke')}
+                      className="flex-shrink-0 text-slate-400 hover:text-emerald-600 transition-colors"
+                      title="Mer info">
+                      <Info className="text-emerald-600 h-3.5 w-3.5" />
+                    </button>
                   </div>
                   <p className="text-slate-500 dark:text-slate-400 text-sm">Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik og HMS & Risiko</p>
                 </div>
