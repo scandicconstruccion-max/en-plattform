@@ -1255,6 +1255,26 @@ export default function Avvik() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Sent Confirmation Dialog */}
+      <AlertDialog open={showSentConfirmDialog} onOpenChange={setShowSentConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Avvik sendt!
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Avviket er opprettet og e-post er sendt til mottaker.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowSentConfirmDialog(false)} className="bg-emerald-600 hover:bg-emerald-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* View Deviations Dialog */}
       <ViewDeviationsDialog
         open={showViewDialog}

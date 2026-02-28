@@ -92,10 +92,16 @@ export default function Endringsmeldinger() {
       ...data,
       requested_by: user?.email
     }),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['changeNotifications'] });
       setShowDialog(false);
       resetForm();
+      if (sendAfterCreate) {
+        setSendAfterCreate(false);
+        setJustCreatedChange(created);
+        setSelectedChange(created);
+        setShowEmailDialog(true);
+      }
     },
   });
 
@@ -128,8 +134,9 @@ export default function Endringsmeldinger() {
     setAttachments([]);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e, andSend = false) => {
     e.preventDefault();
+    setSendAfterCreate(andSend);
     createMutation.mutate({
       ...formData,
       amount: formData.amount ? parseFloat(formData.amount) : null,
@@ -158,6 +165,8 @@ export default function Endringsmeldinger() {
       data: updateData 
     });
     setSelectedChange(null);
+    setJustCreatedChange(null);
+    setShowSentConfirmDialog(true);
   };
 
   const handleDeleteClick = (change) => {
