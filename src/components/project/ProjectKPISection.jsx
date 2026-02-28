@@ -35,11 +35,6 @@ const statusColors = {
 export default function ProjectKPISection({ projectId, userRole }) {
   const navigate = useNavigate();
 
-  // Kun Admin og Prosjektleder kan se seksjonen
-  if (userRole !== 'admin' && userRole !== 'prosjektleder') {
-    return null;
-  }
-
   const [isExpanded, setIsExpanded] = useState(() => {
     const saved = localStorage.getItem(`project-kpi-expanded-${projectId}`);
     return saved !== null ? JSON.parse(saved) : true;
@@ -228,6 +223,11 @@ export default function ProjectKPISection({ projectId, userRole }) {
       link: sjekklisterUrl
     }
   ];
+
+  // Kun Admin og Prosjektleder kan se seksjonen
+  if (userRole !== 'admin' && userRole !== 'prosjektleder') {
+    return null;
+  }
 
   return (
     <div className="space-y-4">
