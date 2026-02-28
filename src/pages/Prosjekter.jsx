@@ -25,7 +25,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { filterProjectsByAccess } from '@/components/shared/permissions';
-import { Building2, Search, MapPin, Calendar, Users, LayoutGrid, List } from 'lucide-react';
+import { Building2, Search, MapPin, Calendar, Users, LayoutGrid, List, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
