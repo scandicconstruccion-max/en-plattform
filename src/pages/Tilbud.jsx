@@ -226,7 +226,7 @@ export default function Tilbud() {
     return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e, andSend = false) => {
     e.preventDefault();
     const total = calculateTotal(formData.items);
     const vat = total * 0.25;
@@ -247,6 +247,7 @@ export default function Tilbud() {
       attachment_urls: attachments.map(a => a.file_url).filter(Boolean)
     };
 
+    setSendAfterCreate(andSend);
     createMutation.mutate(quoteData);
   };
 
