@@ -64,7 +64,7 @@ const moduleInfo = {
   },
   crm: {
     title: 'CRM',
-    body: 'Hold oversikt over alle kunder, leads og oppfølgingsaktiviteter. Prosjektlederen ser hvem som skal følges opp, hvilke tilbud som er sendt og hva som er avtalt. Ingen kunder faller mellom stolene. Henger direkte mot Tilbudsmodul og Prosjekter.'
+    body: 'Hold oversikt over alle kunder, leads og oppfølgingsaktiviteter. Prosjektlederen ser hvem som skal følges opp, hvilke tilbud som er sendt og hva som er avtalt. Du kan sette opp varsler for oppfølging slik at ingen kunde eller lead glemmes, og full aktivitetshistorikk gir deg alltid oversikt over hva som har blitt gjort og sagt. Ingen kunder faller mellom stolene. Henger direkte mot Tilbudsmodul og Prosjekter.'
   }
 };
 
