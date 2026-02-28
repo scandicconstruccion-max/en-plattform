@@ -199,7 +199,11 @@ export default function KPISection() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => {
+            const next = !isExpanded;
+            setIsExpanded(next);
+            localStorage.setItem('kpiSectionExpanded', String(next));
+          }}
           className="gap-2"
         >
           {isExpanded ? (
