@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
@@ -10,10 +11,29 @@ export default function StatCard({
   trendUp,
   className,
   iconColor = 'text-emerald-600',
-  iconBg = 'bg-emerald-100'
+  iconBg = 'bg-emerald-100',
+  onClick,
+  isClickable
 }) {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    } else if (isClickable) {
+      navigate(isClickable);
+    }
+  };
+
   return (
-    <Card className={cn("p-6 border-0 shadow-sm", className)}>
+    <Card 
+      className={cn(
+        "p-6 border-0 shadow-sm", 
+        isClickable || onClick ? "cursor-pointer hover:shadow-md transition-shadow" : "",
+        className
+      )}
+      onClick={handleClick}
+    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-slate-500">{title}</p>
