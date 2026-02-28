@@ -353,6 +353,11 @@ export default function Tilbud() {
     toast.info(`Oppretter revisjon ${newRevisionNumber}`);
   };
 
+  const filteredCustomers = customers.filter(c =>
+    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.contact_person?.toLowerCase().includes(customerSearch.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
@@ -360,7 +365,7 @@ export default function Tilbud() {
         subtitle={`${activeQuotes.length} aktive tilbud${rejectedQuotes.length > 0 ? ` • ${rejectedQuotes.length} ikke akseptert` : ''}`}
         actions={
         <div className="flex gap-2">
-            {selectedQuotes.length > 0 &&
+            {activeTab === 'quotes' && selectedQuotes.length > 0 &&
           <>
                 <Button
               variant="outline"
