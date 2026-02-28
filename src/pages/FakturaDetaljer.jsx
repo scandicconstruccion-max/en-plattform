@@ -22,7 +22,8 @@ import {
   DialogTitle,
   DialogFooter } from
 '@/components/ui/dialog';
-import { ArrowLeft, Plus, Trash2, Send, FileText, Download, CheckCircle, Eye, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Send, FileText, Download, CheckCircle, Eye, X, CheckCircle2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import PageHeader from '@/components/shared/PageHeader';
@@ -60,6 +61,7 @@ export default function FakturaDetaljer() {
   const [attachments, setAttachments] = useState([]);
 
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [showSentConfirmDialog, setShowSentConfirmDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showOrderDialog, setShowOrderDialog] = useState(false);
   const [showDeviationDialog, setShowDeviationDialog] = useState(false);
