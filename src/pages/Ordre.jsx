@@ -571,6 +571,7 @@ export default function Ordre() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onSubmit={(data) => createOrderMutation.mutate(data)}
+        onSubmitAndSend={handleSubmitAndSend}
       />
 
       {/* Send Email Dialog */}
@@ -583,6 +584,26 @@ export default function Ordre() {
           onSent={handleSendEmail}
         />
       )}
+
+      {/* Sent Confirmation Dialog */}
+      <AlertDialog open={showSentConfirmDialog} onOpenChange={setShowSentConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Ordre sendt!
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Ordren er opprettet og e-post er sendt til mottaker.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowSentConfirmDialog(false)} className="bg-emerald-600 hover:bg-emerald-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
