@@ -120,25 +120,18 @@ export default function Tilbud() {
       resetForm();
       if (sendAfterCreate) {
         setSendAfterCreate(false);
-        // Send e-post direkte uten å åpne SendEmailDialog
         const email = createdQuote.customer_email;
         if (!email) {
           toast.error('Ingen e-postadresse på kunden – tilbudet ble opprettet men ikke sendt.');
           return;
         }
         try {
-          let approvalToken = `tilbud-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          await base44.entities.Quote.update(createdQuote.id, { approval_token: approvalToken });
+          const approvalToken = `tilbud-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           const approvalUrl = `${window.location.origin}/approve-quote?token=${approvalToken}`;
           const { generateQuoteEmailHTML } = await import('@/components/shared/generateEmailHTML');
           const htmlBody = generateQuoteEmailHTML({ ...createdQuote, approval_token: approvalToken }, approvalUrl);
-          await base44.integrations.Core.SendEmail({
-            to: email,
-            subject: `Tilbud: ${createdQuote.quote_number}`,
-            body: htmlBody
-          });
           const now = new Date().toISOString();
-          await base44.entities.Quote.update(createdQuote.id, {
+          const updateData = {
             sent_to_customer: true,
             sent_date: now,
             sent_to_email: email,
@@ -146,11 +139,16 @@ export default function Tilbud() {
             delivery_confirmed_date: now,
             approval_token: approvalToken,
             status: 'sendt'
+          };
+          await base44.functions.invoke('sendQuoteEmail', {
+            quoteId: createdQuote.id,
+            toEmail: email,
+            subject: `Tilbud: ${createdQuote.quote_number}`,
+            htmlBody,
+            updateData
           });
           queryClient.invalidateQueries({ queryKey: ['quotes'] });
-          toast.success(`Tilbud ${createdQuote.quote_number} er sendt til ${email}`, {
-            duration: 6000
-          });
+          toast.success(`Tilbud ${createdQuote.quote_number} er sendt til ${email}`, { duration: 6000 });
         } catch (error) {
           toast.error('Tilbudet ble opprettet, men e-post kunne ikke sendes: ' + error.message);
         }
