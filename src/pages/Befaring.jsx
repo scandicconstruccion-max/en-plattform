@@ -183,11 +183,36 @@ export default function Befaring() {
       <PageHeader
         title="Befaring"
         subtitle="Gjennomfør og dokumenter befaringer"
-        onAdd={handleNew}
-        addLabel="Ny befaring"
       />
 
-      <div className="px-6 lg:px-8 py-6 space-y-6">
+      <div className="px-6 lg:px-8 py-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <TabsList className="bg-white border shadow-sm">
+              <TabsTrigger value="befaringer">Befaringer</TabsTrigger>
+              <TabsTrigger value="customers">Kunder</TabsTrigger>
+            </TabsList>
+            <div className="flex gap-3">
+              {activeTab === 'befaringer' && (
+                <Button onClick={handleNew} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Ny befaring
+                </Button>
+              )}
+              {activeTab === 'customers' && (
+                <Button
+                  onClick={() => { setSelectedCustomer(null); setShowCustomerDialog(true); }}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  Ny kunde
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <TabsContent value="befaringer" className="mt-0">
+        <div className="space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="p-4 border-0 shadow-sm dark:bg-slate-900">
