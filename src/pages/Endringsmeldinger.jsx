@@ -88,6 +88,11 @@ export default function Endringsmeldinger() {
     queryFn: () => base44.entities.Employee.list(),
   });
 
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => base44.entities.Customer.list(),
+  });
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ChangeNotification.create({
       ...data,
