@@ -46,6 +46,7 @@ export default function ProjectDropdown() {
     localStorage.setItem('selectedProject', JSON.stringify(project));
     setSelectedProject(project);
     window.dispatchEvent(new Event('projectSelected'));
+    navigate(createPageUrl(`ProsjektDetaljer?id=${project.id}`));
   };
 
   const activeProjects = projects.filter(p => p.status === 'aktiv');
