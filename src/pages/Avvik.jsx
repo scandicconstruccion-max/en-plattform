@@ -459,8 +459,8 @@ export default function Avvik() {
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
-        title="Avvik"
-        subtitle={`${deviations.length} avvik registrert`}
+         title="Avvik"
+         subtitle={`${filteredDeviations.length} avvik`}
         onAdd={() => setShowDialog(true)}
         addLabel="Nytt avvik"
         actions={
