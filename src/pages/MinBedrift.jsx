@@ -61,9 +61,10 @@ export default function MinBedrift() {
   };
 
   const calculateMonthlyPrice = () => {
-    return availableModules
+    const addons = availableModules
       .filter(m => activeModules.includes(m.key))
       .reduce((sum, m) => sum + m.price, 0);
+    return grunnpakkePrice + addons;
   };
 
   return (
