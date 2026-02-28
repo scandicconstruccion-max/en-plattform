@@ -331,7 +331,7 @@ export default function MinBedrift() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Tilleggsmoduler</h2>
-                  <p className="text-slate-500 dark:text-slate-400 mt-1">Legg til moduler etter behov</p>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Legg til moduler etter behov. Alle priser per måned, eks. mva.</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-slate-500 dark:text-slate-400">Total månedlig kostnad</p>
