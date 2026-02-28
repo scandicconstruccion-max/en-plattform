@@ -411,9 +411,18 @@ export default function MinBedrift() {
                       )}
                       onClick={() => toggleModule(module.key)}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-slate-900 dark:text-white">{module.name}</h3>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="font-medium text-slate-900 dark:text-white">{module.name}</h3>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setInfoPopup(module.key); }}
+                              className="flex-shrink-0 text-slate-400 hover:text-emerald-600 transition-colors"
+                              title="Mer info"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
                           <p className="text-sm font-semibold text-slate-900 dark:text-white mt-2">
                             {module.price} kr/mnd
@@ -429,6 +438,33 @@ export default function MinBedrift() {
                   );
                 })}
               </div>
+
+              {/* Info popup */}
+              {infoPopup && moduleInfo[infoPopup] && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setInfoPopup(null)}>
+                  <div
+                    className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 relative"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => setInfoPopup(null)}
+                      className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Info className="h-5 w-5 text-emerald-600" />
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{moduleInfo[infoPopup].title}</h3>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{moduleInfo[infoPopup].body}</p>
+                    <div className="mt-5 flex justify-end">
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl" onClick={() => setInfoPopup(null)}>
+                        Lukk
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>
