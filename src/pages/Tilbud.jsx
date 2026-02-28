@@ -1050,6 +1050,14 @@ export default function Tilbud() {
         </DialogContent>
       </Dialog>
 
+      {/* Customer Overview Dialog */}
+      <CustomerDialog
+        open={showCustomerDialog}
+        onOpenChange={setShowCustomerDialog}
+        customer={selectedCustomer}
+        onCustomerChange={setSelectedCustomer}
+      />
+
       {/* New Customer Dialog */}
       <NewCustomerDialog
         open={showNewCustomerDialog}
