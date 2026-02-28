@@ -13,6 +13,61 @@ import { cn } from '@/lib/utils';
 const grunnpakkeModules = ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms'];
 const grunnpakkePrice = 109;
 
+const moduleInfo = {
+  tilbud: {
+    title: 'Tilbudsmodul',
+    body: 'Prosjektlederen starter arbeidsdagen med å sende et profesjonelt tilbud direkte fra systemet – uten å åpne Word eller Excel. Tilbudet knyttes til kunden, og når kunden godkjenner digitalt, kan du starte prosjektet med ett klikk. Henger tett sammen med Ordre og Faktura, slik at hele flyten fra tilbud til betaling er sømløs.'
+  },
+  ordre: {
+    title: 'Ordre',
+    body: 'Når tilbudet er godkjent, opprettes en arbeidsordre automatisk. Håndverkerne ser hva som skal gjøres, og prosjektlederen følger fremdriften. Ordre henger direkte sammen med Tilbudsmodul og Faktura – slik at det aldri blir dobbeltarbeid eller glemte poster.'
+  },
+  endringsmeldinger: {
+    title: 'Endringsmeldinger',
+    body: 'I byggfaget dukker det alltid opp endringer underveis. Med denne modulen registrerer håndverkeren eller prosjektlederen endringen på stedet, sender den digitalt til kunden for godkjenning, og alt dokumenteres automatisk. Ingen krangler om hva som ble avtalt – alt er sporbart. Kobles mot Prosjekter og Faktura.'
+  },
+  faktura: {
+    title: 'Faktura',
+    body: 'Når jobben er ferdig, genereres fakturaen direkte fra ordren eller timene som er ført. Prosjektlederen bruker ikke tid på manuell regning – alt er allerede registrert. Kobles mot Ordre, Timelister og Tilbudsmodul for en komplett økonomiflyt.'
+  },
+  timelister: {
+    title: 'Timelister',
+    body: 'Håndverkeren fører timer på mobilen i slutten av dagen – med prosjekt, kategori og beskrivelse. Ingen papirslipp, ingen glemt timeføring. Prosjektlederen godkjenner med ett klikk. Timene kobles mot Faktura og Lønn, og gir deg full oversikt over lønnsomheten per prosjekt.'
+  },
+  ansatte: {
+    title: 'Ansatte',
+    body: 'Samle all personalinfo på ett sted: kontaktinfo, stillingstittel, kompetanser og ansettelseshistorikk. Prosjektlederen slipper å lete i e-poster og mapper. Henger sammen med Timelister og Ressursplanlegger slik at du alltid vet hvem som er tilgjengelig og hva de kan.'
+  },
+  ressursplan: {
+    title: 'Ressursplanlegger',
+    body: 'Se hvem av dine ansatte som er ledig og hvem som allerede er booket – i en enkel kalendervisning. Prosjektlederen kan planlegge hvem som skal på hvilken jobb i god tid, og unngår dobbeltbooking. Kobles mot Ansatte, Kalender og Timelister.'
+  },
+  kalender: {
+    title: 'Kalender',
+    body: 'Samle alle møter, befaringer og frister i én felles kalender for hele teamet. Håndverkere og prosjektledere ser alltid hva som skjer i morgen – uten å måtte ringe rundt. Synkroniserer med Ressursplanlegger og Befaring.'
+  },
+  chat: {
+    title: 'Intern Chat',
+    body: 'Fortfortell slippe å bruke private SMS eller WhatsApp for jobbrelaterte beskjeder. Med intern chat holdes all kommunikasjon samlet i systemet, knyttet til riktig prosjekt. Håndverkerne kan sende bilder og meldinger direkte fra byggeplassen, og prosjektlederen svarer fra kontoret.'
+  },
+  befaring: {
+    title: 'Befaring',
+    body: 'På sluttkontroll eller overtakelse registrerer prosjektlederen mangler og feil direkte i appen, tar bilder og tilordner ansvar. Kunden signerer digitalt på stedet. Ingen papirprotokoller som forsvinner. Henger sammen med Avvik og Bildedokumentasjon.'
+  },
+  bildedok: {
+    title: 'Bildedokumentasjon',
+    body: 'Håndverkeren tar bilder før, under og etter arbeid – automatisk stemplet med tid, sted og prosjekt. Det beskytter bedriften ved reklamasjoner og dokumenterer kvaliteten. Bildene organiseres per prosjekt og rom, og kobles mot Befaring og FDV.'
+  },
+  fdv: {
+    title: 'FDV',
+    body: 'Når bygget er ferdig, leverer du en komplett FDV-dokumentasjon digitalt til kunden – med utstyrslister, serviceavtaler og vedlikeholdsplaner. Det gjør deg mer profesjonell og gir kunden trygghet. Kobles mot Prosjektfiler og Bildedokumentasjon.'
+  },
+  crm: {
+    title: 'CRM',
+    body: 'Hold oversikt over alle kunder, leads og oppfølgingsaktiviteter. Prosjektlederen ser hvem som skal følges opp, hvilke tilbud som er sendt og hva som er avtalt. Ingen kunder faller mellom stolene. Henger direkte mot Tilbudsmodul og Prosjekter.'
+  },
+};
+
 const availableModules = [
   { key: 'tilbud', name: 'Tilbudsmodul', description: 'Tilbudsadministrasjon', price: 29 },
   { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', price: 39 },
