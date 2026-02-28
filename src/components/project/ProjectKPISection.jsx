@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
 const formatAmount = (amount) => {
@@ -33,6 +33,8 @@ const statusColors = {
 };
 
 export default function ProjectKPISection({ projectId, userRole }) {
+  const navigate = useNavigate();
+
   // Kun Admin og Prosjektleder kan se seksjonen
   if (userRole !== 'admin' && userRole !== 'prosjektleder') {
     return null;
@@ -253,31 +255,25 @@ export default function ProjectKPISection({ projectId, userRole }) {
 
       {isExpanded && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          {kpis.map((kpi, index) => {
-            const cardContent = (
-              <Card
-                key={index}
-                className={cn(
-                  "p-4 hover:shadow-md transition-all h-full",
-                  statusColors[kpi.status],
-                  kpi.link && "cursor-pointer"
+          {kpis.map((kpi, index) => (
+            <Card
+              key={index}
+              onClick={() => kpi.link && navigate(kpi.link)}
+              className={cn(
+                "p-4 hover:shadow-md transition-all h-full",
+                statusColors[kpi.status],
+                kpi.link && "cursor-pointer hover:bg-opacity-80"
+              )}
+            >
+              <div className="space-y-1">
+                <p className="text-sm text-slate-600">{kpi.title}</p>
+                <p className="text-xl font-bold text-slate-900">{kpi.value}</p>
+                {kpi.subtitle && (
+                  <p className="text-xs text-slate-500">{kpi.subtitle}</p>
                 )}
-              >
-                <div className="space-y-1">
-                  <p className="text-sm text-slate-600">{kpi.title}</p>
-                  <p className="text-xl font-bold text-slate-900">{kpi.value}</p>
-                  {kpi.subtitle && (
-                    <p className="text-xs text-slate-500">{kpi.subtitle}</p>
-                  )}
-                </div>
-              </Card>
-            );
-            return kpi.link ? (
-              <Link key={index} to={kpi.link} className="h-full block">{cardContent}</Link>
-            ) : (
-              <div key={index} className="h-full">{cardContent}</div>
-            );
-          })}
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
