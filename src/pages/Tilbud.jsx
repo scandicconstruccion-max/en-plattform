@@ -397,15 +397,20 @@ export default function Tilbud() {
 
               </>
           }
-            <Button
-            onClick={() => {
-              resetForm();
-              setShowDialog(true);
-            }}
-            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
-
-              <Plus className="h-4 w-4" /> Nytt tilbud
-            </Button>
+            {activeTab === 'quotes' && (
+              <Button
+                onClick={() => { resetForm(); setShowDialog(true); }}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+                <Plus className="h-4 w-4" /> Nytt tilbud
+              </Button>
+            )}
+            {activeTab === 'customers' && (
+              <Button
+                onClick={() => { setSelectedCustomer(null); setShowCustomerDialog(true); }}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+                <Users className="h-4 w-4" /> Ny kunde
+              </Button>
+            )}
           </div>
         } />
 
