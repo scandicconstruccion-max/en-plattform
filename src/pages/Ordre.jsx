@@ -28,6 +28,7 @@ import {
   FileText, Search, Plus, Building2, Calendar, 
   ChevronRight, Send, CheckCircle2, User, Download, Mail, Eye
 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -38,6 +39,7 @@ export default function Ordre() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showSentConfirmDialog, setShowSentConfirmDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [search, setSearch] = useState('');
@@ -163,6 +165,15 @@ export default function Ordre() {
     await base44.entities.Order.update(selectedOrder.id, updateData);
     queryClient.invalidateQueries({ queryKey: ['orders'] });
     setShowEmailDialog(false);
+    setShowSentConfirmDialog(true);
+  };
+
+  const handleSubmitAndSend = async (orderData) => {
+    const created = await base44.entities.Order.create(orderData);
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+    setShowCreateDialog(false);
+    setSelectedOrder(created);
+    setShowEmailDialog(true);
   };
 
   const handleBulkSend = async () => {
