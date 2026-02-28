@@ -299,14 +299,38 @@ export default function MinBedrift() {
           </TabsContent>
 
           <TabsContent value="modules" className="mt-0 space-y-6">
+            {/* Grunnpakke */}
+            <Card className="border-0 shadow-sm p-6 dark:bg-slate-900 border-2 border-emerald-200 dark:border-emerald-800">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Grunnpakke</h2>
+                    <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">Alltid inkludert</span>
+                  </div>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik og HMS & Risiko</p>
+                </div>
+                <div className="text-right flex-shrink-0 ml-4">
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{grunnpakkePrice} kr/mnd</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {['Dashboard', 'Prosjekter', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko'].map(name => (
+                  <span key={name} className="inline-flex items-center gap-1 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-lg">
+                    <Check className="h-3 w-3" /> {name}
+                  </span>
+                ))}
+              </div>
+            </Card>
+
+            {/* Tilleggsmoduler */}
             <Card className="border-0 shadow-sm p-6 dark:bg-slate-900">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Aktive moduler</h2>
-                  <p className="text-slate-500 dark:text-slate-400 mt-1">Velg moduler for din bedrift</p>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Tilleggsmoduler</h2>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Legg til moduler etter behov</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Månedlig kostnad</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Total månedlig kostnad</p>
                   <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                     {calculateMonthlyPrice().toLocaleString('nb-NO')} kr
                   </p>
@@ -323,24 +347,16 @@ export default function MinBedrift() {
                         "p-4 rounded-xl border-2 cursor-pointer transition-all select-none",
                         isActive 
                           ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20" 
-                          : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600",
-                        module.required && "cursor-default"
+                          : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
                       )}
                       onClick={() => toggleModule(module.key)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-slate-900 dark:text-white">{module.name}</h3>
-                            {module.required && (
-                              <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded">
-                                Inkludert
-                              </span>
-                            )}
-                          </div>
+                          <h3 className="font-medium text-slate-900 dark:text-white">{module.name}</h3>
                           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-2">
-                            {module.price === 0 ? 'Gratis' : `${module.price} kr/mnd`}
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white mt-2">
+                            {module.price} kr/mnd
                           </p>
                         </div>
                         {isActive && (
@@ -352,28 +368,6 @@ export default function MinBedrift() {
                     </div>
                   );
                 })}
-              </div>
-            </Card>
-
-            <Card className="border-0 shadow-sm p-6 bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-lg">Alle moduler</h3>
-                  <p className="text-emerald-100 mt-1">Få tilgang til hele systemet med rabatt</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-emerald-100 text-sm line-through">2 186 kr/mnd</p>
-                  <p className="text-3xl font-bold">1 499 kr/mnd</p>
-                  <Button 
-                    className="mt-2 bg-white text-emerald-600 hover:bg-emerald-50 rounded-xl select-none"
-                    onClick={() => {
-                      const allModuleKeys = availableModules.map(m => m.key);
-                      updateCompanyMutation.mutate({ active_modules: allModuleKeys });
-                    }}
-                  >
-                    Velg alle
-                  </Button>
-                </div>
               </div>
             </Card>
           </TabsContent>
