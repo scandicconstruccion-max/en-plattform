@@ -256,14 +256,17 @@ export default function ProjectKPISection({ projectId, userRole }) {
       {isExpanded && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {kpis.map((kpi, index) => (
-            <Card
+            <div
               key={index}
               onClick={() => kpi.link && navigate(kpi.link)}
               className={cn(
-                "p-4 hover:shadow-md transition-all h-full",
+                "rounded-xl border p-4 hover:shadow-md transition-all h-full",
                 statusColors[kpi.status],
-                kpi.link && "cursor-pointer hover:bg-opacity-80"
+                kpi.link && "cursor-pointer"
               )}
+              role={kpi.link ? "button" : undefined}
+              tabIndex={kpi.link ? 0 : undefined}
+              onKeyPress={(e) => kpi.link && (e.key === 'Enter' || e.key === ' ') && navigate(kpi.link)}
             >
               <div className="space-y-1">
                 <p className="text-sm text-slate-600">{kpi.title}</p>
@@ -272,7 +275,7 @@ export default function ProjectKPISection({ projectId, userRole }) {
                   <p className="text-xs text-slate-500">{kpi.subtitle}</p>
                 )}
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
