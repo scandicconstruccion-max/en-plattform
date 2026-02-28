@@ -27,7 +27,7 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
 import SendEndringsmeldingerDialog from '@/components/endringsmeldinger/SendEndringsmeldingerDialog';
-import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail, Trash2, Download, Check } from 'lucide-react';
+import { FileText, Search, TrendingUp, TrendingDown, RefreshCw, Mail, Trash2, Download, Check, Send, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,6 +37,7 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
