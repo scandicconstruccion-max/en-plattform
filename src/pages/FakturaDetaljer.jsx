@@ -986,6 +986,29 @@ ${base44.auth.me().then((u) => u.full_name)}
           </DialogContent>
         </Dialog>
 
+        {/* Sent Confirmation Dialog */}
+        <AlertDialog open={showSentConfirmDialog} onOpenChange={setShowSentConfirmDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                Faktura sendt!
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Fakturaen er sendt til mottaker og merket som sendt.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction
+                onClick={() => { setShowSentConfirmDialog(false); navigate(createPageUrl('Faktura')); }}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                OK
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Payment Dialog */}
         <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
           <DialogContent className="sm:max-w-md dark:bg-slate-900">
