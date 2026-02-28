@@ -123,10 +123,16 @@ export default function Avvik() {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Deviation.create(data),
-    onSuccess: () => {
+    onSuccess: async (created) => {
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
       setShowDialog(false);
       resetForm();
+      if (sendAfterCreate) {
+        setSendAfterCreate(false);
+        setJustCreatedDeviation(created);
+        setSelectedDeviation(created);
+        setShowEmailDialog(true);
+      }
     }
   });
 
@@ -165,8 +171,9 @@ export default function Avvik() {
     setAttachments([]);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e, andSend = false) => {
     e.preventDefault();
+    setSendAfterCreate(andSend);
     createMutation.mutate({
       ...formData,
       cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
