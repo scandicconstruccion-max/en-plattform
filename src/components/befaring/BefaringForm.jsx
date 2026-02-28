@@ -24,6 +24,7 @@ const befaringTypeLabels = {
   sluttkontroll: 'Sluttkontroll',
   overtakelse: 'Overtakelse',
   garantibefaring: 'Garantibefaring',
+  tilbudsbefaring: 'Tilbudsbefaring',
   annet: 'Annet'
 };
 
