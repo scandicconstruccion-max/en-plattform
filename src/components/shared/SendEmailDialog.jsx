@@ -69,13 +69,6 @@ export default function SendEmailDialog({
       // Generate approval token if not exists and type is ordre or tilbud
       if ((type === 'ordre' || type === 'tilbud') && !approvalToken) {
         approvalToken = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Update the item with the approval token
-        if (type === 'ordre') {
-          await base44.entities.Order.update(item.id, { approval_token: approvalToken });
-        } else if (type === 'tilbud') {
-          await base44.entities.Quote.update(item.id, { approval_token: approvalToken });
-        }
       }
 
       // Generate approval URL
@@ -91,16 +84,8 @@ export default function SendEmailDialog({
         htmlBody = generateQuoteEmailHTML({ ...item, approval_token: approvalToken }, approvalUrl);
       }
 
-      // Send email with body (and html if available)
-      await base44.integrations.Core.SendEmail({
-        to: email,
-        subject: subject,
-        body: htmlBody || message
-      });
-
       const now = new Date().toISOString();
-      
-      onSent({
+      const updateData = {
         sent_to_customer: true,
         sent_date: now,
         sent_to_email: email,
@@ -108,7 +93,25 @@ export default function SendEmailDialog({
         delivery_confirmed_date: now,
         ...(approvalToken ? { approval_token: approvalToken } : {}),
         ...(type === 'tilbud' || type === 'ordre' ? { status: 'sendt' } : {})
+      };
+
+      const entityTypeMap = { tilbud: 'Quote', ordre: 'Order', avvik: 'Deviation', endringsmelding: 'ChangeNotification' };
+
+      // Send via backend function (Resend) which supports external emails
+      const response = await base44.functions.invoke('sendEmail', {
+        toEmail: email,
+        subject: subject,
+        body: htmlBody || message.replace(/\n/g, '<br>'),
+        entityType: entityTypeMap[type],
+        entityId: item?.id,
+        updateData
       });
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      onSent(updateData);
 
       toast.success('E-post sendt!', {
         description: `Sendt til ${email}`
