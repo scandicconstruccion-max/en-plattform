@@ -95,10 +95,19 @@ export default function CRM() {
 
   const filteredQuotes = getFilteredQuotes();
 
-  const filteredCustomers = customers.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.contact_person?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCustomers = customers
+    .filter(c =>
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.contact_person?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (customerSort === 'number') {
+        const na = parseInt(a.org_number || '999999999');
+        const nb2 = parseInt(b.org_number || '999999999');
+        return na - nb2;
+      }
+      return (a.name || '').localeCompare(b.name || '', 'nb');
+    });
 
   const handleActionFilter = (filter) => {
     setActionFilter(filter);
