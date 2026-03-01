@@ -603,6 +603,22 @@ export default function Ordre() {
 
       }
 
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Slett {selectedOrders.length} ordre?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette {selectedOrders.length} ordre? Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirmDialog(false)} className="rounded-xl">Avbryt</Button>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700 rounded-xl">Slett</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Sent Confirmation Dialog */}
       <AlertDialog open={showSentConfirmDialog} onOpenChange={setShowSentConfirmDialog}>
         <AlertDialogContent>
