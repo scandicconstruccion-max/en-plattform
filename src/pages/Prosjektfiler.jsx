@@ -507,78 +507,90 @@ export default function Prosjektfiler() {
                 .filter((category, index, self) => 
                   index === self.findIndex((c) => c.name === category.name)
                 )
-                .map((category) =>
-            <div key={`cat-${category.id}`}>
-                  <button
-                onClick={() => setSelectedCategory(category.id)}
-                className={cn(
-                  "w-full text-left px-4 py-3 rounded-xl transition-all",
-                  selectedCategory === category.id ?
-                  "bg-emerald-50 text-emerald-700 shadow-md" :
-                  "hover:bg-white/50"
-                )}>
-
-                    <div className="flex items-center gap-3">
-                      <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: `${category.color}20` }}>
-
-                        <FileText className="h-5 w-5" style={{ color: category.color }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{category.name}</p>
-                        <p className="text-xs text-slate-500">
-                          {getFilesCountForCategory(category.id)} filer
-                        </p>
-                      </div>
-                      {!category.is_predefined &&
-                  <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem
-                        onClick={() => deleteCategoryMutation.mutate(category.id)}
-                        className="text-red-600">
-
-                              <Trash2 className="h-4 w-4 mr-2" /> Slett
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                  }
-                    </div>
-                  </button>
-                  
-                  {/* Subcategories */}
-                  {projectCategories
+                .map((category) => {
+                  const subcategories = projectCategories
                     .filter((c) => c.parent_category === category.name)
                     .reduce((unique, sub) => {
-                      if (!unique.find(u => u.name === sub.name && u.parent_category === sub.parent_category)) {
-                        unique.push(sub);
-                      }
+                      if (!unique.find(u => u.name === sub.name)) unique.push(sub);
                       return unique;
-                    }, [])
-                    .map((sub) =>
-              <button
-                key={`sub-${sub.id}`}
-                onClick={() => setSelectedCategory(sub.id)}
-                className={cn(
-                  "w-full text-left px-4 py-2 pl-12 rounded-xl transition-all ml-4 mt-1",
-                  selectedCategory === sub.id ?
-                  "bg-emerald-50 text-emerald-700 shadow-sm" :
-                  "hover:bg-white/50"
-                )}>
+                    }, []);
+                  const hasChildren = subcategories.length > 0;
+                  const isCollapsed = collapsedCategories[category.id];
 
-                      <p className="text-sm truncate">{sub.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {getFilesCountForCategory(sub.id)} filer
-                      </p>
-                    </button>
-              )}
-                </div>
-            )}
+                  return (
+                    <div key={`cat-${category.id}`}>
+                      <button
+                        onClick={() => {
+                          if (hasChildren) {
+                            setCollapsedCategories(prev => ({ ...prev, [category.id]: !prev[category.id] }));
+                          } else {
+                            setSelectedCategory(category.id);
+                          }
+                        }}
+                        className={cn(
+                          "w-full text-left px-4 py-3 rounded-xl transition-all",
+                          selectedCategory === category.id && !hasChildren ?
+                          "bg-emerald-50 text-emerald-700 shadow-md" :
+                          "hover:bg-white/50"
+                        )}>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center"
+                            style={{ backgroundColor: `${category.color}20` }}>
+                            <FileText className="h-5 w-5" style={{ color: category.color }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{category.name}</p>
+                            <p className="text-xs text-slate-500">
+                              {hasChildren
+                                ? `${subcategories.length} undermapper`
+                                : `${getFilesCountForCategory(category.id)} filer`}
+                            </p>
+                          </div>
+                          {hasChildren && (
+                            isCollapsed
+                              ? <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                              : <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                          )}
+                          {!category.is_predefined &&
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="icon" className="h-6 w-6">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                <DropdownMenuItem
+                                  onClick={() => deleteCategoryMutation.mutate(category.id)}
+                                  className="text-red-600">
+                                  <Trash2 className="h-4 w-4 mr-2" /> Slett
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          }
+                        </div>
+                      </button>
+
+                      {/* Subcategories - collapsible */}
+                      {hasChildren && !isCollapsed && subcategories.map((sub) =>
+                        <button
+                          key={`sub-${sub.id}`}
+                          onClick={() => setSelectedCategory(sub.id)}
+                          className={cn(
+                            "w-full text-left px-4 py-2 pl-12 rounded-xl transition-all ml-4 mt-1",
+                            selectedCategory === sub.id ?
+                            "bg-emerald-50 text-emerald-700 shadow-sm" :
+                            "hover:bg-white/50"
+                          )}>
+                          <p className="text-sm truncate">{sub.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {getFilesCountForCategory(sub.id)} filer
+                          </p>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
 
             {/* Right Panel - Files */}
