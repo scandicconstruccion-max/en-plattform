@@ -31,6 +31,8 @@ export default function OrderForm({ open, onOpenChange, onSubmit, onSubmitAndSen
     due_date: '',
     items: [{ description: '', quantity: 1, unit: 'stk', unit_price: 0, total: 0 }]
   });
+  const [additionalEmails, setAdditionalEmails] = useState([]);
+  const [customEmail, setCustomEmail] = useState('');
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
