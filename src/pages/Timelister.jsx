@@ -215,6 +215,9 @@ export default function Timelister() {
           </Card>
         </div>
 
+        {/* Time Summary */}
+        <TimeSummary employee={employee} />
+
         {/* Week View */}
         <WeekView
           weekStart={currentWeekStart}
