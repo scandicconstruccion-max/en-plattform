@@ -259,6 +259,60 @@ export default function OrderForm({ open, onOpenChange, onSubmit, onSubmitAndSen
             </div>
           </div>
 
+          {/* Additional Email Recipients */}
+          <div className="space-y-3 p-4 bg-slate-50 rounded-xl">
+            <Label className="font-medium">Kopimottakere (valgfritt)</Label>
+
+            {/* Employee dropdown */}
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Legg til ansatt</Label>
+              <Select onValueChange={addEmployeeEmail}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Velg ansatt fra bedriften" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.email}>
+                      {emp.first_name} {emp.last_name} — {emp.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Custom email field */}
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Legg til annen e-post</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="eks. partner@firma.no"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomEmail(); } }}
+                  className="rounded-xl flex-1"
+                />
+                <Button type="button" variant="outline" onClick={addCustomEmail} className="rounded-xl">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Added emails list */}
+            {additionalEmails.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {additionalEmails.map(email => (
+                  <span key={email} className="inline-flex items-center gap-1 bg-white border border-slate-200 text-slate-700 text-sm px-3 py-1 rounded-full">
+                    {email}
+                    <button type="button" onClick={() => removeAdditionalEmail(email)} className="text-slate-400 hover:text-red-500 ml-1">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Due Date */}
           <div>
             <Label>Forfallsdato</Label>
