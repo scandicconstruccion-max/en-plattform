@@ -29,6 +29,7 @@ export default function CRM() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [customerView, setCustomerView] = useState('grid');
+  const [customerSort, setCustomerSort] = useState('alpha'); // 'alpha' | 'number'
   const [actionFilter, setActionFilter] = useState(null); // 'overdue' | 'today' | 'missing' | null
   const [showArchive, setShowArchive] = useState(false);
 
