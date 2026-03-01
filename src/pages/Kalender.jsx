@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import ProjectSelector from '@/components/shared/ProjectSelector';
+import LocationAutocomplete from '@/components/shared/LocationAutocomplete';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react';
 import { 
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, 
