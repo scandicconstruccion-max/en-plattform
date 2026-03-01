@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/shared/PageHeader';
 import WeekView from '@/components/timelister/WeekView';
+import TimeSummary from '@/components/timelister/TimeSummary';
 import { ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, Send } from 'lucide-react';
 import { format, startOfWeek, addWeeks, getWeek, getYear } from 'date-fns';
 import { nb } from 'date-fns/locale';
