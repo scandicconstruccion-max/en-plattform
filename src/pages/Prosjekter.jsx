@@ -108,10 +108,12 @@ export default function Prosjekter() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'project' });
     createMutation.mutate({
       ...formData,
+      project_number: formData.project_number || numRes.data.documentNumber,
       budget: formData.budget ? parseFloat(formData.budget) : null
     });
   };
