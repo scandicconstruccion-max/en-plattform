@@ -308,27 +308,24 @@ export default function FakturaDetaljer() {
       const now = new Date().toISOString();
       const user = await base44.auth.me();
 
-      const emailBody = `Hei,
+      const emailBody = `<p>Hei,</p>
+<p>Vedlagt finner du faktura <strong>${invoice.invoice_number}</strong>.</p>
+<p><strong>Fakturadetaljer:</strong><br/>
+Fakturanummer: ${invoice.invoice_number}<br/>
+Fakturadato: ${format(new Date(invoice.invoice_date), 'dd.MM.yyyy')}<br/>
+Forfallsdato: ${format(new Date(invoice.due_date), 'dd.MM.yyyy')}<br/>
+Beløp: ${formatAmount(invoice.total_amount)}<br/>
+KID-nummer: ${invoice.kid_number}</p>
+<p>Vennligst betal innen forfallsdato.</p>
+<p>Med vennlig hilsen,<br/>${user?.full_name || ''}</p>`;
 
-Vedlagt finner du faktura ${invoice.invoice_number}.
-
-Fakturadetaljer:
-- Fakturanummer: ${invoice.invoice_number}
-- Fakturadato: ${format(new Date(invoice.invoice_date), 'dd.MM.yyyy')}
-- Forfallsdato: ${format(new Date(invoice.due_date), 'dd.MM.yyyy')}
-- Beløp: ${formatAmount(invoice.total_amount)}
-- KID-nummer: ${invoice.kid_number}
-
-Vennligst betal innen forfallsdato.
-
-Med vennlig hilsen,
-${user?.full_name || ''}`;
-
-      await base44.integrations.Core.SendEmail({
-        to: email,
+      const res = await base44.functions.invoke('sendEmail', {
+        toEmail: email,
         subject: `Faktura ${invoice.invoice_number}`,
         body: emailBody
       });
+
+      if (res?.data?.error) throw new Error(res.data.error);
 
       await base44.entities.Invoice.update(invoiceId, {
         status: 'sendt',
