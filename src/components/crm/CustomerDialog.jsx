@@ -44,7 +44,15 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
   }, [customer, open]);
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Customer.create(data),
+    mutationFn: async (data) => {
+      const existing = await base44.entities.Customer.list('-customer_number', 1);
+      const lastNum = existing
+        .map(c => parseInt(c.customer_number, 10))
+        .filter(n => !isNaN(n))
+        .sort((a, b) => b - a)[0] || 0;
+      const nextNum = String(lastNum + 1).padStart(4, '0');
+      return base44.entities.Customer.create({ ...data, customer_number: nextNum });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       onOpenChange(false);
