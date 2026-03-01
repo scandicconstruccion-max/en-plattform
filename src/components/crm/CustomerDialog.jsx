@@ -106,7 +106,9 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {!customer ? 'Ny kunde' : editMode ? 'Rediger kunde' : customer.name}
+            {!customer ? 'Ny kunde' : editMode ? 'Rediger kunde' : (
+              <span>{customer.name}{customer.customer_number && <span className="ml-2 text-sm font-normal text-slate-400">#{customer.customer_number}</span>}</span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
