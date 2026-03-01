@@ -119,10 +119,13 @@ export default function Ansatte() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Employee.delete(id),
+  const terminateMutation = useMutation({
+    mutationFn: ({ id, end_date }) => base44.entities.Employee.update(id, { is_active: false, end_date }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setTerminateEmployee(null);
+      setTerminateDate('');
+      toast.success('Ansatt er terminert og flyttet til tidligere ansatte');
     },
   });
 
