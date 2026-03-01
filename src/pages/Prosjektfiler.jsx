@@ -33,7 +33,7 @@ import {
   FolderOpen, File, Upload, Plus, Search,
   FileText, FileImage, Download, Trash2,
   MoreVertical, Lock, Users, Shield, Camera,
-  Edit, Palette, X, Image as ImageIcon } from
+  Edit, Palette, X, Image as ImageIcon, ChevronDown, ChevronRight } from
 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
