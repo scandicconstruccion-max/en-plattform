@@ -181,7 +181,7 @@ export default function TimesheetForm({
     e.preventDefault();
 
     if (!formData.project_id) {
-      toast.error('Velg et prosjekt');
+      toast.error('Du må velge et prosjekt');
       return;
     }
 
@@ -201,11 +201,12 @@ export default function TimesheetForm({
     }
 
     const selectedProject = projects.find(p => p.id === formData.project_id);
-    
+
     saveMutation.mutate({
       ...formData,
+      project_id: formData.project_id,
       project_name: selectedProject?.name || formData.project_name,
-      hours: formData.hours,
+      hours: Number(formData.hours.toFixed(2)),
       break_minutes: formData.break_minutes || 0
     });
   };
