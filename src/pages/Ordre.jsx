@@ -40,6 +40,7 @@ export default function Ordre() {
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showSentConfirmDialog, setShowSentConfirmDialog] = useState(false);
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [search, setSearch] = useState('');
