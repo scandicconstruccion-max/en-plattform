@@ -194,10 +194,11 @@ export default function Faktura() {
                 </Button>
                 <Button
                   onClick={handleBulkDownload}
+                  disabled={downloadingBulk}
                   variant="outline"
                   className="rounded-xl gap-2">
                   <Download className="h-4 w-4" />
-                  Last ned
+                  {downloadingBulk ? 'Laster ned...' : `Last ned (${selectedInvoices.length})`}
                 </Button>
                 <Button
                   onClick={handleBulkExternalSend}
