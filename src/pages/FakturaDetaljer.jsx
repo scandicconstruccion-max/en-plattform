@@ -792,6 +792,15 @@ KID-nummer: ${invoice.kid_number}</p>
           </Card>
         )}
 
+        {/* Delivery Status */}
+        {invoice && invoice.sent_to_customer && (
+          <Card className="border-0 shadow-sm dark:bg-slate-900">
+            <CardContent className="p-6">
+              <DeliveryStatus item={invoice} />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Totals */}
         <Card className="border-0 shadow-sm dark:bg-slate-900">
           <CardContent className="p-6">
