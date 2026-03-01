@@ -55,7 +55,7 @@ export default function Timelister() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['allProjects'],
-    queryFn: () => base44.entities.Project.filter({ status: 'aktiv' }),
+    queryFn: () => base44.entities.Project.list(),
     enabled: !!user
   });
 
