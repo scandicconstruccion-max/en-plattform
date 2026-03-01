@@ -26,7 +26,7 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import OrderForm from '@/components/ordre/OrderForm';
 import { 
   FileText, Search, Plus, Building2, Calendar, 
-  ChevronRight, Send, CheckCircle2, User, Download, Mail, Eye
+  ChevronRight, Send, CheckCircle2, User, Download, Mail, Eye, Trash2
 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
