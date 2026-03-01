@@ -217,6 +217,15 @@ export default function Ansatte() {
     }
   };
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    setFormData(prev => ({ ...prev, profile_image: file_url }));
+    setUploadingPhoto(false);
+  };
+
   const filteredEmployees = employees.filter(e => {
     const fullName = `${e.first_name} ${e.last_name}`.toLowerCase();
     return fullName.includes(search.toLowerCase()) ||
