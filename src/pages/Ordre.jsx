@@ -76,7 +76,13 @@ export default function Ordre() {
   });
 
   const createOrderMutation = useMutation({
-    mutationFn: (data) => base44.entities.Order.create(data),
+    mutationFn: async (data) => {
+      if (!data.order_number) {
+        const res = await base44.functions.invoke('generateDocumentNumber', { type: 'order' });
+        data = { ...data, order_number: res.data.documentNumber };
+      }
+      return base44.entities.Order.create(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setShowCreateDialog(false);
