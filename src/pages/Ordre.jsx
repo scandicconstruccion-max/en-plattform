@@ -87,8 +87,9 @@ export default function Ordre() {
   const createFromSourceMutation = useMutation({
     mutationFn: async ({ sourceType, sourceId }) => {
       let sourceData;
+      const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'order' });
       let orderData = {
-        order_number: `ORD-${Date.now()}`,
+        order_number: numRes.data.documentNumber,
         source_type: sourceType,
         source_id: sourceId,
         status: 'opprettet',
