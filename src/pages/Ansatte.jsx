@@ -270,6 +270,24 @@ export default function Ansatte() {
       />
 
       <div className="px-6 lg:px-8 py-6">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-5">
+          <button
+            onClick={() => setActiveTab('active')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${activeTab === 'active' ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            <UserCheck className="h-4 w-4" />
+            Aktive ansatte <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{activeEmployees.length}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('former')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${activeTab === 'former' ? 'bg-slate-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            <UserX className="h-4 w-4" />
+            Tidligere ansatte <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{formerEmployees.length}</span>
+          </button>
+        </div>
+
         {/* Search */}
         <div className="relative max-w-md mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
