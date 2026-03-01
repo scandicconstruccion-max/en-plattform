@@ -142,11 +142,14 @@ export default function Endringsmeldinger() {
     setAttachments([]);
   };
 
-  const handleSubmit = (e, andSend = false) => {
+  const handleSubmit = async (e, andSend = false) => {
     e.preventDefault();
     setSendAfterCreate(andSend);
+    const orderId = formData.order_id;
+    const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'change', orderId: orderId || null });
     createMutation.mutate({
       ...formData,
+      document_number: numRes.data.documentNumber,
       amount: formData.amount ? parseFloat(formData.amount) : null,
       attachment_urls: attachments.map(a => a.file_url).filter(Boolean)
     });
