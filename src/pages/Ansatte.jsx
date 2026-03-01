@@ -24,7 +24,17 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Trash2, DollarSign, Lock, Plus, X, Camera } from 'lucide-react';
+import { Users, Search, Mail, Phone, MapPin, Briefcase, Calendar, Edit, UserX, Lock, Plus, X, Camera, UserCheck, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
