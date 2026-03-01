@@ -178,12 +178,12 @@ export default function Ordre() {
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(`Er du sikker på at du vil slette ${selectedOrders.length} ordre?`)) return;
     for (const orderId of selectedOrders) {
       await base44.entities.Order.delete(orderId);
     }
     queryClient.invalidateQueries({ queryKey: ['orders'] });
     setSelectedOrders([]);
+    setShowDeleteConfirmDialog(false);
     toast.success(`${selectedOrders.length} ordre slettet`);
   };
 
