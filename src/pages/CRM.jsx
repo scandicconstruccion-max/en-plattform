@@ -277,7 +277,10 @@ export default function CRM() {
                     className="p-5 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all"
                     onClick={() => { setSelectedCustomer(customer); setShowCustomerDialog(true); }}
                   >
-                    <h3 className="font-semibold text-slate-900 mb-1">{customer.name}</h3>
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-slate-900">{customer.name}</h3>
+                      {customer.customer_number && <span className="text-xs text-slate-400 font-mono">#{customer.customer_number}</span>}
+                    </div>
                     {customer.contact_person && <p className="text-sm text-slate-500 mb-2">{customer.contact_person}</p>}
                     {customer.email && <p className="text-sm text-slate-600">{customer.email}</p>}
                     {customer.phone && <p className="text-sm text-slate-600">{customer.phone}</p>}
