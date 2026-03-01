@@ -291,6 +291,7 @@ export default function Tilbud() {
 
   const handleSendToOrder = async (quote) => {
     try {
+      const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'order' });
       const orderData = {
         customer_name: quote.customer_name,
         customer_email: quote.customer_email,
@@ -305,7 +306,7 @@ export default function Tilbud() {
         status: 'opprettet',
         source_type: 'quote',
         source_id: quote.id,
-        order_number: `O-${Date.now().toString().slice(-6)}`
+        order_number: numRes.data.documentNumber
       };
 
       await base44.entities.Order.create(orderData);
