@@ -176,6 +176,16 @@ export default function Ordre() {
     setShowEmailDialog(true);
   };
 
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Er du sikker på at du vil slette ${selectedOrders.length} ordre?`)) return;
+    for (const orderId of selectedOrders) {
+      await base44.entities.Order.delete(orderId);
+    }
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+    setSelectedOrders([]);
+    toast.success(`${selectedOrders.length} ordre slettet`);
+  };
+
   const handleBulkSend = async () => {
     for (const orderId of selectedOrders) {
       const order = orders.find(o => o.id === orderId);
