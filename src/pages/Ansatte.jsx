@@ -75,6 +75,9 @@ export default function Ansatte() {
   });
   const [competencyInput, setCompetencyInput] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [terminateEmployee, setTerminateEmployee] = useState(null);
+  const [terminateDate, setTerminateDate] = useState('');
+  const [activeTab, setActiveTab] = useState('active');
 
   const queryClient = useQueryClient();
 
