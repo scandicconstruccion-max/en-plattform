@@ -231,6 +231,22 @@ export default function CRM() {
               </div>
               <div className="flex border border-slate-200 rounded-xl overflow-hidden">
                 <button
+                  onClick={() => setCustomerSort('alpha')}
+                  title="Sorter alfabetisk"
+                  className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerSort === 'alpha' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                >
+                  <ArrowDownAZ className="h-4 w-4" /> A–Å
+                </button>
+                <button
+                  onClick={() => setCustomerSort('number')}
+                  title="Sorter etter kundenummer"
+                  className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerSort === 'number' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                >
+                  <Hash className="h-4 w-4" /> Nr.
+                </button>
+              </div>
+              <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+                <button
                   onClick={() => setCustomerView('grid')}
                   className={`px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors ${customerView === 'grid' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
                 >
