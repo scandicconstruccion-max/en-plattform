@@ -78,6 +78,17 @@ Deno.serve(async (req) => {
       const nextSeq = String(maxSeq + 1).padStart(4, '0');
       return Response.json({ documentNumber: `AV-${year}-${nextSeq}` });
 
+    } else if (type === 'project') {
+      // 0001, 0002, ...
+      const projects = await base44.asServiceRole.entities.Project.list('-created_date', 1000);
+      const maxSeq = projects.reduce((max, p) => {
+        const match = p.project_number?.match(/^(\d{4})$/);
+        const seq = match ? parseInt(match[1]) : 0;
+        return Math.max(max, seq);
+      }, 0);
+      const nextSeq = String(maxSeq + 1).padStart(4, '0');
+      return Response.json({ documentNumber: nextSeq });
+
     } else {
       return Response.json({ error: 'Unknown type' }, { status: 400 });
     }
