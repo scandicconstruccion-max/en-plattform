@@ -405,6 +405,41 @@ export default function Ansatte() {
         )}
       </div>
 
+      {/* Terminate Dialog */}
+      <AlertDialog open={!!terminateEmployee} onOpenChange={(open) => !open && setTerminateEmployee(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Terminer ansettelsesforhold
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Du er i ferd med å terminere ansettelsesforholdet til{' '}
+              <strong>{terminateEmployee?.first_name} {terminateEmployee?.last_name}</strong>.
+              Ansatt vil bli flyttet til «Tidligere ansatte» og kan ikke lenger logge timer eller brukes i ressursplan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <Label>Sluttdato</Label>
+            <Input
+              type="date"
+              value={terminateDate}
+              onChange={(e) => setTerminateDate(e.target.value)}
+              className="mt-1.5 rounded-xl"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => terminateMutation.mutate({ id: terminateEmployee.id, end_date: terminateDate })}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Terminer ansettelsesforhold
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900">
