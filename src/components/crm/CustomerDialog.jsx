@@ -81,7 +81,6 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
       notes: '',
       tags: []
     });
-    setTagInput('');
     setEditMode(true);
   };
 
