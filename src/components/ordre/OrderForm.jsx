@@ -72,6 +72,23 @@ export default function OrderForm({ open, onOpenChange, onSubmit, onSubmitAndSen
     setFormData({...formData, items: newItems});
   };
 
+  const addEmployeeEmail = (email) => {
+    if (email && !additionalEmails.includes(email)) {
+      setAdditionalEmails(prev => [...prev, email]);
+    }
+  };
+
+  const removeAdditionalEmail = (email) => {
+    setAdditionalEmails(prev => prev.filter(e => e !== email));
+  };
+
+  const addCustomEmail = () => {
+    if (customEmail.trim() && !additionalEmails.includes(customEmail.trim())) {
+      setAdditionalEmails(prev => [...prev, customEmail.trim()]);
+      setCustomEmail('');
+    }
+  };
+
   const handleSubmit = (e, andSend = false) => {
     e.preventDefault();
     const totalAmount = formData.items.reduce((sum, item) => sum + (item.total || 0), 0);
@@ -83,7 +100,8 @@ export default function OrderForm({ open, onOpenChange, onSubmit, onSubmitAndSen
       total_amount: totalAmount,
       vat_amount: vatAmount,
       source_type: 'manual',
-      approval_token: crypto.randomUUID()
+      approval_token: crypto.randomUUID(),
+      additional_emails: additionalEmails
     };
 
     if (andSend && onSubmitAndSend) {
