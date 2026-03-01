@@ -116,6 +116,37 @@ export default function FakturaDetaljer() {
     queryFn: () => base44.entities.Employee.list()
   });
 
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => base44.entities.Company.list(),
+    initialData: []
+  });
+  const company = companies?.[0];
+
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!invoice) {
+      toast.error('Lagre fakturaen først');
+      return;
+    }
+    setDownloadingPDF(true);
+    try {
+      await downloadInvoicePDF({
+        invoice: { ...formData, ...invoice },
+        lines: invoiceLines.length > 0 ? invoiceLines : lines,
+        totals,
+        company
+      });
+      toast.success('PDF lastet ned');
+    } catch (err) {
+      console.error(err);
+      toast.error('Kunne ikke generere PDF');
+    } finally {
+      setDownloadingPDF(false);
+    }
+  };
+
   useEffect(() => {
     if (invoice) {
       setFormData({
