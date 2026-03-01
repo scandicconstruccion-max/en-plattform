@@ -171,11 +171,13 @@ export default function Avvik() {
     setAttachments([]);
   };
 
-  const handleSubmit = (e, andSend = false) => {
+  const handleSubmit = async (e, andSend = false) => {
     e.preventDefault();
     setSendAfterCreate(andSend);
+    const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'deviation' });
     createMutation.mutate({
       ...formData,
+      deviation_number: numRes.data.documentNumber,
       cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
       images: attachments.map((a) => a.file_url).filter(Boolean)
     });
