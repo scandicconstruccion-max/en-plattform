@@ -21,7 +21,6 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
     notes: '',
     tags: []
   });
-  const [tagInput, setTagInput] = useState('');
 
   const queryClient = useQueryClient();
 

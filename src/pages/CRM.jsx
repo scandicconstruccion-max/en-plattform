@@ -305,13 +305,7 @@ export default function CRM() {
                         <span className="text-sm text-slate-500 truncate">{customer.email || '—'}</span>
                         <span className="text-sm text-slate-500 truncate">{customer.phone || '—'}</span>
                       </div>
-                      {customer.tags?.length > 0 && (
-                        <div className="hidden md:flex gap-1">
-                          {customer.tags.slice(0, 2).map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                          ))}
-                        </div>
-                      )}
+
                     </div>
                   </Card>
                 ))}
