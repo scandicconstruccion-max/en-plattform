@@ -172,7 +172,8 @@ export default function Ansatte() {
       emergency_contact_phone: employee.emergency_contact_phone || '',
       notes: employee.notes || '',
       is_active: employee.is_active !== false,
-      competencies: employee.competencies || []
+      competencies: employee.competencies || [],
+      profile_image: employee.profile_image || ''
     });
     setShowDialog(true);
   };
