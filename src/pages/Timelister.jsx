@@ -54,14 +54,8 @@ export default function Timelister() {
   });
 
   const { data: projects = [] } = useQuery({
-    queryKey: ['assignedProjects', user?.email],
-    queryFn: async () => {
-      const allProjects = await base44.entities.Project.list();
-      return allProjects.filter(p => 
-        p.assigned_users?.includes(user.email) || 
-        p.project_manager === user.email
-      );
-    },
+    queryKey: ['allProjects'],
+    queryFn: () => base44.entities.Project.filter({ status: 'aktiv' }),
     enabled: !!user
   });
 
