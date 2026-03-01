@@ -305,17 +305,10 @@ export default function FakturaDetaljer() {
 
   const sendMutation = useMutation({
     mutationFn: async (email) => {
-      await base44.entities.Invoice.update(invoiceId, {
-        status: 'sendt',
-        sent_date: new Date().toISOString(),
-        sent_to_email: email
-      });
+      const now = new Date().toISOString();
+      const user = await base44.auth.me();
 
-      await base44.integrations.Core.SendEmail({
-        to: email,
-        subject: `Faktura ${invoice.invoice_number}`,
-        body: `
-Hei,
+      const emailBody = `Hei,
 
 Vedlagt finner du faktura ${invoice.invoice_number}.
 
@@ -329,14 +322,28 @@ Fakturadetaljer:
 Vennligst betal innen forfallsdato.
 
 Med vennlig hilsen,
-${base44.auth.me().then((u) => u.full_name)}
-        `
+${user?.full_name || ''}`;
+
+      await base44.integrations.Core.SendEmail({
+        to: email,
+        subject: `Faktura ${invoice.invoice_number}`,
+        body: emailBody
+      });
+
+      await base44.entities.Invoice.update(invoiceId, {
+        status: 'sendt',
+        sent_to_customer: true,
+        sent_date: now,
+        sent_to_email: email,
+        delivery_confirmed: true,
+        delivery_confirmed_date: now
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowSendDialog(false);
+      toast.success('Faktura er sendt til mottaker!', { duration: 5000 });
       setShowSentConfirmDialog(true);
     }
   });
