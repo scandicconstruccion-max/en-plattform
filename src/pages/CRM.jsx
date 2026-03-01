@@ -15,7 +15,7 @@ import UploadQuoteDialog from '@/components/crm/UploadQuoteDialog';
 import ActionCards from '@/components/crm/ActionCards';
 import QuoteWorkList from '@/components/crm/QuoteWorkList';
 import {
-  Users, Search, FileText, LayoutGrid, List, Archive, X
+  Users, Search, FileText, LayoutGrid, List, Archive, X, ArrowDownAZ, Hash
 } from 'lucide-react';
 import { isBefore, isToday, parseISO } from 'date-fns';
 import { nb } from 'date-fns/locale';
