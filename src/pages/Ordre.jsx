@@ -11,23 +11,23 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DialogTitle } from
+'@/components/ui/dialog';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
 import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import OrderForm from '@/components/ordre/OrderForm';
-import { 
-  FileText, Search, Plus, Building2, Calendar, 
-  ChevronRight, Send, CheckCircle2, User, Download, Mail, Eye, Trash2
-} from 'lucide-react';
+import {
+  FileText, Search, Plus, Building2, Calendar,
+  ChevronRight, Send, CheckCircle2, User, Download, Mail, Eye, Trash2 } from
+'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
@@ -51,27 +51,27 @@ export default function Ordre() {
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.list('-created_date'),
+    queryFn: () => base44.entities.Order.list('-created_date')
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date'),
+    queryFn: () => base44.entities.Project.list('-created_date')
   });
 
   const { data: quotes = [] } = useQuery({
     queryKey: ['quotes'],
-    queryFn: () => base44.entities.Quote.list('-created_date'),
+    queryFn: () => base44.entities.Quote.list('-created_date')
   });
 
   const { data: deviations = [] } = useQuery({
     queryKey: ['deviations'],
-    queryFn: () => base44.entities.Deviation.list('-created_date'),
+    queryFn: () => base44.entities.Deviation.list('-created_date')
   });
 
   const { data: changes = [] } = useQuery({
     queryKey: ['changeNotifications'],
-    queryFn: () => base44.entities.ChangeNotification.list('-created_date'),
+    queryFn: () => base44.entities.ChangeNotification.list('-created_date')
   });
 
   const createOrderMutation = useMutation({
@@ -80,7 +80,7 @@ export default function Ordre() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setShowCreateDialog(false);
       toast.success('Ordre opprettet');
-    },
+    }
   });
 
   const createFromSourceMutation = useMutation({
@@ -95,7 +95,7 @@ export default function Ordre() {
       };
 
       if (sourceType === 'quote') {
-        sourceData = quotes.find(q => q.id === sourceId);
+        sourceData = quotes.find((q) => q.id === sourceId);
         orderData = {
           ...orderData,
           customer_name: sourceData.customer_name,
@@ -109,8 +109,8 @@ export default function Ordre() {
           due_date: sourceData.valid_until
         };
       } else if (sourceType === 'deviation') {
-        sourceData = deviations.find(d => d.id === sourceId);
-        const project = projects.find(p => p.id === sourceData.project_id);
+        sourceData = deviations.find((d) => d.id === sourceId);
+        const project = projects.find((p) => p.id === sourceData.project_id);
         orderData = {
           ...orderData,
           customer_name: project?.client_name || '',
@@ -130,8 +130,8 @@ export default function Ordre() {
           vat_amount: (sourceData.cost_amount || 0) * 0.25
         };
       } else if (sourceType === 'change') {
-        sourceData = changes.find(c => c.id === sourceId);
-        const project = projects.find(p => p.id === sourceData.project_id);
+        sourceData = changes.find((c) => c.id === sourceId);
+        const project = projects.find((p) => p.id === sourceData.project_id);
         orderData = {
           ...orderData,
           customer_name: project?.client_name || '',
@@ -158,7 +158,7 @@ export default function Ordre() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setShowSourceDialog(false);
       toast.success('Ordre opprettet');
-    },
+    }
   });
 
   const handleSendEmail = async (updateData) => {
@@ -188,7 +188,7 @@ export default function Ordre() {
 
   const handleBulkSend = async () => {
     for (const orderId of selectedOrders) {
-      const order = orders.find(o => o.id === orderId);
+      const order = orders.find((o) => o.id === orderId);
       if (order && order.customer_email) {
         await base44.integrations.Core.SendEmail({
           to: order.customer_email,
@@ -209,10 +209,10 @@ export default function Ordre() {
   };
 
   const toggleOrderSelection = (orderId) => {
-    setSelectedOrders(prev => 
-      prev.includes(orderId) 
-        ? prev.filter(id => id !== orderId)
-        : [...prev, orderId]
+    setSelectedOrders((prev) =>
+    prev.includes(orderId) ?
+    prev.filter((id) => id !== orderId) :
+    [...prev, orderId]
     );
   };
 
@@ -220,20 +220,20 @@ export default function Ordre() {
     if (selectedOrders.length === filteredOrders.length) {
       setSelectedOrders([]);
     } else {
-      setSelectedOrders(filteredOrders.map(o => o.id));
+      setSelectedOrders(filteredOrders.map((o) => o.id));
     }
   };
 
   const getProjectName = (projectId) => {
-    return projects.find(p => p.id === projectId)?.name || 'Ukjent prosjekt';
+    return projects.find((p) => p.id === projectId)?.name || 'Ukjent prosjekt';
   };
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const matchesSearch = 
-        order.order_number?.toLowerCase().includes(search.toLowerCase()) ||
-        order.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-        order.description?.toLowerCase().includes(search.toLowerCase());
+    return orders.filter((order) => {
+      const matchesSearch =
+      order.order_number?.toLowerCase().includes(search.toLowerCase()) ||
+      order.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+      order.description?.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       const matchesProject = projectFilter === 'all' || order.project_id === projectFilter;
       return matchesSearch && matchesStatus && matchesProject;
@@ -242,18 +242,18 @@ export default function Ordre() {
 
   // Stats
   const statusCounts = {
-    opprettet: orders.filter(o => o.status === 'opprettet').length,
-    sendt: orders.filter(o => o.status === 'sendt').length,
-    godkjent: orders.filter(o => o.status === 'godkjent').length,
-    utfort: orders.filter(o => o.status === 'utfort').length,
+    opprettet: orders.filter((o) => o.status === 'opprettet').length,
+    sendt: orders.filter((o) => o.status === 'sendt').length,
+    godkjent: orders.filter((o) => o.status === 'godkjent').length,
+    utfort: orders.filter((o) => o.status === 'utfort').length
   };
 
   const totalValue = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
   // Get approved sources for creation
-  const approvedQuotes = quotes.filter(q => q.status === 'godkjent');
-  const approvedDeviations = deviations.filter(d => d.status === 'lukket' && d.has_cost_consequence);
-  const approvedChanges = changes.filter(c => c.status === 'godkjent');
+  const approvedQuotes = quotes.filter((q) => q.status === 'godkjent');
+  const approvedDeviations = deviations.filter((d) => d.status === 'lukket' && d.has_cost_consequence);
+  const approvedChanges = changes.filter((c) => c.status === 'godkjent');
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -261,48 +261,48 @@ export default function Ordre() {
         title="Ordre"
         subtitle="Administrer ordre og arbeidsordre"
         actions={
-          <div className="flex gap-2">
-            {selectedOrders.length > 0 && (
-              <>
-                <Button 
-                  variant="outline"
-                  onClick={handleBulkSend}
-                  className="rounded-xl gap-2"
-                >
+        <div className="flex gap-2">
+            {selectedOrders.length > 0 &&
+          <>
+                <Button
+              variant="outline"
+              onClick={handleBulkSend}
+              className="rounded-xl gap-2">
+
                   <Send className="h-4 w-4" /> Send ({selectedOrders.length})
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={handleBulkDelete}
-                  className="rounded-xl gap-2 text-red-600 border-red-200 hover:bg-red-50"
-                >
+                <Button
+              variant="outline"
+              onClick={handleBulkDelete}
+              className="rounded-xl gap-2 text-red-600 border-red-200 hover:bg-red-50">
+
                   <Trash2 className="h-4 w-4" /> Slett ({selectedOrders.length})
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => setSelectedOrders([])}
-                  className="rounded-xl"
-                >
-                  Avbryt
-                </Button>
+                
+
+
+
+
+
+
               </>
-            )}
-            <Button 
-              variant="outline"
-              onClick={() => setShowSourceDialog(true)}
-              className="rounded-xl gap-2"
-            >
+          }
+            <Button
+            variant="outline"
+            onClick={() => setShowSourceDialog(true)}
+            className="rounded-xl gap-2">
+
               <Plus className="h-4 w-4" /> Hent Fra Tilbud/Avvik/Endring
             </Button>
-            <Button 
-              onClick={() => setShowCreateDialog(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-            >
+            <Button
+            onClick={() => setShowCreateDialog(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+
               <Plus className="h-4 w-4" /> Ny ordre
             </Button>
           </div>
-        }
-      />
+        } />
+
 
       <div className="px-6 lg:px-8 py-6 space-y-6">
         {/* Stats */}
@@ -363,8 +363,8 @@ export default function Ordre() {
               placeholder="Søk etter ordre..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 rounded-xl dark:bg-slate-900 dark:border-slate-700"
-            />
+              className="pl-10 rounded-xl dark:bg-slate-900 dark:border-slate-700" />
+
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40 rounded-xl dark:bg-slate-900 dark:border-slate-700">
@@ -384,126 +384,126 @@ export default function Ordre() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle prosjekter</SelectItem>
-              {projects.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
+              {projects.map((p) =>
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>
 
         {/* List */}
-        {isLoading ? (
-          <div className="grid gap-4">
-            {[1,2,3].map(i => (
-              <Card key={i} className="p-6 animate-pulse border-0 shadow-sm">
+        {isLoading ?
+        <div className="grid gap-4">
+            {[1, 2, 3].map((i) =>
+          <Card key={i} className="p-6 animate-pulse border-0 shadow-sm">
                 <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-1/3 mb-3" />
                 <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3" />
               </Card>
-            ))}
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <EmptyState
-            icon={FileText}
-            title="Ingen ordre"
-            description="Opprett en ny ordre eller importer fra tilbud, avvik eller endring"
-            actionLabel="Ny ordre"
-            onAction={() => setShowCreateDialog(true)}
-          />
-        ) : (
-          <div className="space-y-4">
+          )}
+          </div> :
+        filteredOrders.length === 0 ?
+        <EmptyState
+          icon={FileText}
+          title="Ingen ordre"
+          description="Opprett en ny ordre eller importer fra tilbud, avvik eller endring"
+          actionLabel="Ny ordre"
+          onAction={() => setShowCreateDialog(true)} /> :
+
+
+        <div className="space-y-4">
             {/* Bulk Actions Header */}
-            {filteredOrders.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+            {filteredOrders.length > 0 &&
+          <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
                 <Checkbox
-                  checked={selectedOrders.length === filteredOrders.length}
-                  onCheckedChange={toggleSelectAll}
-                />
+              checked={selectedOrders.length === filteredOrders.length}
+              onCheckedChange={toggleSelectAll} />
+
                 <span className="text-sm text-slate-600 dark:text-slate-400">
                   {selectedOrders.length > 0 ? `${selectedOrders.length} valgt` : 'Velg alle'}
                 </span>
               </div>
-            )}
+          }
 
             <div className="grid gap-4">
-              {filteredOrders.map((order) => (
-                <Card 
-                  key={order.id} 
-                  className="p-4 border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900"
-                >
+              {filteredOrders.map((order) =>
+            <Card
+              key={order.id}
+              className="p-4 border-0 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-900">
+
                   <div className="flex items-center gap-3">
                     <Checkbox
-                      checked={selectedOrders.includes(order.id)}
-                      onCheckedChange={() => toggleOrderSelection(order.id)}
-                    />
-                    <div 
-                      className="flex-1 cursor-pointer"
-                      onClick={() => {
-                        window.location.href = createPageUrl(`OrdreDetaljer?id=${order.id}`);
-                      }}
-                    >
+                  checked={selectedOrders.includes(order.id)}
+                  onCheckedChange={() => toggleOrderSelection(order.id)} />
+
+                    <div
+                  className="flex-1 cursor-pointer"
+                  onClick={() => {
+                    window.location.href = createPageUrl(`OrdreDetaljer?id=${order.id}`);
+                  }}>
+
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-slate-900 dark:text-white">
                           {order.order_number}
                         </h3>
                         <StatusBadge status={order.status} />
-                        {order.source_type !== 'manual' && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        {order.source_type !== 'manual' &&
+                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
                             Fra {order.source_type === 'quote' ? 'Tilbud' : order.source_type === 'deviation' ? 'Avvik' : 'Endring'}
                           </span>
-                        )}
-                        {order.sent_to_customer && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center gap-1">
+                    }
+                        {order.sent_to_customer &&
+                    <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center gap-1">
                             <CheckCircle2 className="h-3 w-3" />
                             Sendt {format(new Date(order.sent_date), 'd. MMM HH:mm', { locale: nb })}
                           </span>
-                        )}
+                    }
                       </div>
                       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
                         <span className="flex items-center gap-1">
                           <User className="h-4 w-4" />
                           {order.customer_name}
                         </span>
-                        {order.project_id && (
-                          <span className="flex items-center gap-1">
+                        {order.project_id &&
+                    <span className="flex items-center gap-1">
                             <Building2 className="h-4 w-4" />
                             {getProjectName(order.project_id)}
                           </span>
-                        )}
-                        {order.due_date && (
-                          <span className="flex items-center gap-1">
+                    }
+                        {order.due_date &&
+                    <span className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
                             {format(new Date(order.due_date), 'd. MMM yyyy', { locale: nb })}
                           </span>
-                        )}
+                    }
                         <span className="flex items-center gap-1 font-semibold">
                           kr {order.total_amount?.toFixed(2) || '0.00'}
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {(order.status === 'opprettet' || order.status === 'sendt') && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedOrder(order);
-                            setShowEmailDialog(true);
-                          }}
-                          className="rounded-xl gap-1"
-                        >
+                      {(order.status === 'opprettet' || order.status === 'sendt') &&
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedOrder(order);
+                      setShowEmailDialog(true);
+                    }}
+                    className="rounded-xl gap-1">
+
                           <Send className="h-4 w-4" />
                           Send
                         </Button>
-                      )}
+                  }
                       <ChevronRight className="h-5 w-5 text-slate-400" />
                     </div>
                   </div>
                 </Card>
-              ))}
+            )}
             </div>
           </div>
-        )}
+        }
       </div>
 
       {/* Create from Source Dialog */}
@@ -527,57 +527,57 @@ export default function Ordre() {
             </div>
 
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {sourceType === 'quote' && approvedQuotes.length === 0 && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+              {sourceType === 'quote' && approvedQuotes.length === 0 &&
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
                   Ingen godkjente tilbud
                 </p>
-              )}
-              {sourceType === 'quote' && approvedQuotes.map(quote => (
-                <Card 
-                  key={quote.id}
-                  className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
-                  onClick={() => createFromSourceMutation.mutate({ sourceType: 'quote', sourceId: quote.id })}
-                >
+              }
+              {sourceType === 'quote' && approvedQuotes.map((quote) =>
+              <Card
+                key={quote.id}
+                className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
+                onClick={() => createFromSourceMutation.mutate({ sourceType: 'quote', sourceId: quote.id })}>
+
                   <p className="font-medium text-sm">{quote.quote_number}</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{quote.customer_name}</p>
                 </Card>
-              ))}
+              )}
 
-              {sourceType === 'deviation' && approvedDeviations.length === 0 && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+              {sourceType === 'deviation' && approvedDeviations.length === 0 &&
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
                   Ingen godkjente avvik med kostnadskonsekvens
                 </p>
-              )}
-              {sourceType === 'deviation' && approvedDeviations.map(dev => (
-                <Card 
-                  key={dev.id}
-                  className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
-                  onClick={() => createFromSourceMutation.mutate({ sourceType: 'deviation', sourceId: dev.id })}
-                >
+              }
+              {sourceType === 'deviation' && approvedDeviations.map((dev) =>
+              <Card
+                key={dev.id}
+                className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
+                onClick={() => createFromSourceMutation.mutate({ sourceType: 'deviation', sourceId: dev.id })}>
+
                   <p className="font-medium text-sm">{dev.title}</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     kr {dev.cost_amount?.toFixed(2) || '0.00'}
                   </p>
                 </Card>
-              ))}
+              )}
 
-              {sourceType === 'change' && approvedChanges.length === 0 && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+              {sourceType === 'change' && approvedChanges.length === 0 &&
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
                   Ingen godkjente endringsmeldinger
                 </p>
-              )}
-              {sourceType === 'change' && approvedChanges.map(change => (
-                <Card 
-                  key={change.id}
-                  className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
-                  onClick={() => createFromSourceMutation.mutate({ sourceType: 'change', sourceId: change.id })}
-                >
+              }
+              {sourceType === 'change' && approvedChanges.map((change) =>
+              <Card
+                key={change.id}
+                className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
+                onClick={() => createFromSourceMutation.mutate({ sourceType: 'change', sourceId: change.id })}>
+
                   <p className="font-medium text-sm">{change.title}</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     kr {change.amount?.toFixed(2) || '0.00'}
                   </p>
                 </Card>
-              ))}
+              )}
             </div>
           </div>
         </DialogContent>
@@ -588,19 +588,19 @@ export default function Ordre() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onSubmit={(data) => createOrderMutation.mutate(data)}
-        onSubmitAndSend={handleSubmitAndSend}
-      />
+        onSubmitAndSend={handleSubmitAndSend} />
+
 
       {/* Send Email Dialog */}
-      {selectedOrder && (
-        <SendEmailDialog
-          open={showEmailDialog}
-          onOpenChange={setShowEmailDialog}
-          type="ordre"
-          item={selectedOrder}
-          onSent={handleSendEmail}
-        />
-      )}
+      {selectedOrder &&
+      <SendEmailDialog
+        open={showEmailDialog}
+        onOpenChange={setShowEmailDialog}
+        type="ordre"
+        item={selectedOrder}
+        onSent={handleSendEmail} />
+
+      }
 
       {/* Sent Confirmation Dialog */}
       <AlertDialog open={showSentConfirmDialog} onOpenChange={setShowSentConfirmDialog}>
@@ -621,6 +621,6 @@ export default function Ordre() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
+    </div>);
+
 }
