@@ -60,7 +60,8 @@ export default function Ansatte() {
     emergency_contact_phone: '',
     notes: '',
     is_active: true,
-    competencies: []
+    competencies: [],
+    profile_image: ''
   });
   const [competencyInput, setCompetencyInput] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
