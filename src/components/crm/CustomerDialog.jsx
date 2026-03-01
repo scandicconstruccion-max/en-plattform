@@ -247,30 +247,7 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
                 className="mt-1.5 rounded-xl"
               />
             </div>
-            <div>
-              <Label>Tags</Label>
-              <Input
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={handleAddTag}
-                placeholder="Trykk Enter for å legge til"
-                className="mt-1.5 rounded-xl"
-              />
-              {formData.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {formData.tags.map((tag) => (
-                    <Badge 
-                      key={tag} 
-                      variant="secondary" 
-                      className="cursor-pointer"
-                      onClick={() => handleRemoveTag(tag)}
-                    >
-                      {tag} ×
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
+
             <div>
               <Label>Notater</Label>
               <Textarea
