@@ -37,6 +37,7 @@ export default function Faktura() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [downloadingBulk, setDownloadingBulk] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: invoices = [] } = useQuery({
