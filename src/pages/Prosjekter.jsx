@@ -292,10 +292,10 @@ export default function Prosjekter() {
               <div>
                 <Label>Prosjektnummer</Label>
                 <Input
-                  value={formData.project_number}
-                  onChange={(e) => setFormData({...formData, project_number: e.target.value})}
-                  placeholder="f.eks. P-2024-001"
-                  className="mt-1.5 rounded-xl"
+                  value={formData.project_number || 'Tildeles automatisk'}
+                  readOnly
+                  disabled
+                  className="mt-1.5 rounded-xl bg-slate-50 text-slate-400 cursor-not-allowed"
                 />
               </div>
               <div>
