@@ -144,9 +144,28 @@ export default function Faktura() {
     setSelectedInvoices([]);
   };
 
-  const handleBulkDownload = () => {
-    toast.info('Last ned funksjonalitet kommer snart');
-    // TODO: Implement PDF generation and download
+  const handleBulkDownload = async () => {
+    const invoicesToDownload = invoices.filter(inv => selectedInvoices.includes(inv.id));
+    setDownloadingBulk(true);
+    let count = 0;
+    for (const invoice of invoicesToDownload) {
+      try {
+        // Fetch lines for this invoice
+        const lines = await base44.entities.InvoiceLine.filter({ invoice_id: invoice.id });
+        const totals = {
+          amount_excluding_vat: invoice.amount_excluding_vat || 0,
+          vat_amount: invoice.vat_amount || 0,
+          total_amount: invoice.total_amount || 0
+        };
+        await downloadInvoicePDF({ invoice, lines, totals, company });
+        count++;
+      } catch (err) {
+        console.error('Feil ved nedlasting av faktura:', err);
+      }
+    }
+    setDownloadingBulk(false);
+    toast.success(`${count} faktura(er) lastet ned`);
+    setSelectedInvoices([]);
   };
 
   const handleBulkExternalSend = async () => {
