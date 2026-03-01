@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Trash2, Send } from 'lucide-react';
+import { Plus, Trash2, Send, X } from 'lucide-react';
 
 export default function OrderForm({ open, onOpenChange, onSubmit, onSubmitAndSend }) {
   const [formData, setFormData] = useState({
