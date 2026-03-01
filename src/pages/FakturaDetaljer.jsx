@@ -31,6 +31,7 @@ import InvoicePreview from '@/components/faktura/InvoicePreview';
 import FileUploadSection from '@/components/shared/FileUploadSection';
 import { formatAmount } from '@/components/shared/formatNumber';
 import { downloadInvoicePDF } from '@/components/faktura/InvoicePDFGenerator';
+import DeliveryStatus from '@/components/shared/DeliveryStatus';
 
 export default function FakturaDetaljer() {
   const navigate = useNavigate();
