@@ -274,7 +274,7 @@ export default function Ordre() {
                 </Button>
                 <Button
               variant="outline"
-              onClick={handleBulkDelete}
+              onClick={() => setShowDeleteConfirmDialog(true)}
               className="rounded-xl gap-2 text-red-600 border-red-200 hover:bg-red-50">
 
                   <Trash2 className="h-4 w-4" /> Slett ({selectedOrders.length})
