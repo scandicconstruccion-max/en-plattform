@@ -226,14 +226,27 @@ export default function Tilbud() {
     return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   };
 
-  const handleSubmit = (e, andSend = false) => {
+  const handleSubmit = async (e, andSend = false) => {
     e.preventDefault();
     const total = calculateTotal(formData.items);
     const vat = total * 0.25;
 
+    // Generate document number if new quote (not a revision)
+    let quoteNumber = formData.quote_number;
+    if (!formData.is_revision) {
+      const res = await base44.functions.invoke('generateDocumentNumber', { type: 'quote' });
+      quoteNumber = res.data.documentNumber;
+    } else {
+      // Generate revision number from parent base number
+      const parentQuote = quotes.find(q => q.id === formData.parent_quote_id);
+      const baseNumber = parentQuote?.base_number || parentQuote?.quote_number?.replace(/-REV\d+$/, '') || formData.quote_number;
+      const res = await base44.functions.invoke('generateDocumentNumber', { type: 'quote_revision', baseNumber, currentRevision: formData.revision_number - 1 });
+      quoteNumber = res.data.documentNumber;
+    }
+
     const quoteData = {
       ...formData,
-      quote_number: formData.quote_number || `T-${Date.now().toString().slice(-6)}`,
+      quote_number: quoteNumber,
       items: formData.items.map((item) => ({
         ...item,
         total: item.quantity * item.unit_price
