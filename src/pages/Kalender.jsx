@@ -386,12 +386,14 @@ export default function Kalender() {
             )}
             <div>
               <Label>Sted</Label>
-              <Input
-                value={formData.location}
-                onChange={(e) => setFormData({...formData, location: e.target.value})}
-                placeholder="Adresse eller møterom"
-                className="mt-1.5 rounded-xl"
-              />
+              <div className="mt-1.5">
+                <LocationAutocomplete
+                  value={formData.location}
+                  onChange={(v) => setFormData({...formData, location: v})}
+                  placeholder="Adresse eller møterom"
+                  className="rounded-xl"
+                />
+              </div>
             </div>
             <div>
               <Label>Beskrivelse</Label>
