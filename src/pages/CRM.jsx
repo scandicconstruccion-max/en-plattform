@@ -303,7 +303,10 @@ export default function CRM() {
                         </span>
                       </div>
                       <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-4 gap-1 md:gap-4">
-                        <span className="font-semibold text-slate-900 truncate">{customer.name}</span>
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="font-semibold text-slate-900 truncate">{customer.name}</span>
+                          {customer.customer_number && <span className="text-xs text-slate-400 font-mono flex-shrink-0">#{customer.customer_number}</span>}
+                        </div>
                         <span className="text-sm text-slate-500 truncate">{customer.contact_person || '—'}</span>
                         <span className="text-sm text-slate-500 truncate">{customer.email || '—'}</span>
                         <span className="text-sm text-slate-500 truncate">{customer.phone || '—'}</span>
