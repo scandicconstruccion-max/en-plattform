@@ -420,6 +420,11 @@ export default function Faktura() {
                           </p>
                         </div>
                       </div>
+                      {invoice.sent_to_customer && (
+                        <div onClick={(e) => e.preventDefault()}>
+                          <DeliveryStatus item={invoice} />
+                        </div>
+                      )}
                     </Link>
                   </div>
                 </CardContent>
