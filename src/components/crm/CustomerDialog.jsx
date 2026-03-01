@@ -148,16 +148,6 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
               )}
             </div>
 
-            {customer.tags?.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {customer.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
             {customer.notes && (
               <div>
                 <Label className="text-slate-500">Notater</Label>
