@@ -281,13 +281,7 @@ export default function CRM() {
                     {customer.contact_person && <p className="text-sm text-slate-500 mb-2">{customer.contact_person}</p>}
                     {customer.email && <p className="text-sm text-slate-600">{customer.email}</p>}
                     {customer.phone && <p className="text-sm text-slate-600">{customer.phone}</p>}
-                    {customer.tags?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-3">
-                        {customer.tags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                        ))}
-                      </div>
-                    )}
+
                   </Card>
                 ))}
               </div>
