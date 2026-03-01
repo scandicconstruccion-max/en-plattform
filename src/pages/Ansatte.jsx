@@ -384,6 +384,29 @@ export default function Ansatte() {
               </TabsList>
 
               <TabsContent value="personal" className="space-y-6 mt-6">
+                {/* Profile Photo */}
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <Avatar className="h-20 w-20">
+                      {formData.profile_image && <AvatarImage src={formData.profile_image} className="object-cover" />}
+                      <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xl">
+                        {formData.first_name?.charAt(0)}{formData.last_name?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <label className="absolute -bottom-1 -right-1 h-7 w-7 bg-emerald-600 hover:bg-emerald-700 rounded-full flex items-center justify-center cursor-pointer shadow">
+                      <Camera className="h-3.5 w-3.5 text-white" />
+                      <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                    </label>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">Profilbilde</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{uploadingPhoto ? 'Laster opp...' : 'Klikk på kameraet for å laste opp bilde'}</p>
+                    {formData.profile_image && (
+                      <button type="button" onClick={() => setFormData(prev => ({ ...prev, profile_image: '' }))} className="text-xs text-red-500 hover:text-red-600 mt-1">Fjern bilde</button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Personal Info */}
                 <div>
                   <h4 className="font-medium text-slate-900 dark:text-white mb-3">Personalia</h4>
