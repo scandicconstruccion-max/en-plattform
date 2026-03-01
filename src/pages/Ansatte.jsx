@@ -295,6 +295,7 @@ export default function Ansatte() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-14 w-14">
+                      {employee.profile_image && <AvatarImage src={employee.profile_image} className="object-cover" />}
                       <AvatarFallback className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-lg">
                         {employee.first_name?.charAt(0)}{employee.last_name?.charAt(0)}
                       </AvatarFallback>
