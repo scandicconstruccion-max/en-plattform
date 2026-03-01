@@ -839,6 +839,16 @@ ${base44.auth.me().then((u) => u.full_name)}
               </button>
             </>
           }
+          {invoice &&
+          <Button
+            onClick={handleDownloadPDF}
+            disabled={downloadingPDF}
+            variant="outline"
+            className="rounded-xl gap-2">
+              <Download className="h-4 w-4" />
+              {downloadingPDF ? 'Genererer...' : 'Last ned PDF'}
+            </Button>
+          }
           {invoice && invoice.status === 'kladd' &&
           <Button
             onClick={() => setShowSendDialog(true)}
