@@ -94,26 +94,6 @@ export default function CustomerDialog({ open, onOpenChange, customer, onCustome
     }
   };
 
-  const handleAddTag = (e) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault();
-      if (!formData.tags.includes(tagInput.trim())) {
-        setFormData({
-          ...formData,
-          tags: [...formData.tags, tagInput.trim()]
-        });
-      }
-      setTagInput('');
-    }
-  };
-
-  const handleRemoveTag = (tag) => {
-    setFormData({
-      ...formData,
-      tags: formData.tags.filter(t => t !== tag)
-    });
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
