@@ -76,6 +76,13 @@ export default function Faktura() {
     !d.invoice_id
   );
 
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => base44.entities.Company.list(),
+    initialData: []
+  });
+  const company = companies?.[0];
+
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch =
     invoice.invoice_number?.toLowerCase().includes(search.toLowerCase()) ||
