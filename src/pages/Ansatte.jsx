@@ -63,6 +63,7 @@ export default function Ansatte() {
     competencies: []
   });
   const [competencyInput, setCompetencyInput] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const queryClient = useQueryClient();
 
