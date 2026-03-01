@@ -264,12 +264,8 @@ export default function Ansatte() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <PageHeader
         title="Ansatte"
-        subtitle={`${employees.length} ansatte registrert`}
-        onAdd={() => {
-          resetForm();
-          setSelectedEmployee(null);
-          setShowDialog(true);
-        }}
+        subtitle={`${activeEmployees.length} aktive ansatte`}
+        onAdd={activeTab === 'active' ? () => { resetForm(); setSelectedEmployee(null); setShowDialog(true); } : undefined}
         addLabel="Ny ansatt"
       />
 
