@@ -242,7 +242,10 @@ export default function Ansatte() {
     setUploadingPhoto(false);
   };
 
-  const filteredEmployees = employees.filter(e => {
+  const activeEmployees = employees.filter(e => e.is_active !== false);
+  const formerEmployees = employees.filter(e => e.is_active === false);
+
+  const filteredEmployees = (activeTab === 'active' ? activeEmployees : formerEmployees).filter(e => {
     const fullName = `${e.first_name} ${e.last_name}`.toLowerCase();
     return fullName.includes(search.toLowerCase()) ||
            e.email?.toLowerCase().includes(search.toLowerCase()) ||
