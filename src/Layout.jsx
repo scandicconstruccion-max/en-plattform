@@ -277,6 +277,7 @@ export default function Layout({ children, currentPageName }) {
                 <div className="space-y-1">
                   {section.modules.map((moduleKey) => {
                     if (!user || !hasModuleAccess(user, moduleKey)) return null;
+                    if (!hasModuleSubscriptionAccess(moduleKey)) return null;
 
                     const Icon = moduleIcons[moduleKey] || LayoutDashboard;
                     const label = moduleLabels[moduleKey] || moduleKey;
