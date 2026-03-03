@@ -126,15 +126,16 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.CompanyModuleAccess.bulkCreate(newRecords);
 
+    const activeModules = newRecords.filter(r => r.active).map(r => r.moduleCode);
+    const inactiveModules = newRecords.filter(r => !r.active).map(r => r.moduleCode);
+
     return Response.json({
         success: true,
         companyId,
         companyName: company.name,
         subscriptionStatus: status,
         modulesUpdated: newRecords.length,
-        active,
-        source,
-        ...(validTo ? { validTo } : {}),
-        modules: newRecords.map(r => r.moduleCode)
+        activeModules,
+        inactiveModules
     });
 });
