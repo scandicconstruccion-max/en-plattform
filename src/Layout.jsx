@@ -137,6 +137,7 @@ export default function Layout({ children, currentPageName }) {
   });
 
   const company = companies?.[0];
+  const { hasAccess: hasModuleSubscriptionAccess } = useCompanyModuleAccess(company?.id);
 
   // Module sections
   const moduleSections = [
