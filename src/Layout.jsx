@@ -13,6 +13,7 @@ import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { hasModuleAccess, MODULES } from '@/components/shared/permissions';
+import { useCompanyModuleAccess } from '@/components/shared/useCompanyModuleAccess';
 import {
   DropdownMenu,
   DropdownMenuContent,
