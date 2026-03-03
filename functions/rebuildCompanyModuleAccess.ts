@@ -84,29 +84,45 @@ Deno.serve(async (req) => {
     let source = 'manual';
     let validTo = null;
 
-    if (status === 'trial') {
-        active = true;
-        source = 'trial';
-        validTo = company.trialEndDate ? `${company.trialEndDate}T23:59:59.000Z` : null;
-    } else if (status === 'active') {
-        active = true;
-        source = 'subscription';
-        validTo = null;
-    } else {
-        // suspended eller canceled
-        active = false;
-        source = 'subscription';
-        validTo = null;
-    }
+    let newRecords;
 
-    const newRecords = ALL_MODULE_CODES.map(mod => ({
-        companyId,
-        moduleCode: mod.moduleCode,
-        active,
-        source,
-        validFrom: now,
-        ...(validTo ? { validTo } : {})
-    }));
+    if (status === 'trial') {
+        // Trial: alle moduler aktive
+        const validTo = company.trialEndDate ? `${company.trialEndDate}T23:59:59.000Z` : null;
+        newRecords = ALL_MODULE_CODES.map(mod => ({
+            companyId,
+            moduleCode: mod.moduleCode,
+            active: true,
+            source: 'trial',
+            validFrom: now,
+            ...(validTo ? { validTo } : {})
+        }));
+    } else if (status === 'active') {
+        // Active: kun moduler i CompanySubscriptionItem som er aktive
+        const subItems = await base44.asServiceRole.entities.CompanySubscriptionItem.filter({ companyId, active: true });
+        const activeCodes = new Set(subItems.map(i => i.moduleCode));
+
+        // Alltid gi tilgang til kjerne-moduler (isCore = true)
+        const coreCodes = new Set(ALL_MODULE_CODES.filter(m => m.isCore).map(m => m.moduleCode));
+
+        newRecords = ALL_MODULE_CODES.map(mod => ({
+            companyId,
+            moduleCode: mod.moduleCode,
+            active: activeCodes.has(mod.moduleCode) || coreCodes.has(mod.moduleCode),
+            source: 'subscription',
+            validFrom: now
+        }));
+    } else {
+        // Suspended / canceled: alle inaktive (unntatt kjernemoduler)
+        const coreCodes = new Set(ALL_MODULE_CODES.filter(m => m.isCore).map(m => m.moduleCode));
+        newRecords = ALL_MODULE_CODES.map(mod => ({
+            companyId,
+            moduleCode: mod.moduleCode,
+            active: coreCodes.has(mod.moduleCode), // kjerne alltid tilgjengelig
+            source: 'subscription',
+            validFrom: now
+        }));
+    }
 
     await base44.asServiceRole.entities.CompanyModuleAccess.bulkCreate(newRecords);
 
