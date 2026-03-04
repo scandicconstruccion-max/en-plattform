@@ -91,9 +91,29 @@ const availableModules = [
 { key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', price: 149 }];
 
 
+// Map frontend module keys to Stripe module codes
+const moduleKeyToCode = {
+  tilbud: 'TILBUD',
+  ordre: 'ORDRE',
+  endringsmeldinger: 'ENDRINGSMELDINGER',
+  faktura: 'FAKTURA',
+  timelister: 'TIMELISTER',
+  ansatte: 'ANSATTE',
+  ressursplan: 'RESSURS',
+  kalender: 'KALENDER',
+  chat: 'CHAT',
+  befaring: 'BEFARING',
+  bildedok: 'BILDEDOK',
+  fdv: 'FDV',
+  crm: 'CRM',
+};
+
 export default function MinBedrift() {
   const queryClient = useQueryClient();
   const [infoPopup, setInfoPopup] = useState(null);
+  const [orderDialog, setOrderDialog] = useState(null); // module object
+  const [cancelDialog, setCancelDialog] = useState(null); // module object
+  const [actionLoading, setActionLoading] = useState(false);
 
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
@@ -101,7 +121,32 @@ export default function MinBedrift() {
   });
 
   const company = companies[0];
-  const activeModules = company?.active_modules || availableModules.map((m) => m.key);
+
+  const { data: moduleAccessList = [] } = useQuery({
+    queryKey: ['companyModuleAccess', company?.id],
+    queryFn: () => base44.entities.CompanyModuleAccess.filter({ companyId: company.id }),
+    enabled: !!company?.id
+  });
+
+  const { data: subscriptionItems = [] } = useQuery({
+    queryKey: ['companySubscriptionItems', company?.id],
+    queryFn: async () => {
+      const subs = await base44.entities.CompanySubscription.filter({ companyId: company.id });
+      if (!subs[0]) return [];
+      return base44.entities.CompanySubscriptionItem.filter({ companySubscriptionId: subs[0].id });
+    },
+    enabled: !!company?.id
+  });
+
+  const isTrial = company?.subscriptionStatus === 'trial';
+
+  const isModuleActive = (moduleKey) => {
+    if (isTrial) return true;
+    const code = moduleKeyToCode[moduleKey];
+    if (!code) return true;
+    const access = moduleAccessList.find(a => a.moduleCode === code);
+    return access?.active === true;
+  };
 
   const updateCompanyMutation = useMutation({
     mutationFn: async (data) => {
@@ -116,15 +161,51 @@ export default function MinBedrift() {
     }
   });
 
-  const toggleModule = (moduleKey) => {
-    const module = availableModules.find((m) => m.key === moduleKey);
-    if (module?.required) return;
+  const handleOrderModule = async (module) => {
+    setActionLoading(true);
+    try {
+      const code = moduleKeyToCode[module.key];
+      const res = await base44.functions.invoke('createStripeSubscription', {
+        companyId: company.id,
+        moduleCodes: [code],
+        priceIds: {},
+        customerEmail: company.email,
+        customerName: company.name
+      });
+      if (res.data?.clientSecret) {
+        // redirect or handle Stripe checkout
+        window.location.href = `/stripe-checkout?clientSecret=${res.data.clientSecret}`;
+      } else {
+        toast.success(`${module.name} er bestilt!`);
+        queryClient.invalidateQueries({ queryKey: ['companyModuleAccess', company.id] });
+        queryClient.invalidateQueries({ queryKey: ['companySubscriptionItems', company.id] });
+      }
+    } catch (e) {
+      toast.error('Bestilling feilet: ' + (e.message || 'Ukjent feil'));
+    } finally {
+      setActionLoading(false);
+      setOrderDialog(null);
+    }
+  };
 
-    const newModules = activeModules.includes(moduleKey) ?
-    activeModules.filter((m) => m !== moduleKey) :
-    [...activeModules, moduleKey];
-
-    updateCompanyMutation.mutate({ active_modules: newModules });
+  const handleCancelModule = async (module) => {
+    setActionLoading(true);
+    try {
+      const code = moduleKeyToCode[module.key];
+      await base44.functions.invoke('updateStripeSubscriptionModules', {
+        companyId: company.id,
+        addModules: [],
+        removeModuleCodes: [code]
+      });
+      toast.success(`${module.name} er avbestilt og tilgang er fjernet.`);
+      queryClient.invalidateQueries({ queryKey: ['companyModuleAccess', company.id] });
+      queryClient.invalidateQueries({ queryKey: ['companySubscriptionItems', company.id] });
+    } catch (e) {
+      toast.error('Avbestilling feilet: ' + (e.message || 'Ukjent feil'));
+    } finally {
+      setActionLoading(false);
+      setCancelDialog(null);
+    }
   };
 
   const calculateMonthlyPrice = () => {
