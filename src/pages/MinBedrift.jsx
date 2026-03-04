@@ -209,9 +209,9 @@ export default function MinBedrift() {
   };
 
   const calculateMonthlyPrice = () => {
-    const addons = availableModules.
-    filter((m) => activeModules.includes(m.key)).
-    reduce((sum, m) => sum + m.price, 0);
+    const addons = availableModules
+      .filter((m) => isModuleActive(m.key))
+      .reduce((sum, m) => sum + m.price, 0);
     return grunnpakkePrice + addons;
   };
 
