@@ -493,28 +493,26 @@ export default function MinBedrift() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {availableModules.map((module) => {
-                  const isActive = activeModules.includes(module.key);
+                  const active = isModuleActive(module.key);
                   return (
                     <div
                       key={module.key}
                       className={cn(
-                        "p-4 rounded-xl border-2 cursor-pointer transition-all select-none",
-                        isActive ?
-                        "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20" :
-                        "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                        "p-4 rounded-xl border-2 transition-all select-none",
+                        active
+                          ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 shadow-sm"
+                          : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                       )}
-                      onClick={() => toggleModule(module.key)}>
-
-                      <div className="flex items-start justify-between gap-2">
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <h3 className="font-medium text-slate-900 dark:text-white">{module.name}</h3>
                             <button
-                              onClick={(e) => {e.stopPropagation();setInfoPopup(module.key);}}
+                              onClick={() => setInfoPopup(module.key)}
                               className="flex-shrink-0 text-slate-400 hover:text-emerald-600 transition-colors"
                               title="Mer info">
-
-                              <Info className="text-emerald-600 lucide lucide-info h-3.5 w-3.5" />
+                              <Info className="text-emerald-600 h-3.5 w-3.5" />
                             </button>
                           </div>
                           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
@@ -522,14 +520,32 @@ export default function MinBedrift() {
                             {module.price} kr/mnd
                           </p>
                         </div>
-                        {isActive &&
-                        <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                            <Check className="h-4 w-4 text-white" />
-                          </div>
-                        }
+                        {active && (
+                          <span className="flex-shrink-0 text-xs bg-emerald-500 text-white px-2 py-0.5 rounded-full font-medium">
+                            Aktiv
+                          </span>
+                        )}
                       </div>
-                    </div>);
-
+                      {active ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full rounded-lg border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                          onClick={() => setCancelDialog(module)}
+                        >
+                          Avbestill
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => setOrderDialog(module)}
+                        >
+                          Bestill modul
+                        </Button>
+                      )}
+                    </div>
+                  );
                 })}
               </div>
 
