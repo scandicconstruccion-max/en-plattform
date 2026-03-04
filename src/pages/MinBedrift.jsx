@@ -579,6 +579,22 @@ export default function MinBedrift() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <OrderModuleDialog
+        module={orderDialog}
+        open={!!orderDialog}
+        onCancel={() => setOrderDialog(null)}
+        onConfirm={() => handleOrderModule(orderDialog)}
+        loading={actionLoading}
+      />
+
+      <CancelModuleDialog
+        module={cancelDialog}
+        open={!!cancelDialog}
+        onCancel={() => setCancelDialog(null)}
+        onConfirm={() => handleCancelModule(cancelDialog)}
+        loading={actionLoading}
+      />
     </div>);
 
 }
