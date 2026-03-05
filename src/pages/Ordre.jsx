@@ -515,7 +515,7 @@ export default function Ordre() {
       </div>
 
       {/* Create from Source Dialog */}
-      <Dialog open={showSourceDialog} onOpenChange={setShowSourceDialog}>
+      <Dialog open={showSourceDialog} onOpenChange={(v) => { setShowSourceDialog(v); if (!v) setSourceType(null); }}>
         <DialogContent className="sm:max-w-2xl dark:bg-slate-900">
           <DialogHeader>
             <DialogTitle className="text-2xl">Opprett ordre fra eksisterende</DialogTitle>
