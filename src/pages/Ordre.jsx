@@ -46,7 +46,7 @@ export default function Ordre() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
-  const [sourceType, setSourceType] = useState('quote');
+  const [sourceType, setSourceType] = useState(null);
 
   const queryClient = useQueryClient();
 
