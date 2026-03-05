@@ -516,78 +516,142 @@ export default function Ordre() {
 
       {/* Create from Source Dialog */}
       <Dialog open={showSourceDialog} onOpenChange={setShowSourceDialog}>
-        <DialogContent className="sm:max-w-md dark:bg-slate-900">
+        <DialogContent className="sm:max-w-2xl dark:bg-slate-900">
           <DialogHeader>
-            <DialogTitle>Opprett ordre fra eksisterende</DialogTitle>
+            <DialogTitle className="text-2xl">Opprett ordre fra eksisterende</DialogTitle>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Velg kilde for den nye ordren
+            </p>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Select value={sourceType} onValueChange={setSourceType}>
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="quote">Fra Tilbud</SelectItem>
-                  <SelectItem value="deviation">Fra Avvik</SelectItem>
-                  <SelectItem value="change">Fra Endringsmelding</SelectItem>
-                </SelectContent>
-              </Select>
+
+          {!sourceType ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {/* Tilbud */}
+              <button onClick={() => setSourceType('quote')} className="group text-left">
+                <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all duration-300 h-full p-6 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 hover:shadow-lg">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+                  <div className="relative">
+                    <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mb-4">
+                      <FileText className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Fra tilbud</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Velg et godkjent tilbud og opprett ordre automatisk</p>
+                    {approvedQuotes.length > 0 && (
+                      <div className="mt-3 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                        {approvedQuotes.length} tilbud tilgjengelig
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+
+              {/* Avvik */}
+              <button onClick={() => setSourceType('deviation')} className="group text-left">
+                <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 transition-all duration-300 h-full p-6 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 hover:shadow-lg">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+                  <div className="relative">
+                    <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mb-4">
+                      <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Fra avvik</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Velg et godkjent avvik med kostnadskonsekvens</p>
+                    {approvedDeviations.length > 0 && (
+                      <div className="mt-3 text-xs text-orange-600 dark:text-orange-400 font-medium">
+                        {approvedDeviations.length} avvik tilgjengelig
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+
+              {/* Endringsmelding */}
+              <button onClick={() => setSourceType('change')} className="group text-left">
+                <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-300 h-full p-6 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 hover:shadow-lg">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+                  <div className="relative">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-4">
+                      <Send className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Fra endringsmelding</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Velg en godkjent endringsmelding og opprett ordre</p>
+                    {approvedChanges.length > 0 && (
+                      <div className="mt-3 text-xs text-blue-600 dark:text-blue-400 font-medium">
+                        {approvedChanges.length} endringer tilgjengelig
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
             </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              <button
+                onClick={() => setSourceType(null)}
+                className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors mb-2"
+              >
+                ← Tilbake
+              </button>
 
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {sourceType === 'quote' && approvedQuotes.length === 0 &&
-              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
-                  Ingen godkjente tilbud
-                </p>
-              }
-              {sourceType === 'quote' && approvedQuotes.map((quote) =>
-              <Card
-                key={quote.id}
-                className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
-                onClick={() => createFromSourceMutation.mutate({ sourceType: 'quote', sourceId: quote.id })}>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {sourceType === 'quote' && approvedQuotes.length === 0 && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">Ingen godkjente tilbud</p>
+                )}
+                {sourceType === 'quote' && approvedQuotes.map((quote) => (
+                  <Card
+                    key={quote.id}
+                    className="p-4 cursor-pointer hover:bg-emerald-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-none transition-colors"
+                    onClick={() => { createFromSourceMutation.mutate({ sourceType: 'quote', sourceId: quote.id }); setShowSourceDialog(false); setSourceType(null); }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm text-slate-900 dark:text-white">{quote.quote_number}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{quote.customer_name}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </div>
+                  </Card>
+                ))}
 
-                  <p className="font-medium text-sm">{quote.quote_number}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{quote.customer_name}</p>
-                </Card>
-              )}
+                {sourceType === 'deviation' && approvedDeviations.length === 0 && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">Ingen godkjente avvik med kostnadskonsekvens</p>
+                )}
+                {sourceType === 'deviation' && approvedDeviations.map((dev) => (
+                  <Card
+                    key={dev.id}
+                    className="p-4 cursor-pointer hover:bg-orange-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-none transition-colors"
+                    onClick={() => { createFromSourceMutation.mutate({ sourceType: 'deviation', sourceId: dev.id }); setShowSourceDialog(false); setSourceType(null); }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm text-slate-900 dark:text-white">{dev.title}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">kr {dev.cost_amount?.toFixed(2) || '0.00'}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </div>
+                  </Card>
+                ))}
 
-              {sourceType === 'deviation' && approvedDeviations.length === 0 &&
-              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
-                  Ingen godkjente avvik med kostnadskonsekvens
-                </p>
-              }
-              {sourceType === 'deviation' && approvedDeviations.map((dev) =>
-              <Card
-                key={dev.id}
-                className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
-                onClick={() => createFromSourceMutation.mutate({ sourceType: 'deviation', sourceId: dev.id })}>
-
-                  <p className="font-medium text-sm">{dev.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    kr {dev.cost_amount?.toFixed(2) || '0.00'}
-                  </p>
-                </Card>
-              )}
-
-              {sourceType === 'change' && approvedChanges.length === 0 &&
-              <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
-                  Ingen godkjente endringsmeldinger
-                </p>
-              }
-              {sourceType === 'change' && approvedChanges.map((change) =>
-              <Card
-                key={change.id}
-                className="p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 border-0 dark:bg-slate-800"
-                onClick={() => createFromSourceMutation.mutate({ sourceType: 'change', sourceId: change.id })}>
-
-                  <p className="font-medium text-sm">{change.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    kr {change.amount?.toFixed(2) || '0.00'}
-                  </p>
-                </Card>
-              )}
+                {sourceType === 'change' && approvedChanges.length === 0 && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">Ingen godkjente endringsmeldinger</p>
+                )}
+                {sourceType === 'change' && approvedChanges.map((change) => (
+                  <Card
+                    key={change.id}
+                    className="p-4 cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-none transition-colors"
+                    onClick={() => { createFromSourceMutation.mutate({ sourceType: 'change', sourceId: change.id }); setShowSourceDialog(false); setSourceType(null); }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm text-slate-900 dark:text-white">{change.title}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">kr {change.amount?.toFixed(2) || '0.00'}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
