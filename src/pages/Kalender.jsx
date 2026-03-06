@@ -287,6 +287,35 @@ export default function Kalender() {
 
           {activeView === 'calendar' && (
             <>
+              {/* Today button + nav + period label */}
+              <Button variant="outline" size="sm" onClick={goToToday} className="rounded-xl text-sm font-medium">
+                I dag
+              </Button>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" onClick={navigatePrev} className="rounded-xl h-8 w-8">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 min-w-[180px] text-center">
+                  {getPeriodLabel()}
+                </span>
+                <Button variant="ghost" size="icon" onClick={navigateNext} className="rounded-xl h-8 w-8">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Calendar view selector */}
+              <Select value={calendarView} onValueChange={setCalendarView}>
+                <SelectTrigger className="w-32 rounded-xl dark:bg-slate-800 dark:border-slate-700 h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day">Dag</SelectItem>
+                  <SelectItem value="week">Uke</SelectItem>
+                  <SelectItem value="month">Måned</SelectItem>
+                  <SelectItem value="year">År</SelectItem>
+                </SelectContent>
+              </Select>
+
               {/* Company / Project toggle */}
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
                 <button
