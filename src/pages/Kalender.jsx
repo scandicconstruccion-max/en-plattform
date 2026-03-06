@@ -579,7 +579,7 @@ export default function Kalender() {
             <>
                   <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
                     {['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((d) =>
-                <div key={d} className="p-3 text-center text-sm font-medium text-slate-500 dark:text-slate-400">{d}</div>
+                <div key={d} className="py-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400">{d}</div>
                 )}
                   </div>
                   <div className="grid grid-cols-7 flex-1 overflow-auto">
@@ -590,19 +590,26 @@ export default function Kalender() {
                   return (
                     <div
                       key={index}
-                      onClick={() => handleDateClick(day)}
+                      onClick={() => {
+                        setSelectedDate(day);
+                        setCurrentDate(day);
+                        setCurrentMonth(day);
+                        // On mobile: open bottom sheet with day events instead of new-event dialog
+                        setShowMobileDaySheet(true);
+                      }}
                       className={cn(
-                        "min-h-[80px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
+                        "min-h-[56px] lg:min-h-[80px] p-1 lg:p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
                         !isCurrentMonth && "bg-slate-50 dark:bg-slate-950/50",
                         isSelected && "bg-emerald-50 dark:bg-emerald-900/20",
                         isToday(day) && "ring-2 ring-inset ring-emerald-500",
                         "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                       )}>
 
-                          <div className={cn("text-sm font-medium mb-1", !isCurrentMonth && "text-slate-300 dark:text-slate-600", isToday(day) && "text-emerald-600")}>
+                          <div className={cn("text-xs lg:text-sm font-medium mb-0.5 lg:mb-1 text-center lg:text-left", !isCurrentMonth && "text-slate-300 dark:text-slate-600", isToday(day) && "text-emerald-600")}>
                             {format(day, 'd')}
                           </div>
-                          <div className="space-y-1">
+                          {/* Desktop: show event pills */}
+                          <div className="hidden lg:block space-y-1">
                             {dayEvents.slice(0, 3).map((event, i) =>
                         <div key={i} className={cn("text-xs px-1.5 py-0.5 rounded truncate text-white", eventTypeColors[event.event_type] || 'bg-slate-500')}>
                                 {event.title}
@@ -610,10 +617,71 @@ export default function Kalender() {
                         )}
                             {dayEvents.length > 3 && <div className="text-xs text-slate-500">+{dayEvents.length - 3} mer</div>}
                           </div>
+                          {/* Mobile: dots for events */}
+                          {dayEvents.length > 0 && (
+                            <div className="flex justify-center gap-0.5 mt-0.5 lg:hidden">
+                              {dayEvents.slice(0, 3).map((ev, i) => (
+                                <div key={i} className={cn("w-1.5 h-1.5 rounded-full", eventTypeColors[ev.event_type] || 'bg-slate-500')} />
+                              ))}
+                              {dayEvents.length > 3 && <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />}
+                            </div>
+                          )}
                         </div>);
 
                 })}
                   </div>
+
+                  {/* Mobile: bottom sheet for selected day */}
+                  {showMobileDaySheet && (
+                    <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
+                      <div className="absolute inset-0 bg-black/30" onClick={() => setShowMobileDaySheet(false)} />
+                      <div className="relative bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col">
+                        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                          <h3 className="font-semibold text-slate-900 dark:text-white capitalize">
+                            {format(selectedDate, 'EEEE d. MMMM', { locale: nb })}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => { setFormData({ ...formData, start_time: `${format(selectedDate, 'yyyy-MM-dd')}T09:00`, end_time: `${format(selectedDate, 'yyyy-MM-dd')}T10:00` }); setShowDialog(true); setShowMobileDaySheet(false); }}
+                              className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 rounded-lg">
+                              <Plus className="h-3.5 w-3.5" /> Ny hendelse
+                            </button>
+                            <button onClick={() => setShowMobileDaySheet(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                              <X className="h-4 w-4 text-slate-500" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="overflow-y-auto p-4 space-y-3">
+                          {getEventsForDay(selectedDate).length === 0 ? (
+                            <div className="text-center py-8 text-slate-400">
+                              <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-slate-200 dark:text-slate-700" />
+                              <p className="text-sm">Ingen hendelser denne dagen</p>
+                            </div>
+                          ) : getEventsForDay(selectedDate).map((event) => (
+                            <div key={event.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                              <div className={cn("w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0", eventTypeColors[event.event_type] || 'bg-slate-500')} />
+                              <div>
+                                <p className="font-medium text-slate-900 dark:text-white text-sm">{event.title}</p>
+                                {event.start_time && (
+                                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <Clock className="h-3 w-3" />
+                                    {format(parseISO(event.start_time), 'HH:mm')}
+                                    {event.end_time && ` – ${format(parseISO(event.end_time), 'HH:mm')}`}
+                                  </p>
+                                )}
+                                {event.location && (
+                                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin className="h-3 w-3" />{event.location}
+                                  </p>
+                                )}
+                                {event.project_id && <p className="text-xs text-emerald-600 mt-1">{getProjectName(event.project_id)}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
             }
 
