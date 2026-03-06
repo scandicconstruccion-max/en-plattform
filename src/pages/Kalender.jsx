@@ -46,6 +46,8 @@ export default function Kalender() {
   const [activeView, setActiveView] = useState('calendar'); // 'calendar' | 'employees'
   const [employeeColors, setEmployeeColors] = useState({});
   const [colorPickerFor, setColorPickerFor] = useState(null);
+  const [selectedEmployees, setSelectedEmployees] = useState([]); // empty = show all
+  const [employeeFilterMode, setEmployeeFilterMode] = useState('all'); // 'all' | 'selection'
   const [formData, setFormData] = useState({
     title: '',
     description: '',
