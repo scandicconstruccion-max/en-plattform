@@ -694,6 +694,17 @@ export default function Kalender() {
               }
               </Card>
             </div>
+
+            {/* Expand button when sidebar is collapsed */}
+            {sidebarCollapsed && (
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                className="flex-shrink-0 self-start mt-4 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                title="Vis sidepanel"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
+              </button>
+            )}
           </div> : (
 
         /* Employee Overview */
