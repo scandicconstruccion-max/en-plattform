@@ -12,7 +12,7 @@ import KPISection from '@/components/dashboard/KPISection';
 import UnfinishedChecklists from '@/components/dashboard/UnfinishedChecklists';
 import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
 import {
-  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare
+  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare, ShoppingBag
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';

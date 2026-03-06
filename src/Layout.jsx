@@ -153,7 +153,7 @@ export default function Layout({ children, currentPageName }) {
   },
   {
     title: 'ØKONOMI & KONTRAKT',
-    modules: ['tilbud', 'ordre', 'endringsmeldinger', 'faktura']
+    modules: ['tilbud', 'anbudsportal', 'ordre', 'endringsmeldinger', 'faktura']
   },
   {
     title: 'PERSONELL & RESSURSER',
@@ -165,7 +165,7 @@ export default function Layout({ children, currentPageName }) {
   },
   {
     title: 'SALG & ADMIN',
-    modules: ['crm', 'anbudsportal', 'minbedrift', 'brukeradmin', 'kompetanser']
+    modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser']
   }];
 
 
