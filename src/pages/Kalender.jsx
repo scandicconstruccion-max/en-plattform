@@ -196,8 +196,8 @@ export default function Kalender() {
   }, [events, viewMode, selectedProjectFilter, selectedEmployees, employees]);
 
   // Calendar generation
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(currentDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
@@ -207,6 +207,13 @@ export default function Kalender() {
     calendarDays.push(day);
     day = addDays(day, 1);
   }
+
+  // Week view days
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  // Year view months
+  const yearMonths = Array.from({ length: 12 }, (_, i) => new Date(getYear(currentDate), i, 1));
 
   const getEventsForDay = (day) => {
     return filteredEvents.filter(event => {
