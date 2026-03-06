@@ -20,7 +20,6 @@ const moduleDefinitions = {
   avvik: { name: 'Avvik', description: 'Avvikshåndtering', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
   hms: { name: 'HMS & Risiko', description: 'Helse, miljø og sikkerhet', icon: ShieldAlert, color: 'red', page: 'HMS' },
   tilbud: { name: 'Tilbud', description: 'Tilbudsadministrasjon', icon: FileSpreadsheet, color: 'cyan', page: 'Tilbud' },
-  anbudsportal: { name: 'Anbudsportal', description: 'Forespørsler og anbud', icon: ShoppingCart, color: 'amber', page: 'Anbudsportal' },
   anbudsmodul: { name: 'Anbudsmodul', description: 'Leverandøranbud og tilbud', icon: ShoppingCart, color: 'orange', page: 'Anbudsmodul' },
   ordre: { name: 'Ordre', description: 'Arbeidsordre', icon: FileText, color: 'indigo', page: 'Ordre' },
   endringsmeldinger: { name: 'Endringsmeldinger', description: 'Tillegg og endringer', icon: FileText, color: 'blue', page: 'Endringsmeldinger' },
@@ -47,7 +46,7 @@ const moduleSections = [
   {
     title: '💰 ØKONOMI & KONTRAKT',
     emoji: '💰',
-    modules: ['tilbud', 'anbudsportal', 'anbudsmodul', 'ordre', 'endringsmeldinger', 'faktura']
+    modules: ['tilbud', 'anbudsmodul', 'ordre', 'endringsmeldinger', 'faktura']
   },
   {
     title: '👷 PERSONELL & RESSURSER',
