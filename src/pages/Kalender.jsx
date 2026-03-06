@@ -502,24 +502,24 @@ export default function Kalender() {
                         </div>
                   )}
                   </div>
-                  {/* Hourly grid */}
-                  <div className="flex flex-1">
+                  {/* Hourly grid - full 24h scrollable */}
+                  <div className="flex overflow-y-auto flex-1">
                     <div className="w-16 flex-shrink-0">
-                      {Array.from({ length: 12 }, (_, i) => dayStartHour + i).map((hour) => (
-                        <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
-                          <span className="text-xs text-slate-400 dark:text-slate-500">{String(hour % 24).padStart(2,'0')}:00</span>
+                      {Array.from({ length: 24 }, (_, i) => (i + dayStartHour) % 24).map((hour, idx) => (
+                        <div key={idx} className="h-16 border-b border-slate-100 dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">{String(hour).padStart(2,'0')}:00</span>
                         </div>
                       ))}
                     </div>
                     {weekDays.map((d) => (
                       <div key={d.toString()} className={cn("flex-1 border-l border-slate-100 dark:border-slate-800", isToday(d) && "bg-emerald-50/30 dark:bg-emerald-900/10")}>
-                        {Array.from({ length: 12 }, (_, i) => dayStartHour + i).map((hour) => {
+                        {Array.from({ length: 24 }, (_, i) => (i + dayStartHour) % 24).map((hour, idx) => {
                           const hourEvents = getEventsForDay(d).filter((ev) => {
                             if (!ev.start_time) return false;
-                            return parseISO(ev.start_time).getHours() === (hour % 24);
+                            return parseISO(ev.start_time).getHours() === hour;
                           });
                           return (
-                            <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 relative hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors px-0.5">
+                            <div key={idx} className="h-16 border-b border-slate-100 dark:border-slate-800 relative hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors px-0.5">
                               {hourEvents.map((ev, i) => (
                                 <div key={ev.id} className={cn("absolute left-0.5 right-0.5 px-1 py-0.5 rounded text-white text-[10px] truncate leading-tight", eventTypeColors[ev.event_type] || 'bg-slate-500')} style={{ top: `${2 + i * 20}px` }}>
                                   {ev.title}
