@@ -156,7 +156,7 @@ export default function Layout({ children, currentPageName }) {
   },
   {
     title: 'ØKONOMI & KONTRAKT',
-    modules: ['tilbud', 'anbudsportal', 'ordre', 'endringsmeldinger', 'faktura']
+    modules: ['tilbud', 'anbudsportal', 'anbudsmodul', 'ordre', 'endringsmeldinger', 'faktura']
   },
   {
     title: 'PERSONELL & RESSURSER',
