@@ -4,11 +4,12 @@ import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, Users, FileText, Send, AlertCircle, CheckCircle, Clock, Eye, Minus } from 'lucide-react';
+import { X, Users, FileText, Send, AlertCircle, CheckCircle, Eye } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import InviterLeverandorDialog from './InviterLeverandorDialog';
+import TilbudssammenlignPanel from './TilbudssammenlignPanel';
 
 const statusConfig = {
   DRAFT:       { label: 'Utkast',    classes: 'bg-slate-100 text-slate-600' },
