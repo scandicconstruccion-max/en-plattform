@@ -551,10 +551,10 @@ export default function Kalender() {
               {/* Collapse toggle button */}
               <button
                 onClick={() => setSidebarCollapsed(true)}
-                className="absolute -left-3 top-4 z-10 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                className="absolute -left-3 top-6 z-10 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 title="Skjul sidepanel"
               >
-                <ChevronRight className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
+                <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </button>
               {/* Day events */}
               <Card className="border-0 shadow-sm dark:bg-slate-900">
