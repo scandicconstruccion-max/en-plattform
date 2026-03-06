@@ -879,11 +879,11 @@ export default function Kalender() {
               </Card>
             </div>
 
-            {/* Expand button when sidebar is collapsed */}
+            {/* Expand button when sidebar is collapsed - Desktop only */}
             {sidebarCollapsed && (
               <button
                 onClick={() => setSidebarCollapsed(false)}
-                className="flex-shrink-0 self-start mt-6 -mr-3 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                className="hidden lg:flex flex-shrink-0 self-start mt-6 -mr-3 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full items-center justify-center shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 title="Vis sidepanel"
               >
                 <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
