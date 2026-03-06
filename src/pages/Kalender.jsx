@@ -475,11 +475,11 @@ export default function Kalender() {
       </div>
       {/* ── END DESKTOP HEADER ── */}
 
-      <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
+      <div className="flex-1 overflow-hidden px-0 lg:px-8 lg:py-4 flex flex-col gap-3">
         {activeView === 'calendar' ?
         <div className="flex-1 overflow-hidden flex gap-4 min-h-0">
             {/* Calendar */}
-            <Card className="flex-1 border-0 shadow-sm overflow-hidden dark:bg-slate-900 flex flex-col min-h-0">
+            <Card className="flex-1 border-0 lg:shadow-sm overflow-hidden dark:bg-slate-900 flex flex-col min-h-0 rounded-none lg:rounded-lg">
 
               {/* DAY VIEW */}
               {calendarView === 'day' &&
