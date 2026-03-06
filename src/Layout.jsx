@@ -162,7 +162,7 @@ export default function Layout({ children, currentPageName }) {
   },
   {
     title: 'SALG & ADMIN',
-    modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser']
+    modules: ['crm', 'anbudsportal', 'minbedrift', 'brukeradmin', 'kompetanser']
   }];
 
 
