@@ -442,8 +442,10 @@ export default function Kalender() {
                         return (
                           <button
                             key={emp.id}
-                            onClick={() => setSelectedEmployees(prev =>
-                              prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
+                            onClick={() => setSelectedEmployees(
+                              effectiveSelectedEmployees.includes(emp.id)
+                                ? effectiveSelectedEmployees.filter(id => id !== emp.id)
+                                : [...effectiveSelectedEmployees, emp.id]
                             )}
                             className={cn(
                               "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left",
