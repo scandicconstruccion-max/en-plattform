@@ -58,6 +58,7 @@ const moduleIcons = {
 };
 
 const moduleLabels = {
+  anbudsmodul: 'Anbudsmodul',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
   befaring: 'Befaring',
@@ -90,6 +91,7 @@ const moduleLabels = {
 };
 
 const modulePages = {
+  anbudsmodul: 'Anbudsmodul',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
   befaring: 'Befaring',
