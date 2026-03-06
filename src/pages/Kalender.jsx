@@ -382,69 +382,164 @@ export default function Kalender() {
           <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
             {/* Calendar */}
             <Card className="lg:col-span-3 border-0 shadow-sm overflow-hidden dark:bg-slate-900 flex flex-col min-h-0">
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-xl">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <h2 className="font-semibold text-slate-900 dark:text-white">
-                  {format(currentMonth, 'MMMM yyyy', { locale: nb })}
-                </h2>
-                <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="rounded-xl">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
 
-              <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
-                {['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((d) => (
-                  <div key={d} className="p-3 text-center text-sm font-medium text-slate-500 dark:text-slate-400">{d}</div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 flex-1 overflow-auto">
-                {calendarDays.map((day, index) => {
-                  const dayEvents = getEventsForDay(day);
-                  const isCurrentMonth = isSameMonth(day, currentMonth);
-                  const isSelected = isSameDay(day, selectedDate);
-
-                  return (
-                    <div
-                      key={index}
-                      onClick={() => handleDateClick(day)}
-                      className={cn(
-                        "min-h-[80px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
-                        !isCurrentMonth && "bg-slate-50 dark:bg-slate-950/50",
-                        isSelected && "bg-emerald-50 dark:bg-emerald-900/20",
-                        isToday(day) && "ring-2 ring-inset ring-emerald-500",
-                        "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      )}
-                    >
-                      <div className={cn(
-                        "text-sm font-medium mb-1",
-                        !isCurrentMonth && "text-slate-300 dark:text-slate-600",
-                        isToday(day) && "text-emerald-600"
-                      )}>
-                        {format(day, 'd')}
-                      </div>
-                      <div className="space-y-1">
-                        {dayEvents.slice(0, 3).map((event, i) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              "text-xs px-1.5 py-0.5 rounded truncate text-white",
-                              eventTypeColors[event.event_type] || 'bg-slate-500'
-                            )}
-                          >
-                            {event.title}
-                          </div>
-                        ))}
-                        {dayEvents.length > 3 && (
-                          <div className="text-xs text-slate-500">+{dayEvents.length - 3} mer</div>
-                        )}
-                      </div>
+              {/* DAY VIEW */}
+              {calendarView === 'day' && (
+                <div className="flex-1 overflow-auto p-4">
+                  <div className="text-center mb-4">
+                    <p className={cn("text-2xl font-bold", isToday(currentDate) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>
+                      {format(currentDate, 'd')}
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{format(currentDate, 'EEEE', { locale: nb })}</p>
+                  </div>
+                  {getEventsForDay(currentDate).length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                      <CalendarIcon className="h-10 w-10 mx-auto mb-2 text-slate-200" />
+                      <p className="text-sm">Ingen hendelser denne dagen</p>
                     </div>
-                  );
-                })}
-              </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {getEventsForDay(currentDate).map(event => (
+                        <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 flex gap-3 items-start">
+                          <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", eventTypeColors[event.event_type] || 'bg-slate-500')} />
+                          <div>
+                            <p className="font-medium text-slate-900 dark:text-white">{event.title}</p>
+                            {event.start_time && (
+                              <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                                <Clock className="h-3 w-3" />
+                                {format(parseISO(event.start_time), 'HH:mm')}
+                                {event.end_time && ` – ${format(parseISO(event.end_time), 'HH:mm')}`}
+                              </p>
+                            )}
+                            {event.location && <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="h-3 w-3" />{event.location}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* WEEK VIEW */}
+              {calendarView === 'week' && (
+                <div className="flex-1 overflow-auto flex flex-col">
+                  <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
+                    {weekDays.map(d => (
+                      <div
+                        key={d.toString()}
+                        onClick={() => handleDateClick(d)}
+                        className={cn(
+                          "p-3 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800",
+                          isToday(d) && "bg-emerald-50 dark:bg-emerald-900/20"
+                        )}
+                      >
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{format(d, 'EEE', { locale: nb })}</p>
+                        <p className={cn("text-lg font-bold mt-0.5", isToday(d) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>{format(d, 'd')}</p>
+                        <div className="mt-1 space-y-0.5">
+                          {getEventsForDay(d).slice(0, 2).map((ev, i) => (
+                            <div key={i} className={cn("text-xs px-1 py-0.5 rounded truncate text-white", eventTypeColors[ev.event_type] || 'bg-slate-500')}>
+                              {ev.title}
+                            </div>
+                          ))}
+                          {getEventsForDay(d).length > 2 && <div className="text-xs text-slate-400">+{getEventsForDay(d).length - 2}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex-1 p-4">
+                    {weekDays.every(d => getEventsForDay(d).length === 0) ? (
+                      <div className="text-center py-12 text-slate-400">
+                        <CalendarIcon className="h-10 w-10 mx-auto mb-2 text-slate-200" />
+                        <p className="text-sm">Ingen hendelser denne uken</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {/* MONTH VIEW */}
+              {calendarView === 'month' && (
+                <>
+                  <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
+                    {['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((d) => (
+                      <div key={d} className="p-3 text-center text-sm font-medium text-slate-500 dark:text-slate-400">{d}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 flex-1 overflow-auto">
+                    {calendarDays.map((day, index) => {
+                      const dayEvents = getEventsForDay(day);
+                      const isCurrentMonth = isSameMonth(day, currentDate);
+                      const isSelected = isSameDay(day, selectedDate);
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => handleDateClick(day)}
+                          className={cn(
+                            "min-h-[80px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
+                            !isCurrentMonth && "bg-slate-50 dark:bg-slate-950/50",
+                            isSelected && "bg-emerald-50 dark:bg-emerald-900/20",
+                            isToday(day) && "ring-2 ring-inset ring-emerald-500",
+                            "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                          )}
+                        >
+                          <div className={cn("text-sm font-medium mb-1", !isCurrentMonth && "text-slate-300 dark:text-slate-600", isToday(day) && "text-emerald-600")}>
+                            {format(day, 'd')}
+                          </div>
+                          <div className="space-y-1">
+                            {dayEvents.slice(0, 3).map((event, i) => (
+                              <div key={i} className={cn("text-xs px-1.5 py-0.5 rounded truncate text-white", eventTypeColors[event.event_type] || 'bg-slate-500')}>
+                                {event.title}
+                              </div>
+                            ))}
+                            {dayEvents.length > 3 && <div className="text-xs text-slate-500">+{dayEvents.length - 3} mer</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* YEAR VIEW */}
+              {calendarView === 'year' && (
+                <div className="flex-1 overflow-auto p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {yearMonths.map((monthDate, mi) => {
+                      const mStart = startOfMonth(monthDate);
+                      const mEnd = endOfMonth(monthDate);
+                      const mCalStart = startOfWeek(mStart, { weekStartsOn: 1 });
+                      const mCalEnd = endOfWeek(mEnd, { weekStartsOn: 1 });
+                      const mDays = [];
+                      let md = mCalStart;
+                      while (md <= mCalEnd) { mDays.push(md); md = addDays(md, 1); }
+                      const monthEvents = filteredEvents.filter(e => e.start_time && isSameMonth(parseISO(e.start_time), monthDate));
+                      return (
+                        <div key={mi} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                          onClick={() => { setCalendarView('month'); setCurrentDate(monthDate); setCurrentMonth(monthDate); }}>
+                          <p className={cn("text-sm font-semibold mb-2 capitalize", isSameMonth(monthDate, new Date()) && "text-emerald-600")}>
+                            {format(monthDate, 'MMMM', { locale: nb })}
+                          </p>
+                          <div className="grid grid-cols-7 gap-px">
+                            {mDays.map((d, i) => (
+                              <div key={i} className={cn(
+                                "aspect-square flex items-center justify-center text-[10px] rounded",
+                                !isSameMonth(d, monthDate) && "opacity-0",
+                                isToday(d) && "bg-emerald-500 text-white font-bold",
+                                getEventsForDay(d).length > 0 && !isToday(d) && "bg-blue-100 dark:bg-blue-900/40 font-medium"
+                              )}>
+                                {isSameMonth(d, monthDate) ? format(d, 'd') : ''}
+                              </div>
+                            ))}
+                          </div>
+                          {monthEvents.length > 0 && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{monthEvents.length} hendelse{monthEvents.length !== 1 ? 'r' : ''}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* Sidebar */}
