@@ -35,7 +35,8 @@ export const MODULES = {
   RUH: 'ruh',
   RISIKOANALYSE: 'risikoanalyse',
   HMSHANDBOK: 'hmshandbok',
-  MOTTAKSKONTROLL: 'mottakskontroll'
+  MOTTAKSKONTROLL: 'mottakskontroll',
+  ANBUDSPORTAL: 'anbudsportal'
 };
 
 // Definerer hvilke moduler hver rolle har tilgang til
