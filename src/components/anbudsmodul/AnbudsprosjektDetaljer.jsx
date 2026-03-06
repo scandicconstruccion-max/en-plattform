@@ -102,6 +102,9 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
             </div>
           )}
 
+          {/* Tilbudssammenligning */}
+          <TilbudssammenlignPanel invitations={invitations} quotes={quotes} projectId={project.id} />
+
           {/* Invitations */}
           <div>
             <div className="flex items-center justify-between mb-3">

@@ -97,12 +97,15 @@ export default function AnbudsmodulLeverandorer() {
                     <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{supplier.email}</td>
                     <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{supplier.phone || '–'}</td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {(supplier.tradeTypes || []).map(t => (
-                          <Badge key={t} className="bg-slate-100 text-slate-700 border-0 text-xs">{t}</Badge>
-                        ))}
-                        {(!supplier.tradeTypes || supplier.tradeTypes.length === 0) && <span className="text-slate-400">–</span>}
-                      </div>
+                     <div className="flex flex-wrap gap-1">
+                       {(supplier.tradeTypes || []).map(t => (
+                         <Badge key={t} className="bg-slate-100 text-slate-700 border-0 text-xs">{t}</Badge>
+                       ))}
+                       {(!supplier.tradeTypes || supplier.tradeTypes.length === 0) && <span className="text-slate-400">–</span>}
+                     </div>
+                    </td>
+                    <td className="px-6 py-4">
+                     <LeverandorHistorikk supplier={supplier} />
                     </td>
                   </tr>
                 ))}
