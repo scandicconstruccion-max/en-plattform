@@ -486,36 +486,51 @@ export default function Kalender() {
               {/* WEEK VIEW */}
               {calendarView === 'week' &&
             <div className="flex-1 overflow-auto flex flex-col">
-                  <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
+                  {/* Week header */}
+                  <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-shrink-0">
+                    <div className="w-16 flex-shrink-0" />
                     {weekDays.map((d) =>
-                <div
-                  key={d.toString()}
-                  onClick={() => handleDateClick(d)}
-                  className={cn(
-                    "p-3 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800",
-                    isToday(d) && "bg-emerald-50 dark:bg-emerald-900/20"
-                  )}>
+                  <div
+                    key={d.toString()}
+                    onClick={() => handleDateClick(d)}
+                    className={cn(
+                      "flex-1 p-2 text-center cursor-pointer border-l border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors",
+                      isToday(d) && "bg-emerald-50 dark:bg-emerald-900/20"
+                    )}>
 
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{format(d, 'EEE', { locale: nb })}</p>
-                        <p className={cn("text-lg font-bold mt-0.5", isToday(d) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>{format(d, 'd')}</p>
-                        <div className="mt-1 space-y-0.5">
-                          {getEventsForDay(d).slice(0, 2).map((ev, i) =>
-                    <div key={i} className={cn("text-xs px-1 py-0.5 rounded truncate text-white", eventTypeColors[ev.event_type] || 'bg-slate-500')}>
-                              {ev.title}
-                            </div>
-                    )}
-                          {getEventsForDay(d).length > 2 && <div className="text-xs text-slate-400">+{getEventsForDay(d).length - 2}</div>}
+                          <p className="text-xs text-slate-500 dark:text-slate-400 uppercase">{format(d, 'EEE', { locale: nb })}</p>
+                          <p className={cn("text-lg font-bold mt-0.5", isToday(d) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>{format(d, 'd')}</p>
                         </div>
-                      </div>
-                )}
+                  )}
                   </div>
-                  <div className="flex-1 p-4">
-                    {weekDays.every((d) => getEventsForDay(d).length === 0) ?
-                <div className="text-center py-12 text-slate-400">
-                        <CalendarIcon className="h-10 w-10 mx-auto mb-2 text-slate-200" />
-                        <p className="text-sm">Ingen hendelser denne uken</p>
-                      </div> :
-                null}
+                  {/* Hourly grid */}
+                  <div className="flex flex-1">
+                    <div className="w-16 flex-shrink-0">
+                      {Array.from({ length: 12 }, (_, i) => dayStartHour + i).map((hour) => (
+                        <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">{String(hour % 24).padStart(2,'0')}:00</span>
+                        </div>
+                      ))}
+                    </div>
+                    {weekDays.map((d) => (
+                      <div key={d.toString()} className={cn("flex-1 border-l border-slate-100 dark:border-slate-800", isToday(d) && "bg-emerald-50/30 dark:bg-emerald-900/10")}>
+                        {Array.from({ length: 12 }, (_, i) => dayStartHour + i).map((hour) => {
+                          const hourEvents = getEventsForDay(d).filter((ev) => {
+                            if (!ev.start_time) return false;
+                            return parseISO(ev.start_time).getHours() === (hour % 24);
+                          });
+                          return (
+                            <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 relative hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors px-0.5">
+                              {hourEvents.map((ev, i) => (
+                                <div key={ev.id} className={cn("absolute left-0.5 right-0.5 px-1 py-0.5 rounded text-white text-[10px] truncate leading-tight", eventTypeColors[ev.event_type] || 'bg-slate-500')} style={{ top: `${2 + i * 20}px` }}>
+                                  {ev.title}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 </div>
             }
