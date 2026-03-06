@@ -40,9 +40,11 @@ const EMPLOYEE_COLORS = [
 ];
 
 export default function Kalender() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date()); // anchor date for all views
+  const [currentMonth, setCurrentMonth] = useState(new Date()); // kept for compatibility
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDialog, setShowDialog] = useState(false);
+  const [calendarView, setCalendarView] = useState('month'); // 'day' | 'week' | 'month' | 'year'
   const [viewMode, setViewMode] = useState('company'); // 'company' | 'project'
   const [selectedProjectFilter, setSelectedProjectFilter] = useState('all');
   const [activeView, setActiveView] = useState('calendar'); // 'calendar' | 'employees'
