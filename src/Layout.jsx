@@ -52,7 +52,8 @@ const moduleIcons = {
   ruh: AlertCircle,
   risikoanalyse: FileCheck,
   hmshandbok: BookOpen,
-  mottakskontroll: PackageCheck
+  mottakskontroll: PackageCheck,
+  anbudsportal: FileText
 };
 
 const moduleLabels = {
