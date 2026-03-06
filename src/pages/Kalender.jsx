@@ -205,10 +205,9 @@ export default function Kalender() {
   }, [employees, timesheets, currentMonth, employeeColors]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
       <PageHeader
         title="Kalender"
-        subtitle={format(currentMonth, 'MMMM yyyy', { locale: nb })}
         onAdd={() => {
           setFormData({
             ...formData,
@@ -220,7 +219,7 @@ export default function Kalender() {
         addLabel="Ny hendelse"
       />
 
-      <div className="px-6 lg:px-8 py-6 space-y-4">
+      <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3">
           {/* View toggle: calendar vs employees */}
