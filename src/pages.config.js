@@ -47,7 +47,6 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import Anbudsportal from './pages/Anbudsportal';
 import Ansatte from './pages/Ansatte';
 import ApproveDeviation from './pages/ApproveDeviation';
 import ApproveOrder from './pages/ApproveOrder';
@@ -81,7 +80,6 @@ import OrdreDetaljer from './pages/OrdreDetaljer';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
 import Prosjektfiler from './pages/Prosjektfiler';
-import RFQDetaljer from './pages/RFQDetaljer';
 import RUH from './pages/RUH';
 import RUHDetaljer from './pages/RUHDetaljer';
 import Ressursplan from './pages/Ressursplan';
@@ -101,7 +99,6 @@ import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Anbudsportal": Anbudsportal,
     "Ansatte": Ansatte,
     "ApproveDeviation": ApproveDeviation,
     "ApproveOrder": ApproveOrder,
@@ -135,7 +132,6 @@ export const PAGES = {
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
     "Prosjektfiler": Prosjektfiler,
-    "RFQDetaljer": RFQDetaljer,
     "RUH": RUH,
     "RUHDetaljer": RUHDetaljer,
     "Ressursplan": Ressursplan,

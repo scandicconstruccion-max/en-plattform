@@ -59,7 +59,7 @@ export default function Leverandorer() {
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 lg:px-8 py-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate(createPageUrl('Anbudsportal'))} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <button onClick={() => navigate(createPageUrl('Anbudsmodul'))} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               <ArrowLeft className="h-5 w-5 text-slate-600 dark:text-slate-400" />
             </button>
             <div>
