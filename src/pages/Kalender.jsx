@@ -550,6 +550,12 @@ export default function Kalender() {
                 </Card>
               ))}
 
+              {(employeeFilterMode === 'selection' && selectedEmployees.length === 0) && (
+                <div className="col-span-full text-center py-10 text-slate-500 dark:text-slate-400">
+                  <Users className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-700" />
+                  <p>Velg ansatte i filteret over</p>
+                </div>
+              )}
               {employees.length === 0 && (
                 <div className="col-span-full text-center py-16 text-slate-500 dark:text-slate-400">
                   <Users className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
