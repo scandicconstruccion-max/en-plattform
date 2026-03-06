@@ -681,9 +681,8 @@ export default function Kalender() {
           </div>
         )}
 
-
-      {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        {/* Create Dialog */}
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-md dark:bg-slate-900">
           <DialogHeader>
             <DialogTitle>Ny hendelse</DialogTitle>
