@@ -74,13 +74,13 @@ export default function Kalender() {
   const { data: employees = [] } = useQuery({
     queryKey: ['employees'],
     queryFn: () => base44.entities.Employee.list(),
-    onSuccess: (data) => {
-      // Initialize all employees as selected by default
-      if (selectedEmployees === null && data.length > 0) {
-        setSelectedEmployees(data.map(e => e.id));
-      }
-    }
   });
+
+  useEffect(() => {
+    if (selectedEmployees === null && employees.length > 0) {
+      setSelectedEmployees(employees.map(e => e.id));
+    }
+  }, [employees]);
 
   // Derive the effective list (once employees are loaded)
   const effectiveSelectedEmployees = selectedEmployees === null ? employees.map(e => e.id) : selectedEmployees;
