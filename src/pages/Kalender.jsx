@@ -801,7 +801,8 @@ export default function Kalender() {
             </div>
           </form>
         </DialogContent>
-      </Dialog>
+        </Dialog>
+      </div>
     </div>
   );
 }
