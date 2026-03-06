@@ -9,8 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  DropdownMenuTrigger } from
+'@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Building2, ChevronDown, FolderOpen, Check } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -21,7 +21,7 @@ export default function ProjectDropdown() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date'),
+    queryFn: () => base44.entities.Project.list('-created_date')
   });
 
   useEffect(() => {
@@ -49,35 +49,35 @@ export default function ProjectDropdown() {
     navigate(createPageUrl(`ProsjektDetaljer?id=${project.id}`));
   };
 
-  const activeProjects = projects.filter(p => p.status === 'aktiv');
-  const otherProjects = projects.filter(p => p.status !== 'aktiv');
+  const activeProjects = projects.filter((p) => p.status === 'aktiv');
+  const otherProjects = projects.filter((p) => p.status !== 'aktiv');
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="rounded-xl gap-2 h-11 px-4">
-          <FolderOpen className="h-4 w-4 text-emerald-600" />
-          <span className="max-w-xs truncate">
-            {selectedProject ? selectedProject.name : 'Velg prosjekt'}
-          </span>
-          <ChevronDown className="h-4 w-4 text-slate-400" />
-        </Button>
+        
+
+
+
+
+
+
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-80">
-        {activeProjects.length > 0 && (
-          <>
+        {activeProjects.length > 0 &&
+        <>
             <DropdownMenuLabel className="text-xs text-slate-500 uppercase">
               Aktive prosjekter
             </DropdownMenuLabel>
-            {activeProjects.map((project) => (
-              <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
+            {activeProjects.map((project) =>
+          <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
                 <div className="flex items-center gap-3 w-full">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                    {selectedProject?.id === project.id ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <Building2 className="h-4 w-4 text-emerald-600" />
-                    )}
+                    {selectedProject?.id === project.id ?
+                <Check className="h-4 w-4 text-emerald-600" /> :
+
+                <Building2 className="h-4 w-4 text-emerald-600" />
+                }
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900 truncate">{project.name}</p>
@@ -89,24 +89,24 @@ export default function ProjectDropdown() {
                   <StatusBadge status={project.status} />
                 </div>
               </DropdownMenuItem>
-            ))}
+          )}
           </>
-        )}
-        {otherProjects.length > 0 && (
-          <>
+        }
+        {otherProjects.length > 0 &&
+        <>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-slate-500 uppercase">
               Andre prosjekter
             </DropdownMenuLabel>
-            {otherProjects.map((project) => (
-              <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
+            {otherProjects.map((project) =>
+          <DropdownMenuItem key={project.id} onClick={() => handleSelectProject(project)}>
                 <div className="flex items-center gap-3 w-full">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    {selectedProject?.id === project.id ? (
-                      <Check className="h-4 w-4 text-slate-600" />
-                    ) : (
-                      <Building2 className="h-4 w-4 text-slate-600" />
-                    )}
+                    {selectedProject?.id === project.id ?
+                <Check className="h-4 w-4 text-slate-600" /> :
+
+                <Building2 className="h-4 w-4 text-slate-600" />
+                }
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900 truncate">{project.name}</p>
@@ -118,24 +118,24 @@ export default function ProjectDropdown() {
                   <StatusBadge status={project.status} />
                 </div>
               </DropdownMenuItem>
-            ))}
+          )}
           </>
-        )}
-        {projects.length === 0 && (
-          <div className="p-4 text-center text-slate-500 text-sm">
+        }
+        {projects.length === 0 &&
+        <div className="p-4 text-center text-slate-500 text-sm">
             Ingen prosjekter
           </div>
-        )}
+        }
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link
             to={createPageUrl('Prosjekter')}
-            className="flex items-center justify-center gap-2 text-emerald-600 font-medium cursor-pointer"
-          >
+            className="flex items-center justify-center gap-2 text-emerald-600 font-medium cursor-pointer">
+
             Se alle prosjekter
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
-    </DropdownMenu>
-  );
+    </DropdownMenu>);
+
 }
