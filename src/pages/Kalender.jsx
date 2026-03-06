@@ -142,12 +142,13 @@ export default function Kalender() {
     if (viewMode === 'project' && selectedProjectFilter !== 'all') {
       result = result.filter(e => e.project_id === selectedProjectFilter);
     }
-    // Filter by selected employees (attendees) if any are checked in sidebar
-    if (selectedEmployees.length > 0) {
+    // Filter by selected employees (attendees)
+    const effSelected = selectedEmployees === null ? employees.map(e => e.id) : selectedEmployees;
+    if (effSelected.length > 0 && effSelected.length < employees.length) {
       result = result.filter(e => {
-        if (!e.attendees || e.attendees.length === 0) return true; // show events without attendees always
+        if (!e.attendees || e.attendees.length === 0) return true;
         const empEmails = employees
-          .filter(emp => selectedEmployees.includes(emp.id))
+          .filter(emp => effSelected.includes(emp.id))
           .map(emp => emp.email);
         return e.attendees.some(a => empEmails.includes(a));
       });
