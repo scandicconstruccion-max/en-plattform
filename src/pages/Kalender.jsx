@@ -482,10 +482,10 @@ export default function Kalender() {
                     </div>
                   )}
                 </div>
-                {selectedEmployees.length > 0 && (
+                {effectiveSelectedEmployees.length < employees.length && (
                   <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-800">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {selectedEmployees.length} ansatt(e) valgt — kalender filtreres
+                      {effectiveSelectedEmployees.length} av {employees.length} ansatte vist
                     </p>
                   </div>
                 )}
