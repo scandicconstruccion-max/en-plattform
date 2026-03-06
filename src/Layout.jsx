@@ -58,33 +58,9 @@ const moduleIcons = {
 
 const moduleLabels = {
   dashboard: 'Dashboard',
-  avvik: 'Avvik',
-  befaring: 'Befaring',
-  prosjektfiler: 'Prosjektfiler',
-  endringsmeldinger: 'Endringsmeldinger',
-  timelister: 'Timelister',
-  bildedok: 'Bildedokumentasjon',
-  sjekklister: 'Sjekklister',
-  tilbud: 'Tilbud',
-  ordre: 'Ordre',
-  faktura: 'Faktura',
-  fdv: 'FDV',
-  bestillinger: 'Bestillinger',
-  chat: 'Intern Chat',
-  ressursplan: 'Ressursplanlegger',
-  prosjekter: 'Prosjekter',
-  crm: 'CRM',
-  kalender: 'Kalender',
-  ansatte: 'Ansatte',
-  minbedrift: 'Min bedrift',
-  brukeradmin: 'Brukere',
-  kompetanser: 'Kompetanser',
-  hms: 'HMS & Risiko',
-  sja: 'SJA',
-  ruh: 'RUH',
-  risikoanalyse: 'Risikoanalyse',
-  hmshandbok: 'HMS-håndbok',
-  mottakskontroll: 'Mottakskontroll'
+...
+  mottakskontroll: 'Mottakskontroll',
+  anbudsportal: 'Anbudsportal'
 };
 
 const modulePages = {
