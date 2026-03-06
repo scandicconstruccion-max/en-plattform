@@ -53,6 +53,8 @@ export default function Kalender() {
   const [selectedEmployees, setSelectedEmployees] = useState(null); // null = not yet initialized
   const [employeeFilterMode, setEmployeeFilterMode] = useState('all'); // 'all' | 'selection'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dayStartHour, setDayStartHour] = useState(7); // default start at 07:00
+  const [showTimeSettings, setShowTimeSettings] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
