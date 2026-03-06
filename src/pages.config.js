@@ -92,6 +92,7 @@ import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
 import Anbudsportal from './pages/Anbudsportal';
+import RFQDetaljer from './pages/RFQDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -141,6 +142,7 @@ export const PAGES = {
     "Tilbud": Tilbud,
     "Timelister": Timelister,
     "Anbudsportal": Anbudsportal,
+    "RFQDetaljer": RFQDetaljer,
 }
 
 export const pagesConfig = {
