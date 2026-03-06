@@ -3,18 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Lock, LayoutDashboard, List, Users, Clock } from 'lucide-react';
+import { Lock, LayoutDashboard, List, Users, Clock, BarChart2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import AnbudsmodulOversikt from '@/components/anbudsmodul/AnbudsmodulOversikt';
 import AnbudsmodulForesporsler from '@/components/anbudsmodul/AnbudsmodulForesporsler';
 import AnbudsmodulLeverandorer from '@/components/anbudsmodul/AnbudsmodulLeverandorer';
 import AnbudsmodulHistorikk from '@/components/anbudsmodul/AnbudsmodulHistorikk';
+import AnbudsStatistikk from '@/components/anbudsmodul/AnbudsStatistikk';
 
 const tabs = [
   { key: 'oversikt', label: 'Oversikt', icon: LayoutDashboard },
   { key: 'foresporsler', label: 'Forespørsler', icon: List },
   { key: 'leverandorer', label: 'Leverandører', icon: Users },
+  { key: 'statistikk', label: 'Statistikk', icon: BarChart2 },
   { key: 'historikk', label: 'Historikk', icon: Clock },
 ];
 
@@ -93,6 +95,7 @@ export default function Anbudsmodul() {
         {activeTab === 'oversikt' && <AnbudsmodulOversikt onNavigate={setActiveTab} />}
         {activeTab === 'foresporsler' && <AnbudsmodulForesporsler />}
         {activeTab === 'leverandorer' && <AnbudsmodulLeverandorer />}
+        {activeTab === 'statistikk' && <AnbudsStatistikk />}
         {activeTab === 'historikk' && <AnbudsmodulHistorikk />}
       </div>
     </div>
