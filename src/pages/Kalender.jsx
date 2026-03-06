@@ -452,26 +452,25 @@ export default function Kalender() {
                       <p className={cn("text-2xl font-bold", isToday(currentDate) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>{format(currentDate, 'd')}</p>
                     </div>
                   </div>
-                  {/* Hourly grid */}
-                  <div className="flex">
+                  {/* Hourly grid - full 24h scrollable */}
+                  <div className="flex overflow-y-auto flex-1">
                     <div className="w-16 flex-shrink-0">
-                      {Array.from({ length: 12 }, (_, i) => dayStartHour + i).map((hour) => (
-                        <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
-                          <span className="text-xs text-slate-400 dark:text-slate-500">{String(hour % 24).padStart(2,'0')}:00</span>
+                      {Array.from({ length: 24 }, (_, i) => (i + dayStartHour) % 24).map((hour, idx) => (
+                        <div key={idx} className="h-16 border-b border-slate-100 dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">{String(hour).padStart(2,'0')}:00</span>
                         </div>
                       ))}
                     </div>
                     <div className="flex-1 border-l border-slate-100 dark:border-slate-800 relative">
-                      {Array.from({ length: 12 }, (_, i) => dayStartHour + i).map((hour) => {
+                      {Array.from({ length: 24 }, (_, i) => (i + dayStartHour) % 24).map((hour, idx) => {
                         const hourEvents = getEventsForDay(currentDate).filter((ev) => {
                           if (!ev.start_time) return false;
-                          const h = parseISO(ev.start_time).getHours();
-                          return h === (hour % 24);
+                          return parseISO(ev.start_time).getHours() === hour;
                         });
                         return (
-                          <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 relative hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                          <div key={idx} className="h-16 border-b border-slate-100 dark:border-slate-800 relative hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
                             {hourEvents.map((ev, i) => (
-                              <div key={ev.id} className={cn("absolute left-1 right-1 top-0.5 px-2 py-1 rounded-lg text-white text-xs truncate", eventTypeColors[ev.event_type]?.replace('bg-','bg-') || 'bg-slate-500')} style={{ top: `${i * 22}px` }}>
+                              <div key={ev.id} className={cn("absolute left-1 right-1 px-2 py-1 rounded-lg text-white text-xs truncate", eventTypeColors[ev.event_type] || 'bg-slate-500')} style={{ top: `${2 + i * 22}px` }}>
                                 <span className="font-medium">{format(parseISO(ev.start_time), 'HH:mm')} </span>{ev.title}
                               </div>
                             ))}
