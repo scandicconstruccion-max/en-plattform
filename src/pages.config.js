@@ -94,6 +94,7 @@ import Timelister from './pages/Timelister';
 import Anbudsportal from './pages/Anbudsportal';
 import RFQDetaljer from './pages/RFQDetaljer';
 import Leverandorer from './pages/Leverandorer';
+import BidSubmit from './pages/BidSubmit';
 import __Layout from './Layout.jsx';
 
 
@@ -145,6 +146,7 @@ export const PAGES = {
     "Anbudsportal": Anbudsportal,
     "RFQDetaljer": RFQDetaljer,
     "Leverandorer": Leverandorer,
+    "BidSubmit": BidSubmit,
 }
 
 export const pagesConfig = {
