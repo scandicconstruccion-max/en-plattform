@@ -473,6 +473,7 @@ export default function Kalender() {
           </Button>
         </div>
       </div>
+      {/* ── END DESKTOP HEADER ── */}
 
       <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
         {activeView === 'calendar' ?
