@@ -12,15 +12,15 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DialogTitle } from
+'@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from
+'@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import ProjectSelector from '@/components/shared/ProjectSelector';
 import LocationAutocomplete from '@/components/shared/LocationAutocomplete';
@@ -29,15 +29,15 @@ import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears,
   isSameMonth, isSameDay, isToday, parseISO, startOfYear, endOfYear,
-  getWeek, startOfDay, endOfDay, isSameWeek, isSameYear, getYear
-} from 'date-fns';
+  getWeek, startOfDay, endOfDay, isSameWeek, isSameYear, getYear } from
+'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 const EMPLOYEE_COLORS = [
-  '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
-  '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
-];
+'#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
+'#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'];
+
 
 export default function Kalender() {
   const [currentDate, setCurrentDate] = useState(new Date()); // anchor date for all views
@@ -67,31 +67,31 @@ export default function Kalender() {
 
   const { data: events = [] } = useQuery({
     queryKey: ['calendarEvents'],
-    queryFn: () => base44.entities.CalendarEvent.list('-start_time'),
+    queryFn: () => base44.entities.CalendarEvent.list('-start_time')
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list()
   });
 
   const { data: employees = [] } = useQuery({
     queryKey: ['employees'],
-    queryFn: () => base44.entities.Employee.list(),
+    queryFn: () => base44.entities.Employee.list()
   });
 
   useEffect(() => {
     if (selectedEmployees === null && employees.length > 0) {
-      setSelectedEmployees(employees.map(e => e.id));
+      setSelectedEmployees(employees.map((e) => e.id));
     }
   }, [employees]);
 
   // Derive the effective list (once employees are loaded)
-  const effectiveSelectedEmployees = selectedEmployees === null ? employees.map(e => e.id) : selectedEmployees;
+  const effectiveSelectedEmployees = selectedEmployees === null ? employees.map((e) => e.id) : selectedEmployees;
 
   const { data: timesheets = [] } = useQuery({
     queryKey: ['timesheets'],
-    queryFn: () => base44.entities.Timesheet.list('-date', 200),
+    queryFn: () => base44.entities.Timesheet.list('-date', 200)
   });
 
   const createMutation = useMutation({
@@ -100,7 +100,7 @@ export default function Kalender() {
       queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
       setShowDialog(false);
       resetForm();
-    },
+    }
   });
 
   const resetForm = () => {
@@ -141,17 +141,17 @@ export default function Kalender() {
   };
 
   const navigatePrev = () => {
-    if (calendarView === 'day') { setCurrentDate(d => addDays(d, -1)); setCurrentMonth(d => addDays(d, -1)); }
-    else if (calendarView === 'week') { setCurrentDate(d => subWeeks(d, 1)); setCurrentMonth(d => subWeeks(d, 1)); }
-    else if (calendarView === 'month') { setCurrentDate(d => subMonths(d, 1)); setCurrentMonth(d => subMonths(d, 1)); }
-    else if (calendarView === 'year') { setCurrentDate(d => subYears(d, 1)); setCurrentMonth(d => subYears(d, 1)); }
+    if (calendarView === 'day') {setCurrentDate((d) => addDays(d, -1));setCurrentMonth((d) => addDays(d, -1));} else
+    if (calendarView === 'week') {setCurrentDate((d) => subWeeks(d, 1));setCurrentMonth((d) => subWeeks(d, 1));} else
+    if (calendarView === 'month') {setCurrentDate((d) => subMonths(d, 1));setCurrentMonth((d) => subMonths(d, 1));} else
+    if (calendarView === 'year') {setCurrentDate((d) => subYears(d, 1));setCurrentMonth((d) => subYears(d, 1));}
   };
 
   const navigateNext = () => {
-    if (calendarView === 'day') { setCurrentDate(d => addDays(d, 1)); setCurrentMonth(d => addDays(d, 1)); }
-    else if (calendarView === 'week') { setCurrentDate(d => addWeeks(d, 1)); setCurrentMonth(d => addWeeks(d, 1)); }
-    else if (calendarView === 'month') { setCurrentDate(d => addMonths(d, 1)); setCurrentMonth(d => addMonths(d, 1)); }
-    else if (calendarView === 'year') { setCurrentDate(d => addYears(d, 1)); setCurrentMonth(d => addYears(d, 1)); }
+    if (calendarView === 'day') {setCurrentDate((d) => addDays(d, 1));setCurrentMonth((d) => addDays(d, 1));} else
+    if (calendarView === 'week') {setCurrentDate((d) => addWeeks(d, 1));setCurrentMonth((d) => addWeeks(d, 1));} else
+    if (calendarView === 'month') {setCurrentDate((d) => addMonths(d, 1));setCurrentMonth((d) => addMonths(d, 1));} else
+    if (calendarView === 'year') {setCurrentDate((d) => addYears(d, 1));setCurrentMonth((d) => addYears(d, 1));}
   };
 
   const getPeriodLabel = () => {
@@ -167,7 +167,7 @@ export default function Kalender() {
   };
 
   const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     return project?.name || '';
   };
 
@@ -179,17 +179,17 @@ export default function Kalender() {
   const filteredEvents = useMemo(() => {
     let result = events;
     if (viewMode === 'project' && selectedProjectFilter !== 'all') {
-      result = result.filter(e => e.project_id === selectedProjectFilter);
+      result = result.filter((e) => e.project_id === selectedProjectFilter);
     }
     // Filter by selected employees (attendees)
-    const effSelected = selectedEmployees === null ? employees.map(e => e.id) : selectedEmployees;
+    const effSelected = selectedEmployees === null ? employees.map((e) => e.id) : selectedEmployees;
     if (effSelected.length > 0 && effSelected.length < employees.length) {
-      result = result.filter(e => {
+      result = result.filter((e) => {
         if (!e.attendees || e.attendees.length === 0) return true;
-        const empEmails = employees
-          .filter(emp => effSelected.includes(emp.id))
-          .map(emp => emp.email);
-        return e.attendees.some(a => empEmails.includes(a));
+        const empEmails = employees.
+        filter((emp) => effSelected.includes(emp.id)).
+        map((emp) => emp.email);
+        return e.attendees.some((a) => empEmails.includes(a));
       });
     }
     return result;
@@ -216,7 +216,7 @@ export default function Kalender() {
   const yearMonths = Array.from({ length: 12 }, (_, i) => new Date(getYear(currentDate), i, 1));
 
   const getEventsForDay = (day) => {
-    return filteredEvents.filter(event => {
+    return filteredEvents.filter((event) => {
       if (!event.start_time) return false;
       return isSameDay(parseISO(event.start_time), day);
     });
@@ -235,11 +235,11 @@ export default function Kalender() {
   const employeeActivity = useMemo(() => {
     const monthStr = format(currentMonth, 'yyyy-MM');
     return employees.map((emp, idx) => {
-      const empTimesheets = timesheets.filter(t =>
-        t.employee_id === emp.id && t.date?.startsWith(monthStr)
+      const empTimesheets = timesheets.filter((t) =>
+      t.employee_id === emp.id && t.date?.startsWith(monthStr)
       );
       const totalHours = empTimesheets.reduce((sum, t) => sum + (t.hours || 0), 0);
-      const projectIds = [...new Set(empTimesheets.map(t => t.project_id).filter(Boolean))];
+      const projectIds = [...new Set(empTimesheets.map((t) => t.project_id).filter(Boolean))];
       return {
         ...emp,
         totalHours,
@@ -259,34 +259,34 @@ export default function Kalender() {
 
           {/* View toggle: calendar vs employees */}
           <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
-            <button
-              onClick={() => setActiveView('calendar')}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                activeView === 'calendar'
-                  ? "bg-emerald-600 text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-              )}
-            >
-              <CalendarIcon className="h-4 w-4" />
-              Kalender
-            </button>
-            <button
-              onClick={() => setActiveView('employees')}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                activeView === 'employees'
-                  ? "bg-emerald-600 text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-              )}
-            >
-              <Users className="h-4 w-4" />
-              Ansatte
-            </button>
+            
+
+
+
+
+
+
+
+
+
+
+
+            
+
+
+
+
+
+
+
+
+
+
+
           </div>
 
-          {activeView === 'calendar' && (
-            <>
+          {activeView === 'calendar' &&
+          <>
               {/* Today button + nav + period label */}
               <Button variant="outline" size="sm" onClick={goToToday} className="rounded-xl text-sm font-medium">
                 I dag
@@ -318,47 +318,47 @@ export default function Kalender() {
 
               {/* Company / Project toggle */}
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
+                
+
+
+
+
+
+
+
+
+
+
+
                 <button
-                  onClick={() => setViewMode('company')}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                    viewMode === 'company'
-                      ? "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  )}
-                >
-                  <Building2 className="h-4 w-4" />
-                  Hele bedriften
-                </button>
-                <button
-                  onClick={() => setViewMode('project')}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                    viewMode === 'project'
-                      ? "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  )}
-                >
+                onClick={() => setViewMode('project')}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  viewMode === 'project' ?
+                  "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900" :
+                  "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}>
+
                   <CalendarIcon className="h-4 w-4" />
                   Per prosjekt
                 </button>
               </div>
 
-              {viewMode === 'project' && (
-                <Select value={selectedProjectFilter} onValueChange={setSelectedProjectFilter}>
+              {viewMode === 'project' &&
+            <Select value={selectedProjectFilter} onValueChange={setSelectedProjectFilter}>
                   <SelectTrigger className="w-52 rounded-xl dark:bg-slate-800 dark:border-slate-700">
                     <SelectValue placeholder="Velg prosjekt" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Alle prosjekter</SelectItem>
-                    {projects.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
+                    {projects.map((p) =>
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                )}
                   </SelectContent>
                 </Select>
-              )}
+            }
             </>
-          )}
+          }
         </div>
 
         <Button
@@ -370,176 +370,176 @@ export default function Kalender() {
             });
             setShowDialog(true);
           }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2"
-        >
+          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2">
+
           <span className="text-lg leading-none">+</span>
           Ny hendelse
         </Button>
       </div>
 
       <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
-        {activeView === 'calendar' ? (
-          <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
+        {activeView === 'calendar' ?
+        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
             {/* Calendar */}
             <Card className="lg:col-span-3 border-0 shadow-sm overflow-hidden dark:bg-slate-900 flex flex-col min-h-0">
 
               {/* DAY VIEW */}
-              {calendarView === 'day' && (
-                <div className="flex-1 overflow-auto p-4">
+              {calendarView === 'day' &&
+            <div className="flex-1 overflow-auto p-4">
                   <div className="text-center mb-4">
                     <p className={cn("text-2xl font-bold", isToday(currentDate) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>
                       {format(currentDate, 'd')}
                     </p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">{format(currentDate, 'EEEE', { locale: nb })}</p>
                   </div>
-                  {getEventsForDay(currentDate).length === 0 ? (
-                    <div className="text-center py-12 text-slate-400">
+                  {getEventsForDay(currentDate).length === 0 ?
+              <div className="text-center py-12 text-slate-400">
                       <CalendarIcon className="h-10 w-10 mx-auto mb-2 text-slate-200" />
                       <p className="text-sm">Ingen hendelser denne dagen</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {getEventsForDay(currentDate).map(event => (
-                        <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 flex gap-3 items-start">
+                    </div> :
+
+              <div className="space-y-3">
+                      {getEventsForDay(currentDate).map((event) =>
+                <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 flex gap-3 items-start">
                           <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", eventTypeColors[event.event_type] || 'bg-slate-500')} />
                           <div>
                             <p className="font-medium text-slate-900 dark:text-white">{event.title}</p>
-                            {event.start_time && (
-                              <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                            {event.start_time &&
+                    <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
                                 <Clock className="h-3 w-3" />
                                 {format(parseISO(event.start_time), 'HH:mm')}
                                 {event.end_time && ` – ${format(parseISO(event.end_time), 'HH:mm')}`}
                               </p>
-                            )}
+                    }
                             {event.location && <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="h-3 w-3" />{event.location}</p>}
                           </div>
                         </div>
-                      ))}
+                )}
                     </div>
-                  )}
+              }
                 </div>
-              )}
+            }
 
               {/* WEEK VIEW */}
-              {calendarView === 'week' && (
-                <div className="flex-1 overflow-auto flex flex-col">
+              {calendarView === 'week' &&
+            <div className="flex-1 overflow-auto flex flex-col">
                   <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
-                    {weekDays.map(d => (
-                      <div
-                        key={d.toString()}
-                        onClick={() => handleDateClick(d)}
-                        className={cn(
-                          "p-3 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800",
-                          isToday(d) && "bg-emerald-50 dark:bg-emerald-900/20"
-                        )}
-                      >
+                    {weekDays.map((d) =>
+                <div
+                  key={d.toString()}
+                  onClick={() => handleDateClick(d)}
+                  className={cn(
+                    "p-3 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800",
+                    isToday(d) && "bg-emerald-50 dark:bg-emerald-900/20"
+                  )}>
+
                         <p className="text-xs text-slate-500 dark:text-slate-400">{format(d, 'EEE', { locale: nb })}</p>
                         <p className={cn("text-lg font-bold mt-0.5", isToday(d) ? "text-emerald-600" : "text-slate-900 dark:text-white")}>{format(d, 'd')}</p>
                         <div className="mt-1 space-y-0.5">
-                          {getEventsForDay(d).slice(0, 2).map((ev, i) => (
-                            <div key={i} className={cn("text-xs px-1 py-0.5 rounded truncate text-white", eventTypeColors[ev.event_type] || 'bg-slate-500')}>
+                          {getEventsForDay(d).slice(0, 2).map((ev, i) =>
+                    <div key={i} className={cn("text-xs px-1 py-0.5 rounded truncate text-white", eventTypeColors[ev.event_type] || 'bg-slate-500')}>
                               {ev.title}
                             </div>
-                          ))}
+                    )}
                           {getEventsForDay(d).length > 2 && <div className="text-xs text-slate-400">+{getEventsForDay(d).length - 2}</div>}
                         </div>
                       </div>
-                    ))}
+                )}
                   </div>
                   <div className="flex-1 p-4">
-                    {weekDays.every(d => getEventsForDay(d).length === 0) ? (
-                      <div className="text-center py-12 text-slate-400">
+                    {weekDays.every((d) => getEventsForDay(d).length === 0) ?
+                <div className="text-center py-12 text-slate-400">
                         <CalendarIcon className="h-10 w-10 mx-auto mb-2 text-slate-200" />
                         <p className="text-sm">Ingen hendelser denne uken</p>
-                      </div>
-                    ) : null}
+                      </div> :
+                null}
                   </div>
                 </div>
-              )}
+            }
 
               {/* MONTH VIEW */}
-              {calendarView === 'month' && (
-                <>
+              {calendarView === 'month' &&
+            <>
                   <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
-                    {['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((d) => (
-                      <div key={d} className="p-3 text-center text-sm font-medium text-slate-500 dark:text-slate-400">{d}</div>
-                    ))}
+                    {['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((d) =>
+                <div key={d} className="p-3 text-center text-sm font-medium text-slate-500 dark:text-slate-400">{d}</div>
+                )}
                   </div>
                   <div className="grid grid-cols-7 flex-1 overflow-auto">
                     {calendarDays.map((day, index) => {
-                      const dayEvents = getEventsForDay(day);
-                      const isCurrentMonth = isSameMonth(day, currentDate);
-                      const isSelected = isSameDay(day, selectedDate);
-                      return (
-                        <div
-                          key={index}
-                          onClick={() => handleDateClick(day)}
-                          className={cn(
-                            "min-h-[80px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
-                            !isCurrentMonth && "bg-slate-50 dark:bg-slate-950/50",
-                            isSelected && "bg-emerald-50 dark:bg-emerald-900/20",
-                            isToday(day) && "ring-2 ring-inset ring-emerald-500",
-                            "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                          )}
-                        >
+                  const dayEvents = getEventsForDay(day);
+                  const isCurrentMonth = isSameMonth(day, currentDate);
+                  const isSelected = isSameDay(day, selectedDate);
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => handleDateClick(day)}
+                      className={cn(
+                        "min-h-[80px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
+                        !isCurrentMonth && "bg-slate-50 dark:bg-slate-950/50",
+                        isSelected && "bg-emerald-50 dark:bg-emerald-900/20",
+                        isToday(day) && "ring-2 ring-inset ring-emerald-500",
+                        "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      )}>
+
                           <div className={cn("text-sm font-medium mb-1", !isCurrentMonth && "text-slate-300 dark:text-slate-600", isToday(day) && "text-emerald-600")}>
                             {format(day, 'd')}
                           </div>
                           <div className="space-y-1">
-                            {dayEvents.slice(0, 3).map((event, i) => (
-                              <div key={i} className={cn("text-xs px-1.5 py-0.5 rounded truncate text-white", eventTypeColors[event.event_type] || 'bg-slate-500')}>
+                            {dayEvents.slice(0, 3).map((event, i) =>
+                        <div key={i} className={cn("text-xs px-1.5 py-0.5 rounded truncate text-white", eventTypeColors[event.event_type] || 'bg-slate-500')}>
                                 {event.title}
                               </div>
-                            ))}
+                        )}
                             {dayEvents.length > 3 && <div className="text-xs text-slate-500">+{dayEvents.length - 3} mer</div>}
                           </div>
-                        </div>
-                      );
-                    })}
+                        </div>);
+
+                })}
                   </div>
                 </>
-              )}
+            }
 
               {/* YEAR VIEW */}
-              {calendarView === 'year' && (
-                <div className="flex-1 overflow-auto p-4">
+              {calendarView === 'year' &&
+            <div className="flex-1 overflow-auto p-4">
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                     {yearMonths.map((monthDate, mi) => {
-                      const mStart = startOfMonth(monthDate);
-                      const mEnd = endOfMonth(monthDate);
-                      const mCalStart = startOfWeek(mStart, { weekStartsOn: 1 });
-                      const mCalEnd = endOfWeek(mEnd, { weekStartsOn: 1 });
-                      const mDays = [];
-                      let md = mCalStart;
-                      while (md <= mCalEnd) { mDays.push(md); md = addDays(md, 1); }
-                      const monthEvents = filteredEvents.filter(e => e.start_time && isSameMonth(parseISO(e.start_time), monthDate));
-                      return (
-                        <div key={mi} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                          onClick={() => { setCalendarView('month'); setCurrentDate(monthDate); setCurrentMonth(monthDate); }}>
+                  const mStart = startOfMonth(monthDate);
+                  const mEnd = endOfMonth(monthDate);
+                  const mCalStart = startOfWeek(mStart, { weekStartsOn: 1 });
+                  const mCalEnd = endOfWeek(mEnd, { weekStartsOn: 1 });
+                  const mDays = [];
+                  let md = mCalStart;
+                  while (md <= mCalEnd) {mDays.push(md);md = addDays(md, 1);}
+                  const monthEvents = filteredEvents.filter((e) => e.start_time && isSameMonth(parseISO(e.start_time), monthDate));
+                  return (
+                    <div key={mi} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    onClick={() => {setCalendarView('month');setCurrentDate(monthDate);setCurrentMonth(monthDate);}}>
                           <p className={cn("text-sm font-semibold mb-2 capitalize", isSameMonth(monthDate, new Date()) && "text-emerald-600")}>
                             {format(monthDate, 'MMMM', { locale: nb })}
                           </p>
                           <div className="grid grid-cols-7 gap-px">
-                            {mDays.map((d, i) => (
-                              <div key={i} className={cn(
-                                "aspect-square flex items-center justify-center text-[10px] rounded",
-                                !isSameMonth(d, monthDate) && "opacity-0",
-                                isToday(d) && "bg-emerald-500 text-white font-bold",
-                                getEventsForDay(d).length > 0 && !isToday(d) && "bg-blue-100 dark:bg-blue-900/40 font-medium"
-                              )}>
+                            {mDays.map((d, i) =>
+                        <div key={i} className={cn(
+                          "aspect-square flex items-center justify-center text-[10px] rounded",
+                          !isSameMonth(d, monthDate) && "opacity-0",
+                          isToday(d) && "bg-emerald-500 text-white font-bold",
+                          getEventsForDay(d).length > 0 && !isToday(d) && "bg-blue-100 dark:bg-blue-900/40 font-medium"
+                        )}>
                                 {isSameMonth(d, monthDate) ? format(d, 'd') : ''}
                               </div>
-                            ))}
+                        )}
                           </div>
-                          {monthEvents.length > 0 && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{monthEvents.length} hendelse{monthEvents.length !== 1 ? 'r' : ''}</p>
-                          )}
-                        </div>
-                      );
-                    })}
+                          {monthEvents.length > 0 &&
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{monthEvents.length} hendelse{monthEvents.length !== 1 ? 'r' : ''}</p>
+                      }
+                        </div>);
+
+                })}
                   </div>
                 </div>
-              )}
+            }
             </Card>
 
             {/* Sidebar */}
@@ -552,41 +552,41 @@ export default function Kalender() {
                   </h3>
                 </div>
                 <div className="p-4">
-                  {selectedDateEvents.length === 0 ? (
-                    <div className="text-center py-6 text-slate-500">
+                  {selectedDateEvents.length === 0 ?
+                <div className="text-center py-6 text-slate-500">
                       <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                       <p className="text-sm">Ingen hendelser</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedDateEvents.map((event) => (
-                        <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                    </div> :
+
+                <div className="space-y-3">
+                      {selectedDateEvents.map((event) =>
+                  <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
                           <div className="flex items-start gap-2">
                             <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", eventTypeColors[event.event_type] || 'bg-slate-500')} />
                             <div className="flex-1">
                               <p className="font-medium text-slate-900 dark:text-white">{event.title}</p>
-                              {event.start_time && (
-                                <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                              {event.start_time &&
+                        <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
                                   <Clock className="h-3 w-3" />
                                   {format(parseISO(event.start_time), 'HH:mm')}
                                   {event.end_time && ` - ${format(parseISO(event.end_time), 'HH:mm')}`}
                                 </p>
-                              )}
-                              {event.location && (
-                                <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                        }
+                              {event.location &&
+                        <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
                                   <MapPin className="h-3 w-3" />
                                   {event.location}
                                 </p>
-                              )}
-                              {event.project_id && (
-                                <p className="text-xs text-emerald-600 mt-2">{getProjectName(event.project_id)}</p>
-                              )}
+                        }
+                              {event.project_id &&
+                        <p className="text-xs text-emerald-600 mt-2">{getProjectName(event.project_id)}</p>
+                        }
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
                   )}
+                    </div>
+                }
                 </div>
               </Card>
 
@@ -598,94 +598,94 @@ export default function Kalender() {
                     Ansatte
                   </h3>
                   <button
-                    onClick={() =>
-                      effectiveSelectedEmployees.length === employees.length
-                        ? setSelectedEmployees([])
-                        : setSelectedEmployees(employees.map(e => e.id))
-                    }
-                    className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  >
+                  onClick={() =>
+                  effectiveSelectedEmployees.length === employees.length ?
+                  setSelectedEmployees([]) :
+                  setSelectedEmployees(employees.map((e) => e.id))
+                  }
+                  className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+
                     <div
-                      className={cn(
-                        "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
-                        effectiveSelectedEmployees.length === employees.length
-                          ? "bg-emerald-600 border-emerald-600"
-                          : "border-slate-300 dark:border-slate-600"
-                      )}
-                    >
-                      {effectiveSelectedEmployees.length === employees.length && (
-                        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+                    className={cn(
+                      "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                      effectiveSelectedEmployees.length === employees.length ?
+                      "bg-emerald-600 border-emerald-600" :
+                      "border-slate-300 dark:border-slate-600"
+                    )}>
+
+                      {effectiveSelectedEmployees.length === employees.length &&
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
                           <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      )}
+                    }
                     </div>
                     Vis alle
                   </button>
                 </div>
                 <div className="overflow-y-auto max-h-72 p-2">
-                  {employees.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-4">Ingen ansatte</p>
-                  ) : (
-                    <div className="space-y-1">
+                  {employees.length === 0 ?
+                <p className="text-sm text-slate-400 text-center py-4">Ingen ansatte</p> :
+
+                <div className="space-y-1">
                       {employees.map((emp, idx) => {
-                        const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
-                        const isChecked = effectiveSelectedEmployees.includes(emp.id);
-                        return (
-                          <button
-                            key={emp.id}
-                            onClick={() => setSelectedEmployees(
-                              effectiveSelectedEmployees.includes(emp.id)
-                                ? effectiveSelectedEmployees.filter(id => id !== emp.id)
-                                : [...effectiveSelectedEmployees, emp.id]
-                            )}
-                            className={cn(
-                              "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left",
-                              isChecked
-                                ? "bg-slate-50 dark:bg-slate-800"
-                                : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                            )}
-                          >
+                    const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
+                    const isChecked = effectiveSelectedEmployees.includes(emp.id);
+                    return (
+                      <button
+                        key={emp.id}
+                        onClick={() => setSelectedEmployees(
+                          effectiveSelectedEmployees.includes(emp.id) ?
+                          effectiveSelectedEmployees.filter((id) => id !== emp.id) :
+                          [...effectiveSelectedEmployees, emp.id]
+                        )}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left",
+                          isChecked ?
+                          "bg-slate-50 dark:bg-slate-800" :
+                          "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                        )}>
+
                             <div
-                              className={cn(
-                                "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
-                                isChecked ? "border-transparent" : "border-slate-300 dark:border-slate-600"
-                              )}
-                              style={isChecked ? { backgroundColor: color, borderColor: color } : {}}
-                            >
-                              {isChecked && (
-                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+                          className={cn(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                            isChecked ? "border-transparent" : "border-slate-300 dark:border-slate-600"
+                          )}
+                          style={isChecked ? { backgroundColor: color, borderColor: color } : {}}>
+
+                              {isChecked &&
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
                                   <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                 </svg>
-                              )}
+                          }
                             </div>
                             <div
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
-                              style={{ backgroundColor: color }}
-                            >
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+                          style={{ backgroundColor: color }}>
+
                               {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
                             </div>
                             <span className="text-sm text-slate-700 dark:text-slate-300 truncate">
                               {emp.first_name} {emp.last_name}
                             </span>
-                          </button>
-                        );
-                      })}
+                          </button>);
+
+                  })}
                     </div>
-                  )}
+                }
                 </div>
-                {effectiveSelectedEmployees.length < employees.length && (
-                  <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-800">
+                {effectiveSelectedEmployees.length < employees.length &&
+              <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-800">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {effectiveSelectedEmployees.length} av {employees.length} ansatte vist
                     </p>
                   </div>
-                )}
+              }
               </Card>
             </div>
-          </div>
-        ) : (
-          /* Employee Overview */
-          <div className="flex-1 overflow-y-auto space-y-4">
+          </div> : (
+
+        /* Employee Overview */
+        <div className="flex-1 overflow-y-auto space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-xl">
@@ -701,25 +701,25 @@ export default function Kalender() {
               <div className="flex items-center gap-3">
                 <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 gap-1">
                   <button
-                    onClick={() => { setEmployeeFilterMode('all'); setSelectedEmployees([]); }}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                      employeeFilterMode === 'all'
-                        ? "bg-emerald-600 text-white"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    )}
-                  >
+                  onClick={() => {setEmployeeFilterMode('all');setSelectedEmployees([]);}}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                    employeeFilterMode === 'all' ?
+                    "bg-emerald-600 text-white" :
+                    "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}>
+
                     Alle ansatte
                   </button>
                   <button
-                    onClick={() => setEmployeeFilterMode('selection')}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                      employeeFilterMode === 'selection'
-                        ? "bg-emerald-600 text-white"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    )}
-                  >
+                  onClick={() => setEmployeeFilterMode('selection')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                    employeeFilterMode === 'selection' ?
+                    "bg-emerald-600 text-white" :
+                    "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}>
+
                     Utvalg {employeeFilterMode === 'selection' && selectedEmployees.length > 0 && `(${selectedEmployees.length})`}
                   </button>
                 </div>
@@ -730,54 +730,54 @@ export default function Kalender() {
             </div>
 
             {/* Employee selection checkboxes */}
-            {employeeFilterMode === 'selection' && (
-              <Card className="border-0 shadow-sm dark:bg-slate-900 p-4">
+            {employeeFilterMode === 'selection' &&
+          <Card className="border-0 shadow-sm dark:bg-slate-900 p-4">
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Velg ansatte å vise:</p>
                 <div className="flex flex-wrap gap-2">
                   {employees.map((emp, idx) => {
-                    const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
-                    const isSelected = selectedEmployees.includes(emp.id);
-                    return (
-                      <button
-                        key={emp.id}
-                        onClick={() => setSelectedEmployees(prev =>
-                          prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
-                        )}
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-medium transition-all",
-                          isSelected
-                            ? "text-white border-transparent"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
-                        )}
-                        style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
-                      >
+                const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
+                const isSelected = selectedEmployees.includes(emp.id);
+                return (
+                  <button
+                    key={emp.id}
+                    onClick={() => setSelectedEmployees((prev) =>
+                    prev.includes(emp.id) ? prev.filter((id) => id !== emp.id) : [...prev, emp.id]
+                    )}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-medium transition-all",
+                      isSelected ?
+                      "text-white border-transparent" :
+                      "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+                    )}
+                    style={isSelected ? { backgroundColor: color, borderColor: color } : {}}>
+
                         <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                          style={!isSelected ? { backgroundColor: color, color: 'white' } : {}}
-                        >
+                    style={!isSelected ? { backgroundColor: color, color: 'white' } : {}}>
+
                           {emp.first_name?.charAt(0)}
                         </span>
                         {emp.first_name} {emp.last_name}
-                      </button>
-                    );
-                  })}
+                      </button>);
+
+              })}
                 </div>
               </Card>
-            )}
+          }
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {employeeActivity.filter(emp =>
-                employeeFilterMode === 'all' || selectedEmployees.length === 0 || selectedEmployees.includes(emp.id)
-              ).map((emp) => (
-                <Card key={emp.id} className="border-0 shadow-sm dark:bg-slate-900 overflow-hidden">
+              {employeeActivity.filter((emp) =>
+            employeeFilterMode === 'all' || selectedEmployees.length === 0 || selectedEmployees.includes(emp.id)
+            ).map((emp) =>
+            <Card key={emp.id} className="border-0 shadow-sm dark:bg-slate-900 overflow-hidden">
                   {/* Color bar */}
                   <div className="h-1.5" style={{ backgroundColor: emp.color }} />
                   <div className="p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold text-sm flex-shrink-0"
-                          style={{ backgroundColor: emp.color }}
-                        >
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold text-sm flex-shrink-0"
+                      style={{ backgroundColor: emp.color }}>
+
                           {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
                         </div>
                         <div>
@@ -788,36 +788,36 @@ export default function Kalender() {
                         </div>
                       </div>
                       <button
-                        onClick={() => setColorPickerFor(colorPickerFor === emp.id ? null : emp.id)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Velg farge"
-                      >
+                    onClick={() => setColorPickerFor(colorPickerFor === emp.id ? null : emp.id)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Velg farge">
+
                         <Palette className="h-4 w-4 text-slate-400" />
                       </button>
                     </div>
 
                     {/* Color picker */}
-                    {colorPickerFor === emp.id && (
-                      <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                    {colorPickerFor === emp.id &&
+                <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Velg farge</p>
                         <div className="flex flex-wrap gap-2">
-                          {EMPLOYEE_COLORS.map((color) => (
-                            <button
-                              key={color}
-                              onClick={() => {
-                                setEmployeeColors(prev => ({ ...prev, [emp.id]: color }));
-                                setColorPickerFor(null);
-                              }}
-                              className={cn(
-                                "w-6 h-6 rounded-full border-2 transition-transform hover:scale-110",
-                                emp.color === color ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
-                              )}
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
+                          {EMPLOYEE_COLORS.map((color) =>
+                    <button
+                      key={color}
+                      onClick={() => {
+                        setEmployeeColors((prev) => ({ ...prev, [emp.id]: color }));
+                        setColorPickerFor(null);
+                      }}
+                      className={cn(
+                        "w-6 h-6 rounded-full border-2 transition-transform hover:scale-110",
+                        emp.color === color ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
+                      )}
+                      style={{ backgroundColor: color }} />
+
+                    )}
                         </div>
                       </div>
-                    )}
+                }
 
                     <div className="flex items-center justify-between text-sm">
                       <div className="text-center">
@@ -830,32 +830,32 @@ export default function Kalender() {
                       </div>
                       <div className="text-center">
                         <Badge
-                          className="text-white text-xs"
-                          style={{ backgroundColor: emp.color }}
-                        >
+                      className="text-white text-xs"
+                      style={{ backgroundColor: emp.color }}>
+
                           {emp.is_active !== false ? 'Aktiv' : 'Inaktiv'}
                         </Badge>
                       </div>
                     </div>
                   </div>
                 </Card>
-              ))}
+            )}
 
-              {(employeeFilterMode === 'selection' && selectedEmployees.length === 0) && (
-                <div className="col-span-full text-center py-10 text-slate-500 dark:text-slate-400">
+              {employeeFilterMode === 'selection' && selectedEmployees.length === 0 &&
+            <div className="col-span-full text-center py-10 text-slate-500 dark:text-slate-400">
                   <Users className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-700" />
                   <p>Velg ansatte i filteret over</p>
                 </div>
-              )}
-              {employees.length === 0 && (
-                <div className="col-span-full text-center py-16 text-slate-500 dark:text-slate-400">
+            }
+              {employees.length === 0 &&
+            <div className="col-span-full text-center py-16 text-slate-500 dark:text-slate-400">
                   <Users className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
                   <p>Ingen ansatte registrert</p>
                 </div>
-              )}
+            }
             </div>
-          </div>
-        )}
+          </div>)
+        }
 
         {/* Create Dialog */}
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
@@ -867,16 +867,16 @@ export default function Kalender() {
             <div>
               <Label>Tittel *</Label>
               <Input
-                value={formData.title}
-                onChange={(e) => setFormData({...formData, title: e.target.value})}
-                placeholder="Navn på hendelsen"
-                required
-                className="mt-1.5 rounded-xl"
-              />
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Navn på hendelsen"
+                  required
+                  className="mt-1.5 rounded-xl" />
+
             </div>
             <div>
               <Label>Type</Label>
-              <Select value={formData.event_type} onValueChange={(v) => setFormData({...formData, event_type: v})}>
+              <Select value={formData.event_type} onValueChange={(v) => setFormData({ ...formData, event_type: v })}>
                 <SelectTrigger className="mt-1.5 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
@@ -891,42 +891,42 @@ export default function Kalender() {
             <div>
               <Label>Prosjekt</Label>
               <ProjectSelector
-                value={formData.project_id}
-                onChange={(v) => setFormData({...formData, project_id: v})}
-                className="mt-1.5 rounded-xl"
-              />
+                  value={formData.project_id}
+                  onChange={(v) => setFormData({ ...formData, project_id: v })}
+                  className="mt-1.5 rounded-xl" />
+
             </div>
             <div className="flex items-center gap-2">
               <Checkbox
-                id="all_day"
-                checked={formData.all_day}
-                onCheckedChange={(checked) => setFormData({...formData, all_day: checked})}
-              />
+                  id="all_day"
+                  checked={formData.all_day}
+                  onCheckedChange={(checked) => setFormData({ ...formData, all_day: checked })} />
+
               <Label htmlFor="all_day" className="cursor-pointer">Hele dagen</Label>
             </div>
-            {!formData.all_day ? (
+            {!formData.all_day ?
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Start *</Label>
                   <Input
                     type="datetime-local"
                     value={formData.start_time}
-                    onChange={(e) => setFormData({...formData, start_time: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
                     required
-                    className="mt-1.5 rounded-xl"
-                  />
+                    className="mt-1.5 rounded-xl" />
+
                 </div>
                 <div>
                   <Label>Slutt</Label>
                   <Input
                     type="datetime-local"
                     value={formData.end_time}
-                    onChange={(e) => setFormData({...formData, end_time: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
+                    onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                    className="mt-1.5 rounded-xl" />
+
                 </div>
-              </div>
-            ) : (
+              </div> :
+
               <div>
                 <Label>Dato *</Label>
                 <Input
@@ -938,40 +938,40 @@ export default function Kalender() {
                     end_time: `${e.target.value}T23:59`
                   })}
                   required
-                  className="mt-1.5 rounded-xl"
-                />
+                  className="mt-1.5 rounded-xl" />
+
               </div>
-            )}
+              }
             <div>
               <Label>Sted</Label>
               <div className="mt-1.5">
                 <LocationAutocomplete
-                  value={formData.location}
-                  onChange={(v) => setFormData({...formData, location: v})}
-                  placeholder="Adresse eller møterom"
-                  className="rounded-xl"
-                />
+                    value={formData.location}
+                    onChange={(v) => setFormData({ ...formData, location: v })}
+                    placeholder="Adresse eller møterom"
+                    className="rounded-xl" />
+
               </div>
             </div>
             <div>
               <Label>Beskrivelse</Label>
               <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                placeholder="Detaljer..."
-                rows={2}
-                className="mt-1.5 rounded-xl"
-              />
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Detaljer..."
+                  rows={2}
+                  className="mt-1.5 rounded-xl" />
+
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
                 Avbryt
               </Button>
               <Button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
                 {createMutation.isPending ? 'Lagrer...' : 'Opprett'}
               </Button>
             </div>
@@ -979,6 +979,6 @@ export default function Kalender() {
         </DialogContent>
         </Dialog>
       </div>
-    </div>
-  );
+    </div>);
+
 }
