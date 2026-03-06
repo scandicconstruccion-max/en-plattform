@@ -129,11 +129,22 @@ export default function Kalender() {
 
   // Filtered events
   const filteredEvents = useMemo(() => {
+    let result = events;
     if (viewMode === 'project' && selectedProjectFilter !== 'all') {
-      return events.filter(e => e.project_id === selectedProjectFilter);
+      result = result.filter(e => e.project_id === selectedProjectFilter);
     }
-    return events;
-  }, [events, viewMode, selectedProjectFilter]);
+    // Filter by selected employees (attendees) if any are checked in sidebar
+    if (selectedEmployees.length > 0) {
+      result = result.filter(e => {
+        if (!e.attendees || e.attendees.length === 0) return true; // show events without attendees always
+        const empEmails = employees
+          .filter(emp => selectedEmployees.includes(emp.id))
+          .map(emp => emp.email);
+        return e.attendees.some(a => empEmails.includes(a));
+      });
+    }
+    return result;
+  }, [events, viewMode, selectedProjectFilter, selectedEmployees, employees]);
 
   // Calendar generation
   const monthStart = startOfMonth(currentMonth);
