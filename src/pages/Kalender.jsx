@@ -422,14 +422,30 @@ export default function Kalender() {
                     <Users className="h-4 w-4 text-slate-500" />
                     Ansatte
                   </h3>
-                  {effectiveSelectedEmployees.length < employees.length && (
-                    <button
-                      onClick={() => setSelectedEmployees(employees.map(e => e.id))}
-                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                  <button
+                    onClick={() =>
+                      effectiveSelectedEmployees.length === employees.length
+                        ? setSelectedEmployees([])
+                        : setSelectedEmployees(employees.map(e => e.id))
+                    }
+                    className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                        effectiveSelectedEmployees.length === employees.length
+                          ? "bg-emerald-600 border-emerald-600"
+                          : "border-slate-300 dark:border-slate-600"
+                      )}
                     >
-                      Velg alle
-                    </button>
-                  )}
+                      {effectiveSelectedEmployees.length === employees.length && (
+                        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+                          <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    Vis alle
+                  </button>
                 </div>
                 <div className="overflow-y-auto max-h-72 p-2">
                   {employees.length === 0 ? (
