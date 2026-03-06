@@ -680,7 +680,7 @@ export default function Kalender() {
             </div>
           </div>
         )}
-      </div>
+
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
