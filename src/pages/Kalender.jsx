@@ -395,7 +395,7 @@ export default function Kalender() {
         ) : (
           /* Employee Overview */
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-xl">
                   <ChevronLeft className="h-4 w-4" />
@@ -407,11 +407,76 @@ export default function Kalender() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{employees.length} ansatte</p>
+              <div className="flex items-center gap-3">
+                <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 gap-1">
+                  <button
+                    onClick={() => { setEmployeeFilterMode('all'); setSelectedEmployees([]); }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      employeeFilterMode === 'all'
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    Alle ansatte
+                  </button>
+                  <button
+                    onClick={() => setEmployeeFilterMode('selection')}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      employeeFilterMode === 'selection'
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    Utvalg {employeeFilterMode === 'selection' && selectedEmployees.length > 0 && `(${selectedEmployees.length})`}
+                  </button>
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {employeeFilterMode === 'all' ? employees.length : selectedEmployees.length} ansatte
+                </p>
+              </div>
             </div>
 
+            {/* Employee selection checkboxes */}
+            {employeeFilterMode === 'selection' && (
+              <Card className="border-0 shadow-sm dark:bg-slate-900 p-4">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Velg ansatte å vise:</p>
+                <div className="flex flex-wrap gap-2">
+                  {employees.map((emp, idx) => {
+                    const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
+                    const isSelected = selectedEmployees.includes(emp.id);
+                    return (
+                      <button
+                        key={emp.id}
+                        onClick={() => setSelectedEmployees(prev =>
+                          prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
+                        )}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-medium transition-all",
+                          isSelected
+                            ? "text-white border-transparent"
+                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+                        )}
+                        style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
+                      >
+                        <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={!isSelected ? { backgroundColor: color, color: 'white' } : {}}
+                        >
+                          {emp.first_name?.charAt(0)}
+                        </span>
+                        {emp.first_name} {emp.last_name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {employeeActivity.map((emp) => (
+              {employeeActivity.filter(emp =>
+                employeeFilterMode === 'all' || selectedEmployees.length === 0 || selectedEmployees.includes(emp.id)
+              ).map((emp) => (
                 <Card key={emp.id} className="border-0 shadow-sm dark:bg-slate-900 overflow-hidden">
                   {/* Color bar */}
                   <div className="h-1.5" style={{ backgroundColor: emp.color }} />
