@@ -298,9 +298,9 @@ export default function Kalender() {
         </div>
 
         {activeView === 'calendar' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
             {/* Calendar */}
-            <Card className="lg:col-span-3 border-0 shadow-sm overflow-hidden dark:bg-slate-900">
+            <Card className="lg:col-span-3 border-0 shadow-sm overflow-hidden dark:bg-slate-900 flex flex-col min-h-0">
               <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-xl">
                   <ChevronLeft className="h-4 w-4" />
