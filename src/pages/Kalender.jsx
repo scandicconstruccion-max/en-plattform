@@ -123,12 +123,47 @@ export default function Kalender() {
 
   const handleDateClick = (day) => {
     setSelectedDate(day);
+    setCurrentDate(day);
+    setCurrentMonth(day);
     setFormData({
       ...formData,
       start_time: `${format(day, 'yyyy-MM-dd')}T09:00`,
       end_time: `${format(day, 'yyyy-MM-dd')}T10:00`
     });
     setShowDialog(true);
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setCurrentMonth(today);
+    setSelectedDate(today);
+  };
+
+  const navigatePrev = () => {
+    if (calendarView === 'day') { setCurrentDate(d => addDays(d, -1)); setCurrentMonth(d => addDays(d, -1)); }
+    else if (calendarView === 'week') { setCurrentDate(d => subWeeks(d, 1)); setCurrentMonth(d => subWeeks(d, 1)); }
+    else if (calendarView === 'month') { setCurrentDate(d => subMonths(d, 1)); setCurrentMonth(d => subMonths(d, 1)); }
+    else if (calendarView === 'year') { setCurrentDate(d => subYears(d, 1)); setCurrentMonth(d => subYears(d, 1)); }
+  };
+
+  const navigateNext = () => {
+    if (calendarView === 'day') { setCurrentDate(d => addDays(d, 1)); setCurrentMonth(d => addDays(d, 1)); }
+    else if (calendarView === 'week') { setCurrentDate(d => addWeeks(d, 1)); setCurrentMonth(d => addWeeks(d, 1)); }
+    else if (calendarView === 'month') { setCurrentDate(d => addMonths(d, 1)); setCurrentMonth(d => addMonths(d, 1)); }
+    else if (calendarView === 'year') { setCurrentDate(d => addYears(d, 1)); setCurrentMonth(d => addYears(d, 1)); }
+  };
+
+  const getPeriodLabel = () => {
+    if (calendarView === 'day') return format(currentDate, 'EEEE d. MMMM yyyy', { locale: nb });
+    if (calendarView === 'week') {
+      const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+      return `Uke ${getWeek(currentDate, { weekStartsOn: 1 })} · ${format(weekStart, 'd. MMM', { locale: nb })} – ${format(weekEnd, 'd. MMM yyyy', { locale: nb })}`;
+    }
+    if (calendarView === 'month') return format(currentDate, 'MMMM yyyy', { locale: nb });
+    if (calendarView === 'year') return format(currentDate, 'yyyy');
+    return '';
   };
 
   const getProjectName = (projectId) => {
