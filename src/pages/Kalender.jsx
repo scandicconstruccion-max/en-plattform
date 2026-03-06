@@ -438,7 +438,7 @@ export default function Kalender() {
                     <div className="space-y-1">
                       {employees.map((emp, idx) => {
                         const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
-                        const isChecked = selectedEmployees.includes(emp.id);
+                        const isChecked = effectiveSelectedEmployees.includes(emp.id);
                         return (
                           <button
                             key={emp.id}
