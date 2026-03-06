@@ -139,62 +139,6 @@ export default function Dashboard() {
           </Card>
         </Link>
 
-        {/* Anbudsportal Card */}
-        {activeModules.includes('anbudsportal') && (
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                  <ShoppingBag className="h-5 w-5 text-amber-600" />
-                  Anbudsportal
-                </h2>
-                <Link
-                  to={createPageUrl('Anbudsportal')}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
-                >
-                  Se alle <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-            <div className="p-6 grid grid-cols-3 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {rfqs.filter(r => r.status !== 'lukket').length}
-                </p>
-                <p className="text-sm text-slate-500">Aktive RFQer</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-amber-600">
-                  {rfqs.filter(r => r.deadline && new Date(r.deadline) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) && new Date(r.deadline) > new Date() && r.status !== 'lukket').length}
-                </p>
-                <p className="text-sm text-slate-500">Frister snart</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">
-                  {rfqBids.length}
-                </p>
-                <p className="text-sm text-slate-500">Tilbud mottatt</p>
-              </div>
-            </div>
-            {rfqs.slice(0, 3).map(rfq => (
-              <Link
-                key={rfq.id}
-                to={createPageUrl(`RFQDetaljer?id=${rfq.id}`)}
-                className="flex items-center justify-between px-6 py-3 border-t border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                <div>
-                  <p className="font-medium text-slate-900 dark:text-white text-sm">{rfq.title}</p>
-                  <p className="text-xs text-slate-500">{rfq.rfq_number} {rfq.deadline && `· Frist: ${rfq.deadline}`}</p>
-                </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
-              </Link>
-            ))}
-            {rfqs.length === 0 && (
-              <div className="p-6 text-center text-slate-500 text-sm">Ingen aktive forespørsler</div>
-            )}
-          </Card>
-        )}
-
         {/* Bottom Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Projects */}
