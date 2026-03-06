@@ -509,7 +509,7 @@ export default function Kalender() {
           </div>
         ) : (
           /* Employee Overview */
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-xl">
