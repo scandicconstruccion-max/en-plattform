@@ -47,6 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import Anbudsportal from './pages/Anbudsportal';
 import Ansatte from './pages/Ansatte';
 import ApproveDeviation from './pages/ApproveDeviation';
 import ApproveOrder from './pages/ApproveOrder';
@@ -55,6 +56,7 @@ import Avvik from './pages/Avvik';
 import AvvikDetaljer from './pages/AvvikDetaljer';
 import Befaring from './pages/Befaring';
 import Bestillinger from './pages/Bestillinger';
+import BidSubmit from './pages/BidSubmit';
 import Bildedok from './pages/Bildedok';
 import BrukerAdmin from './pages/BrukerAdmin';
 import CRM from './pages/CRM';
@@ -70,6 +72,7 @@ import HMSHandbok from './pages/HMSHandbok';
 import Innstillinger from './pages/Innstillinger';
 import Kalender from './pages/Kalender';
 import Kompetanser from './pages/Kompetanser';
+import Leverandorer from './pages/Leverandorer';
 import Lonnsgrunnlag from './pages/Lonnsgrunnlag';
 import MinBedrift from './pages/MinBedrift';
 import Mottakskontroll from './pages/Mottakskontroll';
@@ -78,6 +81,7 @@ import OrdreDetaljer from './pages/OrdreDetaljer';
 import ProsjektDetaljer from './pages/ProsjektDetaljer';
 import Prosjekter from './pages/Prosjekter';
 import Prosjektfiler from './pages/Prosjektfiler';
+import RFQDetaljer from './pages/RFQDetaljer';
 import RUH from './pages/RUH';
 import RUHDetaljer from './pages/RUHDetaljer';
 import Ressursplan from './pages/Ressursplan';
@@ -91,14 +95,12 @@ import SjekklisteMaler from './pages/SjekklisteMaler';
 import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
-import Anbudsportal from './pages/Anbudsportal';
-import RFQDetaljer from './pages/RFQDetaljer';
-import Leverandorer from './pages/Leverandorer';
-import BidSubmit from './pages/BidSubmit';
+import Anbudsmodul from './pages/Anbudsmodul';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "Anbudsportal": Anbudsportal,
     "Ansatte": Ansatte,
     "ApproveDeviation": ApproveDeviation,
     "ApproveOrder": ApproveOrder,
@@ -107,6 +109,7 @@ export const PAGES = {
     "AvvikDetaljer": AvvikDetaljer,
     "Befaring": Befaring,
     "Bestillinger": Bestillinger,
+    "BidSubmit": BidSubmit,
     "Bildedok": Bildedok,
     "BrukerAdmin": BrukerAdmin,
     "CRM": CRM,
@@ -122,6 +125,7 @@ export const PAGES = {
     "Innstillinger": Innstillinger,
     "Kalender": Kalender,
     "Kompetanser": Kompetanser,
+    "Leverandorer": Leverandorer,
     "Lonnsgrunnlag": Lonnsgrunnlag,
     "MinBedrift": MinBedrift,
     "Mottakskontroll": Mottakskontroll,
@@ -130,6 +134,7 @@ export const PAGES = {
     "ProsjektDetaljer": ProsjektDetaljer,
     "Prosjekter": Prosjekter,
     "Prosjektfiler": Prosjektfiler,
+    "RFQDetaljer": RFQDetaljer,
     "RUH": RUH,
     "RUHDetaljer": RUHDetaljer,
     "Ressursplan": Ressursplan,
@@ -143,10 +148,7 @@ export const PAGES = {
     "Sjekklister": Sjekklister,
     "Tilbud": Tilbud,
     "Timelister": Timelister,
-    "Anbudsportal": Anbudsportal,
-    "RFQDetaljer": RFQDetaljer,
-    "Leverandorer": Leverandorer,
-    "BidSubmit": BidSubmit,
+    "Anbudsmodul": Anbudsmodul,
 }
 
 export const pagesConfig = {
