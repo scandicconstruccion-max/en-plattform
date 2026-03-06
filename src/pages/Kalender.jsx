@@ -27,7 +27,9 @@ import LocationAutocomplete from '@/components/shared/LocationAutocomplete';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Building2, Palette } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, parseISO
+  addDays, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears,
+  isSameMonth, isSameDay, isToday, parseISO, startOfYear, endOfYear,
+  getWeek, startOfDay, endOfDay, isSameWeek, isSameYear, getYear
 } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
