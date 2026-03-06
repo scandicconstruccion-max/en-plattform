@@ -65,34 +65,9 @@ const moduleLabels = {
 
 const modulePages = {
   dashboard: 'Dashboard',
-  avvik: 'Avvik',
-  befaring: 'Befaring',
-  prosjektfiler: 'Prosjektfiler',
-  endringsmeldinger: 'Endringsmeldinger',
-  timelister: 'Timelister',
-  bildedok: 'Bildedok',
-  sjekklister: 'Sjekklister',
-  sjekkliste_maler: 'SjekklisteMaler',
-  tilbud: 'Tilbud',
-  ordre: 'Ordre',
-  faktura: 'Faktura',
-  fdv: 'FDV',
-  bestillinger: 'Bestillinger',
-  chat: 'Chat',
-  ressursplan: 'Ressursplan',
-  prosjekter: 'Prosjekter',
-  crm: 'CRM',
-  kalender: 'Kalender',
-  ansatte: 'Ansatte',
-  minbedrift: 'MinBedrift',
-  brukeradmin: 'BrukerAdmin',
-  kompetanser: 'Kompetanser',
-  hms: 'HMS',
-  sja: 'SJA',
-  ruh: 'RUH',
-  risikoanalyse: 'Risikoanalyse',
-  hmshandbok: 'HMSHandbok',
-  mottakskontroll: 'Mottakskontroll'
+...
+  mottakskontroll: 'Mottakskontroll',
+  anbudsportal: 'Anbudsportal'
 };
 
 export default function Layout({ children, currentPageName }) {
