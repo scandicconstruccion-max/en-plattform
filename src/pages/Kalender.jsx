@@ -544,7 +544,18 @@ export default function Kalender() {
             </Card>
 
             {/* Sidebar */}
-            <div className="flex flex-col gap-3 overflow-y-auto min-h-0">
+            <div className={cn(
+              "flex-col gap-3 overflow-y-auto min-h-0 relative transition-all duration-300",
+              sidebarCollapsed ? "hidden" : "flex w-72 flex-shrink-0"
+            )}>
+              {/* Collapse toggle button */}
+              <button
+                onClick={() => setSidebarCollapsed(true)}
+                className="absolute -left-3 top-4 z-10 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                title="Skjul sidepanel"
+              >
+                <ChevronRight className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
+              </button>
               {/* Day events */}
               <Card className="border-0 shadow-sm dark:bg-slate-900">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800">
