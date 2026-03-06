@@ -9,10 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, FileText, Upload, X } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { Plus, FileText, Upload, X, AlertCircle } from 'lucide-react';
+import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import AnbudsprosjektDetaljer from './AnbudsprosjektDetaljer';
 
 const statusConfig = {
   DRAFT:       { label: 'Utkast',   classes: 'bg-slate-100 text-slate-600' },
@@ -29,6 +30,7 @@ const emptyForm = {
 
 export default function AnbudsmodulForesporsler() {
   const [showDialog, setShowDialog] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [uploading, setUploading] = useState(false);
   const queryClient = useQueryClient();
@@ -75,7 +77,6 @@ export default function AnbudsmodulForesporsler() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Forespørsler</h2>
         <Button onClick={() => setShowDialog(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2">
@@ -83,7 +84,6 @@ export default function AnbudsmodulForesporsler() {
         </Button>
       </div>
 
-      {/* Table */}
       <Card className="border-0 shadow-sm dark:bg-slate-900">
         {projects.length === 0 ? (
           <div className="p-12 text-center">
@@ -95,7 +95,7 @@ export default function AnbudsmodulForesporsler() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800">
-                  {['Tittel', 'Fag', 'Svarfrist', 'Inviterte', 'Tilbud', 'Status'].map(h => (
+                  {['Tittel', 'Fag', 'Svarfrist', 'Inviterte', 'Svar', 'Status', ''].map(h => (
                     <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -105,18 +105,37 @@ export default function AnbudsmodulForesporsler() {
                   const projInv = invitations.filter(i => i.anbudProjectId === project.id);
                   const projQ = quotes.filter(q => q.anbudProjectId === project.id);
                   const sc = statusConfig[project.status] || statusConfig.DRAFT;
+                  const isDeadlinePast = project.responseDeadline && isPast(parseISO(project.responseDeadline)) && project.status !== 'CLOSED';
+                  const noResponse = projInv.filter(i => i.status === 'NO_RESPONSE').length;
                   return (
-                    <tr key={project.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{project.title}</td>
+                    <tr
+                      key={project.id}
+                      onClick={() => setSelectedProject(project)}
+                      className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900 dark:text-white">{project.title}</span>
+                          {isDeadlinePast && <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{project.tradeType || '–'}</td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                        {project.responseDeadline ? format(parseISO(project.responseDeadline), 'd. MMM yyyy', { locale: nb }) : '–'}
+                      <td className="px-6 py-4">
+                        <span className={cn('text-sm', isDeadlinePast ? 'text-red-500 font-semibold' : 'text-slate-600 dark:text-slate-400')}>
+                          {project.responseDeadline ? format(parseISO(project.responseDeadline), 'd. MMM yyyy', { locale: nb }) : '–'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{projInv.length}</td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{projQ.length}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-600 font-medium">{projQ.length}</span>
+                          {noResponse > 0 && <span className="text-xs text-red-500">{noResponse} ingen svar</span>}
+                        </div>
+                      </td>
                       <td className="px-6 py-4">
                         <Badge className={cn('border-0', sc.classes)}>{sc.label}</Badge>
                       </td>
+                      <td className="px-6 py-4 text-right text-sm text-emerald-600">Åpne →</td>
                     </tr>
                   );
                 })}
@@ -125,6 +144,14 @@ export default function AnbudsmodulForesporsler() {
           </div>
         )}
       </Card>
+
+      {/* Project detail panel */}
+      {selectedProject && (
+        <AnbudsprosjektDetaljer
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
+        />
+      )}
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
@@ -187,8 +214,6 @@ export default function AnbudsmodulForesporsler() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* File upload */}
             <div>
               <Label>Vedlegg (tegninger, beskrivelser)</Label>
               <div className="mt-1.5 space-y-2">
@@ -211,7 +236,6 @@ export default function AnbudsmodulForesporsler() {
                 </label>
               </div>
             </div>
-
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">Avbryt</Button>
               <Button type="submit" disabled={createMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">
