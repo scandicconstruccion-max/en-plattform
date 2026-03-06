@@ -84,7 +84,7 @@ export default function AnbudsmodulLeverandorer() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800">
-                  {['Navn', 'Kontaktperson', 'E-post', 'Telefon', 'Fagområder'].map(h => (
+                  {['Navn', 'Kontaktperson', 'E-post', 'Telefon', 'Fagområder', ''].map(h => (
                     <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
