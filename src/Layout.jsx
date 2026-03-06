@@ -53,7 +53,8 @@ const moduleIcons = {
   risikoanalyse: FileCheck,
   hmshandbok: BookOpen,
   mottakskontroll: PackageCheck,
-  anbudsportal: FileText
+  anbudsportal: FileText,
+  anbudsmodul: Gavel
 };
 
 const moduleLabels = {
