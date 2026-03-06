@@ -206,31 +206,20 @@ export default function Kalender() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
-      <PageHeader
-        title="Kalender"
-        onAdd={() => {
-          setFormData({
-            ...formData,
-            start_time: `${format(new Date(), 'yyyy-MM-dd')}T09:00`,
-            end_time: `${format(new Date(), 'yyyy-MM-dd')}T10:00`
-          });
-          setShowDialog(true);
-        }}
-        addLabel="Ny hendelse"
-      />
+      {/* Header with all controls */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Kalender</h1>
 
-      <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-3">
           {/* View toggle: calendar vs employees */}
-          <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 gap-1">
+          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
             <button
               onClick={() => setActiveView('calendar')}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                 activeView === 'calendar'
                   ? "bg-emerald-600 text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
               )}
             >
               <CalendarIcon className="h-4 w-4" />
@@ -242,7 +231,7 @@ export default function Kalender() {
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                 activeView === 'employees'
                   ? "bg-emerald-600 text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
               )}
             >
               <Users className="h-4 w-4" />
@@ -253,14 +242,14 @@ export default function Kalender() {
           {activeView === 'calendar' && (
             <>
               {/* Company / Project toggle */}
-              <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 gap-1">
+              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
                 <button
                   onClick={() => setViewMode('company')}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                     viewMode === 'company'
                       ? "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                   )}
                 >
                   <Building2 className="h-4 w-4" />
@@ -272,7 +261,7 @@ export default function Kalender() {
                     "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                     viewMode === 'project'
                       ? "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                   )}
                 >
                   <CalendarIcon className="h-4 w-4" />
@@ -282,7 +271,7 @@ export default function Kalender() {
 
               {viewMode === 'project' && (
                 <Select value={selectedProjectFilter} onValueChange={setSelectedProjectFilter}>
-                  <SelectTrigger className="w-52 rounded-xl dark:bg-slate-900 dark:border-slate-700">
+                  <SelectTrigger className="w-52 rounded-xl dark:bg-slate-800 dark:border-slate-700">
                     <SelectValue placeholder="Velg prosjekt" />
                   </SelectTrigger>
                   <SelectContent>
@@ -297,6 +286,23 @@ export default function Kalender() {
           )}
         </div>
 
+        <Button
+          onClick={() => {
+            setFormData({
+              ...formData,
+              start_time: `${format(new Date(), 'yyyy-MM-dd')}T09:00`,
+              end_time: `${format(new Date(), 'yyyy-MM-dd')}T10:00`
+            });
+            setShowDialog(true);
+          }}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2"
+        >
+          <span className="text-lg leading-none">+</span>
+          Ny hendelse
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
         {activeView === 'calendar' ? (
           <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
             {/* Calendar */}
