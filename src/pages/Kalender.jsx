@@ -347,50 +347,127 @@ export default function Kalender() {
             </Card>
 
             {/* Sidebar */}
-            <Card className="border-0 shadow-sm dark:bg-slate-900">
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800">
-                <h3 className="font-semibold text-slate-900 dark:text-white">
-                  {format(selectedDate, 'EEEE d. MMMM', { locale: nb })}
-                </h3>
-              </div>
-              <div className="p-4">
-                {selectedDateEvents.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
-                    <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm">Ingen hendelser</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedDateEvents.map((event) => (
-                      <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                        <div className="flex items-start gap-2">
-                          <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", eventTypeColors[event.event_type] || 'bg-slate-500')} />
-                          <div className="flex-1">
-                            <p className="font-medium text-slate-900 dark:text-white">{event.title}</p>
-                            {event.start_time && (
-                              <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                                <Clock className="h-3 w-3" />
-                                {format(parseISO(event.start_time), 'HH:mm')}
-                                {event.end_time && ` - ${format(parseISO(event.end_time), 'HH:mm')}`}
-                              </p>
-                            )}
-                            {event.location && (
-                              <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                                <MapPin className="h-3 w-3" />
-                                {event.location}
-                              </p>
-                            )}
-                            {event.project_id && (
-                              <p className="text-xs text-emerald-600 mt-2">{getProjectName(event.project_id)}</p>
-                            )}
+            <div className="flex flex-col gap-4">
+              {/* Day events */}
+              <Card className="border-0 shadow-sm dark:bg-slate-900">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-semibold text-slate-900 dark:text-white">
+                    {format(selectedDate, 'EEEE d. MMMM', { locale: nb })}
+                  </h3>
+                </div>
+                <div className="p-4">
+                  {selectedDateEvents.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500">
+                      <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                      <p className="text-sm">Ingen hendelser</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedDateEvents.map((event) => (
+                        <div key={event.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                          <div className="flex items-start gap-2">
+                            <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", eventTypeColors[event.event_type] || 'bg-slate-500')} />
+                            <div className="flex-1">
+                              <p className="font-medium text-slate-900 dark:text-white">{event.title}</p>
+                              {event.start_time && (
+                                <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                                  <Clock className="h-3 w-3" />
+                                  {format(parseISO(event.start_time), 'HH:mm')}
+                                  {event.end_time && ` - ${format(parseISO(event.end_time), 'HH:mm')}`}
+                                </p>
+                              )}
+                              {event.location && (
+                                <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {event.location}
+                                </p>
+                              )}
+                              {event.project_id && (
+                                <p className="text-xs text-emerald-600 mt-2">{getProjectName(event.project_id)}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* Employee list with checkboxes */}
+              <Card className="border-0 shadow-sm dark:bg-slate-900 flex flex-col">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Users className="h-4 w-4 text-slate-500" />
+                    Ansatte
+                  </h3>
+                  {selectedEmployees.length > 0 && (
+                    <button
+                      onClick={() => setSelectedEmployees([])}
+                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    >
+                      Nullstill
+                    </button>
+                  )}
+                </div>
+                <div className="overflow-y-auto max-h-72 p-2">
+                  {employees.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-4">Ingen ansatte</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {employees.map((emp, idx) => {
+                        const color = employeeColors[emp.id] || EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
+                        const isChecked = selectedEmployees.includes(emp.id);
+                        return (
+                          <button
+                            key={emp.id}
+                            onClick={() => setSelectedEmployees(prev =>
+                              prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
+                            )}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left",
+                              isChecked
+                                ? "bg-slate-50 dark:bg-slate-800"
+                                : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                                isChecked ? "border-transparent" : "border-slate-300 dark:border-slate-600"
+                              )}
+                              style={isChecked ? { backgroundColor: color, borderColor: color } : {}}
+                            >
+                              {isChecked && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+                                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </div>
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+                              style={{ backgroundColor: color }}
+                            >
+                              {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
+                            </div>
+                            <span className="text-sm text-slate-700 dark:text-slate-300 truncate">
+                              {emp.first_name} {emp.last_name}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {selectedEmployees.length > 0 && (
+                  <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {selectedEmployees.length} ansatt(e) valgt — kalender filtreres
+                    </p>
                   </div>
                 )}
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         ) : (
           /* Employee Overview */
