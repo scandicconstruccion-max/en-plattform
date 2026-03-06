@@ -30,15 +30,21 @@ export default function Anbudsmodul() {
 
   const company = companies[0];
 
-  const { data: moduleAccess = [] } = useQuery({
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
+  const { data: moduleAccess = [], isLoading: moduleLoading } = useQuery({
     queryKey: ['companyModuleAccess', company?.id],
     queryFn: () => base44.entities.CompanyModuleAccess.filter({ companyId: company.id, moduleCode: 'ANBUDSMODUL' }),
     enabled: !!company?.id,
   });
 
-  const hasAccess = moduleAccess.some(m => m.active);
+  const isAdmin = user?.role === 'admin';
+  const hasAccess = isAdmin || moduleAccess.some(m => m.active);
 
-  if (!hasAccess && company) {
+  if (!moduleLoading && !hasAccess && company) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-8">
         <div className="text-center max-w-md">
