@@ -422,12 +422,12 @@ export default function Kalender() {
                     <Users className="h-4 w-4 text-slate-500" />
                     Ansatte
                   </h3>
-                  {selectedEmployees.length > 0 && (
+                  {effectiveSelectedEmployees.length < employees.length && (
                     <button
-                      onClick={() => setSelectedEmployees([])}
+                      onClick={() => setSelectedEmployees(employees.map(e => e.id))}
                       className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                     >
-                      Nullstill
+                      Velg alle
                     </button>
                   )}
                 </div>
