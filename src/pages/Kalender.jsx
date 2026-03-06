@@ -727,10 +727,10 @@ export default function Kalender() {
             }
             </Card>
 
-            {/* Sidebar */}
+            {/* Sidebar - Desktop only */}
             <div className={cn(
-              "flex-col gap-3 overflow-y-auto min-h-0 relative transition-all duration-300",
-              sidebarCollapsed ? "hidden" : "flex w-72 flex-shrink-0"
+              "hidden lg:flex flex-col gap-3 overflow-y-auto min-h-0 relative transition-all duration-300",
+              sidebarCollapsed ? "lg:hidden" : "lg:flex w-72 flex-shrink-0"
             )}>
               {/* Collapse toggle button */}
               <button
