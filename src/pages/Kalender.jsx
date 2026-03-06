@@ -364,20 +364,75 @@ export default function Kalender() {
           }
         </div>
 
-        <Button
-          onClick={() => {
-            setFormData({
-              ...formData,
-              start_time: `${format(new Date(), 'yyyy-MM-dd')}T09:00`,
-              end_time: `${format(new Date(), 'yyyy-MM-dd')}T10:00`
-            });
-            setShowDialog(true);
-          }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2">
-
-          <span className="text-lg leading-none">+</span>
-          Ny hendelse
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Time settings gear - only for day/week view */}
+          {activeView === 'calendar' && (calendarView === 'day' || calendarView === 'week') && (
+            <div className="relative">
+              <button
+                onClick={() => setShowTimeSettings(!showTimeSettings)}
+                className={cn(
+                  "h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-colors",
+                  showTimeSettings ? "bg-slate-100 dark:bg-slate-700" : "bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                )}
+                title="Tidsinnstillinger"
+              >
+                <Settings className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+              </button>
+              {showTimeSettings && (
+                <div className="absolute right-0 top-11 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg p-4 w-64">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Tidsinnstillinger</p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Kalenderdag starter fra</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => { setDayStartHour(0); setShowTimeSettings(false); }}
+                          className={cn(
+                            "px-3 py-2 rounded-lg text-sm font-medium border transition-colors",
+                            dayStartHour === 0 ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"
+                          )}
+                        >00:00 – 12:00</button>
+                        <button
+                          onClick={() => { setDayStartHour(12); setShowTimeSettings(false); }}
+                          className={cn(
+                            "px-3 py-2 rounded-lg text-sm font-medium border transition-colors",
+                            dayStartHour === 12 ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"
+                          )}
+                        >12:00 – 24:00</button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Eller velg starttime manuelt</label>
+                      <Select value={String(dayStartHour)} onValueChange={(v) => { setDayStartHour(Number(v)); setShowTimeSettings(false); }}>
+                        <SelectTrigger className="rounded-xl h-8 text-sm dark:bg-slate-700 dark:border-slate-600">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 25 }, (_, i) => (
+                            <SelectItem key={i} value={String(i)}>{String(i).padStart(2,'0')}:00</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <Button
+            onClick={() => {
+              setFormData({
+                ...formData,
+                start_time: `${format(new Date(), 'yyyy-MM-dd')}T09:00`,
+                end_time: `${format(new Date(), 'yyyy-MM-dd')}T10:00`
+              });
+              setShowDialog(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2">
+            <span className="text-lg leading-none">+</span>
+            Ny hendelse
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden px-6 lg:px-8 py-4 flex flex-col gap-3">
