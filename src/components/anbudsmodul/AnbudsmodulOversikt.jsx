@@ -4,16 +4,16 @@ import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, Users, Inbox, ChevronRight, Plus } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { FileText, Users, Inbox, ChevronRight, Plus, AlertCircle } from 'lucide-react';
+import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 const statusConfig = {
-  DRAFT:       { label: 'Utkast',       classes: 'bg-slate-100 text-slate-600' },
-  SENT:        { label: 'Sendt',        classes: 'bg-blue-100 text-blue-700' },
-  IN_PROGRESS: { label: 'Pågående',     classes: 'bg-amber-100 text-amber-700' },
-  CLOSED:      { label: 'Lukket',       classes: 'bg-emerald-100 text-emerald-700' },
+  DRAFT:       { label: 'Utkast',   classes: 'bg-slate-100 text-slate-600' },
+  SENT:        { label: 'Sendt',    classes: 'bg-blue-100 text-blue-700' },
+  IN_PROGRESS: { label: 'Pågående', classes: 'bg-amber-100 text-amber-700' },
+  CLOSED:      { label: 'Lukket',   classes: 'bg-emerald-100 text-emerald-700' },
 };
 
 export default function AnbudsmodulOversikt({ onNavigate }) {
@@ -31,10 +31,11 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
   });
 
   const activeProjects = projects.filter(p => p.status !== 'CLOSED');
+  const needsFollowUp = invitations.filter(i => i.status === 'INVITED' || i.status === 'OPENED').length;
 
   const stats = [
     { label: 'Aktive forespørsler', value: activeProjects.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-    { label: 'Inviterte leverandører', value: invitations.length, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+    { label: 'Inviterte leverandører', value: invitations.filter(i => i.status === 'INVITED').length, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
     { label: 'Mottatte tilbud', value: quotes.length, icon: Inbox, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
   ];
 
@@ -57,6 +58,19 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
           );
         })}
       </div>
+
+      {/* Follow-up alert */}
+      {needsFollowUp > 0 && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <p className="text-sm text-amber-700 dark:text-amber-400 flex-1">
+            <strong>{needsFollowUp} leverandør{needsFollowUp > 1 ? 'er' : ''}</strong> har ikke svart ennå og trenger oppfølging.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => onNavigate('foresporsler')} className="rounded-xl border-amber-300 text-amber-700">
+            Se forespørsler
+          </Button>
+        </div>
+      )}
 
       {/* Recent projects */}
       <Card className="border-0 shadow-sm dark:bg-slate-900">
@@ -90,12 +104,24 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
                   const projInvitations = invitations.filter(i => i.anbudProjectId === project.id);
                   const projQuotes = quotes.filter(q => q.anbudProjectId === project.id);
                   const sc = statusConfig[project.status] || statusConfig.DRAFT;
+                  const isDeadlinePast = project.responseDeadline && isPast(parseISO(project.responseDeadline)) && project.status !== 'CLOSED';
                   return (
-                    <tr key={project.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{project.title}</td>
+                    <tr
+                      key={project.id}
+                      onClick={() => onNavigate('foresporsler')}
+                      className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900 dark:text-white">{project.title}</span>
+                          {isDeadlinePast && <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{project.tradeType || '–'}</td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                        {project.responseDeadline ? format(parseISO(project.responseDeadline), 'd. MMM yyyy', { locale: nb }) : '–'}
+                      <td className="px-6 py-4">
+                        <span className={cn('text-sm', isDeadlinePast ? 'text-red-500 font-semibold' : 'text-slate-600 dark:text-slate-400')}>
+                          {project.responseDeadline ? format(parseISO(project.responseDeadline), 'd. MMM yyyy', { locale: nb }) : '–'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{projInvitations.length}</td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{projQuotes.length}</td>
