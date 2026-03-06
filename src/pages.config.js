@@ -93,6 +93,7 @@ import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
 import Anbudsportal from './pages/Anbudsportal';
 import RFQDetaljer from './pages/RFQDetaljer';
+import Leverandorer from './pages/Leverandorer';
 import __Layout from './Layout.jsx';
 
 
@@ -143,6 +144,7 @@ export const PAGES = {
     "Timelister": Timelister,
     "Anbudsportal": Anbudsportal,
     "RFQDetaljer": RFQDetaljer,
+    "Leverandorer": Leverandorer,
 }
 
 export const pagesConfig = {
