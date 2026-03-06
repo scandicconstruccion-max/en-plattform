@@ -53,6 +53,16 @@ export default function Dashboard() {
     queryFn: () => base44.entities.Company.list(),
   });
 
+  const { data: rfqs = [] } = useQuery({
+    queryKey: ['rfqs'],
+    queryFn: () => base44.entities.RFQ.list('-created_date', 5),
+  });
+
+  const { data: rfqBids = [] } = useQuery({
+    queryKey: ['rfqBids'],
+    queryFn: () => base44.entities.VendorBid.list('-received_date', 50),
+  });
+
   const company = companies?.[0];
   const activeModules = user ? getAvailableModules(user) : [];
   
