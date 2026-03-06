@@ -24,7 +24,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import ProjectSelector from '@/components/shared/ProjectSelector';
 import LocationAutocomplete from '@/components/shared/LocationAutocomplete';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Building2, Palette } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Building2, Palette, Settings } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears,
