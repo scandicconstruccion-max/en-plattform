@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
@@ -24,7 +24,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import ProjectSelector from '@/components/shared/ProjectSelector';
 import LocationAutocomplete from '@/components/shared/LocationAutocomplete';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Building2, Palette, Settings } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Building2, Palette, Settings, Plus, X } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears,
