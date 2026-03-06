@@ -319,7 +319,7 @@ export default function Kalender() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-7">
+              <div className="grid grid-cols-7 flex-1 overflow-auto">
                 {calendarDays.map((day, index) => {
                   const dayEvents = getEventsForDay(day);
                   const isCurrentMonth = isSameMonth(day, currentMonth);
@@ -330,7 +330,7 @@ export default function Kalender() {
                       key={index}
                       onClick={() => handleDateClick(day)}
                       className={cn(
-                        "min-h-[100px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
+                        "min-h-[80px] p-2 border-b border-r border-slate-100 dark:border-slate-800 cursor-pointer transition-colors",
                         !isCurrentMonth && "bg-slate-50 dark:bg-slate-950/50",
                         isSelected && "bg-emerald-50 dark:bg-emerald-900/20",
                         isToday(day) && "ring-2 ring-inset ring-emerald-500",
