@@ -58,7 +58,7 @@ const moduleIcons = {
 };
 
 const moduleLabels = {
-  anbudsmodul: 'Anbudsmodul',
+  anbudsmodul: 'Anbudsportal',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
   befaring: 'Befaring',
@@ -91,7 +91,7 @@ const moduleLabels = {
 };
 
 const modulePages = {
-  anbudsmodul: 'Anbudsmodul',
+  anbudsmodul: 'Anbudsportal',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
   befaring: 'Befaring',
