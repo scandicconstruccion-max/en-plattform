@@ -367,7 +367,7 @@ export default function Kalender() {
             </Card>
 
             {/* Sidebar */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 overflow-y-auto min-h-0">
               {/* Day events */}
               <Card className="border-0 shadow-sm dark:bg-slate-900">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800">
