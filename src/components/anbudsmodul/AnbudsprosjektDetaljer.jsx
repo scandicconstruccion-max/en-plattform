@@ -167,10 +167,9 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
                           <button
                             onClick={() => handleResend(inv.supplierId)}
                             disabled={resending === inv.supplierId}
-                            title="Send på nytt"
-                            className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap"
                           >
-                            <RefreshCw className={cn("h-3.5 w-3.5", resending === inv.supplierId && "animate-spin")} />
+                            {resending === inv.supplierId ? 'Sender...' : 'Send på nytt'}
                           </button>
                         )}
                       </div>
