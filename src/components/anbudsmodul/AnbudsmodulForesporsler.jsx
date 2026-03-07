@@ -203,6 +203,17 @@ export default function AnbudsmodulForesporsler() {
               </div>
             </div>
             <div>
+              <Label>Påminnelsesfrist <span className="text-slate-400 font-normal">(valgfritt)</span></Label>
+              <Input
+                type="date"
+                value={form.reminderDeadline}
+                onChange={e => setForm(f => ({ ...f, reminderDeadline: e.target.value }))}
+                max={form.responseDeadline || undefined}
+                className="mt-1.5 rounded-xl"
+              />
+              <p className="text-xs text-slate-400 mt-1">Dato for utsendelse av påminnelse dersom tilbud ikke er mottatt innen denne datoen.</p>
+            </div>
+            <div>
               <Label>Prosjekt (valgfritt)</Label>
               <Select value={form.projectId} onValueChange={v => setForm(f => ({ ...f, projectId: v }))}>
                 <SelectTrigger className="mt-1.5 rounded-xl">
