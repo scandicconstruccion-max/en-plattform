@@ -13,6 +13,7 @@ export default function InviterLeverandorDialog({ open, onClose, project, existi
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState(null);
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['anbudSuppliers'],
