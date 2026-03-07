@@ -17,6 +17,7 @@ Deno.serve(async (req) => {
     const suppliers = allSuppliers.filter(s => supplierIds.includes(s.id));
 
     const appUrl = req.headers.get('origin') || 'https://app.enplattform.no';
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
     const results = [];
 
     for (const supplier of suppliers) {
@@ -48,7 +49,6 @@ Deno.serve(async (req) => {
         .map(f => `<li><a href="${f.url}">${f.name}</a></li>`)
         .join('');
 
-      // Send email
       const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #10b981;">Forespørsel om tilbud</h2>
@@ -70,11 +70,27 @@ Deno.serve(async (req) => {
         </div>
       `;
 
-      await base44.integrations.Core.SendEmail({
-        to: supplier.email,
-        subject: `Forespørsel om tilbud: ${project.title}`,
-        body: emailBody,
+      // Send via Resend
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'En Plattform <no-reply@enplattform.no>',
+          to: [supplier.email],
+          subject: `Forespørsel om tilbud: ${project.title}`,
+          html: emailBody,
+        }),
       });
+
+      if (!emailRes.ok) {
+        const errData = await emailRes.json();
+        console.error('Resend error for', supplier.email, errData);
+        results.push({ supplierId: supplier.id, status: 'email_failed', error: errData.message });
+        continue;
+      }
 
       // Log activity
       await base44.entities.AnbudActivityLog.create({
