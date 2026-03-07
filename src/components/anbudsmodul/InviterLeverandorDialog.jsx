@@ -36,6 +36,7 @@ export default function InviterLeverandorDialog({ open, onClose, project, existi
   const handleSend = async () => {
     if (selected.length === 0) return;
     setSending(true);
+    setError(null);
     try {
       await base44.functions.invoke('anbudSendInvitations', {
         anbudProjectId: project.id,
@@ -48,9 +49,11 @@ export default function InviterLeverandorDialog({ open, onClose, project, existi
         setDone(false);
         setSelected([]);
         setSearch('');
-      }, 1500);
+        setError(null);
+      }, 2000);
     } catch (e) {
       console.error(e);
+      setError('Noe gikk galt ved sending. Prøv igjen.');
     } finally {
       setSending(false);
     }
