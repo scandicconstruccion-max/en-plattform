@@ -5,9 +5,10 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
 
     const today = new Date();
-    const reminderDays = 2;
-    const reminderCutoff = new Date(today);
-    reminderCutoff.setDate(reminderCutoff.getDate() + reminderDays);
+    today.setHours(0, 0, 0, 0);
+
+    // Fallback: 2 days before deadline if no reminderDeadline is set
+    const fallbackReminderDays = 2;
 
     // Get all open projects
     const allProjects = await base44.asServiceRole.entities.AnbudProject.list();
@@ -22,8 +23,21 @@ Deno.serve(async (req) => {
     for (const project of openProjects) {
       if (!project.responseDeadline) continue;
       const deadline = new Date(project.responseDeadline);
+      deadline.setHours(0, 0, 0, 0);
       const isPastDeadline = deadline < today;
-      const isNearDeadline = !isPastDeadline && deadline <= reminderCutoff;
+
+      // Determine if today is the reminder day
+      let isReminderDay = false;
+      if (project.reminderDeadline) {
+        const reminderDate = new Date(project.reminderDeadline);
+        reminderDate.setHours(0, 0, 0, 0);
+        isReminderDay = reminderDate.getTime() === today.getTime();
+      } else {
+        // Fallback: 2 days before deadline
+        const fallbackReminder = new Date(deadline);
+        fallbackReminder.setDate(fallbackReminder.getDate() - fallbackReminderDays);
+        isReminderDay = !isPastDeadline && fallbackReminder.getTime() === today.getTime();
+      }
 
       // Get invitations for this project
       const invitations = await base44.asServiceRole.entities.AnbudInvitation.filter({
@@ -45,8 +59,8 @@ Deno.serve(async (req) => {
           noResponseUpdates++;
         }
 
-        // Send reminder if near deadline and not responded
-        if (isNearDeadline && (inv.status === 'INVITED' || inv.status === 'OPENED') && inv.supplierEmail) {
+        // Send reminder on the reminder day if supplier has not responded
+        if (isReminderDay && (inv.status === 'INVITED' || inv.status === 'OPENED') && inv.supplierEmail) {
           const submissionUrl = `${appUrl}/AnbudSvar?projectId=${project.id}&invitationId=${inv.id}`;
           const deadlineStr = deadline.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
 
