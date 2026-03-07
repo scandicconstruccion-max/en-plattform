@@ -163,6 +163,16 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
                         <Badge className={cn('border-0 flex items-center gap-1', isc.classes)}>
                           <Icon className="h-3 w-3" />{isc.label}
                         </Badge>
+                        {inv.status !== 'RESPONDED' && (
+                          <button
+                            onClick={() => handleResend(inv.supplierId)}
+                            disabled={resending === inv.supplierId}
+                            title="Send på nytt"
+                            className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50"
+                          >
+                            <RefreshCw className={cn("h-3.5 w-3.5", resending === inv.supplierId && "animate-spin")} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
