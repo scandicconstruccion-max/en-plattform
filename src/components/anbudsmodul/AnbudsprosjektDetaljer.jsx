@@ -30,8 +30,18 @@ const invStatusConfig = {
 
 export default function AnbudsprosjektDetaljer({ project, onClose }) {
   const [showInvite, setShowInvite] = useState(false);
-  const [resending, setResending] = useState(null); // supplierId currently being resent
+  const [resending, setResending] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
   const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => base44.entities.AnbudProject.delete(project.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['anbudProjects'] });
+      onClose();
+    },
+  });
 
   const handleResend = async (supplierId) => {
     setResending(supplierId);
