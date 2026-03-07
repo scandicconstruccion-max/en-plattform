@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, Users, FileText, Send, AlertCircle, CheckCircle, Eye } from 'lucide-react';
+import { X, Users, FileText, Send, AlertCircle, CheckCircle, Eye, RefreshCw } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
