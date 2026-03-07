@@ -6,7 +6,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { anbudProjectId, supplierIds } = await req.json();
+    const { anbudProjectId, supplierIds, resend } = await req.json();
 
     // Fetch the project
     const project = await base44.entities.AnbudProject.get(anbudProjectId);
