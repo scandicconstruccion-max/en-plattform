@@ -26,20 +26,30 @@ Deno.serve(async (req) => {
         anbudProjectId,
         supplierId: supplier.id,
       });
-      if (existing.length > 0) {
-        results.push({ supplierId: supplier.id, status: 'already_invited' });
-        continue;
-      }
 
-      // Create invitation
-      const invitation = await base44.entities.AnbudInvitation.create({
-        anbudProjectId,
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        supplierEmail: supplier.email,
-        invitedAt: new Date().toISOString(),
-        status: 'INVITED',
-      });
+      let invitation;
+      if (existing.length > 0) {
+        if (!resend) {
+          results.push({ supplierId: supplier.id, status: 'already_invited' });
+          continue;
+        }
+        // Resend: reuse existing invitation, reset status to INVITED
+        invitation = existing[0];
+        await base44.entities.AnbudInvitation.update(invitation.id, {
+          status: 'INVITED',
+          invitedAt: new Date().toISOString(),
+        });
+      } else {
+        // Create new invitation
+        invitation = await base44.entities.AnbudInvitation.create({
+          anbudProjectId,
+          supplierId: supplier.id,
+          supplierName: supplier.name,
+          supplierEmail: supplier.email,
+          invitedAt: new Date().toISOString(),
+          status: 'INVITED',
+        });
+      }
 
       // Build submission URL
       const submissionUrl = `${appUrl}/AnbudSvar?projectId=${anbudProjectId}&invitationId=${invitation.id}`;
