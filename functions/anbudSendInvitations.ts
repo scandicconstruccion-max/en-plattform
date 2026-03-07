@@ -106,7 +106,9 @@ Deno.serve(async (req) => {
       await base44.entities.AnbudActivityLog.create({
         anbudProjectId,
         activityType: 'INVITE_SENT',
-        activityText: `Invitasjon sendt til ${supplier.name} (${supplier.email})`,
+        activityText: resend
+          ? `Invitasjon sendt på nytt til ${supplier.name} (${supplier.email})`
+          : `Invitasjon sendt til ${supplier.name} (${supplier.email})`,
         createdBy: user.email,
       });
 
