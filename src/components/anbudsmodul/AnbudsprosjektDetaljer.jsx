@@ -28,7 +28,21 @@ const invStatusConfig = {
 
 export default function AnbudsprosjektDetaljer({ project, onClose }) {
   const [showInvite, setShowInvite] = useState(false);
+  const [resending, setResending] = useState(null); // supplierId currently being resent
   const queryClient = useQueryClient();
+
+  const handleResend = async (supplierId) => {
+    setResending(supplierId);
+    try {
+      await base44.functions.invoke('anbudSendInvitations', {
+        anbudProjectId: project.id,
+        supplierIds: [supplierId],
+        resend: true,
+      });
+    } finally {
+      setResending(null);
+    }
+  };
 
   const { data: invitations = [] } = useQuery({
     queryKey: ['anbudInvitations', project.id],
