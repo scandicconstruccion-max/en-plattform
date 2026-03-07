@@ -127,6 +127,10 @@ export default function InviterLeverandorDialog({ open, onClose, project, existi
               })}
             </div>
 
+            {error && (
+              <p className="text-sm text-red-500 mb-2">{error}</p>
+            )}
+
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-500">{selected.length} valgt</span>
               <div className="flex gap-2">
