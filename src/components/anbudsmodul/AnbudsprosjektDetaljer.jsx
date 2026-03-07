@@ -100,9 +100,18 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
-            <X className="h-5 w-5 text-slate-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDeleteDialog(true)}
+              className="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
+              title="Slett forespørsel"
+            >
+              <Trash2 className="h-4.5 w-4.5" />
+            </button>
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+              <X className="h-5 w-5 text-slate-500" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
