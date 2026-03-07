@@ -210,6 +210,42 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
         existingInvitations={invitations}
         onDone={handleDone}
       />
+
+      {/* Delete Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-md dark:bg-slate-900">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Slett forespørsel</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Er du sikker på at du vil slette <strong>«{project.title}»</strong>? Dette kan ikke angres.
+            </p>
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Årsak til tilbaketrekking <span className="text-slate-400 font-normal">(valgfritt)</span>
+              </label>
+              <Textarea
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="Beskriv eventuelt hvorfor forespørselen trekkes tilbake..."
+                rows={3}
+                className="mt-1.5 rounded-xl"
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="rounded-xl">Avbryt</Button>
+              <Button
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="bg-red-600 hover:bg-red-700 text-white rounded-xl"
+              >
+                {deleteMutation.isPending ? 'Sletter...' : 'Slett forespørsel'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
