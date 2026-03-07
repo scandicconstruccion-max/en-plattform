@@ -25,7 +25,7 @@ const statusConfig = {
 const TRADE_TYPES = ['Elektro', 'Rør/VVS', 'Betong', 'Tømrer', 'Maler', 'Gulvlegger', 'Tak', 'Stål/Sveis', 'HVAC', 'Graving/Anlegg', 'Annet'];
 
 const emptyForm = {
-  title: '', description: '', projectId: '', tradeType: '', responseDeadline: '', fileAttachments: []
+  title: '', description: '', projectId: '', tradeType: '', responseDeadline: '', reminderDeadline: '', fileAttachments: []
 };
 
 export default function AnbudsmodulForesporsler() {
