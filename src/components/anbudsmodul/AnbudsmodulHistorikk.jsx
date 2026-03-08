@@ -13,15 +13,15 @@ export default function AnbudsmodulHistorikk() {
 
   const { data: logs = [] } = useQuery({
     queryKey: ['anbudActivityLogs'],
-    queryFn: () => base44.entities.AnbudActivityLog.list('-created_date', 100),
+    queryFn: () => base44.entities.AnbudActivityLog.list('-created_date', 100)
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['anbudProjects'],
-    queryFn: () => base44.entities.AnbudProject.list(),
+    queryFn: () => base44.entities.AnbudProject.list()
   });
 
-  const projectMap = Object.fromEntries(projects.map(p => [p.id, p.title]));
+  const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.title]));
 
   const getActivityIcon = (activityType) => {
     switch (activityType?.toLowerCase()) {
@@ -65,7 +65,7 @@ export default function AnbudsmodulHistorikk() {
     }
   };
 
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = logs.filter((log) => {
     if (filter === 'all') return true;
     if (filter === 'withdrawn') {
       return log.activityType?.toLowerCase() === 'withdrawn' || log.activityType?.toLowerCase() === 'deleted';
@@ -86,25 +86,25 @@ export default function AnbudsmodulHistorikk() {
         <Button
           variant={filter === 'all' ? 'default' : 'outline'}
           size="sm"
-          onClick={() => setFilter('all')}
-          className="text-xs"
-        >
+          onClick={() => setFilter('all')} className="bg-emerald-50 text-emerald-700 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-8">
+
+
           Alle
         </Button>
         <Button
           variant={filter === 'sent' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilter('sent')}
-          className="text-xs"
-        >
+          className="text-xs">
+
           Sendt
         </Button>
         <Button
           variant={filter === 'withdrawn' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilter('withdrawn')}
-          className="text-xs gap-1.5"
-        >
+          className="text-xs gap-1.5">
+
           <AlertCircle className="h-3.5 w-3.5" />
           Tilbaketrukket
         </Button>
@@ -112,32 +112,32 @@ export default function AnbudsmodulHistorikk() {
           variant={filter === 'completed' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilter('completed')}
-          className="text-xs"
-        >
+          className="text-xs">
+
           Avsluttet
         </Button>
       </div>
 
       <Card className="border-0 shadow-sm dark:bg-slate-900">
-        {filteredLogs.length === 0 ? (
-          <div className="p-12 text-center">
+        {filteredLogs.length === 0 ?
+        <div className="p-12 text-center">
             <Icon className="h-10 w-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 dark:text-slate-400">
               {filter === 'all' ? 'Ingen aktivitet registrert ennå' : 'Ingen aktivitet av denne typen'}
             </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filteredLogs.map(log => {
-              const ActivityIcon = getActivityIcon(log.activityType);
-              return (
-                <div
-                  key={log.id}
-                  className={cn(
-                    'px-6 py-4 flex items-start gap-4 border-l-4 transition-colors',
-                    getActivityColor(log.activityType)
-                  )}
-                >
+          </div> :
+
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {filteredLogs.map((log) => {
+            const ActivityIcon = getActivityIcon(log.activityType);
+            return (
+              <div
+                key={log.id}
+                className={cn(
+                  'px-6 py-4 flex items-start gap-4 border-l-4 transition-colors',
+                  getActivityColor(log.activityType)
+                )}>
+
                   <div className="flex-shrink-0 mt-0.5">
                     <ActivityIcon className={cn('h-5 w-5', getActivityIconColor(log.activityType))} />
                   </div>
@@ -145,30 +145,30 @@ export default function AnbudsmodulHistorikk() {
                     <p className="font-medium text-sm text-slate-900 dark:text-white">
                       {log.activityText}
                     </p>
-                    {log.anbudProjectId && projectMap[log.anbudProjectId] && (
-                      <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 font-medium">
+                    {log.anbudProjectId && projectMap[log.anbudProjectId] &&
+                  <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 font-medium">
                         {projectMap[log.anbudProjectId]}
                       </p>
-                    )}
+                  }
                     <div className="flex items-center gap-2 mt-2 text-xs text-slate-500 dark:text-slate-400">
                       <Clock className="h-3.5 w-3.5" />
                       <span>
                         {log.created_date ? format(parseISO(log.created_date), "d. MMM yyyy 'kl.' HH:mm", { locale: nb }) : ''}
                       </span>
-                      {log.createdBy && (
-                        <>
+                      {log.createdBy &&
+                    <>
                           <span>·</span>
                           <span>{log.createdBy}</span>
                         </>
-                      )}
+                    }
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                </div>);
+
+          })}
           </div>
-        )}
+        }
       </Card>
-    </div>
-  );
+    </div>);
+
 }
