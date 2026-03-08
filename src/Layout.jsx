@@ -55,7 +55,8 @@ const moduleIcons = {
   hmshandbok: BookOpen,
   mottakskontroll: PackageCheck,
   anbudsportal: FileText,
-  anbudsmodul: Gavel
+  anbudsmodul: Gavel,
+  varsler: Bell
 };
 
 const moduleLabels = {
