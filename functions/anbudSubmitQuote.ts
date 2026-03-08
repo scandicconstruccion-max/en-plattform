@@ -14,20 +14,20 @@ Deno.serve(async (req) => {
     if (token) {
       const results = await base44.asServiceRole.entities.AnbudInvitation.filter({ token });
       if (!results || results.length === 0) {
-        return Response.json({ error: 'Ugyldig lenke.' }, { status: 400 });
+        return Response.json({ error: 'Token er utløpt eller ugyldig. Kontakt prosjektleder.' }, { status: 400 });
       }
       invitation = results[0];
     } else if (projectId && invitationId) {
       invitation = await base44.asServiceRole.entities.AnbudInvitation.get(invitationId);
       if (!invitation || invitation.anbudProjectId !== projectId) {
-        return Response.json({ error: 'Ugyldig lenke.' }, { status: 400 });
+        return Response.json({ error: 'Token er utløpt eller ugyldig. Kontakt prosjektleder.' }, { status: 400 });
       }
     } else {
       return Response.json({ error: 'Manglende parametere' }, { status: 400 });
     }
 
     if (invitation.status === 'RESPONDED') {
-      return Response.json({ error: 'Tilbud er allerede levert.' }, { status: 409 });
+      return Response.json({ error: 'Tilbud er allerede levert for denne forespørselen.' }, { status: 409 });
     }
 
     // Check deadline
@@ -40,10 +40,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    const supplierDisplayName = companyName || invitation.supplierName;
+
+    // Create the quote
     await base44.asServiceRole.entities.AnbudQuote.create({
       anbudProjectId: invitation.anbudProjectId,
       supplierId: invitation.supplierId,
-      supplierName: companyName || invitation.supplierName,
+      supplierName: supplierDisplayName,
+      contactName: contactName || null,
+      contactEmail: contactEmail || invitation.supplierEmail || null,
+      contactPhone: contactPhone || null,
       price: price ? parseFloat(price) : null,
       currency: currency || 'NOK',
       notes: notes || '',
@@ -51,17 +57,35 @@ Deno.serve(async (req) => {
       submittedAt: new Date().toISOString(),
     });
 
+    // Update invitation status
     await base44.asServiceRole.entities.AnbudInvitation.update(invitation.id, {
       status: 'RESPONDED',
       respondedAt: new Date().toISOString(),
     });
 
+    // Log activity
     await base44.asServiceRole.entities.AnbudActivityLog.create({
       anbudProjectId: invitation.anbudProjectId,
       activityType: 'RESPONDED',
-      activityText: `Tilbud mottatt fra ${companyName || invitation.supplierName}${contactEmail ? ` (${contactEmail})` : ''}`,
+      activityText: `Tilbud mottatt fra ${supplierDisplayName}${contactEmail ? ` (${contactEmail})` : ''}`,
       createdBy: 'system',
     });
+
+    // Send notification to project creator / responsible person
+    const notifyEmail = project?.createdBy || null;
+    if (notifyEmail) {
+      await base44.asServiceRole.entities.Notification.create({
+        userEmail: notifyEmail,
+        module: 'Anbud',
+        type: 'info',
+        title: 'Tilbud mottatt',
+        message: `${supplierDisplayName} har levert tilbud på «${project.title}»`,
+        link: `/Anbudsmodul?projectId=${invitation.anbudProjectId}`,
+        entityId: invitation.anbudProjectId,
+        status: 'unread',
+        eventTime: new Date().toISOString(),
+      });
+    }
 
     return Response.json({ success: true });
   } catch (error) {

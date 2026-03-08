@@ -13,13 +13,13 @@ Deno.serve(async (req) => {
     if (token) {
       const results = await base44.asServiceRole.entities.AnbudInvitation.filter({ token });
       if (!results || results.length === 0) {
-        return Response.json({ error: 'Ugyldig eller utløpt lenke.' }, { status: 404 });
+        return Response.json({ error: 'Token er utløpt eller ugyldig. Kontakt prosjektleder.' }, { status: 404 });
       }
       invitation = results[0];
     } else if (projectId && invitationId) {
       invitation = await base44.asServiceRole.entities.AnbudInvitation.get(invitationId);
       if (!invitation || invitation.anbudProjectId !== projectId) {
-        return Response.json({ error: 'Ugyldig lenke.' }, { status: 400 });
+        return Response.json({ error: 'Token er utløpt eller ugyldig. Kontakt prosjektleder.' }, { status: 400 });
       }
     } else {
       return Response.json({ error: 'Manglende parametere' }, { status: 400 });
@@ -30,11 +30,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forespørselen ble ikke funnet.' }, { status: 404 });
     }
 
-    // Check if past deadline
-    if (project.responseDeadline) {
+    // Check if past deadline (allow viewing if already responded)
+    if (project.responseDeadline && invitation.status !== 'RESPONDED') {
       const deadline = new Date(project.responseDeadline);
       deadline.setHours(23, 59, 59, 999);
-      if (new Date() > deadline && invitation.status !== 'RESPONDED') {
+      if (new Date() > deadline) {
         return Response.json({ error: 'Fristen for å levere tilbud har gått ut.' }, { status: 410 });
       }
     }
