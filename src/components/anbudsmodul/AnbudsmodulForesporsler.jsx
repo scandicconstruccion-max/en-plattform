@@ -62,13 +62,26 @@ export default function AnbudsmodulForesporsler() {
     },
   });
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const uploadFile = async (file) => {
     setUploading(true);
     const { file_url } = await base44.integrations.Core.UploadFile({ file });
     setForm(f => ({ ...f, fileAttachments: [...f.fileAttachments, { name: file.name, url: file_url }] }));
     setUploading(false);
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await uploadFile(file);
+    e.target.value = '';
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    await uploadFile(file);
   };
 
   const handleSubmit = (e) => {
