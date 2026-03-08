@@ -50,10 +50,20 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
         invitations={invitations}
         quotes={quotes}
         systemProjects={systemProjects}
-        onOpenProject={(projectId) => {
-          setSelectedProjectId(projectId);
+        onOpenProject={(anbudProjectId) => {
+          // Find the AnbudProject by id and open it directly
+          const found = projects.find(p => p.id === anbudProjectId);
+          if (found) setDirectOpenProject(found);
         }}
       />
+
+      {/* Direct open from dashboard */}
+      {directOpenProject && (
+        <AnbudsprosjektDetaljer
+          project={directOpenProject}
+          onClose={() => setDirectOpenProject(null)}
+        />
+      )}
 
       {selectedProjectId ? (
         <AnbudsProsjektDetaljer
