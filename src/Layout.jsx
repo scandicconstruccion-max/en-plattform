@@ -136,9 +136,13 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const publicPages = ['Priser', 'Landing', 'AnbudSvar', 'AnbudSvarForm'];
+  const isPublicPage = publicPages.includes(currentPageName);
+
   const { data: user, isLoading } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me()
+    queryFn: () => base44.auth.me(),
+    enabled: !isPublicPage // Skip auth check on public pages
   });
 
   const { data: companies } = useQuery({
@@ -194,11 +198,8 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.logout();
   };
 
-  const publicPages = ['Priser', 'Landing', 'AnbudSvar'];
-  const isPublicPage = publicPages.includes(currentPageName);
-
-  // For AnbudSvar and AnbudSvarForm, render immediately (token-based auth)
-  if (currentPageName === 'AnbudSvar' || currentPageName === 'AnbudSvarForm') {
+  // For public pages, render immediately without auth
+  if (isPublicPage) {
     return <>{children}</>;
   }
 
@@ -208,10 +209,6 @@ export default function Layout({ children, currentPageName }) {
       base44.auth.redirectToLogin(window.location.href);
     }
   }, [user, isLoading]);
-
-  if (isPublicPage) {
-    return <>{children}</>;
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
