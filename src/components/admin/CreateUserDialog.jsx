@@ -291,7 +291,7 @@ KS System Team
             Avbryt
           </Button>
           <Button
-            onClick={handleSubmit}
+            type="submit"
             disabled={createUserMutation.isPending}
           >
             {createUserMutation.isPending ?
