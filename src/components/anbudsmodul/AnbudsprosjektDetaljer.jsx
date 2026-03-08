@@ -61,6 +61,7 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
         anbudProjectId: project.id,
         supplierIds: [inv.supplierId],
         resend: true,
+        appUrl: window.location.origin,
       });
       setResentSupplier(inv.supplierName);
     } finally {
