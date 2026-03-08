@@ -111,6 +111,7 @@ const modulePages = {
   chat: 'Chat',
   ressursplan: 'Ressursplan',
   prosjekter: 'Prosjekter',
+  varsler: 'Varsler',
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
