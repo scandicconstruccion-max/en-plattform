@@ -92,7 +92,8 @@ const roleModuleAccess = {
   [ROLES.REGNSKAPSFORER]: [
     MODULES.DASHBOARD,
     MODULES.FAKTURA,
-    MODULES.ORDRE
+    MODULES.ORDRE,
+    MODULES.VARSLER
   ],
   [ROLES.USER]: Object.values(MODULES) // Legacy fallback
 };
