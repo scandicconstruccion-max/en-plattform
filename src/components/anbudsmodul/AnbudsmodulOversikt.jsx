@@ -38,7 +38,7 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
 
   const stats = [
     { label: 'Aktive forespørsler', value: activeProjects.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-    { label: 'Inviterte leverandører', value: invitations.filter(i => i.status === 'INVITED').length, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+    { label: 'Inviterte leverandører', value: invitations.filter(i => activeProjectIds.has(i.anbudProjectId)).length, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
     { label: 'Mottatte tilbud', value: quotes.length, icon: Inbox, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
   ];
 
