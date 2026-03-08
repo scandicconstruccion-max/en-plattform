@@ -89,6 +89,7 @@ Deno.serve(async (req) => {
         supplierId: invitation.supplierId,
         supplierName: invitation.supplierName,
         supplierEmail: invitation.supplierEmail,
+        loginCode: invitation.loginCode,
         anbudProjectId: invitation.anbudProjectId,
         token: token,
       },
