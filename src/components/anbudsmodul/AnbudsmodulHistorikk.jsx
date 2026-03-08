@@ -95,8 +95,8 @@ export default function AnbudsmodulHistorikk() {
           variant={filter === 'sent' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilter('sent')}
-          className="text-xs">
-
+          className="text-xs"
+        >
           Sendt
         </Button>
         <Button
