@@ -133,7 +133,7 @@ export default function AnbudSvarForm() {
     },
   });
 
-  if (error) {
+  if (error && (!invitationData || !authenticated)) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
         <Card className="w-full max-w-md">
