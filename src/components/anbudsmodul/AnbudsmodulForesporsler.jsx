@@ -91,7 +91,7 @@ export default function AnbudsmodulForesporsler() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    createMutation.mutate({ ...form, status: 'DRAFT' });
+    createMutation.mutate({ ...form, status: 'DRAFT', createdBy: user?.email || null });
   };
 
   return (
