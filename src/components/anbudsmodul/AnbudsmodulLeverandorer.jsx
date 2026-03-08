@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, Users, Search, Pencil, X } from 'lucide-react';
 import LeverandorHistorikk from './LeverandorHistorikk';
 
-const TRADE_TYPES = ['Elektro', 'Rør/VVS', 'Betong', 'Tømrer', 'Maler', 'Gulvlegger', 'Tak', 'Stål/Sveis', 'HVAC', 'Graving/Anlegg', 'Annet'];
+const TRADE_TYPES = ['Elektro', 'Rør/VVS', 'Betong', 'Tømrer', 'Maler', 'Gulvlegger', 'Tak', 'Stål/Sveis', 'HVAC', 'Graving/Anlegg', 'Leverandør av materiell', 'Annet'];
 
 const emptyForm = { name: '', contactPerson: '', email: '', phone: '', tradeTypes: [] };
 
