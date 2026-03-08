@@ -7,7 +7,7 @@ import { base44 } from '@/api/base44Client';
 import { hasModuleAccess } from '@/components/shared/permissions';
 import {
   AlertTriangle, FileText, Clock, Camera, CheckSquare,
-  FileSpreadsheet, ShoppingCart, MessageSquare, Users,
+  FileSpreadsheet, Gavel, MessageSquare, Users,
   CalendarDays, Building2, LayoutDashboard, ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
