@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import AnbudsKPI from './AnbudsKPI';
 import AnbudsProsjektListe from './AnbudsProsjektListe';
 import AnbudsProsjektDetaljer from './AnbudsProsjektDetaljer';
+import KritiskDashboard from './KritiskDashboard';
 
 export default function AnbudsmodulOversikt({ onNavigate }) {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
