@@ -31,6 +31,7 @@ const invStatusConfig = {
 export default function AnbudsprosjektDetaljer({ project, onClose }) {
   const [showInvite, setShowInvite] = useState(false);
   const [resending, setResending] = useState(null);
+  const [resentSupplier, setResentSupplier] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
   const queryClient = useQueryClient();
