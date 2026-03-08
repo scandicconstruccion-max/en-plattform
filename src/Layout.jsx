@@ -197,8 +197,8 @@ export default function Layout({ children, currentPageName }) {
   const publicPages = ['Priser', 'Landing', 'AnbudSvar'];
   const isPublicPage = publicPages.includes(currentPageName);
 
-  // For AnbudSvar, render immediately without auth check
-  if (currentPageName === 'AnbudSvar') {
+  // For AnbudSvar and AnbudSvarForm, render immediately (token-based auth)
+  if (currentPageName === 'AnbudSvar' || currentPageName === 'AnbudSvarForm') {
     return <>{children}</>;
   }
 
