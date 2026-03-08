@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { FileText, Upload, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -41,36 +40,18 @@ export default function AnbudSvar() {
 
   const loadData = async () => {
     try {
-      const [proj, inv] = await Promise.all([
-        base44.entities.AnbudProject.get(projectId),
-        base44.entities.AnbudInvitation.get(invitationId),
-      ]);
+      const res = await base44.functions.invoke('anbudGetPublic', { projectId, invitationId });
+      const data = res.data;
+      if (data.error) throw new Error(data.error);
 
-      if (!proj || !inv) throw new Error('Forespørselen ble ikke funnet.');
-      if (inv.anbudProjectId !== projectId) throw new Error('Ugyldig lenke.');
+      setProject(data.project);
+      setInvitation(data.invitation);
 
-      setProject(proj);
-      setInvitation(inv);
-
-      // Mark as OPENED if not already responded
-      if (inv.status === 'INVITED') {
-        await base44.entities.AnbudInvitation.update(invitationId, {
-          status: 'OPENED',
-          openedAt: new Date().toISOString(),
-        });
-        await base44.entities.AnbudActivityLog.create({
-          anbudProjectId: projectId,
-          activityType: 'OPENED',
-          activityText: `${inv.supplierName} åpnet forespørselen`,
-          createdBy: 'system',
-        });
-      }
-
-      if (inv.status === 'RESPONDED') {
+      if (data.invitation.status === 'RESPONDED') {
         setSubmitted(true);
       }
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'Kunne ikke laste forespørselen.');
     } finally {
       setLoading(false);
     }
@@ -89,29 +70,15 @@ export default function AnbudSvar() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await base44.entities.AnbudQuote.create({
-        anbudProjectId: projectId,
-        supplierId: invitation.supplierId,
-        supplierName: invitation.supplierName,
-        price: form.price ? parseFloat(form.price) : null,
+      const res = await base44.functions.invoke('anbudSubmitQuote', {
+        projectId,
+        invitationId,
+        price: form.price,
         currency: form.currency,
         notes: form.notes,
         fileAttachments: form.fileAttachments,
-        submittedAt: new Date().toISOString(),
       });
-
-      await base44.entities.AnbudInvitation.update(invitationId, {
-        status: 'RESPONDED',
-        respondedAt: new Date().toISOString(),
-      });
-
-      await base44.entities.AnbudActivityLog.create({
-        anbudProjectId: projectId,
-        activityType: 'RESPONDED',
-        activityText: `Tilbud mottatt fra ${invitation.supplierName}`,
-        createdBy: 'system',
-      });
-
+      if (res.data?.error) throw new Error(res.data.error);
       setSubmitted(true);
     } catch (e) {
       setError('Noe gikk galt. Prøv igjen.');
