@@ -60,6 +60,7 @@ const moduleIcons = {
 };
 
 const moduleLabels = {
+  varsler: 'Varsler',
   anbudsmodul: 'Anbudsportal',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
