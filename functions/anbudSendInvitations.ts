@@ -15,6 +15,11 @@ Deno.serve(async (req) => {
       return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
     };
 
+    // Helper to generate a 6-digit login code
+    const generateLoginCode = () => {
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    };
+
     // Fetch the project
     const project = await base44.entities.AnbudProject.get(anbudProjectId);
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
@@ -47,19 +52,20 @@ Deno.serve(async (req) => {
           invitedAt: new Date().toISOString(),
         });
       } else {
-        // Create new invitation with unique token
-        invitation = await base44.entities.AnbudInvitation.create({
-          anbudProjectId,
-          supplierId: supplier.id,
-          supplierName: supplier.name,
-          supplierEmail: supplier.email,
-          invitedAt: new Date().toISOString(),
-          status: 'INVITED',
-          token: generateToken(),
-        });
+       // Create new invitation with unique token and login code
+       invitation = await base44.entities.AnbudInvitation.create({
+         anbudProjectId,
+         supplierId: supplier.id,
+         supplierName: supplier.name,
+         supplierEmail: supplier.email,
+         invitedAt: new Date().toISOString(),
+         status: 'INVITED',
+         token: generateToken(),
+         loginCode: generateLoginCode(),
+       });
       }
 
-      // Build submission URL - use token if available, fallback to IDs
+      // Build submission URL
       const token = invitation.token || '';
       const submissionUrl = token
         ? `${appUrl}/AnbudSvar?token=${token}`
@@ -69,6 +75,9 @@ Deno.serve(async (req) => {
       const fileLinks = (project.fileAttachments || [])
         .map(f => `<li><a href="${f.url}">${f.name}</a></li>`)
         .join('');
+
+      // Login code for this invitation
+      const loginCode = invitation.loginCode;
 
       const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -82,12 +91,20 @@ Deno.serve(async (req) => {
           </table>
           ${project.description ? `<p style="background:#f8fafc;padding:12px;border-radius:8px;">${project.description}</p>` : ''}
           ${fileLinks ? `<p><strong>Vedlegg:</strong></p><ul>${fileLinks}</ul>` : ''}
+          
+          <div style="margin: 32px 0; padding: 16px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
+            <p style="margin: 0 0 12px 0; color: #64748b;"><strong>Innloggingsinformasjon:</strong></p>
+            <p style="margin: 0 0 8px 0; color: #64748b;">E-post: <code style="background: white; padding: 4px 8px; border-radius: 4px;">${supplier.email}</code></p>
+            <p style="margin: 0; color: #64748b;">Innloggingskode: <code style="background: white; padding: 4px 8px; border-radius: 4px; font-size: 18px; font-weight: bold; letter-spacing: 2px;">${loginCode}</code></p>
+            <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 12px;">Koden er gyldig til svarfristen.</p>
+          </div>
+
           <div style="margin: 32px 0; text-align: center;">
             <a href="${submissionUrl}" style="background: #10b981; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold;">
               Lever tilbud her
             </a>
           </div>
-          <p style="color: #94a3b8; font-size: 13px;">Denne lenken er personlig og knyttet til din bedrift. Del den ikke med andre.</p>
+          <p style="color: #94a3b8; font-size: 13px;">Denne lenken og koden er personlig og knyttet til din bedrift. Del dem ikke med andre.</p>
         </div>
       `;
 
