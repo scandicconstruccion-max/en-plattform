@@ -136,10 +136,12 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Check public pages - prioritize pathname check since it's reliable
+  // Check public pages - check pathname and full URL (including from_url param)
+  const fullUrl = window.location.href;
   const isPublicPage = location.pathname.includes('AnbudSvar') || 
                        location.pathname.includes('Priser') || 
-                       location.pathname.includes('Landing');
+                       location.pathname.includes('Landing') ||
+                       fullUrl.includes('AnbudSvar');
 
   const { data: user, isLoading } = useQuery({
     queryKey: ['currentUser'],
