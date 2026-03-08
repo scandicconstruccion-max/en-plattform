@@ -20,9 +20,13 @@ export default function AnbudsStatistikk() {
     queryFn: () => base44.entities.AnbudQuote.list(),
   });
 
+  // Kun data knyttet til eksisterende prosjekter
+  const projectIds = new Set(projects.map(p => p.id));
+  const validInvitations = invitations.filter(i => projectIds.has(i.anbudProjectId));
+
   // Svarprosent per fagområde
   const tradeStats = {};
-  invitations.forEach(inv => {
+  validInvitations.forEach(inv => {
     const project = projects.find(p => p.id === inv.anbudProjectId);
     const trade = project?.tradeType || 'Annet';
     if (!tradeStats[trade]) tradeStats[trade] = { trade, invitert: 0, svart: 0 };
@@ -43,14 +47,14 @@ export default function AnbudsStatistikk() {
   });
   const timeData = Object.entries(monthMap).map(([month, count]) => ({ month, count })).slice(-6);
 
-  // Svarsstatistikk totalt
+  // Svarsstatistikk totalt (kun gyldige invitasjoner)
   const invCounts = {
-    INVITED: invitations.filter(i => i.status === 'INVITED').length,
-    OPENED: invitations.filter(i => i.status === 'OPENED').length,
-    RESPONDED: invitations.filter(i => i.status === 'RESPONDED').length,
-    NO_RESPONSE: invitations.filter(i => i.status === 'NO_RESPONSE').length,
+    INVITED: validInvitations.filter(i => i.status === 'INVITED').length,
+    OPENED: validInvitations.filter(i => i.status === 'OPENED').length,
+    RESPONDED: validInvitations.filter(i => i.status === 'RESPONDED').length,
+    NO_RESPONSE: validInvitations.filter(i => i.status === 'NO_RESPONSE').length,
   };
-  const total = invitations.length || 1;
+  const total = validInvitations.length || 1;
   const svarprosent = Math.round((invCounts.RESPONDED / total) * 100);
 
   return (
