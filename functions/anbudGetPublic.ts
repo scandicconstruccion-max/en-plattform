@@ -3,10 +3,21 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const body = await req.json();
-
-    // Support both token-based (new) and id-based (legacy) lookup
-    const { token, projectId, invitationId } = body;
+    
+    // Support both GET (URL params) and POST (body)
+    let token, projectId, invitationId;
+    
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      token = url.searchParams.get('token');
+      projectId = url.searchParams.get('projectId');
+      invitationId = url.searchParams.get('invitationId');
+    } else {
+      const body = await req.json();
+      token = body.token;
+      projectId = body.projectId;
+      invitationId = body.invitationId;
+    }
 
     let invitation;
 
