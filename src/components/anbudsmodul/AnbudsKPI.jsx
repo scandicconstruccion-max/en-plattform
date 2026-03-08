@@ -11,8 +11,10 @@ export default function AnbudsKPI({ projects, invitations, quotes, onSelectProje
   const activeProjects = projects.filter(p => p.status !== 'CLOSED');
   const activeIds = new Set(activeProjects.map(p => p.id));
 
-  const totalInvitations = invitations.filter(i => activeIds.has(i.anbudProjectId)).length;
-  const totalQuotes = quotes.filter(q => activeIds.has(q.anbudProjectId)).length;
+  // KPI: count only invitations/quotes linked to existing projects
+  const existingIds = new Set(projects.map(p => p.id));
+  const totalInvitations = invitations.filter(i => existingIds.has(i.anbudProjectId)).length;
+  const totalQuotes = quotes.filter(q => existingIds.has(q.anbudProjectId)).length;
   const svarprosent = totalInvitations > 0 ? Math.round((totalQuotes / totalInvitations) * 100) : 0;
 
   const today = new Date();
