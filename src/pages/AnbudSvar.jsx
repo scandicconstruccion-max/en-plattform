@@ -44,8 +44,8 @@ export default function AnbudSvar() {
 
   const loadData = async () => {
     try {
-      const payload = token ? { token } : { projectId, invitationId };
-      const res = await base44.functions.invoke('anbudGetPublic', payload);
+      // Call function via GET if token available
+      const res = await base44.functions.invoke('anbudGetPublic', token ? { token } : { projectId, invitationId });
       const data = res.data;
       if (data.error) throw new Error(data.error);
 
