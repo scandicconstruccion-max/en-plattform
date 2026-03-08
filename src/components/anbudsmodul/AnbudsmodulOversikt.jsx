@@ -8,6 +8,7 @@ import KritiskDashboard from './KritiskDashboard';
 
 export default function AnbudsmodulOversikt({ onNavigate }) {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [directOpenProject, setDirectOpenProject] = useState(null); // AnbudProject object from dashboard
 
   const { data: projects = [] } = useQuery({
     queryKey: ['anbudProjects'],
