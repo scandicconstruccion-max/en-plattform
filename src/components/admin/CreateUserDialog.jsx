@@ -307,6 +307,7 @@ KS System Team
             }
           </Button>
         </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>);
 
