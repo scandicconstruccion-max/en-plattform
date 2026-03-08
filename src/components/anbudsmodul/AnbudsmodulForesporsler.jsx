@@ -36,6 +36,11 @@ export default function AnbudsmodulForesporsler() {
   const [dragOver, setDragOver] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
   const { data: projects = [] } = useQuery({
     queryKey: ['anbudProjects'],
     queryFn: () => base44.entities.AnbudProject.list('-created_date'),
