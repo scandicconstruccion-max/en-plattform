@@ -171,8 +171,8 @@ KS System Team
           <DialogTitle>Opprett ny bruker</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh]">
-          <form onSubmit={handleSubmit} className="space-y-6 p-1">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <ScrollArea className="max-h-[60vh]">
             {/* Basic Info */}
             <div className="space-y-4">
               <div className="space-y-2">
