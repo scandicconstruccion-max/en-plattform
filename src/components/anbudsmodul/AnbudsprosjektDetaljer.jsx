@@ -252,6 +252,30 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
         </DialogContent>
       </Dialog>
 
+      {/* Withdraw Invitation Dialog */}
+      <Dialog open={!!withdrawInv} onOpenChange={() => setWithdrawInv(null)}>
+        <DialogContent className="sm:max-w-sm dark:bg-slate-900">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <UserMinus className="h-5 w-5" /> Trekk tilbake invitasjon
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Er du sikker på at du vil trekke tilbake invitasjonen til <strong>{withdrawInv?.supplierName}</strong>?
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setWithdrawInv(null)} className="rounded-xl">Avbryt</Button>
+            <Button
+              onClick={() => withdrawMutation.mutate(withdrawInv.id)}
+              disabled={withdrawMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white rounded-xl"
+            >
+              {withdrawMutation.isPending ? 'Trekker tilbake...' : 'Trekk tilbake'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="sm:max-w-md dark:bg-slate-900">
