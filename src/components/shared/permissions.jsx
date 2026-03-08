@@ -37,7 +37,8 @@ export const MODULES = {
   HMSHANDBOK: 'hmshandbok',
   MOTTAKSKONTROLL: 'mottakskontroll',
   ANBUDSPORTAL: 'anbudsportal',
-  ANBUDSMODUL: 'anbudsmodul'
+  ANBUDSMODUL: 'anbudsmodul',
+  VARSLER: 'varsler'
 };
 
 // Definerer hvilke moduler hver rolle har tilgang til
