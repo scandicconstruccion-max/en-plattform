@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Users, FileText, Send, AlertCircle, CheckCircle, Eye, Trash2 } from 'lucide-react';
+import { X, Users, FileText, Send, AlertCircle, CheckCircle, Eye, Trash2, UserMinus } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
