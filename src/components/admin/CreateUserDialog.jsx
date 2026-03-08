@@ -65,8 +65,28 @@ export default function CreateUserDialog({ open, onClose, onCreated, projects })
 
   const createUserMutation = useMutation({
     mutationFn: async (data) => {
-      // Invite user to the app
+      // Get invited user's ID by fetching users after invite
       await base44.users.inviteUser(data.email, data.role);
+
+      // Get the newly created user
+      const allUsers = await base44.entities.User.list();
+      const newUser = allUsers.find(u => u.email === data.email);
+
+      // Update user with module access and project assignments
+      if (newUser) {
+        const updateData = {
+          assigned_projects: data.assigned_projects,
+          managed_projects: data.managed_projects,
+          is_active: true
+        };
+
+        // If custom module access specified, store it
+        if (data.custom_module_access && data.custom_module_access.length > 0) {
+          updateData.custom_module_access = data.custom_module_access;
+        }
+
+        await base44.entities.User.update(newUser.id, updateData);
+      }
 
       // Log the creation
       await base44.entities.UserAuditLog.create({
@@ -78,7 +98,8 @@ export default function CreateUserDialog({ open, onClose, onCreated, projects })
         new_value: JSON.stringify({
           role: data.role,
           assigned_projects: data.assigned_projects,
-          managed_projects: data.managed_projects
+          managed_projects: data.managed_projects,
+          custom_module_access: data.custom_module_access
         }),
         description: `Ny bruker opprettet med rolle ${ROLE_LABELS[data.role]}`
       });
