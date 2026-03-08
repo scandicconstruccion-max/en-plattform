@@ -20,7 +20,7 @@ const moduleDefinitions = {
   avvik: { name: 'Avvik', description: 'Avvikshåndtering', icon: AlertTriangle, color: 'amber', page: 'Avvik' },
   hms: { name: 'HMS & Risiko', description: 'Helse, miljø og sikkerhet', icon: ShieldAlert, color: 'red', page: 'HMS' },
   tilbud: { name: 'Tilbud', description: 'Tilbudsadministrasjon', icon: FileSpreadsheet, color: 'cyan', page: 'Tilbud' },
-  anbudsmodul: { name: 'Anbudsportal', description: 'Leverandøranbud og tilbud', icon: ShoppingCart, color: 'orange', page: 'Anbudsmodul' },
+  anbudsmodul: { name: 'Anbudsportal', description: 'Leverandøranbud og tilbud', icon: Gavel, color: 'orange', page: 'Anbudsmodul' },
   ordre: { name: 'Ordre', description: 'Arbeidsordre', icon: FileText, color: 'indigo', page: 'Ordre' },
   endringsmeldinger: { name: 'Endringsmeldinger', description: 'Tillegg og endringer', icon: FileText, color: 'blue', page: 'Endringsmeldinger' },
   faktura: { name: 'Faktura', description: 'Fakturering og betalinger', icon: FileText, color: 'green', page: 'Faktura' },
