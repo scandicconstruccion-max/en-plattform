@@ -8,6 +8,13 @@ Deno.serve(async (req) => {
 
     const { anbudProjectId, supplierIds, resend, appUrl: payloadAppUrl } = await req.json();
 
+    // Helper to generate a secure random token
+    const generateToken = () => {
+      const arr = new Uint8Array(32);
+      crypto.getRandomValues(arr);
+      return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
     // Fetch the project
     const project = await base44.entities.AnbudProject.get(anbudProjectId);
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
@@ -40,7 +47,7 @@ Deno.serve(async (req) => {
           invitedAt: new Date().toISOString(),
         });
       } else {
-        // Create new invitation
+        // Create new invitation with unique token
         invitation = await base44.entities.AnbudInvitation.create({
           anbudProjectId,
           supplierId: supplier.id,
@@ -48,11 +55,15 @@ Deno.serve(async (req) => {
           supplierEmail: supplier.email,
           invitedAt: new Date().toISOString(),
           status: 'INVITED',
+          token: generateToken(),
         });
       }
 
-      // Build submission URL
-      const submissionUrl = `${appUrl}/AnbudSvar?projectId=${anbudProjectId}&invitationId=${invitation.id}`;
+      // Build submission URL - use token if available, fallback to IDs
+      const token = invitation.token || '';
+      const submissionUrl = token
+        ? `${appUrl}/AnbudSvar?token=${token}`
+        : `${appUrl}/AnbudSvar?projectId=${anbudProjectId}&invitationId=${invitation.id}`;
 
       // Build file links
       const fileLinks = (project.fileAttachments || [])
