@@ -112,8 +112,8 @@ export default function AnbudsmodulHistorikk() {
           variant={filter === 'completed' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilter('completed')}
-          className="text-xs">
-
+          className="text-xs"
+        >
           Avsluttet
         </Button>
       </div>
