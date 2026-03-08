@@ -187,9 +187,9 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
                           <Icon className="h-3 w-3" />{isc.label}
                         </Badge>
                         {inv.status !== 'RESPONDED' && (
-                          <button
-                            onClick={() => handleResend(inv.supplierId)}
-                            disabled={resending === inv.supplierId}
+                         <button
+                           onClick={() => handleResend(inv)}
+                           disabled={resending === inv.supplierId}
                             className="text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap"
                           >
                             {resending === inv.supplierId ? 'Sender...' : 'Send på nytt'}
