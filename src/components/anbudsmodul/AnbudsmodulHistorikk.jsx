@@ -103,8 +103,8 @@ export default function AnbudsmodulHistorikk() {
           variant={filter === 'withdrawn' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilter('withdrawn')}
-          className="text-xs gap-1.5">
-
+          className="text-xs gap-1.5"
+        >
           <AlertCircle className="h-3.5 w-3.5" />
           Tilbaketrukket
         </Button>
