@@ -155,7 +155,13 @@ KS System Team
       return;
     }
 
-    createUserMutation.mutate(formData);
+    // If no custom module access specified, allow all modules for the role by default
+    const submitData = { ...formData };
+    if (!submitData.custom_module_access || submitData.custom_module_access.length === 0) {
+      submitData.custom_module_access = Object.values(MODULES);
+    }
+
+    createUserMutation.mutate(submitData);
   };
 
   const toggleProject = (projectId, type) => {
