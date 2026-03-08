@@ -251,12 +251,18 @@ export default function AnbudsmodulForesporsler() {
                     </button>
                   </div>
                 ))}
-                <label className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-emerald-400 transition-colors text-sm text-slate-500',
-                  uploading && 'opacity-50 pointer-events-none'
-                )}>
-                  <Upload className="h-4 w-4" />
-                  {uploading ? 'Laster opp...' : 'Last opp fil'}
+                <label
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1 px-4 py-5 border-2 border-dashed rounded-xl cursor-pointer transition-colors text-sm text-slate-500',
+                    dragOver ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600' : 'border-slate-200 dark:border-slate-700 hover:border-emerald-400',
+                    uploading && 'opacity-50 pointer-events-none'
+                  )}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                >
+                  <Upload className="h-5 w-5" />
+                  <span>{uploading ? 'Laster opp...' : dragOver ? 'Slipp filen her' : 'Dra og slipp fil her, eller klikk for å laste opp'}</span>
                   <input type="file" className="hidden" onChange={handleFileUpload} />
                 </label>
               </div>
