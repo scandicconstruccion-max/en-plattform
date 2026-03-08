@@ -194,7 +194,17 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.logout();
   };
 
-  if (currentPageName === 'Priser' || currentPageName === 'Landing' || currentPageName === 'AnbudSvar') {
+  const publicPages = ['Priser', 'Landing', 'AnbudSvar'];
+  const isPublicPage = publicPages.includes(currentPageName);
+
+  // Redirect to login if not authenticated and not on a public page
+  useEffect(() => {
+    if (!isPublicPage && !user && !isLoading) {
+      base44.auth.redirectToLogin(window.location.href);
+    }
+  }, [user, isPublicPage]);
+
+  if (isPublicPage) {
     return <>{children}</>;
   }
 
