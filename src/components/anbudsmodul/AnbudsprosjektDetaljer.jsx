@@ -34,6 +34,7 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
   const [resentSupplier, setResentSupplier] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
+  const [withdrawInv, setWithdrawInv] = useState(null);
   const queryClient = useQueryClient();
 
   const deleteMutation = useMutation({
