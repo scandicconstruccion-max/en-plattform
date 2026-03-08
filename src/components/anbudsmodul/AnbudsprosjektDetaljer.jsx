@@ -46,7 +46,7 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: (invId) => base44.entities.AnbudInvitation.delete(invId),
+    mutationFn: (invId) => base44.functions.invoke('anbudWithdrawInvitation', { invitationId: invId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['anbudInvitations', project.id] });
       queryClient.invalidateQueries({ queryKey: ['anbudInvitations'] });
