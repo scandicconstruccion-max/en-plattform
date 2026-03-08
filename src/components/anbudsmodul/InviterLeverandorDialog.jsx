@@ -41,6 +41,7 @@ export default function InviterLeverandorDialog({ open, onClose, project, existi
       await base44.functions.invoke('anbudSendInvitations', {
         anbudProjectId: project.id,
         supplierIds: selected,
+        appUrl: window.location.origin,
       });
       setDone(true);
       setTimeout(() => {
