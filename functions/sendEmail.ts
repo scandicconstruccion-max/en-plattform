@@ -24,8 +24,8 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'onboarding@resend.dev',
-        to: ['baderomsentreprenoren@gmail.com'], // TEST: sender kun til din e-post
+        from: 'En Plattform <post@enplattform.no>',
+        to: [toEmail],
         subject: subject,
         html: body
       })
