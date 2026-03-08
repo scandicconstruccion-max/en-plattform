@@ -136,8 +136,10 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const publicPages = ['Priser', 'Landing', 'AnbudSvar'];
-  const isPublicPage = publicPages.includes(currentPageName) || location.pathname.includes('AnbudSvar');
+  // Check public pages - prioritize pathname check since it's reliable
+  const isPublicPage = location.pathname.includes('AnbudSvar') || 
+                       location.pathname.includes('Priser') || 
+                       location.pathname.includes('Landing');
 
   const { data: user, isLoading } = useQuery({
     queryKey: ['currentUser'],
