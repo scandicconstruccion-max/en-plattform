@@ -22,6 +22,11 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
     queryFn: () => base44.entities.AnbudQuote.list(),
   });
 
+  const { data: systemProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+  });
+
   const handleSelectProject = (projectId) => {
     setSelectedProjectId(projectId);
   };
