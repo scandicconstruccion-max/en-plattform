@@ -44,6 +44,16 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
         onSelectProject={handleSelectProject}
       />
 
+      <KritiskDashboard
+        projects={projects}
+        invitations={invitations}
+        quotes={quotes}
+        systemProjects={systemProjects}
+        onOpenProject={(projectId) => {
+          setSelectedProjectId(projectId);
+        }}
+      />
+
       {selectedProjectId ? (
         <AnbudsProsjektDetaljer
           projectId={selectedProjectId}
