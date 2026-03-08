@@ -284,8 +284,7 @@ KS System Team
                 )}
               </div>
             </div>
-          </form>
-        </ScrollArea>
+          </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
