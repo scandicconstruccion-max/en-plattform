@@ -76,6 +76,7 @@ const moduleLabels = {
   chat: 'Intern Chat',
   ressursplan: 'Ressursplanlegger',
   prosjekter: 'Prosjekter',
+  varsler: 'Varsler',
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
