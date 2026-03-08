@@ -208,7 +208,10 @@ export default function Layout({ children, currentPageName }) {
             {sidebarOpen ? <X className="h-7 w-7" /> : <Menu className="h-7 w-7" />}
           </Button>
           <span className="text-green-600 font-semibold dark:text-white">En Plattform</span>
-          <ProjectDropdown />
+          <div className="flex items-center gap-1">
+            <NotificationBell userEmail={user?.email} />
+            <ProjectDropdown />
+          </div>
         </header>
       }
 
