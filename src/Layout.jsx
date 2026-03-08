@@ -197,12 +197,17 @@ export default function Layout({ children, currentPageName }) {
   const publicPages = ['Priser', 'Landing', 'AnbudSvar'];
   const isPublicPage = publicPages.includes(currentPageName);
 
-  // Redirect to login if not authenticated and not on a public page
+  // For AnbudSvar, render immediately without auth check
+  if (currentPageName === 'AnbudSvar') {
+    return <>{children}</>;
+  }
+
+  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isPublicPage && !user && !isLoading) {
+    if (!user && !isLoading) {
       base44.auth.redirectToLogin(window.location.href);
     }
-  }, [user, isPublicPage, isLoading]);
+  }, [user, isLoading]);
 
   if (isPublicPage) {
     return <>{children}</>;
