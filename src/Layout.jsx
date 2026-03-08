@@ -194,7 +194,7 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.logout();
   };
 
-  if (currentPageName === 'Priser' || currentPageName === 'Landing') {
+  if (currentPageName === 'Priser' || currentPageName === 'Landing' || currentPageName === 'AnbudSvar') {
     return <>{children}</>;
   }
 
