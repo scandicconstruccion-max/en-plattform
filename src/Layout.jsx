@@ -195,16 +195,14 @@ export default function Layout({ children, currentPageName }) {
   };
 
   const publicPages = ['Priser', 'Landing', 'AnbudSvar'];
-  const protectedPages = ['BrukerAdmin', 'Innstillinger', 'MinBedrift'];
   const isPublicPage = publicPages.includes(currentPageName);
-  const isProtectedPage = protectedPages.includes(currentPageName);
 
-  // Redirect to login if on protected page and not authenticated
+  // Redirect to login if not authenticated and not on a public page
   useEffect(() => {
-    if (isProtectedPage && !user && !isLoading) {
+    if (!isPublicPage && !user && !isLoading) {
       base44.auth.redirectToLogin(window.location.href);
     }
-  }, [user, isProtectedPage, isLoading]);
+  }, [user, isPublicPage, isLoading]);
 
   if (isPublicPage) {
     return <>{children}</>;
