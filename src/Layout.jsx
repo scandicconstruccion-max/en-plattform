@@ -10,6 +10,7 @@ import {
   Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen, PackageCheck, Gavel } from
 'lucide-react';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
+import NotificationBell from '@/components/notifications/NotificationBell';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { hasModuleAccess, MODULES } from '@/components/shared/permissions';
