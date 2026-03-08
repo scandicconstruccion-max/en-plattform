@@ -61,7 +61,7 @@ const moduleIcons = {
 
 const moduleLabels = {
   varsler: 'Varsler',
-  anbudsmodul: 'Anbudsportal',
+  anbudsmodul: 'Anbudsmodul',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
   befaring: 'Befaring',
@@ -95,7 +95,7 @@ const moduleLabels = {
 };
 
 const modulePages = {
-  anbudsmodul: 'Anbudsportal',
+  anbudsmodul: 'Anbudsmodul',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
   befaring: 'Befaring',
