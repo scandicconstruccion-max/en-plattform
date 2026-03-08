@@ -15,6 +15,8 @@ export default function AnbudSvarForm() {
   const token = searchParams.get('token');
   const navigate = useNavigate();
 
+  const [loginCode, setLoginCode] = useState('');
+  const [authenticated, setAuthenticated] = useState(false);
   const [formData, setFormData] = useState({
     companyName: '',
     contactName: '',
@@ -30,17 +32,17 @@ export default function AnbudSvarForm() {
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  // Validate token and load data
+  // Load invitation data on mount
   useEffect(() => {
     if (!token) {
       setError('Token mangler. Sjekk lenken i e-posten.');
       return;
     }
 
-    validateToken();
+    loadInvitationData();
   }, [token]);
 
-  const validateToken = async () => {
+  const loadInvitationData = async () => {
     try {
       const res = await base44.functions.invoke('anbudValidateAndAuthGuest', { token });
       setInvitationData(res.data);
@@ -49,9 +51,32 @@ export default function AnbudSvarForm() {
         contactEmail: res.data.invitation.supplierEmail || '',
       }));
     } catch (err) {
-      setError(err.response?.data?.error || 'Kunne ikke validere token.');
+      setError(err.response?.data?.error || 'Kunne ikke laste forespørselen.');
     }
   };
+
+  // Validate login code
+  const validateLoginCode = async () => {
+    if (!loginCode || !invitationData) return;
+    
+    try {
+      const res = await base44.functions.invoke('anbudValidateLoginCode', {
+        token,
+        loginCode: loginCode.replace(/\s/g, ''), // Remove spaces
+      });
+      
+      if (res.data.valid) {
+        setAuthenticated(true);
+        setError('');
+      } else {
+        setError('Innloggingskoden er feil. Prøv igjen.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Feil ved validering av kode.');
+    }
+  };
+
+
 
   const handleFileUpload = async (e) => {
     const files = e.target.files;
@@ -130,6 +155,60 @@ export default function AnbudSvarForm() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
         <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
+      </div>
+    );
+  }
+
+  // Show login code entry screen if not authenticated
+  if (!authenticated) {
+    const supplierEmail = invitationData.invitation.supplierEmail;
+    
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Innlogging</CardTitle>
+            <CardDescription>Skriv inn innloggingskoden fra e-posten</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="space-y-2">
+              <Label className="text-sm">E-post</Label>
+              <div className="p-3 bg-slate-100 rounded text-sm font-medium text-slate-700">
+                {supplierEmail}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="loginCode">Innloggingskode *</Label>
+              <Input
+                id="loginCode"
+                type="text"
+                value={loginCode}
+                onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                placeholder="Skriv inn 6-sifret kode"
+                className="text-center text-lg font-mono tracking-widest"
+                maxLength="6"
+                onKeyPress={(e) => e.key === 'Enter' && validateLoginCode()}
+              />
+              <p className="text-xs text-slate-500">Koden ble sendt i e-posten</p>
+            </div>
+
+            <Button
+              onClick={validateLoginCode}
+              className="w-full bg-green-600 hover:bg-green-700"
+              disabled={!loginCode || loginCode.length !== 6}
+            >
+              Logg inn
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
