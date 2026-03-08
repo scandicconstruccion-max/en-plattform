@@ -6,7 +6,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { anbudProjectId, supplierIds, resend } = await req.json();
+    const { anbudProjectId, supplierIds, resend, appUrl: payloadAppUrl } = await req.json();
 
     // Fetch the project
     const project = await base44.entities.AnbudProject.get(anbudProjectId);
@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const allSuppliers = await base44.entities.AnbudSupplier.list();
     const suppliers = allSuppliers.filter(s => supplierIds.includes(s.id));
 
-    const appUrl = req.headers.get('x-app-url') || req.headers.get('origin') || 'https://app.enplattform.no';
+    const appUrl = payloadAppUrl || req.headers.get('origin') || 'https://app.enplattform.no';
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     const results = [];
 
