@@ -33,6 +33,7 @@ export default function AnbudsmodulForesporsler() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: projects = [] } = useQuery({
