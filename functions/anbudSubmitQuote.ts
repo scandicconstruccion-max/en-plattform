@@ -3,25 +3,47 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const { projectId, invitationId, price, currency, notes, fileAttachments } = await req.json();
+    const {
+      token, projectId, invitationId,
+      price, currency, notes, fileAttachments,
+      contactName, contactEmail, contactPhone, companyName,
+    } = await req.json();
 
-    if (!projectId || !invitationId) {
+    // Resolve invitation by token or by IDs (legacy)
+    let invitation;
+    if (token) {
+      const results = await base44.asServiceRole.entities.AnbudInvitation.filter({ token });
+      if (!results || results.length === 0) {
+        return Response.json({ error: 'Ugyldig lenke.' }, { status: 400 });
+      }
+      invitation = results[0];
+    } else if (projectId && invitationId) {
+      invitation = await base44.asServiceRole.entities.AnbudInvitation.get(invitationId);
+      if (!invitation || invitation.anbudProjectId !== projectId) {
+        return Response.json({ error: 'Ugyldig lenke.' }, { status: 400 });
+      }
+    } else {
       return Response.json({ error: 'Manglende parametere' }, { status: 400 });
-    }
-
-    const invitation = await base44.asServiceRole.entities.AnbudInvitation.get(invitationId);
-    if (!invitation || invitation.anbudProjectId !== projectId) {
-      return Response.json({ error: 'Ugyldig lenke.' }, { status: 400 });
     }
 
     if (invitation.status === 'RESPONDED') {
       return Response.json({ error: 'Tilbud er allerede levert.' }, { status: 409 });
     }
 
+    // Check deadline
+    const project = await base44.asServiceRole.entities.AnbudProject.get(invitation.anbudProjectId);
+    if (project?.responseDeadline) {
+      const deadline = new Date(project.responseDeadline);
+      deadline.setHours(23, 59, 59, 999);
+      if (new Date() > deadline) {
+        return Response.json({ error: 'Fristen for å levere tilbud har gått ut.' }, { status: 410 });
+      }
+    }
+
     await base44.asServiceRole.entities.AnbudQuote.create({
-      anbudProjectId: projectId,
+      anbudProjectId: invitation.anbudProjectId,
       supplierId: invitation.supplierId,
-      supplierName: invitation.supplierName,
+      supplierName: companyName || invitation.supplierName,
       price: price ? parseFloat(price) : null,
       currency: currency || 'NOK',
       notes: notes || '',
@@ -29,15 +51,15 @@ Deno.serve(async (req) => {
       submittedAt: new Date().toISOString(),
     });
 
-    await base44.asServiceRole.entities.AnbudInvitation.update(invitationId, {
+    await base44.asServiceRole.entities.AnbudInvitation.update(invitation.id, {
       status: 'RESPONDED',
       respondedAt: new Date().toISOString(),
     });
 
     await base44.asServiceRole.entities.AnbudActivityLog.create({
-      anbudProjectId: projectId,
+      anbudProjectId: invitation.anbudProjectId,
       activityType: 'RESPONDED',
-      activityText: `Tilbud mottatt fra ${invitation.supplierName}`,
+      activityText: `Tilbud mottatt fra ${companyName || invitation.supplierName}${contactEmail ? ` (${contactEmail})` : ''}`,
       createdBy: 'system',
     });
 
