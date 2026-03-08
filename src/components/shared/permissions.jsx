@@ -5,7 +5,8 @@ export const ROLES = {
   PROSJEKTLEDER: 'prosjektleder',
   ANSATT: 'ansatt',
   REGNSKAPSFORER: 'regnskapsforer',
-  USER: 'user' // Legacy fallback
+  USER: 'user', // Legacy fallback
+  UE_GUEST: 'UE_GUEST' // Temporary guest for tender submissions
 };
 
 export const MODULES = {
@@ -95,7 +96,8 @@ const roleModuleAccess = {
     MODULES.ORDRE,
     MODULES.VARSLER
   ],
-  [ROLES.USER]: Object.values(MODULES) // Legacy fallback
+  [ROLES.USER]: Object.values(MODULES), // Legacy fallback
+  [ROLES.UE_GUEST]: [MODULES.ANBUDSMODUL] // Guest can only submit tenders
 };
 
 // Sjekker om bruker har tilgang til en modul
@@ -233,5 +235,6 @@ export const ROLE_LABELS = {
   [ROLES.PROSJEKTLEDER]: 'Prosjektleder',
   [ROLES.ANSATT]: 'Ansatt',
   [ROLES.REGNSKAPSFORER]: 'Regnskapsfører',
-  [ROLES.USER]: 'Bruker'
+  [ROLES.USER]: 'Bruker',
+  [ROLES.UE_GUEST]: 'Leverandør (gjest)'
 };
