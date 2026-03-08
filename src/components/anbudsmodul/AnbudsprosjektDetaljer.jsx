@@ -44,14 +44,15 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
     },
   });
 
-  const handleResend = async (supplierId) => {
-    setResending(supplierId);
+  const handleResend = async (inv) => {
+    setResending(inv.supplierId);
     try {
       await base44.functions.invoke('anbudSendInvitations', {
         anbudProjectId: project.id,
-        supplierIds: [supplierId],
+        supplierIds: [inv.supplierId],
         resend: true,
       });
+      setResentSupplier(inv.supplierName);
     } finally {
       setResending(null);
     }
