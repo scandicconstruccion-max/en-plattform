@@ -213,6 +213,28 @@ export default function AnbudsprosjektDetaljer({ project, onClose }) {
         onDone={handleDone}
       />
 
+      {/* Resend Confirmation Dialog */}
+      <Dialog open={!!resentSupplier} onOpenChange={() => { setResentSupplier(null); onClose(); }}>
+        <DialogContent className="sm:max-w-sm dark:bg-slate-900">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <CheckCircle className="h-5 w-5" /> Invitasjon sendt på nytt
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Forespørselen ble sendt på nytt til <strong>{resentSupplier}</strong>.
+          </p>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => { setResentSupplier(null); onClose(); }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+            >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="sm:max-w-md dark:bg-slate-900">
