@@ -83,7 +83,7 @@ export default function AnbudsStatistikk() {
         <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3">
           <div className="bg-emerald-500 h-3 rounded-full transition-all" style={{ width: `${svarprosent}%` }} />
         </div>
-        <p className="text-xs text-slate-400 mt-1">{invCounts.RESPONDED} av {total} leverandører har svart</p>
+        <p className="text-xs text-slate-400 mt-1">{invCounts.RESPONDED} av {validInvitations.length} leverandører har svart</p>
       </Card>
 
       {/* Charts */}
