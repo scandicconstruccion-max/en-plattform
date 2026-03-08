@@ -215,9 +215,10 @@ export default function Layout({ children, currentPageName }) {
       {/* Desktop Top Bar with Project Dropdown */}
       {!isMobile &&
       <div className={cn(
-        "fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 flex items-center justify-end px-6 transition-all duration-300",
+        "fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 flex items-center justify-end gap-2 px-6 transition-all duration-300",
         sidebarCollapsed ? "left-16" : "left-64"
       )}>
+          <NotificationBell userEmail={user?.email} />
           <ProjectDropdown />
         </div>
       }
