@@ -31,7 +31,10 @@ export default function AnbudsmodulOversikt({ onNavigate }) {
   });
 
   const activeProjects = projects.filter(p => p.status !== 'CLOSED');
-  const needsFollowUp = invitations.filter(i => i.status === 'INVITED' || i.status === 'OPENED').length;
+  const activeProjectIds = new Set(activeProjects.map(p => p.id));
+  const needsFollowUp = invitations.filter(i =>
+    activeProjectIds.has(i.anbudProjectId) && (i.status === 'INVITED' || i.status === 'OPENED')
+  ).length;
 
   const stats = [
     { label: 'Aktive forespørsler', value: activeProjects.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
