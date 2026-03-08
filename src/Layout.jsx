@@ -203,12 +203,12 @@ export default function Layout({ children, currentPageName }) {
     return <>{children}</>;
   }
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated (skip for public pages)
   useEffect(() => {
-    if (!user && !isLoading) {
+    if (!isPublicPage && !user && !isLoading) {
       base44.auth.redirectToLogin(window.location.href);
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, isPublicPage]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
