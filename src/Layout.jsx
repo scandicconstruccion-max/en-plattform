@@ -204,17 +204,17 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.logout();
   };
 
-  // For public pages, render immediately without auth
-  if (isPublicPage) {
-    return <>{children}</>;
-  }
-
   // Redirect to login if not authenticated (skip for public pages)
   useEffect(() => {
     if (!isPublicPage && !user && !isLoading) {
       base44.auth.redirectToLogin(window.location.href);
     }
   }, [user, isLoading, isPublicPage]);
+
+  // For public pages, render immediately without auth
+  if (isPublicPage) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
