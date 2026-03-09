@@ -85,8 +85,14 @@ export default function AnbudSvar() {
     if (!file) return;
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      setForm(f => ({ ...f, fileAttachments: [...f.fileAttachments, { name: file.name, url: file_url }] }));
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+      const res = await fetch(`https://api.base44.com/api/v1/apps/${APP_ID}/functions/anbudUploadFile`, {
+        method: 'POST',
+        body: formDataUpload,
+      });
+      const data = await res.json();
+      setForm(f => ({ ...f, fileAttachments: [...f.fileAttachments, { name: file.name, url: data.file_url }] }));
     } finally {
       setUploading(false);
       e.target.value = '';
