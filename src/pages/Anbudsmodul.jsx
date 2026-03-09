@@ -36,7 +36,7 @@ export default function Anbudsmodul() {
   });
 
   const { data: moduleAccess = [], isLoading: moduleLoading } = useQuery({
-    queryKey: ['companyModuleAccess', company?.id],
+    queryKey: ['companyModuleAccess', company?.id, 'ANBUDSMODUL'],
     queryFn: () => base44.entities.CompanyModuleAccess.filter({ companyId: company.id, moduleCode: 'ANBUDSMODUL' }),
     enabled: !!company?.id,
   });
