@@ -9,18 +9,12 @@ import { Label } from '@/components/ui/label';
 import { AlertCircle, Upload, Loader2, CheckCircle2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-// Helper: call backend functions without requiring auth session
-const BASE_URL = 'https://enplattform.base44.app';
+import { base44 } from '@/api/base44Client';
 
+// Helper: call backend functions without requiring auth session
 async function callPublicFunction(name, payload) {
-  const res = await fetch(`${BASE_URL}/api/functions/${name}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw { response: { data } };
-  return { data };
+  const res = await base44.functions.invoke(name, payload);
+  return { data: res.data };
 }
 
 export default function AnbudSvarForm() {
