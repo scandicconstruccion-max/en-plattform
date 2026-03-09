@@ -8,8 +8,10 @@ import { FileText, Upload, X, CheckCircle, AlertCircle, Loader2, Building2, User
 import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
+const BASE_URL = 'https://enplattform.base44.app';
+
 async function callPublicFunction(name, payload) {
-  const res = await fetch(`/api/functions/${name}`, {
+  const res = await fetch(`${BASE_URL}/api/functions/${name}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
