@@ -78,14 +78,8 @@ export default function AnbudSvar() {
     if (!file) return;
     setUploading(true);
     try {
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', file);
-      const res = await fetch(`${BASE_URL}/api/functions/anbudUploadFile`, {
-        method: 'POST',
-        body: formDataUpload,
-      });
-      const data = await res.json();
-      setForm(f => ({ ...f, fileAttachments: [...f.fileAttachments, { name: file.name, url: data.file_url }] }));
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setForm(f => ({ ...f, fileAttachments: [...f.fileAttachments, { name: file.name, url: file_url }] }));
     } finally {
       setUploading(false);
       e.target.value = '';
