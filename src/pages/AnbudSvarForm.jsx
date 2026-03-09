@@ -128,7 +128,7 @@ export default function AnbudSvarForm() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const res = await base44.functions.invoke('anbudSubmitQuote', {
+      const res = await callPublicFunction('anbudSubmitQuote', {
         token,
         projectId: invitationData.invitation.anbudProjectId,
         invitationId: invitationData.invitation.id,
