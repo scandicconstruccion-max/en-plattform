@@ -87,7 +87,7 @@ export default function AnbudSvar() {
     try {
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
-      const res = await fetch(`/api/functions/anbudUploadFile`, {
+      const res = await fetch(`${BASE_URL}/api/functions/anbudUploadFile`, {
         method: 'POST',
         body: formDataUpload,
       });
