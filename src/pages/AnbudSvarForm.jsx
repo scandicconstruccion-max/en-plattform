@@ -10,8 +10,10 @@ import { AlertCircle, Upload, Loader2, CheckCircle2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Helper: call backend functions without requiring auth session
+const BASE_URL = 'https://enplattform.base44.app';
+
 async function callPublicFunction(name, payload) {
-  const res = await fetch(`/api/functions/${name}`, {
+  const res = await fetch(`${BASE_URL}/api/functions/${name}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
