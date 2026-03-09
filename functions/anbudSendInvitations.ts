@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     const allSuppliers = await base44.entities.AnbudSupplier.list();
     const suppliers = allSuppliers.filter(s => supplierIds.includes(s.id));
 
-    const appUrl = payloadAppUrl || req.headers.get('origin') || 'https://app.enplattform.no';
+    const appUrl = 'https://enplattform.base44.app';
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     const results = [];
 
