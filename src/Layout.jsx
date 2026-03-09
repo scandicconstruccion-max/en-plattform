@@ -154,7 +154,8 @@ export default function Layout({ children, currentPageName }) {
   const { data: companies } = useQuery({
     queryKey: ['companies'],
     queryFn: () => base44.entities.Company.list(),
-    initialData: []
+    initialData: [],
+    enabled: !isPublicPage
   });
 
   const company = companies?.[0];
