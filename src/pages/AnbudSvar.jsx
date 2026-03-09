@@ -7,18 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { FileText, Upload, X, CheckCircle, AlertCircle, Loader2, Building2, User, Mail, Phone, Clock } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { nb } from 'date-fns/locale';
-
-const BASE_URL = 'https://enplattform.base44.app';
+import { base44 } from '@/api/base44Client';
 
 async function callPublicFunction(name, payload) {
-  const res = await fetch(`${BASE_URL}/api/functions/${name}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Feil fra server');
-  return data;
+  const res = await base44.functions.invoke(name, payload);
+  return res.data;
 }
 
 export default function AnbudSvar() {
