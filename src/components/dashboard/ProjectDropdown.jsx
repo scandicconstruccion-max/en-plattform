@@ -55,7 +55,13 @@ export default function ProjectDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        
+        <Button variant="outline" className="gap-2 max-w-[220px]">
+          <FolderOpen className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+          <span className="truncate text-sm">
+            {selectedProject ? selectedProject.name : 'Velg prosjekt'}
+          </span>
+          <ChevronDown className="h-4 w-4 flex-shrink-0 text-slate-400" />
+        </Button>
 
 
 
