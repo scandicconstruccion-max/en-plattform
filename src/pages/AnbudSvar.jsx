@@ -13,7 +13,10 @@ const APP_ID = '699376a31a2b8a2014ee8ac9';
 async function callPublicFunction(name, payload) {
   const res = await fetch(`https://api.base44.com/api/v1/apps/${APP_ID}/functions/${name}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': APP_ID,
+    },
     body: JSON.stringify(payload),
   });
   const data = await res.json();
