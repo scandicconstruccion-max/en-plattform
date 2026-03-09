@@ -21,6 +21,10 @@ const moduleInfo = {
     title: 'Tilbudsmodul',
     body: 'Prosjektlederen starter arbeidsdagen med å sende et profesjonelt tilbud direkte fra systemet – uten å åpne Word eller Excel. Tilbudet knyttes til kunden, og når kunden godkjenner digitalt, kan du starte prosjektet med ett klikk. Henger tett sammen med Ordre og Faktura, slik at hele flyten fra tilbud til betaling er sømløs.'
   },
+  anbudsmodul: {
+    title: 'Anbudsmodul',
+    body: 'Send anbudsforespørsler til flere leverandører samtidig og motta tilbud digitalt på ett sted. Sammenlign priser, velg vinner og hold full oversikt over hele anbudsprosessen. Spar tid og få bedre kontroll over innkjøp og underentreprenører. Henger tett sammen med Prosjekter og Ordre.'
+  },
   ordre: {
     title: 'Ordre',
     body: 'Når tilbudet er godkjent, opprettes en arbeidsordre automatisk. Håndverkerne ser hva som skal gjøres, og prosjektlederen følger fremdriften. Ordre henger direkte sammen med Tilbudsmodul og Faktura – slik at det aldri blir dobbeltarbeid eller glemte poster.'
@@ -77,6 +81,7 @@ const moduleInfo = {
 
 const availableModules = [
 { key: 'tilbud', name: 'Tilbudsmodul', description: 'Tilbudsadministrasjon', price: 29 },
+{ key: 'anbudsmodul', name: 'Anbudsmodul', description: 'Anbudsforespørsler og leverandørtilbud', price: 189 },
 { key: 'ordre', name: 'Ordre', description: 'Arbeidsordre', price: 39 },
 { key: 'endringsmeldinger', name: 'Endringsmeldinger', description: 'Endringshåndtering', price: 29 },
 { key: 'faktura', name: 'Faktura', description: 'Fakturering og betalinger', price: 49 },
@@ -94,6 +99,7 @@ const availableModules = [
 // Map frontend module keys to Stripe module codes
 const moduleKeyToCode = {
   tilbud: 'TILBUD',
+  anbudsmodul: 'ANBUDSMODUL',
   ordre: 'ORDRE',
   endringsmeldinger: 'ENDRINGSMELDINGER',
   faktura: 'FAKTURA',
