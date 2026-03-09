@@ -85,7 +85,7 @@ export default function AnbudSvar() {
     try {
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
-      const res = await fetch(`https://api.base44.com/api/v1/apps/${APP_ID}/functions/anbudUploadFile`, {
+      const res = await fetch(`/api/functions/anbudUploadFile`, {
         method: 'POST',
         body: formDataUpload,
       });
