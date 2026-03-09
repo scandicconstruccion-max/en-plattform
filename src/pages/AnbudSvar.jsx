@@ -120,8 +120,8 @@ export default function AnbudSvar() {
         payload.projectId = projectId;
         payload.invitationId = invitationId;
       }
-      const res = await base44.functions.invoke('anbudSubmitQuote', payload);
-      if (res.data?.error) throw new Error(res.data.error);
+      const data = await callPublicFunction('anbudSubmitQuote', payload);
+      if (data?.error) throw new Error(data.error);
       setSubmitted(true);
     } catch (e) {
       setError(e.message || 'Noe gikk galt. Prøv igjen.');
