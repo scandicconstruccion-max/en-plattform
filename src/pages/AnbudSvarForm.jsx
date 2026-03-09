@@ -9,10 +9,21 @@ import { Label } from '@/components/ui/label';
 import { AlertCircle, Upload, Loader2, CheckCircle2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
+// Helper: call backend functions without requiring auth session
+async function callPublicFunction(name, payload) {
+  const res = await fetch(`/api/v1/functions/${name}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw { response: { data } };
+  return { data };
+}
+
 export default function AnbudSvarForm() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const navigate = useNavigate();
 
   const [loginCode, setLoginCode] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
