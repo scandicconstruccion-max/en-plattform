@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
         role: 'UE_GUEST',
         assigned_projects: [invitation.anbudProjectId],
         managed_projects: [],
-        custom_module_access: ['anbudsmodul'],
+        custom_module_access: [],
         is_active: true,
         last_login: new Date().toISOString(),
       });
