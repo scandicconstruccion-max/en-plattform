@@ -103,10 +103,16 @@ const roleModuleAccess = {
 // Sjekker om bruker har tilgang til en modul
 export function hasModuleAccess(user, moduleKey) {
   if (!user || !user.role) return false;
+
+  // UE_GUEST har kun tilgang til anbudsmodul
+  if (user.role === ROLES.UE_GUEST) {
+    return moduleKey === MODULES.ANBUDSMODUL;
+  }
   
-  // Sjekk tilpasset modultilgang først
-  if (user.custom_module_access && user.custom_module_access.length > 0) {
-    return user.custom_module_access.includes(moduleKey);
+  // Sjekk tilpasset modultilgang (støtter både flatt og nestet data-objekt)
+  const customAccess = user.custom_module_access ?? user.data?.custom_module_access;
+  if (customAccess && customAccess.length > 0) {
+    return customAccess.includes(moduleKey);
   }
   
   const userRole = user.role || ROLES.USER;
