@@ -41,6 +41,11 @@ export default function Anbudsmodul() {
     enabled: !!company?.id,
   });
 
+  // UE_GUEST skal ikke se denne siden (de har egen portal)
+  if (user?.role === 'UE_GUEST') {
+    return null;
+  }
+
   const isAdmin = user?.role === 'admin';
   const hasAccess = isAdmin || moduleAccess.some(m => m.active);
 
