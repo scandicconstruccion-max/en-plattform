@@ -139,9 +139,11 @@ export default function Layout({ children, currentPageName }) {
   // Check public pages - check pathname and full URL (including from_url param)
   const fullUrl = window.location.href;
   const isPublicPage = location.pathname.includes('AnbudSvar') || 
+                       location.pathname.includes('AnbudSvarForm') ||
                        location.pathname.includes('Priser') || 
                        location.pathname.includes('Landing') ||
-                       fullUrl.includes('AnbudSvar');
+                       fullUrl.includes('AnbudSvar') ||
+                       fullUrl.includes('AnbudSvarForm');
 
   const { data: user, isLoading } = useQuery({
     queryKey: ['currentUser'],
