@@ -36,6 +36,7 @@ const availableModules = [
   { key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumentasjon', price: 149 },
   { key: 'sjekklister', name: 'Sjekklister', description: 'Kvalitetskontroll', price: 149 },
   { key: 'tilbud', name: 'Tilbud', description: 'Tilbudsadministrasjon', price: 249 },
+  { key: 'anbudsmodul', name: 'Anbudsmodul', description: 'Anbudsforespørsler og leverandørtilbud', price: 189 },
   { key: 'bestillinger', name: 'Bestillinger', description: 'Innkjøp og bestillinger', price: 199 },
   { key: 'chat', name: 'Intern Chat', description: 'Teamkommunikasjon', price: 99 },
   { key: 'ressursplan', name: 'Ressursplanlegger', description: 'Bemanning og allokering', price: 249 },
