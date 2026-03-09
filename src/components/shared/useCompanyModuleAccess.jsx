@@ -16,6 +16,7 @@ export const FRONTEND_TO_MODULE_CODE = {
     risikoanalyse:      'HMS',
     hmshandbok:         'HMS',
     tilbud:             'TILBUD',
+    anbudsmodul:        'ANBUDSMODUL',
     ordre:              'ORDRE',
     endringsmeldinger:  'ENDRINGSMELDINGER',
     faktura:            'FAKTURA',
