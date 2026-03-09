@@ -54,8 +54,16 @@ export default function AnbudSvarForm() {
 
   const loadInvitationData = async () => {
     try {
-      const res = await base44.functions.invoke('anbudValidateAndAuthGuest', { token });
-      setInvitationData(res.data);
+      const res = await callPublicFunction('anbudGetPublic', { token });
+      // anbudGetPublic returnerer { project, invitation } - pass loginCode fra AnbudSvarForm flyt
+      const invData = {
+        invitation: {
+          ...res.data.invitation,
+          anbudProjectId: res.data.invitation.projectId,
+        },
+        project: res.data.project,
+      };
+      setInvitationData(invData);
       setFormData(prev => ({
         ...prev,
         contactEmail: res.data.invitation.supplierEmail || '',
@@ -70,7 +78,7 @@ export default function AnbudSvarForm() {
     if (!loginCode || !invitationData) return;
     
     try {
-      const res = await base44.functions.invoke('anbudValidateLoginCode', {
+      const res = await callPublicFunction('anbudValidateLoginCode', {
         token,
         loginCode: loginCode.replace(/\s/g, ''), // Remove spaces
       });
