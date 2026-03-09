@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Helper: call backend functions without requiring auth session
 async function callPublicFunction(name, payload) {
-  const res = await fetch(`/api/v1/functions/${name}`, {
+  const appId = import.meta.env.VITE_APP_ID || window.__APP_ID__;
+  const res = await fetch(`https://api.base44.com/api/v1/apps/${appId}/functions/${name}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
