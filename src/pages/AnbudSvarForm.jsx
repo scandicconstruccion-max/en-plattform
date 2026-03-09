@@ -104,10 +104,16 @@ export default function AnbudSvarForm() {
       const newFiles = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const res = await base44.integrations.Core.UploadFile({ file });
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        const res = await fetch('/api/v1/integrations/Core/UploadFile', {
+          method: 'POST',
+          body: formDataUpload,
+        });
+        const data = await res.json();
         newFiles.push({
           name: file.name,
-          url: res.file_url,
+          url: data.file_url,
         });
       }
       setFormData(prev => ({
