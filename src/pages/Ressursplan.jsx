@@ -213,7 +213,7 @@ export default function Ressursplan() {
     }
   });
 
-  // Check for conflicts
+  // Check for conflicts (resource or machine)
   const checkConflicts = (resourceId, startDatoTid, sluttDatoTid, excludeId = null) => {
     const start = parseISO(startDatoTid);
     const end = parseISO(sluttDatoTid);
@@ -230,7 +230,26 @@ export default function Ressursplan() {
         isWithinInterval(end, { start: aStart, end: aEnd }) ||
         isWithinInterval(aStart, { start, end }) ||
         isWithinInterval(aEnd, { start, end }));
+    });
+  };
 
+  const checkMachineConflicts = (machineId, startDatoTid, sluttDatoTid, excludeId = null) => {
+    if (!machineId) return [];
+    const start = parseISO(startDatoTid);
+    const end = parseISO(sluttDatoTid);
+
+    return assignments.filter((a) => {
+      if (a.id === excludeId) return false;
+      if (a.machine_id !== machineId) return false;
+
+      const aStart = parseISO(a.start_dato_tid);
+      const aEnd = parseISO(a.slutt_dato_tid);
+
+      return (
+        isWithinInterval(start, { start: aStart, end: aEnd }) ||
+        isWithinInterval(end, { start: aStart, end: aEnd }) ||
+        isWithinInterval(aStart, { start, end }) ||
+        isWithinInterval(aEnd, { start, end }));
     });
   };
 
