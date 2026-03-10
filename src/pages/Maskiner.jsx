@@ -490,6 +490,16 @@ export default function Maskiner() {
         </DialogContent>
       </Dialog>
 
+      {/* Sjekk ut/inn dialog */}
+      <SjekkUtDialog
+        maskin={sjekkUtTarget}
+        employees={employees}
+        open={!!sjekkUtTarget}
+        onOpenChange={(open) => !open && setSjekkUtTarget(null)}
+        isPending={sjekkUtMutation.isPending}
+        onSave={(data) => sjekkUtMutation.mutate({ id: sjekkUtTarget.id, data })}
+      />
+
       {/* Delete confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
