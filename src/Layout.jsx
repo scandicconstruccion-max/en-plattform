@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users, CalendarDays,
-  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen, PackageCheck, Gavel, Bell } from
+  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen, PackageCheck, Gavel, Bell, Truck } from
 'lucide-react';
 import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
 import NotificationBell from '@/components/notifications/NotificationBell';
