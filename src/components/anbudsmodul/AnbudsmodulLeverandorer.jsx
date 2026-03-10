@@ -172,11 +172,13 @@ export default function AnbudsmodulLeverandorer() {
     }
   };
 
-  const filtered = suppliers.filter(s =>
-    !search || s.name?.toLowerCase().includes(search.toLowerCase()) ||
-    s.email?.toLowerCase().includes(search.toLowerCase()) ||
-    s.contactPerson?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = suppliers
+    .filter(s =>
+      !search || s.name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.email?.toLowerCase().includes(search.toLowerCase()) ||
+      s.contactPerson?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nb'));
 
   return (
     <div className="space-y-4">
