@@ -19,6 +19,7 @@ export default function CreateAssignmentDialog({
   employees,
   externals,
   projects,
+  maskinerProp = null,
   onSubmit,
   isLoading,
   initialStartDate = null,
@@ -36,11 +37,14 @@ export default function CreateAssignmentDialog({
     initialData: []
   });
 
-  const { data: maskiner = [] } = useQuery({
+  const { data: maskinerFetched = [] } = useQuery({
     queryKey: ['maskiner'],
     queryFn: () => base44.entities.Maskin.list(),
-    initialData: []
+    initialData: [],
+    enabled: maskinerProp === null, // Only fetch if not provided
   });
+
+  const maskiner = maskinerProp ?? maskinerFetched;
 
   const { data: allAssignments = [] } = useQuery({
     queryKey: ['resourceAssignments'],
