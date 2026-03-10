@@ -443,8 +443,8 @@ export default function Ressursplan() {
      setShowCreateDialog(true);
    };
 
-  // Combine all resources
-  const allResources = [
+  // Combine all human resources
+  const humanResources = [
   ...employees.map((e) => ({
     id: e.id,
     navn: `${e.first_name} ${e.last_name}`,
@@ -468,6 +468,23 @@ export default function Ressursplan() {
     epost: e.epost,
     competencies: []
   }))];
+
+  // Machine resources (for machine view)
+  const machineResources = maskiner.map((m) => ({
+    id: m.id,
+    navn: m.navn,
+    type: 'machine',
+    stilling: m.maskintype || '',
+    department: 'Maskiner',
+    normal_hours_per_day: 8,
+    competencies: [],
+    maskintype: m.maskintype,
+    maskinnummer: m.maskinnummer,
+    status: m.status,
+  }));
+
+  // allResources used for backward compatibility (drag/drop etc.)
+  const allResources = humanResources;
 
 
   // Apply filters with search and grouping
