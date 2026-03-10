@@ -1155,13 +1155,87 @@ export default function OptimizedResourceCalendar({
           )}>
 
           {/* Header Right - Dates */}
+          {viewMode === 'month' ? (() => {
+            // Build month groups
+            const monthGroups = [];
+            viewDates.forEach((day, idx) => {
+              const mKey = format(day, 'yyyy-MM');
+              if (!monthGroups.length || monthGroups[monthGroups.length - 1].key !== mKey) {
+                monthGroups.push({ key: mKey, label: format(day, 'MMMM yyyy', { locale: nb }), startIdx: idx, count: 1 });
+              } else {
+                monthGroups[monthGroups.length - 1].count++;
+              }
+            });
+
+            // Build week groups
+            const weekGroups = [];
+            viewDates.forEach((day, idx) => {
+              const wKey = format(startOfWeek(day, { weekStartsOn: 1 }), 'yyyy-ww');
+              if (!weekGroups.length || weekGroups[weekGroups.length - 1].key !== wKey) {
+                weekGroups.push({ key: wKey, weekNum: format(day, 'w', { locale: nb }), startIdx: idx, count: 1 });
+              } else {
+                weekGroups[weekGroups.length - 1].count++;
+              }
+            });
+
+            return (
+              <div className="flex-shrink-0 flex flex-col bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
+                {/* Row 1: Month labels */}
+                <div className="flex border-b border-slate-200">
+                  {monthGroups.map((mg) => (
+                    <div
+                      key={mg.key}
+                      style={{ width: mg.count * dayWidth }}
+                      className="flex-shrink-0 px-2 py-0.5 border-l border-slate-200 text-[10px] font-bold text-slate-700 uppercase tracking-wider bg-slate-100 capitalize">
+                      {mg.label}
+                    </div>
+                  ))}
+                </div>
+                {/* Row 2: Week numbers */}
+                <div className="flex border-b border-slate-200">
+                  {weekGroups.map((wg) => (
+                    <div
+                      key={wg.key}
+                      style={{ width: wg.count * dayWidth }}
+                      className="flex-shrink-0 px-2 py-0.5 border-l border-slate-200 text-[9px] font-semibold text-slate-500 bg-slate-50">
+                      uke {wg.weekNum}
+                    </div>
+                  ))}
+                </div>
+                {/* Row 3: Day cells */}
+                <div className="flex">
+                  {viewDates.map((day) => {
+                    const dayIsHoliday = isHolidayFunc(day);
+                    const isToday = isSameDay(day, new Date());
+                    const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        style={{ width: dayWidth }}
+                        className={cn(
+                          "flex-shrink-0 text-center px-0.5 py-0.5 border-l border-slate-200 relative",
+                          isWeekend && !isToday && "bg-slate-200/70",
+                          isToday && "bg-emerald-100 font-bold",
+                          !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
+                          !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
+                          isWeekend && !isToday && "text-slate-500"
+                        )}>
+                        {isToday && <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />}
+                        <div className="text-[9px] font-semibold uppercase tracking-wide relative z-10 leading-none">{format(day, 'EEE', { locale: nb })}</div>
+                        <div className={cn("text-[10px] font-bold mt-0.5 relative z-10 leading-none", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })() : (
           <div className="flex-shrink-0 flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
             {viewDates.map((day, idx) => {
               const dayIsHoliday = isHolidayFunc(day);
               const isToday = isSameDay(day, new Date());
               const isWeekend = getDay(day) === 0 || getDay(day) === 6;
               const weekNum = format(day, 'w', { locale: nb });
-              // Show week number only on Monday (or first day in view)
               const showWeekNum = idx === 0 || getDay(day) === 1;
               return (
                 <div
@@ -1175,19 +1249,16 @@ export default function OptimizedResourceCalendar({
                     !isToday && !dayIsHoliday && !isWeekend && "text-slate-600",
                     isWeekend && !isToday && !dayIsHoliday && "text-slate-600 font-medium"
                   )}>
-
-                  {isToday &&
-                  <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
-                  }
+                  {isToday && <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />}
                   <div className="text-[9px] text-slate-400 relative z-10 leading-none mb-0.5">
                     {showWeekNum ? `uke ${weekNum}` : ''}
                   </div>
                   <div className="text-[9px] font-semibold uppercase tracking-wide relative z-10 leading-none">{format(day, 'EEE', { locale: nb })}</div>
                   <div className={cn("text-xs font-bold mt-0.5 relative z-10 leading-none", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
                 </div>);
-
             })}
           </div>
+          )}
 
           {/* Body Right - Grid + Activities */}
           <div className="flex-1 relative">
