@@ -139,6 +139,9 @@ export default function CreateSubprojectDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={typeValue}>{typeLabel}</SelectItem>
+                <SelectItem value="common_area">Fellesareal</SelectItem>
+                <SelectItem value="exterior">Utvendig</SelectItem>
+                <SelectItem value="roof">Tak</SelectItem>
               </SelectContent>
             </Select>
           </div>
