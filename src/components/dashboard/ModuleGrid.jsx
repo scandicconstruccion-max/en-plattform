@@ -42,7 +42,7 @@ const moduleSections = [
   {
     title: '🔹 GRUNNPAKKE',
     emoji: '🔹',
-    modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
+    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner']
   },
   {
     title: '💰 ØKONOMI & KONTRAKT',
