@@ -15,8 +15,9 @@ export default function ChecklistSendEmailDialog({ open, onOpenChange, checklist
 
   useEffect(() => {
     if (open && checklist?.project_id) {
-      base44.entities.Project.filter({ id: checklist.project_id }).then(res => {
-        if (res?.length > 0) setProjectData(res[0]);
+      base44.entities.Project.list().then(res => {
+        const found = res?.find(p => p.id === checklist.project_id);
+        if (found) setProjectData(found);
       });
     }
   }, [open, checklist?.project_id]);
