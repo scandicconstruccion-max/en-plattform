@@ -189,6 +189,16 @@ export default function Maskiner() {
     }
   };
 
+  const sjekkUtMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Maskin.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['maskiner'] });
+      setSjekkUtTarget(null);
+      toast.success('Plassering oppdatert');
+    },
+    onError: () => toast.error('Kunne ikke oppdatere plassering'),
+  });
+
   const availableMaskintypes = formData.utstyrstype
     ? [...(MASKINTYPE_BY_UTSTYRSTYPE[formData.utstyrstype] || []), { value: 'egendefinert', label: '✏️ Skriv inn selv...' }]
     : [...MASKINTYPES, { value: 'egendefinert', label: '✏️ Skriv inn selv...' }];
