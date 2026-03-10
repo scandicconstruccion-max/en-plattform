@@ -691,238 +691,32 @@ export default function ProsjektDetaljer() {
               <Separator />
 
               {/* Subcontractors */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-slate-900">Underentreprenører</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={addSubcontractor} className="rounded-xl">
-                    <Plus className="h-4 w-4 mr-1" /> Legg til
-                  </Button>
-                </div>
-                {formData.subcontractors.map((sub, index) => (
-                  <div key={index} className="grid grid-cols-6 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
-                    <Input
-                      placeholder="Firma"
-                      value={sub.name}
-                      onChange={(e) => {
-                        const newSubs = [...formData.subcontractors];
-                        newSubs[index].name = e.target.value;
-                        setFormData({...formData, subcontractors: newSubs});
-                      }}
-                      className="col-span-2 rounded-lg"
-                    />
-                    <Input
-                      placeholder="Fag"
-                      value={sub.trade}
-                      onChange={(e) => {
-                        const newSubs = [...formData.subcontractors];
-                        newSubs[index].trade = e.target.value;
-                        setFormData({...formData, subcontractors: newSubs});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <Input
-                      placeholder="Kontakt"
-                      value={sub.contact_person}
-                      onChange={(e) => {
-                        const newSubs = [...formData.subcontractors];
-                        newSubs[index].contact_person = e.target.value;
-                        setFormData({...formData, subcontractors: newSubs});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <Input
-                      placeholder="Telefon"
-                      value={sub.phone}
-                      onChange={(e) => {
-                        const newSubs = [...formData.subcontractors];
-                        newSubs[index].phone = e.target.value;
-                        setFormData({...formData, subcontractors: newSubs});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <div className="flex gap-1">
-                      <Input
-                        placeholder="E-post"
-                        value={sub.email}
-                        onChange={(e) => {
-                          const newSubs = [...formData.subcontractors];
-                          newSubs[index].email = e.target.value;
-                          setFormData({...formData, subcontractors: newSubs});
-                        }}
-                        className="rounded-lg flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            subcontractors: formData.subcontractors.filter((_, i) => i !== index)
-                          });
-                        }}
-                        className="text-red-500 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <HistoricContactPickerSection
+                type="subcontractor"
+                items={formData.subcontractors}
+                onChange={(v) => setFormData({...formData, subcontractors: v})}
+                currentProjectId={projectId}
+              />
 
               <Separator />
 
               {/* Architects */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-slate-900">Arkitekter</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={addArchitect} className="rounded-xl">
-                    <Plus className="h-4 w-4 mr-1" /> Legg til
-                  </Button>
-                </div>
-                {formData.architects.map((arch, index) => (
-                  <div key={index} className="grid grid-cols-5 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
-                    <Input
-                      placeholder="Firma"
-                      value={arch.company}
-                      onChange={(e) => {
-                        const newArchs = [...formData.architects];
-                        newArchs[index].company = e.target.value;
-                        setFormData({...formData, architects: newArchs});
-                      }}
-                      className="col-span-2 rounded-lg"
-                    />
-                    <Input
-                      placeholder="Kontakt"
-                      value={arch.contact_person}
-                      onChange={(e) => {
-                        const newArchs = [...formData.architects];
-                        newArchs[index].contact_person = e.target.value;
-                        setFormData({...formData, architects: newArchs});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <Input
-                      placeholder="Telefon"
-                      value={arch.phone}
-                      onChange={(e) => {
-                        const newArchs = [...formData.architects];
-                        newArchs[index].phone = e.target.value;
-                        setFormData({...formData, architects: newArchs});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <div className="flex gap-1">
-                      <Input
-                        placeholder="E-post"
-                        value={arch.email}
-                        onChange={(e) => {
-                          const newArchs = [...formData.architects];
-                          newArchs[index].email = e.target.value;
-                          setFormData({...formData, architects: newArchs});
-                        }}
-                        className="rounded-lg flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            architects: formData.architects.filter((_, i) => i !== index)
-                          });
-                        }}
-                        className="text-red-500 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <HistoricContactPickerSection
+                type="architect"
+                items={formData.architects}
+                onChange={(v) => setFormData({...formData, architects: v})}
+                currentProjectId={projectId}
+              />
 
               <Separator />
 
               {/* Consultants */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-slate-900">Rådgivende ingeniører</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={addConsultant} className="rounded-xl">
-                    <Plus className="h-4 w-4 mr-1" /> Legg til
-                  </Button>
-                </div>
-                {formData.consultants.map((cons, index) => (
-                  <div key={index} className="grid grid-cols-6 gap-2 mb-2 p-3 bg-slate-50 rounded-xl">
-                    <Input
-                      placeholder="Firma"
-                      value={cons.company}
-                      onChange={(e) => {
-                        const newCons = [...formData.consultants];
-                        newCons[index].company = e.target.value;
-                        setFormData({...formData, consultants: newCons});
-                      }}
-                      className="col-span-2 rounded-lg"
-                    />
-                    <Input
-                      placeholder="Fagområde"
-                      value={cons.discipline}
-                      onChange={(e) => {
-                        const newCons = [...formData.consultants];
-                        newCons[index].discipline = e.target.value;
-                        setFormData({...formData, consultants: newCons});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <Input
-                      placeholder="Kontakt"
-                      value={cons.contact_person}
-                      onChange={(e) => {
-                        const newCons = [...formData.consultants];
-                        newCons[index].contact_person = e.target.value;
-                        setFormData({...formData, consultants: newCons});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <Input
-                      placeholder="Telefon"
-                      value={cons.phone}
-                      onChange={(e) => {
-                        const newCons = [...formData.consultants];
-                        newCons[index].phone = e.target.value;
-                        setFormData({...formData, consultants: newCons});
-                      }}
-                      className="rounded-lg"
-                    />
-                    <div className="flex gap-1">
-                      <Input
-                        placeholder="E-post"
-                        value={cons.email}
-                        onChange={(e) => {
-                          const newCons = [...formData.consultants];
-                          newCons[index].email = e.target.value;
-                          setFormData({...formData, consultants: newCons});
-                        }}
-                        className="rounded-lg flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            consultants: formData.consultants.filter((_, i) => i !== index)
-                          });
-                        }}
-                        className="text-red-500 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <HistoricContactPickerSection
+                type="consultant"
+                items={formData.consultants}
+                onChange={(v) => setFormData({...formData, consultants: v})}
+                currentProjectId={projectId}
+              />
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)} className="rounded-xl">
