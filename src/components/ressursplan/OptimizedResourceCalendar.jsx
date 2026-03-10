@@ -1054,9 +1054,9 @@ export default function OptimizedResourceCalendar({
           {/* Body Left - Resource names */}
           <div className="flex-1 overflow-y-hidden">
             <List
-              height={isFullscreen ? window.innerHeight - 60 : resources.length * 56}
+              height={isFullscreen ? window.innerHeight - 60 : resources.length * 44}
               itemCount={resources.length}
-              itemSize={56}
+              itemSize={44}
               width={resourceWidth}
               style={{ overflow: 'hidden' }}>
 
