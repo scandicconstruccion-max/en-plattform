@@ -219,6 +219,33 @@ export default function Maskiner() {
       />
 
       <div className="px-6 lg:px-8 py-6">
+        {/* Filter bar */}
+        {!isLoading && maskiner.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-5">
+            {['alle', 'lager', 'hos_ansatt', 'prosjekt', 'service'].map((key) => {
+              const cfg = LOKASJON_CONFIG[key];
+              const Icon = cfg?.icon;
+              const count = key === 'alle' ? maskiner.length : maskiner.filter((m) => (m.lokasjon || 'lager') === key).length;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilterLokasjon(key)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all',
+                    filterLokasjon === key
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  )}
+                >
+                  {Icon && <Icon className="h-3.5 w-3.5" />}
+                  {key === 'alle' ? 'Alle' : cfg.label}
+                  <span className={cn('ml-0.5 text-xs', filterLokasjon === key ? 'text-emerald-100' : 'text-slate-400')}>({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
@@ -234,9 +261,13 @@ export default function Maskiner() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {maskiner.map((maskin) => {
+            {maskiner
+              .filter((m) => filterLokasjon === 'alle' || (m.lokasjon || 'lager') === filterLokasjon)
+              .map((maskin) => {
               const statusCfg = STATUS_CONFIG[maskin.status] || STATUS_CONFIG.tilgjengelig;
               const typeCfg = MASKINTYPES.find((t) => t.value === maskin.maskintype);
+              const lokCfg = LOKASJON_CONFIG[maskin.lokasjon || 'lager'];
+              const LokIcon = lokCfg.icon;
               return (
                 <div
                   key={maskin.id}
@@ -255,27 +286,48 @@ export default function Maskiner() {
                     </Badge>
                   </div>
 
+                  {/* Lokasjon-seksjon — hovedelement */}
+                  <div className={cn('flex items-start gap-2 p-2.5 rounded-lg', lokCfg.badgeClass.replace('text-', 'bg-').replace('-700','-50').replace('-100','').concat(' bg-opacity-60'))}>
+                    <LokIcon className={cn('h-4 w-4 mt-0.5 flex-shrink-0', lokCfg.badgeClass.split(' ')[1])} />
+                    <div className="min-w-0">
+                      <p className={cn('text-xs font-semibold', lokCfg.badgeClass.split(' ')[1])}>{lokCfg.label}</p>
+                      {maskin.lokasjon === 'hos_ansatt' && maskin.hos_ansatt_navn && (
+                        <p className="text-xs text-slate-700 font-medium truncate">{maskin.hos_ansatt_navn}</p>
+                      )}
+                      {maskin.lokasjon === 'prosjekt' && maskin.prosjekt_lokasjon && (
+                        <p className="text-xs text-slate-700 truncate">{maskin.prosjekt_lokasjon}</p>
+                      )}
+                      {maskin.lokasjon_notat && (
+                        <p className="text-xs text-slate-500 truncate">{maskin.lokasjon_notat}</p>
+                      )}
+                      {maskin.utlevert_dato && maskin.lokasjon !== 'lager' && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Siden {format(new Date(maskin.utlevert_dato), 'd. MMM', { locale: nb })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
                   {maskin.maskinnummer && (
                     <p className="text-xs text-slate-500">Nr: {maskin.maskinnummer}</p>
-                  )}
-                  {maskin.standard_forer_navn && (
-                    <p className="text-xs text-slate-600">
-                      Std. fører: <span className="font-medium">{maskin.standard_forer_navn}</span>
-                    </p>
-                  )}
-                  {maskin.notater && (
-                    <p className="text-xs text-slate-500 line-clamp-2">{maskin.notater}</p>
                   )}
 
                   <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100">
                     <Button
+                      size="sm"
+                      className="flex-1 h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => setSjekkUtTarget(maskin)}
+                    >
+                      <MapPin className="h-3 w-3 mr-1" />
+                      Plassering
+                    </Button>
+                    <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1 h-7 text-xs"
+                      className="h-7 w-7 p-0"
                       onClick={() => openEdit(maskin)}
                     >
-                      <Pencil className="h-3 w-3 mr-1" />
-                      Rediger
+                      <Pencil className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="ghost"
