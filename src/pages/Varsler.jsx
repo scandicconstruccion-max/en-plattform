@@ -38,6 +38,10 @@ export default function Varsler() {
   const [moduleFilter, setModuleFilter] = useState('Alle moduler');
   const [typeFilter, setTypeFilter] = useState('Alle typer');
   const [statusFilter, setStatusFilter] = useState('Alle');
+  const [showEmailSettings, setShowEmailSettings] = useState(false);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [emailSaved, setEmailSaved] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
