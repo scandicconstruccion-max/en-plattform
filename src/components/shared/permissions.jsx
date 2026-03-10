@@ -39,7 +39,8 @@ export const MODULES = {
   MOTTAKSKONTROLL: 'mottakskontroll',
   ANBUDSPORTAL: 'anbudsportal',
   ANBUDSMODUL: 'anbudsmodul',
-  VARSLER: 'varsler'
+  VARSLER: 'varsler',
+  MASKINER: 'maskiner'
 };
 
 // Definerer hvilke moduler hver rolle har tilgang til
