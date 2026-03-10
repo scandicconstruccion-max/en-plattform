@@ -51,13 +51,22 @@ export default function CreateSubprojectDialog({
     
     if (!formData.name) return;
 
-    const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'project' });
+    // Get parent project number and find next subproject number
+    const parentNumber = parentProject.project_number;
+    const projects = await base44.entities.Project.filter({ parent_id: parentProject.id });
+    const maxSubSeq = projects.reduce((max, p) => {
+      const match = p.project_number?.match(/-(\d{2})$/);
+      const seq = match ? parseInt(match[1]) : 0;
+      return Math.max(max, seq);
+    }, 0);
+    const nextSubSeq = String(maxSubSeq + 1).padStart(2, '0');
+    const subprojectNumber = `${parentNumber}-${nextSubSeq}`;
 
     createMutation.mutate({
       name: formData.name,
       type: formData.type,
       parent_id: parentProject.id,
-      project_number: numRes.data.documentNumber,
+      project_number: subprojectNumber,
       // Arv fra parent
       client_name: parentProject.client_name || '',
       client_contact: parentProject.client_contact || '',
