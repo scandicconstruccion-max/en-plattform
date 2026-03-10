@@ -1097,79 +1097,64 @@ export default function OptimizedResourceCalendar({
                       )}
                       style={{ width: colWidth, height: style.height }}>
 
-                      {resourceColumnCollapsed ?
-                      <div className="flex flex-col items-center gap-1">
-                          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center",
-                            resource.type === 'machine' ? "bg-amber-100" : "bg-emerald-100")}>
-                            {resource.type === 'machine' ? (
-                              <Truck className="h-3.5 w-3.5 text-amber-600" />
-                            ) : (
-                            <span className="text-xs font-semibold text-emerald-700">
-                              {(() => {
-                              const names = resource.navn?.split(' ') || [];
-                              if (names.length >= 2) {
-                                return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                              }
-                              return resource.navn?.charAt(0) || 'R';
-                            })()}
-                            </span>
-                            )}
-                          </div>
-                          {resource.type !== 'machine' && (
-                          <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">
-                            {allocPercent}%
-                          </span>
-                          )}
-                        </div> :
-                      resource.type === 'machine' ? (
-                       /* Machine row */
-                       <div className="flex items-start gap-2 w-full text-left">
-                         <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                           <Truck className="h-3.5 w-3.5 text-amber-600" />
-                         </div>
-                         <div className="min-w-0 flex-1">
-                           <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
-                             {resource.navn}
-                           </p>
-                           <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                             {resource.maskintype || resource.stilling || ''}
-                             {resource.maskinnummer ? ` · ${resource.maskinnummer}` : ''}
-                           </p>
-                         </div>
-                       </div>
-                     ) : (
-                     <button
-                         onClick={() => {
-                           setSelectedResource(resource);
-                           setActivityPanelOpen(true);
-                         }}
-                         className="flex items-start gap-2 w-full hover:opacity-75 transition-opacity text-left">
-                           <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                             <span className="text-xs font-semibold text-emerald-700">
-                               {(() => {
-                               const names = resource.navn?.split(' ') || [];
-                               if (names.length >= 2) {
-                                 return names[0].charAt(0) + names[names.length - 1].charAt(0);
-                               }
-                               return resource.navn?.charAt(0) || 'R';
-                             })()}
-                             </span>
-                           </div>
-                           <div className="min-w-0 flex-1">
-                             <div className="flex items-center gap-1.5">
-                               <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
-                                 {resource.navn}
-                               </p>
-                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 bg-green-100 text-green-700">
-                                 {allocPercent}%
-                               </span>
-                             </div>
-                             <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
-                               {resource.type === 'employee' ? resource.stilling : resource.rolle}
-                             </p>
-                           </div>
-                         </button>
-                     )}
+                      {(() => {
+                        const initials = (() => {
+                          const names = resource.navn?.split(' ') || [];
+                          if (names.length >= 2) return names[0].charAt(0) + names[names.length - 1].charAt(0);
+                          return resource.navn?.charAt(0) || 'R';
+                        })();
+                        if (resourceColumnCollapsed) {
+                          return (
+                            <div className="flex flex-col items-center gap-1">
+                              <div className={cn("w-7 h-7 rounded-full flex items-center justify-center",
+                                resource.type === 'machine' ? "bg-amber-100" : "bg-emerald-100")}>
+                                {resource.type === 'machine' ? (
+                                  <Truck className="h-3.5 w-3.5 text-amber-600" />
+                                ) : (
+                                  <span className="text-xs font-semibold text-emerald-700">{initials}</span>
+                                )}
+                              </div>
+                              {resource.type !== 'machine' && (
+                                <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">{allocPercent}%</span>
+                              )}
+                            </div>
+                          );
+                        }
+                        if (resource.type === 'machine') {
+                          return (
+                            <div className="flex items-start gap-2 w-full text-left">
+                              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                <Truck className="h-3.5 w-3.5 text-amber-600" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>{resource.navn}</p>
+                                <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                                  {resource.maskintype || resource.stilling || ''}
+                                  {resource.maskinnummer ? ` · ${resource.maskinnummer}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => { setSelectedResource(resource); setActivityPanelOpen(true); }}
+                            className="flex items-start gap-2 w-full hover:opacity-75 transition-opacity text-left">
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-semibold text-emerald-700">{initials}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>{resource.navn}</p>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 bg-green-100 text-green-700">{allocPercent}%</span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 truncate mt-0.5" title={resource.type === 'employee' ? resource.stilling : resource.rolle}>
+                                {resource.type === 'employee' ? resource.stilling : resource.rolle}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>);
 
