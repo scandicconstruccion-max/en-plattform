@@ -14,7 +14,7 @@ import OrderModuleDialog from '@/components/minbedrift/OrderModuleDialog';
 import CancelModuleDialog from '@/components/minbedrift/CancelModuleDialog';
 
 const grunnpakkeModules = ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms'];
-const grunnpakkePrice = 109;
+const grunnpakkePrice = 139;
 
 const moduleInfo = {
   tilbud: {
