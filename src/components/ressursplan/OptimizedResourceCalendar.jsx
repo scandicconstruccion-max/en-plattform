@@ -374,7 +374,7 @@ const ResourceRow = memo(({
     const startPos = { x: e.clientX, y: e.clientY };
     const assignmentStart = parseISO(assignment.start_dato_tid);
     const assignmentEnd = parseISO(assignment.slutt_dato_tid);
-    const rowHeight = 56;
+    const rowHeight = 44;
 
     const dragState = {
       assignment,
