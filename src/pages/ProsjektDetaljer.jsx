@@ -37,6 +37,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/shared/StatCard';
 import ProjectKPISection from '@/components/project/ProjectKPISection';
 import GenerateFDVDialog from '@/components/project/GenerateFDVDialog';
+import EmployeeSearchField from '@/components/shared/EmployeeSearchField';
 import {
   Building2, MapPin, Calendar, Users, Clock, AlertTriangle,
   FileText, Camera, CheckSquare, Edit, Mail, Phone, User,
