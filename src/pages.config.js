@@ -76,6 +76,7 @@ import Kalender from './pages/Kalender';
 import Kompetanser from './pages/Kompetanser';
 import Leverandorer from './pages/Leverandorer';
 import Lonnsgrunnlag from './pages/Lonnsgrunnlag';
+import Maskiner from './pages/Maskiner';
 import MinBedrift from './pages/MinBedrift';
 import Mottakskontroll from './pages/Mottakskontroll';
 import Ordre from './pages/Ordre';
@@ -97,7 +98,6 @@ import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
 import Varsler from './pages/Varsler';
-import Maskiner from './pages/Maskiner';
 import __Layout from './Layout.jsx';
 
 
@@ -131,6 +131,7 @@ export const PAGES = {
     "Kompetanser": Kompetanser,
     "Leverandorer": Leverandorer,
     "Lonnsgrunnlag": Lonnsgrunnlag,
+    "Maskiner": Maskiner,
     "MinBedrift": MinBedrift,
     "Mottakskontroll": Mottakskontroll,
     "Ordre": Ordre,
@@ -152,7 +153,6 @@ export const PAGES = {
     "Tilbud": Tilbud,
     "Timelister": Timelister,
     "Varsler": Varsler,
-    "Maskiner": Maskiner,
 }
 
 export const pagesConfig = {

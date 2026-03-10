@@ -168,7 +168,7 @@ export default function Layout({ children, currentPageName }) {
   const moduleSections = [
   {
     title: 'GRUNNPAKKE',
-    modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms']
+    modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner']
   },
   {
     separator: true
@@ -179,7 +179,7 @@ export default function Layout({ children, currentPageName }) {
   },
   {
     title: 'PERSONELL & RESSURSER',
-    modules: ['ansatte', 'timelister', 'ressursplan', 'maskiner', 'kalender', 'chat']
+    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat']
   },
   {
     title: 'DOKUMENTASJON & OVERLEVERING',

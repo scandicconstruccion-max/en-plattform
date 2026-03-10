@@ -15,18 +15,52 @@ import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const MASKINTYPES = [
-  { value: 'gravemaskin', label: 'Gravemaskin' },
-  { value: 'lift', label: 'Lift' },
-  { value: 'kran', label: 'Kran' },
-  { value: 'dumper', label: 'Dumper' },
-  { value: 'hjullaster', label: 'Hjullaster' },
-  { value: 'kompressor', label: 'Kompressor' },
-  { value: 'betongbil', label: 'Betongbil' },
-  { value: 'stillaskran', label: 'Stillaskran' },
-  { value: 'minidumper', label: 'Minidumper' },
-  { value: 'annet', label: 'Annet' },
+const UTSTYRTYPER = [
+  { value: 'maskin', label: 'Maskin / Kjøretøy' },
+  { value: 'handverktoy', label: 'Håndverktøy / Elektroverktøy' },
+  { value: 'stillas', label: 'Stillas / Løfteutstyr' },
+  { value: 'maling', label: 'Maling / Overflatebehandling' },
+  { value: 'annet_utstyr', label: 'Annet utstyr' },
 ];
+
+const MASKINTYPE_BY_UTSTYRSTYPE = {
+  maskin: [
+    { value: 'gravemaskin', label: 'Gravemaskin' },
+    { value: 'lift', label: 'Lift' },
+    { value: 'kran', label: 'Kran' },
+    { value: 'dumper', label: 'Dumper' },
+    { value: 'hjullaster', label: 'Hjullaster' },
+    { value: 'kompressor', label: 'Kompressor' },
+    { value: 'betongbil', label: 'Betongbil' },
+    { value: 'stillaskran', label: 'Stillaskran' },
+    { value: 'minidumper', label: 'Minidumper' },
+  ],
+  handverktoy: [
+    { value: 'slagborr', label: 'Slagborrmaskin' },
+    { value: 'kjedeborr', label: 'Kjedeborrmaskin' },
+    { value: 'piggemaskin', label: 'Piggemaskin' },
+    { value: 'vinkelsliper', label: 'Vinkelsliper' },
+    { value: 'rundsag', label: 'Rundsag' },
+    { value: 'stikksag', label: 'Stikksag' },
+    { value: 'boremaskin', label: 'Boremaskin' },
+    { value: 'spikerpistol', label: 'Spikerpistol' },
+    { value: 'sliperimaskin', label: 'Sliperimaskin' },
+  ],
+  stillas: [
+    { value: 'rulestilas', label: 'Rullestilas' },
+    { value: 'fasadestilas', label: 'Fasadestilas' },
+    { value: 'arbeidsbukk', label: 'Arbeidsbukk' },
+    { value: 'lift_saks', label: 'Sakselift' },
+    { value: 'lift_mast', label: 'Mastlift' },
+  ],
+  maling: [
+    { value: 'luftkompressor', label: 'Luftkompressor' },
+    { value: 'malingspray', label: 'Malingsprøyte' },
+  ],
+  annet_utstyr: [],
+};
+
+const MASKINTYPES = Object.values(MASKINTYPE_BY_UTSTYRSTYPE).flat().concat([{ value: 'annet', label: 'Annet' }]);
 
 const STATUS_CONFIG = {
   tilgjengelig: { label: 'Tilgjengelig', class: 'bg-green-100 text-green-700' },
