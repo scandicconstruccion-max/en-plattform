@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,7 @@ export default function SjekkUtDialog({ maskin, employees, open, onOpenChange, o
   const [prosjektLokasjon, setProsjektLokasjon] = useState(maskin?.prosjekt_lokasjon || '');
   const [lokasjonNotat, setLokasjonNotat] = useState(maskin?.lokasjon_notat || '');
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (maskin) {
       setLokasjon(maskin.lokasjon || 'lager');
       setHosAnsattId(maskin.hos_ansatt_id || '');
