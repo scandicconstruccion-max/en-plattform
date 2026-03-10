@@ -47,7 +47,7 @@ const moduleInfo = {
   },
   ressursplan: {
     title: 'Ressursplanlegger',
-    body: 'Se hvem av dine ansatte som er ledig og hvem som allerede er booket – i en enkel kalendervisning. Prosjektlederen kan planlegge hvem som skal på hvilken jobb i god tid, og unngår dobbeltbooking. Du kan også filtrere på kompetanser, slik at du alltid sender rett person med rett fagkunnskap til riktig oppdrag. Kobles mot Ansatte, Kompetanser, Kalender og Timelister.'
+    body: 'Se hvem av dine ansatte som er ledig og hvem som allerede er booket – i en enkel kalendervisning. Prosjektlederen kan planlegge hvem som skal på hvilken jobb i god tid, og unngår dobbeltbooking. Du kan også planlegge maskiner og utstyr direkte i ressursplanleggeren sammen med ansatte, og få full oversikt over hva som er i bruk hvor og når. Du kan filtrere på kompetanser, slik at du alltid sender rett person med rett fagkunnskap til riktig oppdrag. Kobles mot Ansatte, Kompetanser, Maskiner, Kalender og Timelister.'
   },
   kalender: {
     title: 'Kalender',
