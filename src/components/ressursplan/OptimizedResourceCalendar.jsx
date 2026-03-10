@@ -271,8 +271,13 @@ const AssignmentBlock = memo(({
              <AlertTriangle className="h-3 w-3 flex-shrink-0" title="Mangler nødvendige kompetanser" />
            )}
          </span>
-         {assignment.machine_navn && (
-           <span className="truncate text-white/75 text-[9px] leading-none mt-0.5">{assignment.machine_navn}</span>
+         {/* Show machine name under project name (resource view) */}
+         {assignment.machine_navn && !assignment._isMachineRow && (
+           <span className="truncate text-white/75 text-[9px] leading-none mt-0.5">🚜 {assignment.machine_navn}</span>
+         )}
+         {/* In machine row view: show resource name */}
+         {assignment._isMachineRow && assignment.resource_navn && (
+           <span className="truncate text-white/75 text-[9px] leading-none mt-0.5">👷 {assignment.resource_navn}</span>
          )}
        </span>
      </div>);
