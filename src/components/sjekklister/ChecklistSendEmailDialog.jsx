@@ -97,25 +97,39 @@ En Plattform
         </DialogHeader>
 
         <div className="space-y-4">
-          {presets.length > 0 && (
+          {involvedParties.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-slate-700 mb-2">Hurtigvalg:</p>
-              <div className="flex flex-wrap gap-2">
-                {presets.map((p, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => {
-                      if (!recipients.find(r => r.email === p.email)) {
-                        setRecipients(r => [...r.filter(x => x.email), { label: p.label, email: p.email }]);
-                      }
-                    }}
-                    className="px-3 py-1 rounded-lg text-sm border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-colors"
-                  >
-                    + {p.label}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowParties(p => !p)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors text-sm font-medium text-slate-700"
+              >
+                <span className="flex items-center gap-2"><Users className="h-4 w-4 text-emerald-600" /> Involverte parter i prosjektet</span>
+                {showParties ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+              {showParties && (
+                <div className="mt-2 border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+                  {involvedParties.map((p, i) => {
+                    const alreadyAdded = recipients.some(r => r.email === p.email);
+                    return (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-slate-50">
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{p.label}</p>
+                          <p className="text-xs text-slate-500">{p.group} — {p.email}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => addParty(p)}
+                          disabled={alreadyAdded}
+                          className={`text-xs px-2 py-1 rounded-lg border transition-colors ${alreadyAdded ? 'border-emerald-200 text-emerald-600 bg-emerald-50 cursor-default' : 'border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700'}`}
+                        >
+                          {alreadyAdded ? '✓ Lagt til' : '+ Legg til'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
