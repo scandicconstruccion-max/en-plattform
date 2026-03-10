@@ -488,24 +488,48 @@ export default function Ressursplan() {
 
 
   // Apply filters with search and grouping
-  let filteredResources = allResources.filter((r) => {
+  let filteredHumanResources = humanResources.filter((r) => {
     if (filters.resourceType !== 'all' && r.type !== filters.resourceType) return false;
+    if (searchQuery && !r.navn.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  let filteredMachineResources = machineResources.filter((r) => {
     if (searchQuery && !r.navn.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
   // Apply grouping
   if (groupBy === 'type') {
-    const employees = filteredResources.filter((r) => r.type === 'employee');
-    const externals = filteredResources.filter((r) => r.type === 'external');
-    filteredResources = [...employees, ...externals];
+    const emp = filteredHumanResources.filter((r) => r.type === 'employee');
+    const ext = filteredHumanResources.filter((r) => r.type === 'external');
+    filteredHumanResources = [...emp, ...ext];
   } else if (groupBy === 'department') {
-    filteredResources = filteredResources.sort((a, b) => {
-      const deptA = a.department || '';
-      const deptB = b.department || '';
-      return deptA.localeCompare(deptB);
-    });
+    filteredHumanResources = filteredHumanResources.sort((a, b) =>
+      (a.department || '').localeCompare(b.department || ''));
   }
+
+  // Build the resource list to show based on planleggerView
+  let filteredResources;
+  if (planleggerView === 'resources') {
+    filteredResources = filteredHumanResources;
+  } else if (planleggerView === 'machines') {
+    filteredResources = filteredMachineResources;
+  } else {
+    // 'all' - show both with separator marker
+    filteredResources = [
+      ...filteredHumanResources,
+      ...filteredMachineResources,
+    ];
+  }
+
+  // For machine view: build machine assignments (assignments where machine_id === resource.id)
+  // We re-map machine assignments so resource_id points to the machine's id
+  const machineAssignments = assignments.filter(a => a.machine_id).map(a => ({
+    ...a,
+    _isMachineRow: true,
+    resource_id: a.machine_id, // Override so calendar renders on machine row
+  }));
 
   const filteredAssignments = assignments.filter((a) => {
     if (filters.projectId !== 'all' && a.prosjekt_id !== filters.projectId) return false;
