@@ -628,7 +628,37 @@ export default function Ressursplan() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="hidden md:inline text-xs text-slate-600">{filteredResources.length} res.</span>
+            {/* View toggle: resources / machines / all */}
+            <div className="hidden sm:flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+              <button
+                onClick={() => setPlanleggerView('resources')}
+                className={cn('flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                  planleggerView === 'resources' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                )}
+                title="Vis ressurser">
+                <Users className="h-3 w-3" />
+                <span className="hidden md:inline">Ressurser</span>
+              </button>
+              <button
+                onClick={() => setPlanleggerView('machines')}
+                className={cn('flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                  planleggerView === 'machines' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                )}
+                title="Vis maskiner">
+                <Truck className="h-3 w-3" />
+                <span className="hidden md:inline">Maskiner</span>
+              </button>
+              <button
+                onClick={() => setPlanleggerView('all')}
+                className={cn('flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                  planleggerView === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                )}
+                title="Vis alle">
+                <Grid3x3 className="h-3 w-3" />
+                <span className="hidden md:inline">Alle</span>
+              </button>
+            </div>
+            <span className="hidden md:inline text-xs text-slate-600">{filteredResources.length} rader</span>
             {canEdit && !isFullscreen &&
             <Button
               onClick={() => setShowCreateDialog(true)}
