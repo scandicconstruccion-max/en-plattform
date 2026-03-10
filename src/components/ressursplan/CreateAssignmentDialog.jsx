@@ -132,6 +132,43 @@ export default function CreateAssignmentDialog({
     });
   };
 
+  // Suggest default driver when resource is selected
+  useEffect(() => {
+    if (selectedResources.length === 1 && maskiner.length > 0) {
+      const suggestedMachine = maskiner.find(
+        (m) => m.aktiv && m.standard_forer_id === selectedResources[0]
+      );
+      if (suggestedMachine && !formData.machine_id) {
+        setFormData((prev) => ({
+          ...prev,
+          machine_id: suggestedMachine.id,
+          machine_navn: suggestedMachine.navn,
+        }));
+      }
+    }
+  }, [selectedResources]);
+
+  // Check machine conflict when machine or time changes
+  useEffect(() => {
+    if (!formData.machine_id || !formData.start_dato_tid || !formData.slutt_dato_tid) {
+      setMachineConflict(false);
+      return;
+    }
+    const start = new Date(formData.start_dato_tid);
+    const end = new Date(formData.slutt_dato_tid);
+    const conflict = allAssignments.some((a) => {
+      if (a.machine_id !== formData.machine_id) return false;
+      const aStart = parseISO(a.start_dato_tid);
+      const aEnd = parseISO(a.slutt_dato_tid);
+      return (
+        isWithinInterval(start, { start: aStart, end: aEnd }) ||
+        isWithinInterval(end, { start: aStart, end: aEnd }) ||
+        isWithinInterval(aStart, { start, end })
+      );
+    });
+    setMachineConflict(conflict);
+  }, [formData.machine_id, formData.start_dato_tid, formData.slutt_dato_tid, allAssignments]);
+
   const resetForm = () => {
     setFormData({
       prosjekt_id: '',
@@ -142,12 +179,15 @@ export default function CreateAssignmentDialog({
       slutt_dato_tid: '',
       rolle_pa_prosjekt: '',
       kommentar: '',
+      machine_id: '',
+      machine_navn: '',
       include_saturday: currentSettings.default_include_saturday || false,
       include_sunday: currentSettings.default_include_sunday || false
     });
     setSelectedResources([]);
     setRequiredCompetencies([]);
     setCompetencyInput('');
+    setMachineConflict(false);
   };
 
   const handleClose = (open) => {
