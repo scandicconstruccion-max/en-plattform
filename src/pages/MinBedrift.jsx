@@ -473,7 +473,7 @@ export default function MinBedrift() {
                       <Info className="text-emerald-600 h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik og HMS & Risiko</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko og Maskiner</p>
                 </div>
                 <div className="text-right flex-shrink-0 ml-4">
                   <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{grunnpakkePrice} kr/mnd</p>
