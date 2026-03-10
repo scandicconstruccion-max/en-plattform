@@ -229,6 +229,15 @@ export default function ProsjektDetaljer() {
         backUrl={createPageUrl('Dashboard')}
         actions={
           <div className="flex gap-2">
+            {project.type !== 'unit' && (
+              <Button 
+                onClick={() => setShowSubprojectDialog(true)} 
+                variant="outline"
+                className="rounded-xl gap-2">
+                <Plus className="h-4 w-4" />
+                {project.type === 'project' ? 'Opprett delprosjekt' : 'Opprett enhet'}
+              </Button>
+            )}
             {project.status === 'fullfort' && (
               <Button 
                 onClick={() => setShowFDVDialog(true)} 
