@@ -768,6 +768,7 @@ export default function Ressursplan() {
          employees={employees}
          externals={externals}
          projects={projects}
+         maskinerProp={maskiner}
          onSubmit={handleCreateAssignment}
          isLoading={createAssignmentMutation.isPending}
          prefilledData={cellClickData} />
