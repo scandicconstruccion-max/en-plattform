@@ -150,6 +150,84 @@ export default function Varsler() {
         </div>
       </div>
 
+      {/* Email settings toggle button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setShowEmailSettings(!showEmailSettings);
+            if (!notificationEmail && currentUser?.email) {
+              setNotificationEmail(currentUser.email);
+            }
+          }}
+          className="gap-2 text-sm"
+        >
+          <Mail className="h-4 w-4" />
+          E-postvarsling
+          <Settings className="h-3.5 w-3.5 text-slate-400" />
+        </Button>
+      </div>
+
+      {/* Email notification settings panel */}
+      {showEmailSettings && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center">
+              <Mail className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-slate-900 dark:text-white text-sm">E-postvarsling</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Motta kopi av varsler på e-post</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+            <div>
+              <Label className="font-medium text-sm text-slate-900 dark:text-white">Aktiver e-postvarsler</Label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Du mottar en e-post hver gang du får et nytt varsel</p>
+            </div>
+            <Switch
+              checked={emailEnabled}
+              onCheckedChange={setEmailEnabled}
+            />
+          </div>
+
+          {emailEnabled && (
+            <div className="space-y-2">
+              <Label htmlFor="notificationEmail" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                E-postadresse for varsler
+              </Label>
+              <Input
+                id="notificationEmail"
+                type="email"
+                value={notificationEmail}
+                onChange={e => setNotificationEmail(e.target.value)}
+                placeholder="din@epost.no"
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Kan være en annen adresse enn din innloggings-e-post
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              onClick={() => saveEmailSettingsMutation.mutate()}
+              disabled={saveEmailSettingsMutation.isPending || (emailEnabled && !notificationEmail)}
+              className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saveEmailSettingsMutation.isPending ? 'Lagrer...' : emailSaved ? 'Lagret!' : 'Lagre innstillinger'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowEmailSettings(false)}>
+              Lukk
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-3">
         <div className="flex items-center gap-2">
