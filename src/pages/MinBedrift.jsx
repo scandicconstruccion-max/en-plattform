@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import OrderModuleDialog from '@/components/minbedrift/OrderModuleDialog';
 import CancelModuleDialog from '@/components/minbedrift/CancelModuleDialog';
 
-const grunnpakkeModules = ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms'];
+const grunnpakkeModules = ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner'];
 const grunnpakkePrice = 139;
 
 const moduleInfo = {
