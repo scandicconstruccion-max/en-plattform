@@ -38,6 +38,7 @@ import StatCard from '@/components/shared/StatCard';
 import ProjectKPISection from '@/components/project/ProjectKPISection';
 import GenerateFDVDialog from '@/components/project/GenerateFDVDialog';
 import EmployeeSearchField from '@/components/shared/EmployeeSearchField';
+import CustomerSelectField from '@/components/shared/CustomerSelectField';
 import {
   Building2, MapPin, Calendar, Users, Clock, AlertTriangle,
   FileText, Camera, CheckSquare, Edit, Mail, Phone, User,
