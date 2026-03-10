@@ -11,9 +11,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Switch } from '@/components/ui/switch';
 import PageHeader from '@/components/shared/PageHeader';
-import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
+import SjekkUtDialog from '@/components/maskiner/SjekkUtDialog';
+import { Plus, Pencil, Trash2, Loader2, MapPin, User, Warehouse, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { nb } from 'date-fns/locale';
+
+const LOKASJON_CONFIG = {
+  lager: { label: 'På lager', icon: Warehouse, badgeClass: 'bg-green-100 text-green-700' },
+  hos_ansatt: { label: 'Hos ansatt', icon: User, badgeClass: 'bg-blue-100 text-blue-700' },
+  prosjekt: { label: 'På prosjekt', icon: MapPin, badgeClass: 'bg-orange-100 text-orange-700' },
+  service: { label: 'På service', icon: Wrench, badgeClass: 'bg-yellow-100 text-yellow-700' },
+};
 
 const UTSTYRTYPER = [
   { value: 'maskin', label: 'Maskin / Kjøretøy' },
