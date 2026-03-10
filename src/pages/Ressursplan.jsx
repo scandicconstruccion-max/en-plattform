@@ -262,6 +262,15 @@ export default function Ressursplan() {
       assignment.id
     );
 
+    // Also check machine conflicts
+    const machineConflicts = checkMachineConflicts(
+      assignment.machine_id,
+      newStartDatoTid,
+      newSluttDatoTid,
+      assignment.id
+    );
+    const allConflicts = [...foundConflicts, ...machineConflicts];
+
     const resource = newResourceId !== assignment.resource_id ?
     allResources.find((r) => r.id === newResourceId) :
     null;
