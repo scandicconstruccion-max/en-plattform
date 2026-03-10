@@ -179,7 +179,7 @@ export default function Layout({ children, currentPageName }) {
   },
   {
     title: 'PERSONELL & RESSURSER',
-    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat']
+    modules: ['ansatte', 'timelister', 'ressursplan', 'maskiner', 'kalender', 'chat']
   },
   {
     title: 'DOKUMENTASJON & OVERLEVERING',
