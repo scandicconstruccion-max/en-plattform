@@ -45,10 +45,39 @@ export default function Varsler() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+    onSuccess: (user) => {
+      setEmailEnabled(user?.email_notifications_enabled || false);
+      setNotificationEmail(user?.notification_email || user?.email || '');
+    }
+  });
+
+  // Set initial values when user loads
+  useState(() => {
+    if (currentUser) {
+      setEmailEnabled(currentUser.email_notifications_enabled || false);
+      setNotificationEmail(currentUser.notification_email || currentUser.email || '');
+    }
+  });
+
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => base44.entities.Notification.list('-created_date', 200),
     refetchInterval: 30000,
+  });
+
+  const saveEmailSettingsMutation = useMutation({
+    mutationFn: () => base44.auth.updateMe({
+      email_notifications_enabled: emailEnabled,
+      notification_email: notificationEmail,
+    }),
+    onSuccess: () => {
+      setEmailSaved(true);
+      setTimeout(() => setEmailSaved(false), 2500);
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+    },
   });
 
   const markReadMutation = useMutation({
