@@ -155,6 +155,9 @@ export default function ProsjektDetaljer() {
       project_manager_name: project.project_manager_name || '',
       project_manager: project.project_manager || '',
       project_manager_phone: project.project_manager_phone || '',
+      resident_name: project.resident_name || '',
+      resident_phone: project.resident_phone || '',
+      resident_email: project.resident_email || '',
       subcontractors: project.subcontractors || [],
       architects: project.architects || [],
       consultants: project.consultants || []
@@ -379,7 +382,10 @@ export default function ProsjektDetaljer() {
                             <Building2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-slate-900 truncate">{child.name}</p>
-                              <p className="text-xs text-slate-500">{child.project_number}</p>
+                              <div className="text-xs text-slate-500 space-y-0.5">
+                                <p>{child.project_number}</p>
+                                {child.resident_name && <p className="text-emerald-700 font-medium">👤 {child.resident_name}</p>}
+                              </div>
                             </div>
                             <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
                           </Link>
@@ -581,6 +587,29 @@ export default function ProsjektDetaljer() {
               )}
             </Card>
 
+            {/* Resident/Contact Info */}
+            {project.resident_name && (
+              <Card className="p-6 border-0 shadow-sm">
+                <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <User className="h-5 w-5 text-purple-600" />
+                  Beboer / Kontakt
+                </h3>
+                <div className="space-y-2">
+                  <p className="font-medium text-slate-900">{project.resident_name}</p>
+                  {project.resident_email && (
+                    <a href={`mailto:${project.resident_email}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600">
+                      <Mail className="h-4 w-4" /> {project.resident_email}
+                    </a>
+                  )}
+                  {project.resident_phone && (
+                    <a href={`tel:${project.resident_phone}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600">
+                      <Phone className="h-4 w-4" /> {project.resident_phone}
+                    </a>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {/* Quick Links */}
             <Card className="p-6 border-0 shadow-sm">
               <h3 className="font-semibold text-slate-900 mb-4">Hurtiglenker</h3>
@@ -757,6 +786,42 @@ export default function ProsjektDetaljer() {
                   value={{ name: formData.client_name, contact: formData.client_contact, email: formData.client_email, phone: formData.client_phone }}
                   onChange={(c) => setFormData({...formData, client_name: c.name, client_contact: c.contact, client_email: c.email, client_phone: c.phone})}
                 />
+              </div>
+
+              <Separator />
+
+              {/* Resident/Contact Info */}
+              <div>
+                <h4 className="font-medium text-slate-900 mb-3">Beboer / Annen kontakt</h4>
+                <div className="space-y-3">
+                  <div>
+                    <Label>Navn</Label>
+                    <Input
+                      value={formData.resident_name}
+                      onChange={(e) => setFormData({...formData, resident_name: e.target.value})}
+                      placeholder="F.eks. navn på beboer"
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Telefon</Label>
+                    <Input
+                      value={formData.resident_phone}
+                      onChange={(e) => setFormData({...formData, resident_phone: e.target.value})}
+                      placeholder="Telefonnummer"
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>E-post</Label>
+                    <Input
+                      value={formData.resident_email}
+                      onChange={(e) => setFormData({...formData, resident_email: e.target.value})}
+                      placeholder="E-postadresse"
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                </div>
               </div>
 
               <Separator />
