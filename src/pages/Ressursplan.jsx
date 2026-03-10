@@ -39,6 +39,7 @@ export default function Ressursplan() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [resourceColumnCollapsed, setResourceColumnCollapsed] = useState(false);
   const [cellClickData, setCellClickData] = useState(null);
+  const [planleggerView, setPlanleggerView] = useState('resources'); // 'resources' | 'machines' | 'all'
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
