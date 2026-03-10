@@ -590,10 +590,29 @@ export default function ProsjektDetaljer() {
                     </Select>
                   </div>
                   <div className="col-span-2">
-                    <Label>Adresse</Label>
+                    <Label>Gateadresse</Label>
                     <Input
-                      value={formData.address}
-                      onChange={(e) => setFormData({...formData, address: e.target.value})}
+                      placeholder="Gatenavn og nummer"
+                      value={formData.address_street || ''}
+                      onChange={(e) => setFormData({...formData, address_street: e.target.value, address: [e.target.value, formData.address_city ? `${formData.address_postal || ''} ${formData.address_city}`.trim() : ''].filter(Boolean).join(', ')})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Postnummer</Label>
+                    <Input
+                      placeholder="0000"
+                      value={formData.address_postal || ''}
+                      onChange={(e) => setFormData({...formData, address_postal: e.target.value, address: [formData.address_street || '', `${e.target.value} ${formData.address_city || ''}`.trim()].filter(Boolean).join(', ')})}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label>Poststed</Label>
+                    <Input
+                      placeholder="By"
+                      value={formData.address_city || ''}
+                      onChange={(e) => setFormData({...formData, address_city: e.target.value, address: [formData.address_street || '', `${formData.address_postal || ''} ${e.target.value}`.trim()].filter(Boolean).join(', ')})}
                       className="mt-1.5 rounded-xl"
                     />
                   </div>
