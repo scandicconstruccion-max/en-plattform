@@ -405,7 +405,7 @@ export default function Maskiner() {
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || !formData.navn || !formData.maskintype}
+                disabled={isPending || !formData.navn || !formData.maskintype || (formData.maskintype === 'egendefinert' && !formData.maskintype_custom)}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
               >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
