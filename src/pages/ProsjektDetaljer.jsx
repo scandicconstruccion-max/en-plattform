@@ -235,7 +235,7 @@ export default function ProsjektDetaljer() {
                 variant="outline"
                 className="rounded-xl gap-2">
                 <Plus className="h-4 w-4" />
-                {project.type === 'project' ? 'Opprett delprosjekt' : 'Opprett enhet'}
+                + Opprett underprosjekt
               </Button>
             )}
             {project.status === 'fullfort' && (
