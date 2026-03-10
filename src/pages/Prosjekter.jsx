@@ -127,8 +127,16 @@ export default function Prosjekter() {
     const matchesSearch = p.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.client_name?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const isMainProject = !p.parent_id;
+    return matchesSearch && matchesStatus && isMainProject;
   });
+
+  const projectHierarchy = buildProjectHierarchy(projects);
+
+  const handleAddSubproject = (parentProject) => {
+    setSelectedParentProject(parentProject);
+    setShowSubprojectDialog(true);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
