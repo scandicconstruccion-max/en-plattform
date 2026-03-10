@@ -61,6 +61,7 @@ const moduleIcons = {
 };
 
 const moduleLabels = {
+  maskiner: 'Maskiner',
   varsler: 'Varsler',
   anbudsmodul: 'Anbudsmodul',
   dashboard: 'Dashboard',
