@@ -186,6 +186,13 @@ export default function Prosjekter() {
             >
               <List className="h-4 w-4" />
             </button>
+            <button
+              onClick={() => setViewMode('hierarchy')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'hierarchy' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100'}`}
+              title="Hierarki"
+            >
+              <Building2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
