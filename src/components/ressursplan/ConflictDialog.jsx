@@ -15,11 +15,12 @@ export default function ConflictDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
-            ⚠️ Ressurskonflikt oppdaget
+            ⚠️ Planleggingskonflikt oppdaget
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-3">
             <p>
-              <strong>{resourceName}</strong> er allerede planlagt på et annet prosjekt i dette tidsrommet:
+              {resourceName && <><strong>{resourceName}</strong> eller en tilknyttet maskin er</>}
+              {!resourceName && <>En ressurs er</>} allerede planlagt i dette tidsrommet:
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
               {conflicts.map((conflict, idx) => (
