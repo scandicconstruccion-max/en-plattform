@@ -3,7 +3,7 @@ import { FixedSizeList as List } from 'react-window';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, Settings, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, AlertTriangle, Truck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { format, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, subWeeks, subMonths, isSameDay, isWithinInterval, parseISO, endOfWeek, endOfMonth, eachDayOfInterval, differenceInMinutes, addMinutes, getDay } from 'date-fns';
 import { nb } from 'date-fns/locale';
