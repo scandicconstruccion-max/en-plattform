@@ -96,13 +96,20 @@ export default function CreateAssignmentDialog({
 
          setFormData(prev => ({
            ...prev,
-           resource_type: prefilledData.resourceType,
+           resource_type: prefilledData.resourceType || 'employee',
            start_dato_tid: startLocal,
-           slutt_dato_tid: endLocal
+           slutt_dato_tid: endLocal,
+           // Pre-fill machine if coming from machine row click
+           ...(prefilledData.machineId ? {
+             machine_id: prefilledData.machineId,
+             machine_navn: prefilledData.machineNavn || '',
+           } : {})
          }));
 
-         // Pre-select the resource
-         setSelectedResources([prefilledData.resourceId]);
+         // Pre-select the resource (may be null if coming from machine row with no default driver)
+         if (prefilledData.resourceId) {
+           setSelectedResources([prefilledData.resourceId]);
+         }
        } else {
          // Default behavior
          const defaults = getDefaultDateTime(initialStartDate);
