@@ -688,11 +688,15 @@ export default function Ressursplan() {
         )}>
           {filteredResources.length === 0 ?
           <EmptyState
-            icon={Users}
-            title="Ingen ressurser"
-            description="Legg til ansatte eller eksterne ressurser for å komme i gang"
-            actionLabel="Ny ekstern ressurs"
-            onAction={() => setShowExternalDialog(true)} /> :
+            icon={planleggerView === 'machines' ? Truck : Users}
+            title={planleggerView === 'machines' ? 'Ingen maskiner' : 'Ingen ressurser'}
+            description={planleggerView === 'machines'
+              ? 'Legg til aktive maskiner i maskinregisteret for å planlegge dem her'
+              : 'Legg til ansatte eller eksterne ressurser for å komme i gang'}
+            actionLabel={planleggerView === 'machines' ? 'Gå til maskiner' : 'Ny ekstern ressurs'}
+            onAction={planleggerView === 'machines'
+              ? () => navigate(createPageUrl('Maskiner'))
+              : () => setShowExternalDialog(true)} /> :
 
 
           <OptimizedResourceCalendar
