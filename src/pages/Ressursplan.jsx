@@ -292,8 +292,8 @@ export default function Ressursplan() {
 
     };
 
-    if (foundConflicts.length > 0) {
-      setConflicts(foundConflicts);
+    if (allConflicts.length > 0) {
+      setConflicts(allConflicts);
       setPendingAssignment({
         ...assignment,
         ...updatedData,
