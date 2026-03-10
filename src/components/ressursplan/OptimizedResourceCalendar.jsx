@@ -264,10 +264,15 @@ const AssignmentBlock = memo(({
 
          </>
       }
-       <span className="pointer-events-auto cursor-pointer block leading-tight flex items-center justify-between h-full">
-         <span className="truncate flex-1">{label}</span>
-         {hasCompetencyIssue && (
-           <AlertTriangle className="h-3 w-3 flex-shrink-0 ml-1" title="Mangler nødvendige kompetanser" />
+       <span className="pointer-events-auto cursor-pointer block leading-tight h-full flex flex-col justify-center">
+         <span className="flex items-center justify-between gap-1">
+           <span className="truncate flex-1">{label}</span>
+           {hasCompetencyIssue && (
+             <AlertTriangle className="h-3 w-3 flex-shrink-0" title="Mangler nødvendige kompetanser" />
+           )}
+         </span>
+         {assignment.machine_navn && (
+           <span className="truncate text-white/75 text-[9px] leading-none mt-0.5">{assignment.machine_navn}</span>
          )}
        </span>
      </div>);
