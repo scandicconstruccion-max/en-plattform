@@ -14,13 +14,15 @@ export default function ChecklistSendEmailDialog({ open, onOpenChange, checklist
   const [showParties, setShowParties] = useState(false);
 
   useEffect(() => {
-    if (open && checklist?.project_id) {
+    if (project) {
+      setProjectData(project);
+    } else if (open && checklist?.project_id) {
       base44.entities.Project.list().then(res => {
         const found = res?.find(p => p.id === checklist.project_id);
         if (found) setProjectData(found);
       });
     }
-  }, [open, checklist?.project_id]);
+  }, [open, checklist?.project_id, project]);
 
   // Build list of all involved parties from project
   const involvedParties = [];
