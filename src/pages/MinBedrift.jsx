@@ -480,7 +480,7 @@ export default function MinBedrift() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {['Dashboard', 'Prosjekter', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko'].map((name) =>
+                {['Dashboard', 'Prosjekter', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko', 'Maskiner'].map((name) =>
                 <span key={name} className="inline-flex items-center gap-1 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-lg">
                     <Check className="h-3 w-3" /> {name}
                   </span>
