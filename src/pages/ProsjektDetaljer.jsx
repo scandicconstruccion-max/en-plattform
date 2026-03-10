@@ -232,10 +232,9 @@ export default function ProsjektDetaljer() {
             {project.type !== 'unit' && (
               <Button 
                 onClick={() => setShowSubprojectDialog(true)} 
-                variant="outline"
-                className="rounded-xl gap-2">
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2">
                 <Plus className="h-4 w-4" />
-                + Opprett underprosjekt
+                Opprett underprosjekt
               </Button>
             )}
             {project.status === 'fullfort' && (
