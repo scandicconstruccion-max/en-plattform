@@ -77,7 +77,7 @@ export default function ChecklistItemCard({
             key={s}
             variant={currentStatus === s ? 'default' : 'outline'}
             size="sm"
-            onClick={() => onStatusChange(itemIndex, s)}
+            onClick={() => onStatusChange(itemIndex, currentStatus === s ? 'ikke_kontrollert' : s)}
             className={cn(
               'text-xs',
               currentStatus === s && statusConfig[s]?.color
