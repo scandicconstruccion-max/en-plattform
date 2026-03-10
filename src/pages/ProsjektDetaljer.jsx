@@ -40,10 +40,11 @@ import GenerateFDVDialog from '@/components/project/GenerateFDVDialog';
 import EmployeeSearchField from '@/components/shared/EmployeeSearchField';
 import CustomerSelectField from '@/components/shared/CustomerSelectField';
 import HistoricContactPickerSection from '@/components/project/HistoricContactPickerSection';
+import CreateSubprojectDialog from '@/components/project/CreateSubprojectDialog';
 import {
   Building2, MapPin, Calendar, Users, Clock, AlertTriangle,
   FileText, Camera, CheckSquare, Edit, Mail, Phone, User,
-  HardHat, Ruler, Wrench, Plus, Trash2
+  HardHat, Ruler, Wrench, Plus, Trash2, ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
