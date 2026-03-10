@@ -1110,7 +1110,24 @@ export default function OptimizedResourceCalendar({
                           </span>
                         </div> :
 
-                      <button
+                      {resource.type === 'machine' ? (
+                       /* Machine row */
+                       <div className="flex items-start gap-2 w-full text-left">
+                         <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                           <Truck className="h-3.5 w-3.5 text-amber-600" />
+                         </div>
+                         <div className="min-w-0 flex-1">
+                           <p className="font-semibold text-slate-900 text-xs truncate" title={resource.navn}>
+                             {resource.navn}
+                           </p>
+                           <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                             {resource.maskintype || resource.stilling || ''}
+                             {resource.maskinnummer ? ` · ${resource.maskinnummer}` : ''}
+                           </p>
+                         </div>
+                       </div>
+                     ) : (
+                     <button
                          onClick={() => {
                            setSelectedResource(resource);
                            setActivityPanelOpen(true);
@@ -1141,6 +1158,7 @@ export default function OptimizedResourceCalendar({
                              </p>
                            </div>
                          </button>
+                     )}
                       }
                     </div>
                   </div>);
