@@ -25,11 +25,19 @@ export default function ProjectDropdown() {
   });
 
   useEffect(() => {
+    if (projects.length === 0) return;
     const stored = localStorage.getItem('selectedProject');
     if (stored) {
-      setSelectedProject(JSON.parse(stored));
+      const parsed = JSON.parse(stored);
+      const stillExists = projects.find(p => p.id === parsed.id);
+      if (stillExists) {
+        setSelectedProject(stillExists);
+      } else {
+        localStorage.removeItem('selectedProject');
+        setSelectedProject(null);
+      }
     }
-  }, []);
+  }, [projects]);
 
   useEffect(() => {
     const handleProjectSelected = () => {
