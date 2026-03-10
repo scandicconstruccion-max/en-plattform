@@ -97,6 +97,7 @@ import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
 import Varsler from './pages/Varsler';
+import SjekklisteDetaljer from './pages/SjekklisteDetaljer';
 import __Layout from './Layout.jsx';
 
 
@@ -151,6 +152,7 @@ export const PAGES = {
     "Tilbud": Tilbud,
     "Timelister": Timelister,
     "Varsler": Varsler,
+    "SjekklisteDetaljer": SjekklisteDetaljer,
 }
 
 export const pagesConfig = {
