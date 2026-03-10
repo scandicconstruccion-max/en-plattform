@@ -640,33 +640,16 @@ export default function ProsjektDetaljer() {
               {/* Project Manager */}
               <div>
                 <h4 className="font-medium text-slate-900 mb-3">Prosjektleder</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label>Navn</Label>
-                    <Input
-                      value={formData.project_manager_name}
-                      onChange={(e) => setFormData({...formData, project_manager_name: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>E-post</Label>
-                    <Input
-                      type="email"
-                      value={formData.project_manager}
-                      onChange={(e) => setFormData({...formData, project_manager: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>Telefon</Label>
-                    <Input
-                      value={formData.project_manager_phone}
-                      onChange={(e) => setFormData({...formData, project_manager_phone: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                </div>
+                <EmployeeSearchField
+                  employees={employees}
+                  value={{ name: formData.project_manager_name, email: formData.project_manager, phone: formData.project_manager_phone }}
+                  onChange={(emp) => setFormData({
+                    ...formData,
+                    project_manager_name: emp.name,
+                    project_manager: emp.email,
+                    project_manager_phone: emp.phone
+                  })}
+                />
               </div>
 
               <Separator />
