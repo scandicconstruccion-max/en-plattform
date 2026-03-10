@@ -1121,8 +1121,7 @@ export default function OptimizedResourceCalendar({
                           </span>
                           )}
                         </div> :
-
-                      {resource.type === 'machine' ? (
+                      resource.type === 'machine' ? (
                        /* Machine row */
                        <div className="flex items-start gap-2 w-full text-left">
                          <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -1171,7 +1170,6 @@ export default function OptimizedResourceCalendar({
                            </div>
                          </button>
                      )}
-                      }
                     </div>
                   </div>);
 
