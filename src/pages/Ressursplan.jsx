@@ -531,10 +531,20 @@ export default function Ressursplan() {
     resource_id: a.machine_id, // Override so calendar renders on machine row
   }));
 
-  const filteredAssignments = assignments.filter((a) => {
+  const baseFilteredAssignments = assignments.filter((a) => {
     if (filters.projectId !== 'all' && a.prosjekt_id !== filters.projectId) return false;
     return true;
   });
+
+  // Pick which assignments to show based on view
+  const filteredAssignments = planleggerView === 'machines'
+    ? machineAssignments.filter(a => filters.projectId === 'all' || a.prosjekt_id === filters.projectId)
+    : planleggerView === 'all'
+      ? [
+          ...baseFilteredAssignments,
+          ...machineAssignments.filter(a => filters.projectId === 'all' || a.prosjekt_id === filters.projectId),
+        ]
+      : baseFilteredAssignments;
 
   return (
     <div className={cn(
