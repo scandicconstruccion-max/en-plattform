@@ -681,41 +681,10 @@ export default function ProsjektDetaljer() {
               {/* Customer */}
               <div>
                 <h4 className="font-medium text-slate-900 mb-3">Kunde</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Kundenavn</Label>
-                    <Input
-                      value={formData.client_name}
-                      onChange={(e) => setFormData({...formData, client_name: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>Kontaktperson</Label>
-                    <Input
-                      value={formData.client_contact}
-                      onChange={(e) => setFormData({...formData, client_contact: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>E-post</Label>
-                    <Input
-                      type="email"
-                      value={formData.client_email}
-                      onChange={(e) => setFormData({...formData, client_email: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label>Telefon</Label>
-                    <Input
-                      value={formData.client_phone}
-                      onChange={(e) => setFormData({...formData, client_phone: e.target.value})}
-                      className="mt-1.5 rounded-xl"
-                    />
-                  </div>
-                </div>
+                <CustomerSelectField
+                  value={{ name: formData.client_name, contact: formData.client_contact, email: formData.client_email, phone: formData.client_phone }}
+                  onChange={(c) => setFormData({...formData, client_name: c.name, client_contact: c.contact, client_email: c.email, client_phone: c.phone})}
+                />
               </div>
 
               <Separator />
