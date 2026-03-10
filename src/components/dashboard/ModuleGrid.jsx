@@ -8,7 +8,7 @@ import { hasModuleAccess } from '@/components/shared/permissions';
 import {
   AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, Gavel, MessageSquare, Users,
-  CalendarDays, Building2, LayoutDashboard, ShieldAlert, Truck
+  CalendarDays, Building2, LayoutDashboard, ShieldAlert, Construction
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
