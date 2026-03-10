@@ -290,20 +290,47 @@ export default function Maskiner() {
             </div>
 
             <div>
+              <Label>Utstyrstype</Label>
+              <Select
+                value={formData.utstyrstype || 'alle'}
+                onValueChange={(v) => setFormData({ ...formData, utstyrstype: v === 'alle' ? '' : v, maskintype: '', maskintype_custom: '' })}
+              >
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue placeholder="Velg utstyrstype..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="alle">— Alle kategorier —</SelectItem>
+                  {UTSTYRTYPER.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
               <Label>Maskintype *</Label>
               <Select
                 value={formData.maskintype}
-                onValueChange={(v) => setFormData({ ...formData, maskintype: v })}
+                onValueChange={(v) => setFormData({ ...formData, maskintype: v, maskintype_custom: '' })}
               >
                 <SelectTrigger className="mt-1.5 rounded-xl">
                   <SelectValue placeholder="Velg type..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {MASKINTYPES.map((t) => (
+                  {availableMaskintypes.map((t) => (
                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {formData.maskintype === 'egendefinert' && (
+                <Input
+                  value={formData.maskintype_custom}
+                  onChange={(e) => setFormData({ ...formData, maskintype_custom: e.target.value })}
+                  placeholder="Skriv inn maskintype..."
+                  className="mt-2 rounded-xl"
+                  autoFocus
+                />
+              )}
             </div>
 
             <div>
