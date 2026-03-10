@@ -71,7 +71,9 @@ const STATUS_CONFIG = {
 
 const EMPTY_FORM = {
   navn: '',
+  utstyrstype: '',
   maskintype: '',
+  maskintype_custom: '',
   maskinnummer: '',
   status: 'tilgjengelig',
   standard_forer_id: '',
