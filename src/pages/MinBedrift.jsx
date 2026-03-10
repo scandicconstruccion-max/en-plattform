@@ -76,6 +76,10 @@ const moduleInfo = {
   crm: {
     title: 'CRM',
     body: 'Hold oversikt over alle kunder, leads og oppfølgingsaktiviteter. Prosjektlederen ser hvem som skal følges opp, hvilke tilbud som er sendt og hva som er avtalt. Du kan sette opp varsler for oppfølging slik at ingen kunde eller lead glemmes, og full aktivitetshistorikk gir deg alltid oversikt over hva som har blitt gjort og sagt. Ingen kunder faller mellom stolene. Henger direkte mot Tilbudsmodul og Prosjekter.'
+  },
+  maskiner: {
+    title: 'Maskiner',
+    body: 'Hold full oversikt over bedriftens maskinpark og utstyr. Registrer maskiner med type, status og plassering. Se hvem som har utstyr ute, og planlegg vedlikehold og service. Henger direkte mot Ressursplanlegger slik at du kan knytte maskiner og operatører til prosjekter og arbeidsoppgaver.'
   }
 };
 
