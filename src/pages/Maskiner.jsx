@@ -145,7 +145,9 @@ export default function Maskiner() {
     setEditingMaskin(maskin);
     setFormData({
       navn: maskin.navn || '',
+      utstyrstype: maskin.utstyrstype || '',
       maskintype: maskin.maskintype || '',
+      maskintype_custom: maskin.maskintype_custom || '',
       maskinnummer: maskin.maskinnummer || '',
       status: maskin.status || 'tilgjengelig',
       standard_forer_id: maskin.standard_forer_id || '',
