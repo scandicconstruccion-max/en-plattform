@@ -344,6 +344,54 @@ export default function ProsjektDetaljer() {
               </div>
             </Card>
 
+            {/* Project Hierarchy */}
+            {(parentProject || childProjects.length > 0) && (
+              <Card className="p-6 border-0 shadow-sm">
+                <h3 className="font-semibold text-slate-900 mb-4">Prosjekthierarki</h3>
+                <div className="space-y-3">
+                  {parentProject && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-2">Overordnet prosjekt</p>
+                      <Link
+                        to={createPageUrl(`ProsjektDetaljer?id=${parentProject.id}`)}
+                        className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        <Building2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-900 truncate">{parentProject.name}</p>
+                          <p className="text-xs text-slate-500">{parentProject.project_number}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                      </Link>
+                    </div>
+                  )}
+                  {childProjects.length > 0 && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-2">
+                        {project.type === 'project' ? 'Delprosjekter' : 'Enheter'} ({childProjects.length})
+                      </p>
+                      <div className="space-y-2">
+                        {childProjects.map(child => (
+                          <Link
+                            key={child.id}
+                            to={createPageUrl(`ProsjektDetaljer?id=${child.id}`)}
+                            className="flex items-center gap-2 p-3 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+                          >
+                            <Building2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-900 truncate">{child.name}</p>
+                              <p className="text-xs text-slate-500">{child.project_number}</p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {/* Subcontractors, Architects, Consultants */}
             <Card className="border-0 shadow-sm overflow-hidden">
               <Tabs defaultValue="subcontractors" className="w-full">
