@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const moduleDefinitions = {
+  maskiner: { name: 'Maskiner', description: 'Maskin- og utstyrsregister', icon: Truck, color: 'amber', page: 'Maskiner' },
   dashboard: { name: 'Dashboard', description: 'Oversikt', icon: LayoutDashboard, color: 'slate', page: 'Dashboard' },
   prosjekter: { name: 'Prosjekter', description: 'Administrer prosjekter', icon: Building2, color: 'emerald', page: 'Prosjekter' },
   prosjektfiler: { name: 'Prosjektfiler', description: 'Filer og dokumenter', icon: FileText, color: 'slate', page: 'Prosjektfiler' },
