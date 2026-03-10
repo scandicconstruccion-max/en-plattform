@@ -739,6 +739,13 @@ export default function Prosjekter() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Create Subproject Dialog */}
+      <CreateSubprojectDialog
+        open={showSubprojectDialog}
+        onClose={() => setShowSubprojectDialog(false)}
+        parentProject={selectedParentProject}
+      />
     </div>
   );
 }
