@@ -162,6 +162,36 @@ export default function InlineEditDialog({
             </div>
 
             <div>
+              <Label>Maskin (valgfritt)</Label>
+              <Select
+                value={formData.machine_id || 'none'}
+                onValueChange={(v) => {
+                  const selected = maskiner.find((m) => m.id === v);
+                  setFormData({
+                    ...formData,
+                    machine_id: v === 'none' ? '' : v,
+                    machine_navn: selected ? selected.navn : '',
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Ingen maskin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Ingen maskin</SelectItem>
+                  {maskiner.filter((m) => m.aktiv).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.navn}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {machineConflict && (
+                <p className="text-xs text-amber-700 mt-1.5 flex items-center gap-1">
+                  <span>⚠</span> Maskinen er allerede planlagt i dette tidsrommet.
+                </p>
+              )}
+            </div>
+
+            <div>
               <Label>Kommentar</Label>
               <Textarea
                 value={formData.kommentar}
