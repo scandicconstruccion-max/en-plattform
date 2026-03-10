@@ -106,6 +106,19 @@ export default function ProsjektDetaljer() {
     enabled: showEditDialog
   });
 
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+  });
+
+  const { data: parentProject } = useQuery({
+    queryKey: ['parentProject', project?.parent_id],
+    queryFn: () => project?.parent_id ? base44.entities.Project.filter({ id: project.parent_id }).then(p => p[0]) : null,
+    enabled: !!project?.parent_id,
+  });
+
+  const childProjects = allProjects.filter(p => p.parent_id === projectId);
+
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Project.update(projectId, data),
     onSuccess: () => {
