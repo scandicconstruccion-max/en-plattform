@@ -31,6 +31,10 @@ export default function CreateSubprojectDialog({
   const [formData, setFormData] = useState({
     name: '',
     type: 'subproject',
+    addResident: false,
+    resident_name: '',
+    resident_phone: '',
+    resident_email: '',
   });
 
   const queryClient = useQueryClient();
@@ -62,7 +66,7 @@ export default function CreateSubprojectDialog({
     const nextSubSeq = String(maxSubSeq + 1).padStart(2, '0');
     const subprojectNumber = `${parentNumber}-${nextSubSeq}`;
 
-    createMutation.mutate({
+    const projectData = {
       name: formData.name,
       type: formData.type,
       parent_id: parentProject.id,
@@ -81,7 +85,16 @@ export default function CreateSubprojectDialog({
       subcontractors: parentProject.subcontractors || [],
       inherit_from_parent: true,
       status: parentProject.status || 'planlagt'
-    });
+    };
+
+    // Legg til beboer/annen kontakt hvis ønsket
+    if (formData.addResident && formData.resident_name) {
+      projectData.resident_name = formData.resident_name;
+      projectData.resident_phone = formData.resident_phone || '';
+      projectData.resident_email = formData.resident_email || '';
+    }
+
+    createMutation.mutate(projectData);
   };
 
   const isSubproject = parentProject?.type === 'project';
@@ -130,10 +143,57 @@ export default function CreateSubprojectDialog({
             </Select>
           </div>
 
-          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+          <div className="space-y-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-xs text-blue-700">
               <strong>Tip:</strong> Denne {typeLabel.toLowerCase()}en arver automatisk informasjon om kunde, adresse, arkitekter og rådgivere fra overordnet prosjekt. Du kan endre disse senere.
             </p>
+          </div>
+
+          <div className="border-t pt-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <input 
+                type="checkbox"
+                id="addResident"
+                checked={formData.addResident}
+                onChange={(e) => setFormData({...formData, addResident: e.target.checked})}
+                className="w-4 h-4 rounded border-slate-300"
+              />
+              <label htmlFor="addResident" className="text-sm font-medium text-slate-700">
+                Legg til beboer/annen kontakt
+              </label>
+            </div>
+
+            {formData.addResident && (
+              <div className="space-y-3 pl-7 border-l-2 border-slate-200">
+                <div>
+                  <Label className="text-xs">Navn</Label>
+                  <Input
+                    value={formData.resident_name}
+                    onChange={(e) => setFormData({...formData, resident_name: e.target.value})}
+                    placeholder="Navn på beboer/kontakt"
+                    className="mt-1 rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Telefon</Label>
+                  <Input
+                    value={formData.resident_phone}
+                    onChange={(e) => setFormData({...formData, resident_phone: e.target.value})}
+                    placeholder="Telefonnummer"
+                    className="mt-1 rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">E-post</Label>
+                  <Input
+                    value={formData.resident_email}
+                    onChange={(e) => setFormData({...formData, resident_email: e.target.value})}
+                    placeholder="E-postadresse"
+                    className="mt-1 rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
