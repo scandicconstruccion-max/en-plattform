@@ -25,10 +25,16 @@ export default function ConflictDialog({
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
               {conflicts.map((conflict, idx) => (
                 <div key={idx} className="text-sm">
-                  <p className="font-medium text-amber-900">{conflict.prosjekt_navn}</p>
+                  <p className="font-medium text-amber-900">{conflict.prosjekt_navn || 'Ukjent prosjekt'}</p>
                   <p className="text-amber-700">
-                    {format(parseISO(conflict.start_dato_tid), 'dd.MM.yyyy HH:mm', { locale: nb })} - {format(parseISO(conflict.slutt_dato_tid), 'dd.MM.yyyy HH:mm', { locale: nb })}
+                    {format(parseISO(conflict.start_dato_tid), 'dd.MM.yyyy HH:mm', { locale: nb })} – {format(parseISO(conflict.slutt_dato_tid), 'dd.MM.yyyy HH:mm', { locale: nb })}
                   </p>
+                  {conflict.resource_navn && (
+                    <p className="text-amber-600 text-xs">Ressurs: {conflict.resource_navn}</p>
+                  )}
+                  {conflict.machine_navn && (
+                    <p className="text-amber-600 text-xs">🚜 Maskin: {conflict.machine_navn}</p>
+                  )}
                   {conflict.rolle_pa_prosjekt && (
                     <p className="text-amber-600 text-xs">Rolle: {conflict.rolle_pa_prosjekt}</p>
                   )}
