@@ -98,7 +98,7 @@ const availableModules = [
 { key: 'bildedok', name: 'Bildedokumentasjon', description: 'Foto og dokumentasjon', price: 79 },
 { key: 'fdv', name: 'FDV', description: 'Forvaltning, drift og vedlikehold', price: 109 },
 { key: 'crm', name: 'CRM', description: 'Kundeadministrasjon', price: 149 },
-{ key: 'maskiner', name: 'Maskiner', description: 'Maskinpark og utstyrsregister', price: 59 }];
+];
 
 
 // Map frontend module keys to Stripe module codes
