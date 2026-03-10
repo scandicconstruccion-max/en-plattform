@@ -74,7 +74,9 @@ export default function InlineEditDialog({
         slutt_dato_tid: assignment.slutt_dato_tid?.slice(0, 16) || '',
         rolle_pa_prosjekt: assignment.rolle_pa_prosjekt || '',
         kommentar: assignment.kommentar || '',
-        status: assignment.status || 'planlagt'
+        status: assignment.status || 'planlagt',
+        machine_id: assignment.machine_id || '',
+        machine_navn: assignment.machine_navn || '',
       });
     }
   }, [assignment]);
