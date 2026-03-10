@@ -97,6 +97,8 @@ export default function Maskiner() {
   const [editingMaskin, setEditingMaskin] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [sjekkUtTarget, setSjekkUtTarget] = useState(null);
+  const [filterLokasjon, setFilterLokasjon] = useState('alle');
 
   const queryClient = useQueryClient();
 
