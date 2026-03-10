@@ -68,6 +68,8 @@ export default function CreateAssignmentDialog({
     slutt_dato_tid: '',
     rolle_pa_prosjekt: '',
     kommentar: '',
+    machine_id: '',
+    machine_navn: '',
     include_saturday: currentSettings.default_include_saturday || false,
     include_sunday: currentSettings.default_include_sunday || false
   });
@@ -75,6 +77,7 @@ export default function CreateAssignmentDialog({
   const [selectedResources, setSelectedResources] = useState([]);
   const [competencyInput, setCompetencyInput] = useState('');
   const [requiredCompetencies, setRequiredCompetencies] = useState([]);
+  const [machineConflict, setMachineConflict] = useState(false);
 
   useEffect(() => {
      if (open) {
