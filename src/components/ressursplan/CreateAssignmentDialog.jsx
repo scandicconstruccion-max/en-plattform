@@ -36,6 +36,18 @@ export default function CreateAssignmentDialog({
     initialData: []
   });
 
+  const { data: maskiner = [] } = useQuery({
+    queryKey: ['maskiner'],
+    queryFn: () => base44.entities.Maskin.list(),
+    initialData: []
+  });
+
+  const { data: allAssignments = [] } = useQuery({
+    queryKey: ['resourceAssignments'],
+    queryFn: () => base44.entities.ResourceAssignment.list(),
+    initialData: []
+  });
+
   const currentSettings = settings[0] || { standard_start_tid: '07:00', standard_slutt_tid: '15:30' };
 
   const getDefaultDateTime = (dateOverride = null) => {
