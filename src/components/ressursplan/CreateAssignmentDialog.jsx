@@ -447,6 +447,51 @@ export default function CreateAssignmentDialog({
             </div>
           )}
 
+          {formData.assignment_type === 'arbeid' && (
+            <div>
+              <Label>Maskin (valgfritt)</Label>
+              <Select
+                value={formData.machine_id || 'none'}
+                onValueChange={(v) => {
+                  const selected = maskiner.find((m) => m.id === v);
+                  setFormData({
+                    ...formData,
+                    machine_id: v === 'none' ? '' : v,
+                    machine_navn: selected ? selected.navn : '',
+                  });
+                }}
+              >
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue placeholder="Ingen maskin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Ingen maskin</SelectItem>
+                  {maskiner
+                    .filter((m) => m.aktiv)
+                    .map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        <span className="flex items-center gap-2">
+                          {m.navn}
+                          {m.status === 'tilgjengelig' && (
+                            <span className="text-[10px] text-green-600">● Tilgjengelig</span>
+                          )}
+                          {m.status !== 'tilgjengelig' && (
+                            <span className="text-[10px] text-amber-600">● {m.status}</span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {machineConflict && (
+                <div className="mt-2 flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                  Maskinen er allerede planlagt i dette tidsrommet.
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <Label>Kommentar</Label>
             <Textarea
