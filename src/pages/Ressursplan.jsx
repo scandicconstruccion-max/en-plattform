@@ -94,6 +94,13 @@ export default function Ressursplan() {
     initialData: []
   });
 
+  // Fetch machines
+  const { data: maskiner = [] } = useQuery({
+    queryKey: ['maskiner'],
+    queryFn: () => base44.entities.Maskin.filter({ aktiv: true }),
+    initialData: []
+  });
+
   // Create assignment mutation
   const createAssignmentMutation = useMutation({
     mutationFn: async (data) => {
