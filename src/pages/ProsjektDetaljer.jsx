@@ -814,6 +814,13 @@ export default function ProsjektDetaljer() {
         project={project}
       />
 
+      {/* Create Subproject Dialog */}
+      <CreateSubprojectDialog
+        open={showSubprojectDialog}
+        onClose={() => setShowSubprojectDialog(false)}
+        parentProject={project}
+      />
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="rounded-xl">
