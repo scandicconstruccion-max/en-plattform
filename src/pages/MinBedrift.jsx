@@ -117,6 +117,7 @@ const moduleKeyToCode = {
   bildedok: 'BILDEDOK',
   fdv: 'FDV',
   crm: 'CRM',
+  maskiner: 'MASKINER',
 };
 
 export default function MinBedrift() {
