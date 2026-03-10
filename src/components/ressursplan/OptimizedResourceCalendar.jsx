@@ -1156,16 +1156,19 @@ export default function OptimizedResourceCalendar({
 
           {/* Header Right - Dates */}
           <div className="flex-shrink-0 flex bg-slate-50 border-b border-slate-200" style={{ minWidth: 'max-content' }}>
-            {viewDates.map((day) => {
+            {viewDates.map((day, idx) => {
               const dayIsHoliday = isHolidayFunc(day);
               const isToday = isSameDay(day, new Date());
               const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+              const weekNum = format(day, 'w', { locale: nb });
+              // Show week number only on Monday (or first day in view)
+              const showWeekNum = idx === 0 || getDay(day) === 1;
               return (
                 <div
                   key={day.toISOString()}
                   style={{ width: dayWidth }}
                   className={cn(
-                    "flex-shrink-0 text-center px-2 py-2.5 border-l border-slate-200 relative",
+                    "flex-shrink-0 text-center px-1 py-1 border-l border-slate-200 relative",
                     isWeekend && !isToday && "bg-slate-200/70",
                     isToday && "bg-emerald-100 text-emerald-900 font-bold",
                     !isToday && dayIsHoliday && "bg-red-50/50 text-red-700",
@@ -1176,8 +1179,11 @@ export default function OptimizedResourceCalendar({
                   {isToday &&
                   <div className="absolute inset-0 bg-emerald-600 opacity-10 pointer-events-none" />
                   }
-                  <div className="text-[10px] font-semibold uppercase tracking-wide relative z-10">{format(day, 'EEE', { locale: nb })}</div>
-                  <div className={cn("text-sm font-bold mt-0.5 relative z-10", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
+                  <div className="text-[9px] text-slate-400 relative z-10 leading-none mb-0.5">
+                    {showWeekNum ? `uke ${weekNum}` : ''}
+                  </div>
+                  <div className="text-[9px] font-semibold uppercase tracking-wide relative z-10 leading-none">{format(day, 'EEE', { locale: nb })}</div>
+                  <div className={cn("text-xs font-bold mt-0.5 relative z-10 leading-none", isToday && "text-emerald-700")}>{format(day, 'd')}</div>
                 </div>);
 
             })}
