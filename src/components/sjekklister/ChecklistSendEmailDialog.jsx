@@ -1,20 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Plus, X } from 'lucide-react';
+import { Mail, Plus, X, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 export default function ChecklistSendEmailDialog({ open, onOpenChange, checklist, project }) {
   const [recipients, setRecipients] = useState([{ label: '', email: '' }]);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [projectData, setProjectData] = useState(null);
+  const [showParties, setShowParties] = useState(false);
 
-  const presets = [
-    { label: 'Prosjektleder', email: project?.manager_email || '' },
-    { label: 'Kunde', email: project?.customer_email || '' },
-  ].filter(p => p.email);
+  useEffect(() => {
+    if (open && checklist?.project_id) {
+      base44.entities.Project.filter({ id: checklist.project_id }).then(res => {
+        if (res?.length > 0) setProjectData(res[0]);
+      });
+    }
+  }, [open, checklist?.project_id]);
+
+  // Build list of all involved parties from project
+  const involvedParties = [];
+  if (projectData) {
+    if (projectData.client_name && projectData.client_email)
+      involvedParties.push({ group: 'Kunde / Byggherre', label: projectData.client_contact || projectData.client_name, email: projectData.client_email });
+    if (projectData.project_manager && projectData.project_manager_name)
+      involvedParties.push({ group: 'Prosjektleder', label: projectData.project_manager_name, email: projectData.project_manager });
+    for (const a of (projectData.architects || []))
+      if (a.email) involvedParties.push({ group: 'Arkitekt', label: a.contact_person || a.company, email: a.email });
+    for (const c of (projectData.consultants || []))
+      if (c.email) involvedParties.push({ group: `Rådgivende ingeniør (${c.discipline || c.company})`, label: c.contact_person || c.company, email: c.email });
+    for (const s of (projectData.subcontractors || []))
+      if (s.email) involvedParties.push({ group: 'Underentreprenør', label: s.contact_person || s.name, email: s.email });
+  }
+
+  const addParty = (party) => {
+    if (!recipients.find(r => r.email === party.email)) {
+      setRecipients(r => [...r.filter(x => x.email), { label: `${party.label} (${party.group})`, email: party.email }]);
+    }
+  };
 
   const addRecipient = () => setRecipients(r => [...r, { label: '', email: '' }]);
   const removeRecipient = (i) => setRecipients(r => r.filter((_, idx) => idx !== i));
