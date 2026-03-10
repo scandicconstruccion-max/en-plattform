@@ -26,9 +26,45 @@ export default function InlineEditDialog({
     slutt_dato_tid: '',
     rolle_pa_prosjekt: '',
     kommentar: '',
-    status: 'planlagt'
+    status: 'planlagt',
+    machine_id: '',
+    machine_navn: '',
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [machineConflict, setMachineConflict] = useState(false);
+
+  const { data: maskiner = [] } = useQuery({
+    queryKey: ['maskiner'],
+    queryFn: () => base44.entities.Maskin.list(),
+    initialData: [],
+  });
+
+  const { data: allAssignments = [] } = useQuery({
+    queryKey: ['resourceAssignments'],
+    queryFn: () => base44.entities.ResourceAssignment.list(),
+    initialData: [],
+  });
+
+  useEffect(() => {
+    if (!formData.machine_id || !formData.start_dato_tid || !formData.slutt_dato_tid) {
+      setMachineConflict(false);
+      return;
+    }
+    const start = new Date(formData.start_dato_tid);
+    const end = new Date(formData.slutt_dato_tid);
+    const conflict = allAssignments.some((a) => {
+      if (a.id === assignment?.id) return false;
+      if (a.machine_id !== formData.machine_id) return false;
+      const aStart = parseISO(a.start_dato_tid);
+      const aEnd = parseISO(a.slutt_dato_tid);
+      return (
+        isWithinInterval(start, { start: aStart, end: aEnd }) ||
+        isWithinInterval(end, { start: aStart, end: aEnd }) ||
+        isWithinInterval(aStart, { start, end })
+      );
+    });
+    setMachineConflict(conflict);
+  }, [formData.machine_id, formData.start_dato_tid, formData.slutt_dato_tid, allAssignments]);
 
   useEffect(() => {
     if (assignment) {
