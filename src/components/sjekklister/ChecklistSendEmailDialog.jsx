@@ -44,9 +44,7 @@ export default function ChecklistSendEmailDialog({ open, onOpenChange, checklist
 
   const addRecipient = () => setRecipients(r => [...r, { label: '', email: '' }]);
   const removeRecipient = (i) => setRecipients(r => r.filter((_, idx) => idx !== i));
-  const updateRecipient = (i, field, value) => {
-    setRecipients(r => r.map((rec, idx) => idx === i ? { ...rec, [field]: value } : rec));
-  };
+  const updateRecipient = (i, field, value) => setRecipients(r => r.map((rec, idx) => idx === i ? { ...rec, [field]: value } : rec));
 
   const handleSend = async () => {
     const validRecipients = recipients.filter(r => r.email?.includes('@'));
