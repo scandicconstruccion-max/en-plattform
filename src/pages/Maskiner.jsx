@@ -160,10 +160,12 @@ export default function Maskiner() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.navn || !formData.maskintype) return;
+    const effectiveMaskintype = formData.maskintype === 'egendefinert' ? formData.maskintype_custom : formData.maskintype;
+    if (!formData.navn || !effectiveMaskintype) return;
     const selectedEmployee = employees.find((emp) => emp.id === formData.standard_forer_id);
     const submitData = {
       ...formData,
+      maskintype: effectiveMaskintype,
       standard_forer_navn: selectedEmployee
         ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}`
         : '',
@@ -174,6 +176,10 @@ export default function Maskiner() {
       createMutation.mutate(submitData);
     }
   };
+
+  const availableMaskintypes = formData.utstyrstype
+    ? [...(MASKINTYPE_BY_UTSTYRSTYPE[formData.utstyrstype] || []), { value: 'egendefinert', label: '✏️ Skriv inn selv...' }]
+    : [...MASKINTYPES, { value: 'egendefinert', label: '✏️ Skriv inn selv...' }];
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
