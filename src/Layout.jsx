@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import BottomNav from '@/components/navigation/BottomNav';
 
 const moduleIcons = {
+  maskiner: Truck,
   dashboard: LayoutDashboard,
   avvik: AlertTriangle,
   befaring: CheckSquare,
