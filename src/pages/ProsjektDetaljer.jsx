@@ -95,6 +95,12 @@ export default function ProsjektDetaljer() {
     queryFn: () => base44.auth.me()
   });
 
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => base44.entities.Employee.list(),
+    enabled: showEditDialog
+  });
+
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Project.update(projectId, data),
     onSuccess: () => {
