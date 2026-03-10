@@ -97,6 +97,7 @@ const moduleLabels = {
 };
 
 const modulePages = {
+  maskiner: 'Maskiner',
   anbudsmodul: 'Anbudsmodul',
   dashboard: 'Dashboard',
   avvik: 'Avvik',
