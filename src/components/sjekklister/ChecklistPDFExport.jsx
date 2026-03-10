@@ -153,11 +153,11 @@ export function generateChecklistPDF(checklist, projectName) {
 </body>
 </html>`;
 
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `sjekkliste-${checklist.name.replace(/[^a-zA-Z0-9æøåÆØÅ]/g, '-')}.html`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 500);
 }
