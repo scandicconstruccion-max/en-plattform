@@ -628,7 +628,7 @@ const ResourceRow = memo(({
           return (
             <div
               key={day.toISOString()}
-              style={{ width: style.dayWidth, height: '56px' }}
+              style={{ width: style.dayWidth, height: '44px' }}
               className={cn(
                 "flex-shrink-0 p-0.5 border-l border-t border-slate-200 relative transition-colors",
                 isWeekend && "bg-slate-100/60",
