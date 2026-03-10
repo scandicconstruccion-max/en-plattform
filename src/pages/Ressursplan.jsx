@@ -430,16 +430,32 @@ export default function Ressursplan() {
   };
 
   const handleQuickCreate = (resourceId, startTime, endTime) => {
-     const resource = allResources.find((r) => r.id === resourceId);
+     // Check both human and machine resources
+     const resource = humanResources.find((r) => r.id === resourceId)
+       || machineResources.find((r) => r.id === resourceId);
      if (!resource) return;
 
-     // Pre-fill dialog with cell click data
-     setCellClickData({
-       resourceId,
-       resourceType: resource.type,
-       startTime,
-       endTime
-     });
+     if (resource.type === 'machine') {
+       // For machine rows: pre-fill dialog with machine and suggest default driver
+       const defaultDriver = humanResources.find(
+         (hr) => maskiner.find(m => m.id === resourceId)?.standard_forer_id === hr.id
+       );
+       setCellClickData({
+         resourceId: defaultDriver?.id || null,
+         resourceType: 'employee',
+         startTime,
+         endTime,
+         machineId: resourceId,
+         machineNavn: resource.navn,
+       });
+     } else {
+       setCellClickData({
+         resourceId,
+         resourceType: resource.type,
+         startTime,
+         endTime
+       });
+     }
      setShowCreateDialog(true);
    };
 
