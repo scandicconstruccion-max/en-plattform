@@ -32,6 +32,7 @@ import { filterProjectsByAccess } from '@/components/shared/permissions';
 import { buildProjectHierarchy } from '@/components/shared/projectHierarchyUtils';
 import ProjectHierarchyTree from '@/components/project/ProjectHierarchyTree';
 import CreateSubprojectDialog from '@/components/project/CreateSubprojectDialog';
+import CustomerManagerDialog from '@/components/shared/CustomerManagerDialog';
 import { Building2, Search, MapPin, Calendar, Users, LayoutGrid, List, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
