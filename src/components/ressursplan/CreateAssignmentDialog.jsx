@@ -41,7 +41,7 @@ export default function CreateAssignmentDialog({
     queryKey: ['maskiner'],
     queryFn: () => base44.entities.Maskin.list(),
     initialData: [],
-    enabled: maskinerProp === null, // Only fetch if not provided
+    enabled: maskinerProp === null // Only fetch if not provided
   });
 
   const maskiner = maskinerProp ?? maskinerFetched;
@@ -100,7 +100,7 @@ export default function CreateAssignmentDialog({
       const isSaturday = dayOfWeek === 6;
       const isSunday = dayOfWeek === 0;
 
-      if (isWeekday || (isSaturday && includeSaturday) || (isSunday && includeSunday)) {
+      if (isWeekday || isSaturday && includeSaturday || isSunday && includeSunday) {
         workDays++;
       }
       current.setDate(current.getDate() + 1);
@@ -120,7 +120,7 @@ export default function CreateAssignmentDialog({
       const isSaturday = dayOfWeek === 6;
       const isSunday = dayOfWeek === 0;
 
-      if (isWeekday || (isSaturday && includeSaturday) || (isSunday && includeSunday)) {
+      if (isWeekday || isSaturday && includeSaturday || isSunday && includeSunday) {
         addedDays++;
       }
     }
@@ -142,47 +142,47 @@ export default function CreateAssignmentDialog({
   };
 
   useEffect(() => {
-     if (open) {
-       if (prefilledData) {
-         // Pre-fill from cell click data
-         const startTime = typeof prefilledData.startTime === 'string' 
-           ? prefilledData.startTime 
-           : prefilledData.startTime.toISOString();
-         const endTime = typeof prefilledData.endTime === 'string' 
-           ? prefilledData.endTime 
-           : prefilledData.endTime.toISOString();
+    if (open) {
+      if (prefilledData) {
+        // Pre-fill from cell click data
+        const startTime = typeof prefilledData.startTime === 'string' ?
+        prefilledData.startTime :
+        prefilledData.startTime.toISOString();
+        const endTime = typeof prefilledData.endTime === 'string' ?
+        prefilledData.endTime :
+        prefilledData.endTime.toISOString();
 
-         // Convert ISO to datetime-local format
-         const startLocal = startTime.substring(0, 16);
-         const endLocal = endTime.substring(0, 16);
+        // Convert ISO to datetime-local format
+        const startLocal = startTime.substring(0, 16);
+        const endLocal = endTime.substring(0, 16);
 
-         setFormData(prev => ({
-           ...prev,
-           resource_type: prefilledData.resourceType || 'employee',
-           start_dato_tid: startLocal,
-           slutt_dato_tid: endLocal,
-           // Pre-fill machine if coming from machine row click
-           ...(prefilledData.machineId ? {
-             machine_id: prefilledData.machineId,
-             machine_navn: prefilledData.machineNavn || '',
-           } : {})
-         }));
+        setFormData((prev) => ({
+          ...prev,
+          resource_type: prefilledData.resourceType || 'employee',
+          start_dato_tid: startLocal,
+          slutt_dato_tid: endLocal,
+          // Pre-fill machine if coming from machine row click
+          ...(prefilledData.machineId ? {
+            machine_id: prefilledData.machineId,
+            machine_navn: prefilledData.machineNavn || ''
+          } : {})
+        }));
 
-         // Pre-select the resource (may be null if coming from machine row with no default driver)
-         if (prefilledData.resourceId) {
-           setSelectedResources([prefilledData.resourceId]);
-         }
-       } else {
-         // Default behavior
-         const defaults = getDefaultDateTime(initialStartDate);
-         setFormData(prev => ({
-           ...prev,
-           start_dato_tid: defaults.start,
-           slutt_dato_tid: defaults.end
-         }));
-       }
-     }
-   }, [open, prefilledData, initialStartDate, currentSettings.standard_start_tid, currentSettings.standard_slutt_tid]);
+        // Pre-select the resource (may be null if coming from machine row with no default driver)
+        if (prefilledData.resourceId) {
+          setSelectedResources([prefilledData.resourceId]);
+        }
+      } else {
+        // Default behavior
+        const defaults = getDefaultDateTime(initialStartDate);
+        setFormData((prev) => ({
+          ...prev,
+          start_dato_tid: defaults.start,
+          slutt_dato_tid: defaults.end
+        }));
+      }
+    }
+  }, [open, prefilledData, initialStartDate, currentSettings.standard_start_tid, currentSettings.standard_slutt_tid]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -194,8 +194,8 @@ export default function CreateAssignmentDialog({
       alert('Velg prosjekt for arbeidsallokering');
       return;
     }
-    onSubmit({ 
-      ...formData, 
+    onSubmit({
+      ...formData,
       resource_ids: selectedResources,
       required_competencies: requiredCompetencies
     });
@@ -211,7 +211,7 @@ export default function CreateAssignmentDialog({
         setFormData((prev) => ({
           ...prev,
           machine_id: suggestedMachine.id,
-          machine_navn: suggestedMachine.navn,
+          machine_navn: suggestedMachine.navn
         }));
       }
     }
@@ -232,8 +232,8 @@ export default function CreateAssignmentDialog({
       return (
         isWithinInterval(start, { start: aStart, end: aEnd }) ||
         isWithinInterval(end, { start: aStart, end: aEnd }) ||
-        isWithinInterval(aStart, { start, end })
-      );
+        isWithinInterval(aStart, { start, end }));
+
     });
     setMachineConflict(conflict);
   }, [formData.machine_id, formData.start_dato_tid, formData.slutt_dato_tid, allAssignments]);
@@ -269,10 +269,10 @@ export default function CreateAssignmentDialog({
   const availableResources = formData.resource_type === 'employee' ? employees : externals;
 
   const toggleResource = (resourceId) => {
-    setSelectedResources(prev =>
-      prev.includes(resourceId)
-        ? prev.filter(id => id !== resourceId)
-        : [...prev, resourceId]
+    setSelectedResources((prev) =>
+    prev.includes(resourceId) ?
+    prev.filter((id) => id !== resourceId) :
+    [...prev, resourceId]
     );
   };
 
@@ -287,8 +287,8 @@ export default function CreateAssignmentDialog({
             <Label>Type *</Label>
             <Select
               value={formData.assignment_type}
-              onValueChange={(v) => setFormData({ ...formData, assignment_type: v })}
-            >
+              onValueChange={(v) => setFormData({ ...formData, assignment_type: v })}>
+
               <SelectTrigger className="mt-1.5 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
@@ -301,16 +301,16 @@ export default function CreateAssignmentDialog({
             </Select>
           </div>
 
-          {formData.assignment_type === 'arbeid' && (
-            <div>
+          {formData.assignment_type === 'arbeid' &&
+          <div>
               <Label>Prosjekt *</Label>
               <ProjectSelector
-                value={formData.prosjekt_id}
-                onChange={(v) => setFormData({ ...formData, prosjekt_id: v })}
-                className="mt-1.5 rounded-xl"
-              />
+              value={formData.prosjekt_id}
+              onChange={(v) => setFormData({ ...formData, prosjekt_id: v })}
+              className="mt-1.5 rounded-xl" />
+
             </div>
-          )}
+          }
 
           <div>
             <Label>Ressurstype *</Label>
@@ -319,8 +319,8 @@ export default function CreateAssignmentDialog({
               onValueChange={(v) => {
                 setFormData({ ...formData, resource_type: v });
                 setSelectedResources([]);
-              }}
-            >
+              }}>
+
               <SelectTrigger className="mt-1.5 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
@@ -331,157 +331,157 @@ export default function CreateAssignmentDialog({
             </Select>
           </div>
 
-          {formData.assignment_type === 'arbeid' && (
-            <div>
+          {formData.assignment_type === 'arbeid' &&
+          <div>
               <Label>Nødvendige kompetanser (valgfritt)</Label>
               <p className="text-xs text-slate-500 mt-1 mb-2">
                 Velg kompetanser - ressurslisten oppdateres basert på match
               </p>
               
               <Select
-                value=""
-                onValueChange={(value) => {
-                  if (!requiredCompetencies.includes(value)) {
-                    setRequiredCompetencies([...requiredCompetencies, value]);
-                  }
-                }}
-              >
+              value=""
+              onValueChange={(value) => {
+                if (!requiredCompetencies.includes(value)) {
+                  setRequiredCompetencies([...requiredCompetencies, value]);
+                }
+              }}>
+
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Velg kompetanse..." />
                 </SelectTrigger>
                 <SelectContent className="max-h-[200px] overflow-y-auto">
-                  {competencies
-                    .filter(c => !requiredCompetencies.includes(c.name))
-                    .map((comp) => (
-                      <SelectItem key={comp.id} value={comp.name}>
+                  {competencies.
+                filter((c) => !requiredCompetencies.includes(c.name)).
+                map((comp) =>
+                <SelectItem key={comp.id} value={comp.name}>
                         {comp.name}
                       </SelectItem>
-                    ))
-                  }
-                  {competencies.filter(c => !requiredCompetencies.includes(c.name)).length === 0 && (
-                    <div className="px-2 py-1.5 text-sm text-slate-500">
+                )
+                }
+                  {competencies.filter((c) => !requiredCompetencies.includes(c.name)).length === 0 &&
+                <div className="px-2 py-1.5 text-sm text-slate-500">
                       Alle kompetanser er valgt
                     </div>
-                  )}
+                }
                 </SelectContent>
               </Select>
 
-              {requiredCompetencies.length > 0 && (
-                <div className="mt-3">
+              {requiredCompetencies.length > 0 &&
+            <div className="mt-3">
                   <div className="flex flex-wrap gap-2">
-                    {requiredCompetencies.map((comp, idx) => (
-                      <Badge
-                        key={idx}
-                        className="bg-blue-100 text-blue-700 px-3 py-1 flex items-center gap-2"
-                      >
+                    {requiredCompetencies.map((comp, idx) =>
+                <Badge
+                  key={idx}
+                  className="bg-blue-100 text-blue-700 px-3 py-1 flex items-center gap-2">
+
                         {comp}
                         <button
-                          type="button"
-                          onClick={() => {
-                            setRequiredCompetencies(requiredCompetencies.filter((_, i) => i !== idx));
-                          }}
-                          className="hover:text-blue-900"
-                        >
+                    type="button"
+                    onClick={() => {
+                      setRequiredCompetencies(requiredCompetencies.filter((_, i) => i !== idx));
+                    }}
+                    className="hover:text-blue-900">
+
                           <X className="h-3 w-3" />
                         </button>
                       </Badge>
-                    ))}
+                )}
                   </div>
-                  {formData.resource_type === 'employee' && (
-                    <p className="text-xs text-slate-500 mt-2">
+                  {formData.resource_type === 'employee' &&
+              <p className="text-xs text-slate-500 mt-2">
                       💡 Ressurser med alle kompetanser markeres med grønn badge
                     </p>
-                  )}
+              }
                 </div>
-              )}
+            }
             </div>
-          )}
+          }
 
           <div>
             <Label>Velg ressurser * (kan velge flere)</Label>
             <div className="mt-2 border rounded-xl p-4 space-y-2">
-              {availableResources.length === 0 ? (
-                <p className="text-sm text-slate-500">
+              {availableResources.length === 0 ?
+              <p className="text-sm text-slate-500">
                   Ingen {formData.resource_type === 'employee' ? 'ansatte' : 'eksterne ressurser'} tilgjengelig
-                </p>
-              ) : (
-                availableResources.map((resource) => {
-                  const resourceCompetencies = resource.competencies || [];
-                  const hasAllRequired = requiredCompetencies.length === 0 || 
-                    requiredCompetencies.every(req => resourceCompetencies.includes(req));
-                  const missingCompetencies = requiredCompetencies.filter(req => !resourceCompetencies.includes(req));
-                  
-                  return (
-                    <div key={resource.id} className="flex items-center gap-3">
+                </p> :
+
+              availableResources.map((resource) => {
+                const resourceCompetencies = resource.competencies || [];
+                const hasAllRequired = requiredCompetencies.length === 0 ||
+                requiredCompetencies.every((req) => resourceCompetencies.includes(req));
+                const missingCompetencies = requiredCompetencies.filter((req) => !resourceCompetencies.includes(req));
+
+                return (
+                  <div key={resource.id} className="flex items-center gap-3">
                       <Checkbox
-                        checked={selectedResources.includes(resource.id)}
-                        onCheckedChange={() => toggleResource(resource.id)}
-                      />
+                      checked={selectedResources.includes(resource.id)}
+                      onCheckedChange={() => toggleResource(resource.id)} />
+
                       <label className="text-sm cursor-pointer flex-1" onClick={() => toggleResource(resource.id)}>
                         <div className="flex items-center gap-2">
                           <span className="font-medium">
                             {resource.first_name ? `${resource.first_name} ${resource.last_name}` : resource.navn}
                           </span>
                           {requiredCompetencies.length > 0 && (
-                            hasAllRequired ? (
-                              <Badge className="bg-green-100 text-green-700 text-xs">
+                        hasAllRequired ?
+                        <Badge className="bg-green-100 text-green-700 text-xs">
                                 ✓ Alle kompetanser
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-amber-100 text-amber-700 text-xs" title={`Mangler: ${missingCompetencies.join(', ')}`}>
+                              </Badge> :
+
+                        <Badge className="bg-amber-100 text-amber-700 text-xs" title={`Mangler: ${missingCompetencies.join(', ')}`}>
                                 ⚠ Mangler {missingCompetencies.length}
-                              </Badge>
-                            )
-                          )}
+                              </Badge>)
+
+                        }
                         </div>
                         <span className="text-slate-500 text-xs">
                           {resource.position || resource.stilling || resource.rolle || ''}
                         </span>
                       </label>
-                    </div>
-                  );
-                })
-              )}
+                    </div>);
+
+              })
+              }
             </div>
-            {selectedResources.length > 0 && (
-              <p className="text-xs text-slate-500 mt-2">
+            {selectedResources.length > 0 &&
+            <p className="text-xs text-slate-500 mt-2">
                 {selectedResources.length} ressurs(er) valgt
               </p>
-            )}
+            }
           </div>
 
           <div className="grid grid-cols-2 gap-4">
              <div>
                <Label>Start dato og tid *</Label>
                <Input
-                 type="datetime-local"
-                 value={formData.start_dato_tid}
-                 onChange={(e) => {
-                   setFormData({ ...formData, start_dato_tid: e.target.value });
-                   if (formData.slutt_dato_tid) {
-                     const days = calculateWorkDays(e.target.value, formData.slutt_dato_tid, formData.include_saturday, formData.include_sunday);
-                     setWorkDays(days);
-                   }
-                 }}
-                 required
-                 className="mt-1.5 rounded-xl"
-               />
+                type="datetime-local"
+                value={formData.start_dato_tid}
+                onChange={(e) => {
+                  setFormData({ ...formData, start_dato_tid: e.target.value });
+                  if (formData.slutt_dato_tid) {
+                    const days = calculateWorkDays(e.target.value, formData.slutt_dato_tid, formData.include_saturday, formData.include_sunday);
+                    setWorkDays(days);
+                  }
+                }}
+                required
+                className="mt-1.5 rounded-xl" />
+
              </div>
              <div>
                <Label>Slutt dato og tid *</Label>
                <Input
-                 type="datetime-local"
-                 value={formData.slutt_dato_tid}
-                 onChange={(e) => {
-                   setFormData({ ...formData, slutt_dato_tid: e.target.value });
-                   if (formData.start_dato_tid) {
-                     const days = calculateWorkDays(formData.start_dato_tid, e.target.value, formData.include_saturday, formData.include_sunday);
-                     setWorkDays(days);
-                   }
-                 }}
-                 required
-                 className="mt-1.5 rounded-xl"
-               />
+                type="datetime-local"
+                value={formData.slutt_dato_tid}
+                onChange={(e) => {
+                  setFormData({ ...formData, slutt_dato_tid: e.target.value });
+                  if (formData.start_dato_tid) {
+                    const days = calculateWorkDays(formData.start_dato_tid, e.target.value, formData.include_saturday, formData.include_sunday);
+                    setWorkDays(days);
+                  }
+                }}
+                required
+                className="mt-1.5 rounded-xl" />
+
              </div>
            </div>
 
@@ -489,32 +489,32 @@ export default function CreateAssignmentDialog({
              <div className="flex items-center justify-between gap-4">
                <div>
                  <p className="text-sm font-medium text-slate-700">Arbeidsdager</p>
-                 <p className="text-2xl font-bold text-blue-700 mt-1">{workDays}</p>
+                 <p className="text-emerald-700 mt-1 text-2xl font-bold">{workDays}</p>
                </div>
                <Button
-                 type="button"
-                 variant="outline"
-                 size="sm"
-                 onClick={() => setEditingWorkDays(!editingWorkDays)}
-                 className="rounded-xl"
-               >
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingWorkDays(!editingWorkDays)}
+                className="rounded-xl">
+
                  {editingWorkDays ? 'Ferdig' : 'Endre'}
                </Button>
              </div>
-             {editingWorkDays && (
-               <div className="mt-4 pt-4 border-t border-blue-200">
+             {editingWorkDays &&
+            <div className="mt-4 pt-4 border-t border-blue-200">
                  <Label htmlFor="work-days-input-create" className="text-sm">Antall arbeidsdager</Label>
                  <Input
-                   id="work-days-input-create"
-                   type="number"
-                   min="0"
-                   value={workDays}
-                   onChange={(e) => handleWorkDaysChange(parseInt(e.target.value) || 0)}
-                   className="rounded-xl mt-2"
-                 />
+                id="work-days-input-create"
+                type="number"
+                min="0"
+                value={workDays}
+                onChange={(e) => handleWorkDaysChange(parseInt(e.target.value) || 0)}
+                className="rounded-xl mt-2" />
+
                  <p className="text-xs text-slate-500 mt-2">Sluttdato oppdateres automatisk</p>
                </div>
-             )}
+            }
            </div>
 
           {/* Weekend Inclusion Options */}
@@ -531,8 +531,8 @@ export default function CreateAssignmentDialog({
                 <Checkbox
                   id="include_saturday"
                   checked={formData.include_saturday}
-                  onCheckedChange={(checked) => setFormData({ ...formData, include_saturday: checked })}
-                />
+                  onCheckedChange={(checked) => setFormData({ ...formData, include_saturday: checked })} />
+
                 <label htmlFor="include_saturday" className="text-sm cursor-pointer">
                   Inkluder lørdag
                 </label>
@@ -541,8 +541,8 @@ export default function CreateAssignmentDialog({
                 <Checkbox
                   id="include_sunday"
                   checked={formData.include_sunday}
-                  onCheckedChange={(checked) => setFormData({ ...formData, include_sunday: checked })}
-                />
+                  onCheckedChange={(checked) => setFormData({ ...formData, include_sunday: checked })} />
+
                 <label htmlFor="include_sunday" className="text-sm cursor-pointer">
                   Inkluder søndag
                 </label>
@@ -550,62 +550,62 @@ export default function CreateAssignmentDialog({
             </div>
           </div>
 
-          {formData.assignment_type === 'arbeid' && (
-            <div>
+          {formData.assignment_type === 'arbeid' &&
+          <div>
               <Label>Rolle på prosjekt</Label>
               <Input
-                value={formData.rolle_pa_prosjekt}
-                onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
-                placeholder="f.eks. Prosjektleder, Tømrer, Montør"
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-          )}
+              value={formData.rolle_pa_prosjekt}
+              onChange={(e) => setFormData({ ...formData, rolle_pa_prosjekt: e.target.value })}
+              placeholder="f.eks. Prosjektleder, Tømrer, Montør"
+              className="mt-1.5 rounded-xl" />
 
-          {formData.assignment_type === 'arbeid' && (
-            <div>
+            </div>
+          }
+
+          {formData.assignment_type === 'arbeid' &&
+          <div>
               <Label>Maskin (valgfritt)</Label>
               <Select
-                value={formData.machine_id || 'none'}
-                onValueChange={(v) => {
-                  const selected = maskiner.find((m) => m.id === v);
-                  setFormData({
-                    ...formData,
-                    machine_id: v === 'none' ? '' : v,
-                    machine_navn: selected ? selected.navn : '',
-                  });
-                }}
-              >
+              value={formData.machine_id || 'none'}
+              onValueChange={(v) => {
+                const selected = maskiner.find((m) => m.id === v);
+                setFormData({
+                  ...formData,
+                  machine_id: v === 'none' ? '' : v,
+                  machine_navn: selected ? selected.navn : ''
+                });
+              }}>
+
                 <SelectTrigger className="mt-1.5 rounded-xl">
                   <SelectValue placeholder="Ingen maskin" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Ingen maskin</SelectItem>
-                  {maskiner
-                    .filter((m) => m.aktiv)
-                    .map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
+                  {maskiner.
+                filter((m) => m.aktiv).
+                map((m) =>
+                <SelectItem key={m.id} value={m.id}>
                         <span className="flex items-center gap-2">
                           {m.navn}
-                          {m.status === 'tilgjengelig' && (
-                            <span className="text-[10px] text-green-600">● Tilgjengelig</span>
-                          )}
-                          {m.status !== 'tilgjengelig' && (
-                            <span className="text-[10px] text-amber-600">● {m.status}</span>
-                          )}
+                          {m.status === 'tilgjengelig' &&
+                    <span className="text-[10px] text-green-600">● Tilgjengelig</span>
+                    }
+                          {m.status !== 'tilgjengelig' &&
+                    <span className="text-[10px] text-amber-600">● {m.status}</span>
+                    }
                         </span>
                       </SelectItem>
-                    ))}
+                )}
                 </SelectContent>
               </Select>
-              {machineConflict && (
-                <div className="mt-2 flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              {machineConflict &&
+            <div className="mt-2 flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
                   <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                   Maskinen er allerede planlagt i dette tidsrommet.
                 </div>
-              )}
+            }
             </div>
-          )}
+          }
 
           <div>
             <Label>Kommentar</Label>
@@ -613,8 +613,8 @@ export default function CreateAssignmentDialog({
               value={formData.kommentar}
               onChange={(e) => setFormData({ ...formData, kommentar: e.target.value })}
               placeholder="Eventuelle notater..."
-              className="mt-1.5 rounded-xl"
-            />
+              className="mt-1.5 rounded-xl" />
+
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
@@ -624,13 +624,13 @@ export default function CreateAssignmentDialog({
             <Button
               type="submit"
               disabled={isLoading || selectedResources.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
               {isLoading ? 'Oppretter...' : 'Opprett planlegging'}
             </Button>
           </div>
         </form>
       </DialogContent>
-    </Dialog>
-  );
+    </Dialog>);
+
 }
