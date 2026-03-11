@@ -82,9 +82,11 @@ export default function EditAssignmentDialog({
 
   useEffect(() => {
     if (assignment) {
+      const startDato = assignment.start_dato_tid ? assignment.start_dato_tid.slice(0, 16) : '';
+      const sluttDato = assignment.slutt_dato_tid ? assignment.slutt_dato_tid.slice(0, 16) : '';
       setFormData({
-        start_dato_tid: assignment.start_dato_tid ? assignment.start_dato_tid.slice(0, 16) : '',
-        slutt_dato_tid: assignment.slutt_dato_tid ? assignment.slutt_dato_tid.slice(0, 16) : '',
+        start_dato_tid: startDato,
+        slutt_dato_tid: sluttDato,
         rolle_pa_prosjekt: assignment.rolle_pa_prosjekt || '',
         kommentar: assignment.kommentar || '',
         status: assignment.status || 'planlagt',
@@ -93,8 +95,24 @@ export default function EditAssignmentDialog({
       });
       setRequiredCompetencies(assignment.required_competencies || []);
       setCompetencyInput('');
+      setEditingWorkDays(false);
+      const days = calculateWorkDays(startDato, sluttDato, assignment.include_saturday, assignment.include_sunday);
+      setWorkDays(days);
     }
   }, [assignment, open]);
+
+  const handleWorkDaysChange = (newWorkDays) => {
+    setWorkDays(newWorkDays);
+    if (formData.start_dato_tid && newWorkDays > 0) {
+      const newEndDate = addWorkDays(formData.start_dato_tid, newWorkDays, formData.include_saturday, formData.include_sunday);
+      const year = newEndDate.getFullYear();
+      const month = String(newEndDate.getMonth() + 1).padStart(2, '0');
+      const date = String(newEndDate.getDate()).padStart(2, '0');
+      const hours = String(newEndDate.getHours()).padStart(2, '0');
+      const minutes = String(newEndDate.getMinutes()).padStart(2, '0');
+      setFormData({ ...formData, slutt_dato_tid: `${year}-${month}-${date}T${hours}:${minutes}` });
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
