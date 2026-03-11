@@ -215,11 +215,24 @@ export default function CreateAssignmentDialog({
         setFormData((prev) => ({
           ...prev,
           machine_id: suggestedMachine.id,
-          machine_navn: suggestedMachine.navn
+          machine_navn: suggestedMachine.navn,
+          machine_start_dato_tid: prev.machine_start_dato_tid || prev.start_dato_tid,
+          machine_slutt_dato_tid: prev.machine_slutt_dato_tid || prev.slutt_dato_tid
         }));
       }
     }
-  }, [selectedResources]);
+  }, [selectedResources, maskiner]);
+
+  // Auto-fill machine dates when resource dates are set and machine is selected
+  useEffect(() => {
+    if (formData.machine_id && formData.start_dato_tid && formData.slutt_dato_tid) {
+      setFormData((prev) => ({
+        ...prev,
+        machine_start_dato_tid: prev.machine_start_dato_tid || prev.start_dato_tid,
+        machine_slutt_dato_tid: prev.machine_slutt_dato_tid || prev.slutt_dato_tid
+      }));
+    }
+  }, [formData.machine_id, formData.start_dato_tid, formData.slutt_dato_tid]);
 
   // Check machine conflict when machine or time changes
   useEffect(() => {
