@@ -77,6 +77,8 @@ export default function EditAssignmentDialog({
   });
   const [competencyInput, setCompetencyInput] = useState('');
   const [requiredCompetencies, setRequiredCompetencies] = useState([]);
+  const [workDays, setWorkDays] = useState(0);
+  const [editingWorkDays, setEditingWorkDays] = useState(false);
 
   useEffect(() => {
     if (assignment) {
