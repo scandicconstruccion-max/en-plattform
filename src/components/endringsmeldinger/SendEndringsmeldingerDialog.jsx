@@ -29,22 +29,18 @@ export default function SendEndringsmeldingerDialog({ open, onOpenChange, select
         for (const changeId of selectedChanges) {
           const change = changeList.find(c => c.id === changeId);
           const project = projects.find(p => p.id === change?.project_id);
-          
+
+          // Generer token og lagre på endringsmeldingen
+          const token = generateApprovalToken();
+          await base44.entities.ChangeNotification.update(changeId, { approval_token: token });
+
+          const approvalUrl = buildApprovalUrl('change', changeId, token);
+          const htmlBody = generateChangeEmailHTML(change, project, approvalUrl);
+
           await base44.integrations.Core.SendEmail({
             to: email,
-            subject: `Endringsmelding: ${change?.title || 'Ukjent'}`,
-            body: `
-              <h2>Endringsmelding</h2>
-              <p><strong>Prosjekt:</strong> ${project?.name || 'Ukjent'}</p>
-              <p><strong>Tittel:</strong> ${change?.title || 'Ukjent'}</p>
-              <p><strong>Type:</strong> ${changeTypeLabels[change?.change_type] || 'Ukjent'}</p>
-              ${change?.amount ? `<p><strong>Beløp:</strong> ${change.amount.toLocaleString('nb-NO')} kr</p>` : ''}
-              <p><strong>Status:</strong> ${change?.status}</p>
-              <br>
-              <p>${change?.description || 'Ingen beskrivelse'}</p>
-              <br>
-              <p>Se systemet for mer informasjon.</p>
-            `
+            subject: `Endringsmelding til godkjenning: ${change?.title || 'Ukjent'}`,
+            body: htmlBody,
           });
         }
       });
