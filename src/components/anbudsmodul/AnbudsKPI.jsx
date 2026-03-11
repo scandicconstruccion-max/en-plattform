@@ -7,7 +7,7 @@ import { isPast, addDays, parseISO } from 'date-fns';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
-export default function AnbudsKPI({ projects, invitations, quotes, onSelectProject }) {
+export default function AnbudsKPI({ projects, invitations, quotes, onSelectProject, onFilterChange }) {
   const activeProjects = projects.filter(p => p.status !== 'CLOSED');
   const activeIds = new Set(activeProjects.map(p => p.id));
 
@@ -33,11 +33,17 @@ export default function AnbudsKPI({ projects, invitations, quotes, onSelectProje
     return inv > 0 && (q / inv) < 0.3;
   });
 
+  const handleCardClick = (filterType) => {
+    if (onFilterChange) {
+      onFilterChange(filterType);
+    }
+  };
+
   const stats = [
-    { label: 'Aktive forespørsler', value: activeProjects.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-    { label: 'Inviterte leverandører', value: totalInvitations, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-    { label: 'Mottatte tilbud', value: totalQuotes, icon: Inbox, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-    { label: 'Gj.sn. svarprosent', value: `${svarprosent}%`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+    { label: 'Aktive forespørsler', value: activeProjects.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20', filter: 'active' },
+    { label: 'Inviterte leverandører', value: totalInvitations, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20', filter: 'invited' },
+    { label: 'Mottatte tilbud', value: totalQuotes, icon: Inbox, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', filter: 'received' },
+    { label: 'Gj.sn. svarprosent', value: `${svarprosent}%`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20', filter: 'response' },
   ];
 
   return (
