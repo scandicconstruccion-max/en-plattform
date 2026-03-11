@@ -1066,11 +1066,11 @@ export default function Kalender() {
 
         {/* Create Dialog */}
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-md dark:bg-slate-900">
+        <DialogContent className="sm:max-w-md dark:bg-slate-900 max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Ny hendelse</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
             <div>
               <Label>Tittel *</Label>
               <Input
