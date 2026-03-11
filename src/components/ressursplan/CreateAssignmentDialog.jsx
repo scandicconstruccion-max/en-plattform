@@ -257,6 +257,8 @@ export default function CreateAssignmentDialog({
     setRequiredCompetencies([]);
     setCompetencyInput('');
     setMachineConflict(false);
+    setWorkDays(0);
+    setEditingWorkDays(false);
   };
 
   const handleClose = (open) => {
