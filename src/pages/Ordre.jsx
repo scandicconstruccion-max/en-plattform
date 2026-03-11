@@ -315,7 +315,10 @@ export default function Ordre() {
       <div className="px-6 lg:px-8 py-6 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card className="p-4 border-0 shadow-sm dark:bg-slate-900">
+          <Card
+            className="p-4 border-0 shadow-sm dark:bg-slate-900 cursor-pointer hover:shadow-md hover:ring-2 hover:ring-slate-200 dark:hover:ring-slate-700 transition-all"
+            onClick={() => setStatusFilter(statusFilter === 'opprettet' ? 'all' : 'opprettet')}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                 <FileText className="h-5 w-5 text-slate-600 dark:text-slate-400" />
@@ -326,7 +329,10 @@ export default function Ordre() {
               </div>
             </div>
           </Card>
-          <Card className="p-4 border-0 shadow-sm dark:bg-slate-900">
+          <Card
+            className="p-4 border-0 shadow-sm dark:bg-slate-900 cursor-pointer hover:shadow-md hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-800 transition-all"
+            onClick={() => setStatusFilter(statusFilter === 'sendt' ? 'all' : 'sendt')}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                 <Send className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -337,7 +343,10 @@ export default function Ordre() {
               </div>
             </div>
           </Card>
-          <Card className="p-4 border-0 shadow-sm dark:bg-slate-900">
+          <Card
+            className="p-4 border-0 shadow-sm dark:bg-slate-900 cursor-pointer hover:shadow-md hover:ring-2 hover:ring-emerald-200 dark:hover:ring-emerald-800 transition-all"
+            onClick={() => setStatusFilter(statusFilter === 'godkjent' ? 'all' : 'godkjent')}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />

@@ -69,6 +69,7 @@ import FDV from './pages/FDV';
 import FDVDetaljer from './pages/FDVDetaljer';
 import Faktura from './pages/Faktura';
 import FakturaDetaljer from './pages/FakturaDetaljer';
+import Godkjenning from './pages/Godkjenning';
 import HMS from './pages/HMS';
 import HMSHandbok from './pages/HMSHandbok';
 import Innstillinger from './pages/Innstillinger';
@@ -98,7 +99,6 @@ import Sjekklister from './pages/Sjekklister';
 import Tilbud from './pages/Tilbud';
 import Timelister from './pages/Timelister';
 import Varsler from './pages/Varsler';
-import Godkjenning from './pages/Godkjenning';
 import __Layout from './Layout.jsx';
 
 
@@ -125,6 +125,7 @@ export const PAGES = {
     "FDVDetaljer": FDVDetaljer,
     "Faktura": Faktura,
     "FakturaDetaljer": FakturaDetaljer,
+    "Godkjenning": Godkjenning,
     "HMS": HMS,
     "HMSHandbok": HMSHandbok,
     "Innstillinger": Innstillinger,
@@ -154,7 +155,6 @@ export const PAGES = {
     "Tilbud": Tilbud,
     "Timelister": Timelister,
     "Varsler": Varsler,
-    "Godkjenning": Godkjenning,
 }
 
 export const pagesConfig = {
