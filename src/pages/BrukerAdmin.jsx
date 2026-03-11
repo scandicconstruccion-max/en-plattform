@@ -450,6 +450,9 @@ export default function BrukerAdmin() {
         />
       )}
 
+          </TabsContent>
+        </Tabs>
+
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteUserId} onOpenChange={() => setDeleteUserId(null)}>
         <AlertDialogContent>
