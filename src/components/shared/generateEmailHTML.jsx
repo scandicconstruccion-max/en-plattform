@@ -1,4 +1,5 @@
 import { formatAmount } from './formatNumber';
+import { generateApprovalEmailHTML } from './approvalEmailTemplate';
 
 export function generateOrderEmailHTML(order, approvalUrl) {
   const items = order.items || [];
