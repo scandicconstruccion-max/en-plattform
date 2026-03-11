@@ -159,6 +159,19 @@ export default function BrukerAdmin() {
       />
 
       <div className="px-6 lg:px-8 py-8 space-y-6">
+        <Tabs defaultValue="brukere">
+          <TabsList className="mb-4">
+            <TabsTrigger value="brukere">Brukere</TabsTrigger>
+            <TabsTrigger value="rolletilganger">Rolletilganger</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="rolletilganger">
+            <Card className="p-6">
+              <RoleTilgangMatrise />
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="brukere" className="space-y-6">
         {/* Filters and Actions */}
         <Card className="p-6">
           <div className="flex flex-col lg:flex-row gap-4">
