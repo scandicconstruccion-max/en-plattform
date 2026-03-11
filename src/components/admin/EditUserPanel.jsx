@@ -42,6 +42,7 @@ const moduleLabels = {
 
 export default function EditUserPanel({ user, projects, onClose, onSaved }) {
   const [formData, setFormData] = useState({
+    display_name: user.display_name || user.full_name || '',
     role: user.role || 'ansatt',
     assigned_projects: user.assigned_projects || [],
     managed_projects: user.managed_projects || [],
