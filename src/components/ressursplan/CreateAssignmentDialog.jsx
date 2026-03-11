@@ -582,10 +582,7 @@ export default function CreateAssignmentDialog({
                 setFormData((prev) => ({
                   ...prev,
                   machine_id: v,
-                  machine_navn: selected ? selected.navn : '',
-                  // Auto-fill machine dates with resource dates on first selection
-                  machine_start_dato_tid: prev.machine_start_dato_tid || prev.start_dato_tid,
-                  machine_slutt_dato_tid: prev.machine_slutt_dato_tid || prev.slutt_dato_tid
+                  machine_navn: selected ? selected.navn : ''
                 }));
               }}>
 
