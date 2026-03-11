@@ -257,6 +257,25 @@ export default function Endringsmeldinger() {
       />
 
       <div className="px-6 lg:px-8 py-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: 'Utkast', status: 'utkast', color: 'slate', count: changes.filter(c => c.status === 'utkast').length },
+            { label: 'Sendt', status: 'sendt', color: 'blue', count: changes.filter(c => c.status === 'sendt').length },
+            { label: 'Godkjent', status: 'godkjent', color: 'emerald', count: changes.filter(c => c.status === 'godkjent').length },
+            { label: 'Avvist', status: 'avvist', color: 'red', count: changes.filter(c => c.status === 'avvist').length },
+          ].map(({ label, status, color, count }) => (
+            <Card
+              key={status}
+              className={`p-4 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all ${statusFilter === status ? 'ring-2 ring-offset-1 ring-' + color + '-400' : 'hover:ring-2 hover:ring-' + color + '-200'}`}
+              onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
+            >
+              <p className="text-2xl font-bold text-slate-900">{count}</p>
+              <p className="text-sm text-slate-500">{label}</p>
+            </Card>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1">
