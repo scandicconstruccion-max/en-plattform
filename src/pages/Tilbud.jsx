@@ -584,13 +584,13 @@ export default function Tilbud() {
           ].map(({ label, status, count }) => (
             <Card
               key={status}
-              className="p-4 border-0 shadow-sm cursor-pointer hover:shadow-md hover:ring-2 hover:ring-slate-200 transition-all"
+              className={`p-4 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all ${statusFilter === status ? 'ring-2 ring-slate-400' : 'hover:ring-2 hover:ring-slate-200'}`}
               onClick={() => {
                 if (status === 'avvist') {
                   setShowRejectedQuotes(true);
+                  setStatusFilter('all');
                 } else {
-                  // Filter by scrolling to section - use search as proxy via a status concept
-                  // We scroll to list and visually show it
+                  setStatusFilter(statusFilter === status ? 'all' : status);
                 }
               }}
             >
