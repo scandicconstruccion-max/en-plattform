@@ -262,7 +262,9 @@ export default function CreateAssignmentDialog({
   };
 
   const handleClose = (open) => {
-    if (!open) resetForm();
+    if (!open) {
+      resetForm();
+    }
     onOpenChange(open);
   };
 
