@@ -49,22 +49,28 @@ export default function AnbudsKPI({ projects, invitations, quotes, onSelectProje
   return (
     <div className="space-y-4">
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s, i) => {
-          const Icon = s.icon;
-          return (
-            <Card key={i} className="border-0 shadow-sm dark:bg-slate-900 p-5 flex items-center gap-4">
-              <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0', s.bg)}>
-                <Icon className={cn('h-5 w-5', s.color)} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{s.value}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+         {stats.map((s, i) => {
+           const Icon = s.icon;
+           return (
+             <button 
+               key={i}
+               onClick={() => handleCardClick(s.filter)}
+               className="cursor-pointer hover:shadow-md transition-shadow"
+             >
+               <Card className="border-0 shadow-sm dark:bg-slate-900 p-5 flex items-center gap-4 h-full">
+                 <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0', s.bg)}>
+                   <Icon className={cn('h-5 w-5', s.color)} />
+                 </div>
+                 <div className="text-left">
+                   <p className="text-2xl font-bold text-slate-900 dark:text-white">{s.value}</p>
+                   <p className="text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
+                 </div>
+               </Card>
+             </button>
+           );
+         })}
+       </div>
 
       {/* Alerts */}
       {(deadlineSoon.length > 0 || noQuotes.length > 0 || lowResponse.length > 0) && (
