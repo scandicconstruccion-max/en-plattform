@@ -95,7 +95,7 @@ export default function SjekklisteDetaljer() {
       action,
       details: details || '',
       user_email: user?.email || '',
-      user_name: user?.full_name || user?.email || '',
+      user_name: user?.display_name || user?.full_name || user?.email || '',
       timestamp: new Date().toISOString()
     });
     return log;
@@ -109,7 +109,7 @@ export default function SjekklisteDetaljer() {
       item_order: itemIndex,
       status,
       responded_by: user?.email,
-      responded_by_name: user?.full_name || user?.email,
+      responded_by_name: user?.display_name || user?.full_name || user?.email,
       responded_date: new Date().toISOString()
     };
     if (idx >= 0) {
@@ -130,7 +130,7 @@ export default function SjekklisteDetaljer() {
     const commentData = {
       comment,
       comment_by: user?.email,
-      comment_by_name: user?.full_name || user?.email,
+      comment_by_name: user?.display_name || user?.full_name || user?.email,
       comment_date: new Date().toISOString()
     };
     if (idx >= 0) {
@@ -202,11 +202,11 @@ export default function SjekklisteDetaljer() {
     const signatures = [...(checklist.signatures || [])];
     signatures.push({
       signed_by: user?.email,
-      signed_by_name: user?.full_name || user?.email,
+      signed_by_name: user?.display_name || user?.full_name || user?.email,
       role,
       signed_date: new Date().toISOString()
     });
-    const activity_log = logActivity(`Signert av ${user?.full_name || user?.email}`, `Rolle: ${role}`);
+    const activity_log = logActivity(`Signert av ${user?.display_name || user?.full_name || user?.email}`, `Rolle: ${role}`);
     updateMutation.mutate({ signatures, activity_log });
   };
 
