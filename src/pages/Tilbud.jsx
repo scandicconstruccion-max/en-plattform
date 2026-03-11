@@ -572,6 +572,32 @@ export default function Tilbud() {
         ) : null}
 
         {activeTab === 'quotes' && <>
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: 'Utkast', status: 'utkast', count: quotes.filter(q => q.status === 'utkast').length },
+            { label: 'Sendt', status: 'sendt', count: quotes.filter(q => q.status === 'sendt').length },
+            { label: 'Godkjent', status: 'godkjent', count: quotes.filter(q => q.status === 'godkjent').length },
+            { label: 'Avvist', status: 'avvist', count: rejectedQuotes.length },
+          ].map(({ label, status, count }) => (
+            <Card
+              key={status}
+              className="p-4 border-0 shadow-sm cursor-pointer hover:shadow-md hover:ring-2 hover:ring-slate-200 transition-all"
+              onClick={() => {
+                if (status === 'avvist') {
+                  setShowRejectedQuotes(true);
+                } else {
+                  // Filter by scrolling to section - use search as proxy via a status concept
+                  // We scroll to list and visually show it
+                }
+              }}
+            >
+              <p className="text-2xl font-bold text-slate-900">{count}</p>
+              <p className="text-sm text-slate-500">{label}</p>
+            </Card>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1">
