@@ -222,7 +222,7 @@ export default function Avvik() {
         action: 'markert_utfort',
         timestamp: new Date().toISOString(),
         user_email: user.email,
-        user_name: user.full_name,
+        user_name: user.display_name || user.full_name,
         details: 'Avvik markert som utført'
       });
 
@@ -250,7 +250,7 @@ export default function Avvik() {
         action: 'kommentar',
         timestamp: new Date().toISOString(),
         user_email: user.email,
-        user_name: user.full_name,
+        user_name: user.display_name || user.full_name,
         details: commentText
       });
 
@@ -280,7 +280,7 @@ export default function Avvik() {
         action: 'dokument_lastet_opp',
         timestamp: new Date().toISOString(),
         user_email: user.email,
-        user_name: user.full_name,
+        user_name: user.display_name || user.full_name,
         details: `${uploadAttachments.length} dokument(er) lastet opp`
       });
 
@@ -365,7 +365,7 @@ export default function Avvik() {
             action: 'status_endret',
             timestamp: new Date().toISOString(),
             user_email: user.email,
-            user_name: user.full_name,
+            user_name: user.display_name || user.full_name,
             details: `Status endret til ${getStatusLabel(newStatus)}`
           });
 

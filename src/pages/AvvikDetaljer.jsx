@@ -132,7 +132,7 @@ export default function AvvikDetaljer() {
         action: 'markert_utfort',
         timestamp: new Date().toISOString(),
         user_email: user.email,
-        user_name: user.full_name,
+        user_name: user.display_name || user.full_name,
         details: 'Avvik markert som utført'
       });
 
