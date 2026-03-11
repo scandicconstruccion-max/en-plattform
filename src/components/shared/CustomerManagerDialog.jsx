@@ -61,14 +61,20 @@ export default function CustomerManagerDialog({ open, onClose }) {
   });
 
   const startNew = () => { setForm(emptyCustomer); setEditing('new'); };
-  const startEdit = (c) => { setForm({ ...c }); setEditing(c); };
+  const startEdit = (c) => {
+    const fields = addressToFields(c.address);
+    setForm({ ...c, ...fields });
+    setEditing(c);
+  };
 
   const handleSave = (e) => {
     e.preventDefault();
+    const { street, postal_code, city, ...rest } = form;
+    const data = { ...rest, address: fieldsToAddress(street, postal_code, city) };
     if (editing === 'new') {
-      createMutation.mutate(form);
+      createMutation.mutate(data);
     } else {
-      updateMutation.mutate({ id: editing.id, data: form });
+      updateMutation.mutate({ id: editing.id, data });
     }
   };
 
