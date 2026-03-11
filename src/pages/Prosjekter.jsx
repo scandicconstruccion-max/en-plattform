@@ -544,6 +544,9 @@ export default function Prosjekter() {
         </DialogContent>
       </Dialog>
 
+      {/* Customer Manager Dialog */}
+      <CustomerManagerDialog open={showCustomerManager} onClose={() => setShowCustomerManager(false)} />
+
       {/* Create Subproject Dialog */}
       <CreateSubprojectDialog
         open={showSubprojectDialog}
