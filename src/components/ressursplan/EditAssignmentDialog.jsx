@@ -67,14 +67,18 @@ export default function EditAssignmentDialog({
     initialData: []
   });
   const [formData, setFormData] = useState({
-    start_dato_tid: '',
-    slutt_dato_tid: '',
-    rolle_pa_prosjekt: '',
-    kommentar: '',
-    status: 'planlagt',
-    include_saturday: false,
-    include_sunday: false
-  });
+     start_dato_tid: '',
+     slutt_dato_tid: '',
+     rolle_pa_prosjekt: '',
+     kommentar: '',
+     status: 'planlagt',
+     machine_id: '',
+     machine_navn: '',
+     machine_start_dato_tid: '',
+     machine_slutt_dato_tid: '',
+     include_saturday: false,
+     include_sunday: false
+   });
   const [competencyInput, setCompetencyInput] = useState('');
   const [requiredCompetencies, setRequiredCompetencies] = useState([]);
   const [workDays, setWorkDays] = useState(0);
