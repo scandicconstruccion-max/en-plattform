@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,9 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
+import EmployeeSearchField from '@/components/shared/EmployeeSearchField';
+import CustomerSelectField from '@/components/shared/CustomerSelectField';
+import HistoricContactPickerSection from '@/components/project/HistoricContactPickerSection';
 import { filterProjectsByAccess } from '@/components/shared/permissions';
 import { buildProjectHierarchy } from '@/components/shared/projectHierarchyUtils';
 import ProjectHierarchyTree from '@/components/project/ProjectHierarchyTree';
