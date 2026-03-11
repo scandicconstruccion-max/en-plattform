@@ -40,6 +40,7 @@ import { nb } from 'date-fns/locale';
 export default function Prosjekter() {
   const [showDialog, setShowDialog] = useState(false);
   const [showSubprojectDialog, setShowSubprojectDialog] = useState(false);
+  const [showCustomerManager, setShowCustomerManager] = useState(false);
   const [selectedParentProject, setSelectedParentProject] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
