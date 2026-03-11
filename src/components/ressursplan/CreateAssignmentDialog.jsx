@@ -212,14 +212,12 @@ export default function CreateAssignmentDialog({
         (m) => m.aktiv && m.standard_forer_id === selectedResources[0]
       );
       if (suggestedMachine && !formData.machine_id) {
-        setFormData((prev) => ({
-          ...prev,
-          machine_id: suggestedMachine.id,
-          machine_navn: suggestedMachine.navn,
-          machine_start_dato_tid: prev.machine_start_dato_tid || prev.start_dato_tid,
-          machine_slutt_dato_tid: prev.machine_slutt_dato_tid || prev.slutt_dato_tid
-        }));
-      }
+         setFormData((prev) => ({
+           ...prev,
+           machine_id: suggestedMachine.id,
+           machine_navn: suggestedMachine.navn
+         }));
+       }
     }
   }, [selectedResources, maskiner]);
 
