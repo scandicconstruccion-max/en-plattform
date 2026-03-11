@@ -322,12 +322,21 @@ export default function ProsjektDetaljer() {
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {project.address && (
+                {(project.address_street || project.address) && (
                   <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                     <MapPin className="h-5 w-5 text-slate-400" />
                     <div>
                       <p className="text-xs text-slate-500">Adresse</p>
-                      <p className="font-medium text-slate-900">{project.address}</p>
+                      {project.address_street ? (
+                        <>
+                          <p className="font-medium text-slate-900">{project.address_street}</p>
+                          {(project.address_postal_code || project.address_city) && (
+                            <p className="text-sm text-slate-600">{[project.address_postal_code, project.address_city].filter(Boolean).join(' ')}</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="font-medium text-slate-900">{project.address}</p>
+                      )}
                     </div>
                   </div>
                 )}
