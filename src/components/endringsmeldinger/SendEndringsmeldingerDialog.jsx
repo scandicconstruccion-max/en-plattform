@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { X, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { generateChangeEmailHTML } from '@/components/shared/generateEmailHTML';
+import { generateApprovalToken, buildApprovalUrl } from '@/components/shared/approvalEmailTemplate';
 
 export default function SendEndringsmeldingerDialog({ open, onOpenChange, selectedChanges, changeList, projects, getProjectName, changeTypeLabels }) {
   const [recipients, setRecipients] = useState([]);
