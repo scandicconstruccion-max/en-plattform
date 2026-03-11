@@ -121,5 +121,6 @@ export function generateApprovalToken() {
  */
 export function buildApprovalUrl(action, id, token) {
   const base = window.location.origin;
-  return `${base}/Godkjenning?action=${action}&id=${id}&token=${token}`;
+  // Base44 router lager lowercase kebab-case av PageName → "Godkjenning" → "/godkjenning"
+  return `${base}/godkjenning?action=${action}&id=${id}&token=${token}`;
 }
