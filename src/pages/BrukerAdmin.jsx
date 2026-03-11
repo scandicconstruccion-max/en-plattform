@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageHeader from '@/components/shared/PageHeader';
 import EditUserPanel from '@/components/admin/EditUserPanel';
 import BulkEditDialog from '@/components/admin/BulkEditDialog';
 import UserAuditLogDialog from '@/components/admin/UserAuditLogDialog';
 import CreateUserDialog from '@/components/admin/CreateUserDialog';
+import RoleTilgangMatrise from '@/components/admin/RoleTilgangMatrise';
 import { ROLE_LABELS } from '@/components/shared/permissions';
 import { 
   Users, Search, Edit, Trash2, Mail, History, CheckCircle2, XCircle,
