@@ -401,6 +401,8 @@ export default function BrukerAdmin() {
             )}
           </div>
         </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Create User Dialog */}
@@ -449,9 +451,6 @@ export default function BrukerAdmin() {
           onClose={() => setAuditLogUser(null)}
         />
       )}
-
-          </TabsContent>
-        </Tabs>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteUserId} onOpenChange={() => setDeleteUserId(null)}>
