@@ -194,6 +194,8 @@ export default function CreateAssignmentDialog({
       alert('Velg prosjekt for arbeidsallokering');
       return;
     }
+    // Log to verify machine data is being sent
+    console.log('Submitting with machine_id:', formData.machine_id, 'machine_navn:', formData.machine_navn);
     onSubmit({
       ...formData,
       resource_ids: selectedResources,
