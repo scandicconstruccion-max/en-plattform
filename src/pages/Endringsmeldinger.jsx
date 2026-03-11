@@ -423,11 +423,11 @@ export default function Endringsmeldinger() {
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Ny endringsmelding</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
             <div>
               <Label>Tittel *</Label>
               <Input
@@ -519,29 +519,30 @@ export default function Endringsmeldinger() {
               projectId={formData.project_id}
               moduleType="change"
             />
-
-            <div className="flex justify-end gap-3 pt-4 flex-wrap">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {createMutation.isPending && !sendAfterCreate ? 'Lagrer...' : 'Opprett'}
-              </Button>
-              <Button
-                type="button"
-                disabled={createMutation.isPending || !formData.project_id}
-                onClick={(e) => handleSubmit(e, true)}
-                className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2"
-              >
-                <Send className="h-4 w-4" />
-                {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send'}
-              </Button>
-            </div>
           </form>
+
+          <div className="flex justify-end gap-3 pt-4 flex-wrap mt-4">
+            <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+              Avbryt
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={createMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              onClick={(e) => handleSubmit(e, false)}
+            >
+              {createMutation.isPending && !sendAfterCreate ? 'Lagrer...' : 'Opprett'}
+            </Button>
+            <Button
+              type="button"
+              disabled={createMutation.isPending || !formData.project_id}
+              onClick={(e) => handleSubmit(e, true)}
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2"
+            >
+              <Send className="h-4 w-4" />
+              {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
