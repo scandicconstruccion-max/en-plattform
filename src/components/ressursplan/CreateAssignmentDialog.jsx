@@ -570,14 +570,14 @@ export default function CreateAssignmentDialog({
           <div>
               <Label>Maskin (valgfritt)</Label>
               <Select
-              value={formData.machine_id || 'none'}
+              value={formData.machine_id}
               onValueChange={(v) => {
                 const selected = maskiner.find((m) => m.id === v);
-                setFormData({
-                  ...formData,
-                  machine_id: v === 'none' ? '' : v,
+                setFormData((prev) => ({
+                  ...prev,
+                  machine_id: v,
                   machine_navn: selected ? selected.navn : ''
-                });
+                }));
               }}>
 
                 <SelectTrigger className="mt-1.5 rounded-xl">
