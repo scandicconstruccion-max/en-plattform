@@ -11,6 +11,49 @@ import { Plus, X, Calendar } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 
+const calculateWorkDays = (startDate, endDate, includeSaturday, includeSunday) => {
+  if (!startDate || !endDate) return 0;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (start > end) return 0;
+  
+  let workDays = 0;
+  const current = new Date(start);
+  
+  while (current < end) {
+    const dayOfWeek = current.getDay();
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+    
+    if (isWeekday || (isSaturday && includeSaturday) || (isSunday && includeSunday)) {
+      workDays++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return workDays;
+};
+
+const addWorkDays = (startDate, days, includeSaturday, includeSunday) => {
+  const date = new Date(startDate);
+  let addedDays = 0;
+  
+  while (addedDays < days) {
+    date.setDate(date.getDate() + 1);
+    const dayOfWeek = date.getDay();
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+    
+    if (isWeekday || (isSaturday && includeSaturday) || (isSunday && includeSunday)) {
+      addedDays++;
+    }
+  }
+  
+  return date;
+};
+
 export default function EditAssignmentDialog({
   open,
   onOpenChange,
