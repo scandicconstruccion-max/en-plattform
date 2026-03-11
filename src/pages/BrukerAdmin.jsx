@@ -404,6 +404,7 @@ export default function BrukerAdmin() {
           </TabsContent>
         </Tabs>
       </div>
+    </div>
 
       {/* Create User Dialog */}
       <CreateUserDialog
