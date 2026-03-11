@@ -1170,19 +1170,21 @@ export default function Kalender() {
                   className="mt-1.5 rounded-xl" />
 
             </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
-
-                {createMutation.isPending ? 'Lagrer...' : 'Opprett'}
-              </Button>
-            </div>
           </form>
+
+          <div className="flex justify-end gap-3 pt-4 flex-wrap mt-4">
+            <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+              Avbryt
+            </Button>
+            <Button
+                type="submit"
+                onClick={handleSubmit}
+                disabled={createMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+
+              {createMutation.isPending ? 'Lagrer...' : 'Opprett'}
+            </Button>
+          </div>
         </DialogContent>
         </Dialog>
       </div>
