@@ -178,7 +178,7 @@ export default function AnbudsmodulForesporsler() {
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>Opprett forespørsel</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 pr-4">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 pr-4 px-6">
             <div>
               <Label>Tittel *</Label>
               <Input
