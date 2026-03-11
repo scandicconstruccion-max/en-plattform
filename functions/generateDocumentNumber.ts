@@ -6,7 +6,8 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { type, orderId } = await req.json();
+    const body = await req.json();
+    const { type, orderId, baseNumber: bodyBaseNumber, currentRevision: bodyCurrentRevision } = body;
     const year = new Date().getFullYear();
 
     if (type === 'quote') {
