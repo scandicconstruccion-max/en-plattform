@@ -791,12 +791,12 @@ export default function Tilbud() {
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Nytt tilbud</DialogTitle>
+          <DialogContent className="max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+            <DialogHeader className="px-8 pt-7 pb-2 flex-shrink-0">
+              <DialogTitle className="text-xl">Nytt tilbud</DialogTitle>
             </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto px-8 pb-8 flex-1">
             {/* Customer Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
