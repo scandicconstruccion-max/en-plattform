@@ -146,7 +146,13 @@ export default function EditAssignmentDialog({
               <Input
                 type="datetime-local"
                 value={formData.start_dato_tid}
-                onChange={(e) => setFormData({ ...formData, start_dato_tid: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, start_dato_tid: e.target.value });
+                  if (formData.slutt_dato_tid) {
+                    const days = calculateWorkDays(e.target.value, formData.slutt_dato_tid, formData.include_saturday, formData.include_sunday);
+                    setWorkDays(days);
+                  }
+                }}
                 required
                 className="mt-1.5 rounded-xl"
               />
@@ -156,11 +162,53 @@ export default function EditAssignmentDialog({
               <Input
                 type="datetime-local"
                 value={formData.slutt_dato_tid}
-                onChange={(e) => setFormData({ ...formData, slutt_dato_tid: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, slutt_dato_tid: e.target.value });
+                  if (formData.start_dato_tid) {
+                    const days = calculateWorkDays(formData.start_dato_tid, e.target.value, formData.include_saturday, formData.include_sunday);
+                    setWorkDays(days);
+                  }
+                }}
                 required
                 className="mt-1.5 rounded-xl"
               />
             </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Arbeidsdager</Label>
+                <p className="text-2xl font-bold text-blue-700 mt-1">{workDays} dager</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingWorkDays(!editingWorkDays)}
+                className="rounded-xl"
+              >
+                {editingWorkDays ? 'Ferdig' : 'Endre'}
+              </Button>
+            </div>
+            {editingWorkDays && (
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <Label htmlFor="work-days-input" className="text-sm">Antall arbeidsdager</Label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    id="work-days-input"
+                    type="number"
+                    min="0"
+                    value={workDays}
+                    onChange={(e) => handleWorkDaysChange(parseInt(e.target.value) || 0)}
+                    className="rounded-xl"
+                  />
+                  <p className="text-xs text-slate-500 self-center">
+                    Sluttdato oppdateres automatisk
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Weekend Inclusion Options */}
