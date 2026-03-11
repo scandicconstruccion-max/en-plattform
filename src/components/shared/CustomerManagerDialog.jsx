@@ -10,7 +10,23 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Search, Plus, Pencil, Trash2, Building2, Phone, Mail, Globe, X } from 'lucide-react';
 
-const emptyCustomer = { name: '', org_number: '', contact_person: '', email: '', phone: '', address: '', website: '', notes: '' };
+const emptyCustomer = { name: '', org_number: '', contact_person: '', email: '', phone: '', street: '', postal_code: '', city: '', website: '', notes: '' };
+
+function addressToFields(address) {
+  if (!address) return { street: '', postal_code: '', city: '' };
+  // Try to split "Street, PostalCode City" format
+  const parts = address.split(',');
+  const street = parts[0]?.trim() || '';
+  const rest = parts[1]?.trim() || '';
+  const postalMatch = rest.match(/^(\d{4})\s+(.+)$/);
+  if (postalMatch) return { street, postal_code: postalMatch[1], city: postalMatch[2] };
+  return { street, postal_code: '', city: rest };
+}
+
+function fieldsToAddress(street, postal_code, city) {
+  const parts = [street, [postal_code, city].filter(Boolean).join(' ')].filter(Boolean);
+  return parts.join(', ');
+}
 
 export default function CustomerManagerDialog({ open, onClose }) {
   const [search, setSearch] = useState('');
