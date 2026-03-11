@@ -1019,7 +1019,7 @@ export default function Tilbud() {
             <DialogTitle>Tilbud #{selectedQuote?.quote_number}</DialogTitle>
           </DialogHeader>
           {selectedQuote &&
-          <div className="space-y-6 overflow-y-auto flex-1 pr-1">
+          <div className="space-y-6 overflow-y-auto flex-1 pr-4">
               {/* Customer Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
