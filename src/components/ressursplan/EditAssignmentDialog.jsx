@@ -225,7 +225,13 @@ export default function EditAssignmentDialog({
                 <Checkbox
                   id="edit_include_saturday"
                   checked={formData.include_saturday}
-                  onCheckedChange={(checked) => setFormData({ ...formData, include_saturday: checked })}
+                  onCheckedChange={(checked) => {
+                    setFormData({ ...formData, include_saturday: checked });
+                    if (formData.start_dato_tid && formData.slutt_dato_tid) {
+                      const days = calculateWorkDays(formData.start_dato_tid, formData.slutt_dato_tid, checked, formData.include_sunday);
+                      setWorkDays(days);
+                    }
+                  }}
                 />
                 <label htmlFor="edit_include_saturday" className="text-sm cursor-pointer">
                   Inkluder lørdag
@@ -235,7 +241,13 @@ export default function EditAssignmentDialog({
                 <Checkbox
                   id="edit_include_sunday"
                   checked={formData.include_sunday}
-                  onCheckedChange={(checked) => setFormData({ ...formData, include_sunday: checked })}
+                  onCheckedChange={(checked) => {
+                    setFormData({ ...formData, include_sunday: checked });
+                    if (formData.start_dato_tid && formData.slutt_dato_tid) {
+                      const days = calculateWorkDays(formData.start_dato_tid, formData.slutt_dato_tid, formData.include_saturday, checked);
+                      setWorkDays(days);
+                    }
+                  }}
                 />
                 <label htmlFor="edit_include_sunday" className="text-sm cursor-pointer">
                   Inkluder søndag
