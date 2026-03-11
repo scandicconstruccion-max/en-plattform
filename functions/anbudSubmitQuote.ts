@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 
     // Send notification to project creator / responsible person
     // Use built-in created_by field (email) since createdBy data field is often null
-    const notifyEmail = project?.created_by || project?.createdBy || null;
+    const notifyEmail = project?.created_by;
     if (notifyEmail && !notifyEmail.includes('service+')) {
       await base44.asServiceRole.entities.Notification.create({
         userEmail: notifyEmail,
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
         type: 'info',
         title: 'Tilbud mottatt',
         message: `${supplierDisplayName} har levert tilbud på «${project.title}»`,
-        link: `/Anbudsmodul?projectId=${invitation.anbudProjectId}`,
+        link: `/Anbudsmodul`,
         entityId: invitation.anbudProjectId,
         status: 'unread',
         eventTime: new Date().toISOString(),
