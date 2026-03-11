@@ -328,14 +328,16 @@ export default function Tilbud() {
   }, [quotes]);
 
   const filteredQuotes = useMemo(() => {
-    return activeQuotes.filter((q) => {
+    // When statusFilter is 'all', only show active (non-rejected) quotes - rejected shown below
+    const pool = statusFilter === 'all' ? activeQuotes : quotes;
+    return pool.filter((q) => {
       const matchesSearch = q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
       q.quote_number?.toLowerCase().includes(search.toLowerCase());
       const matchesProject = projectFilter === 'all' || q.project_id === projectFilter;
       const matchesStatus = statusFilter === 'all' || q.status === statusFilter;
       return matchesSearch && matchesProject && matchesStatus;
     });
-  }, [activeQuotes, search, projectFilter, statusFilter]);
+  }, [activeQuotes, quotes, search, projectFilter, statusFilter]);
 
   const toggleSelectQuote = (quoteId) => {
     setSelectedQuotes((prev) =>
