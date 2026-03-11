@@ -206,7 +206,7 @@ export default function AnbudsmodulForesporsler() {
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue placeholder="Velg fag" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-48 overflow-y-auto">
                     {TRADE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
