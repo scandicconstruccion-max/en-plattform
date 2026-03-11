@@ -697,9 +697,9 @@ export default function ProsjektDetaljer() {
                   <div className="col-span-2">
                     <Label>Gateadresse</Label>
                     <Input
-                      placeholder="Gatenavn og nummer"
+                      placeholder="Gatenavn og nummer, f.eks. Storgata 12"
                       value={formData.address_street || ''}
-                      onChange={(e) => setFormData({...formData, address_street: e.target.value, address: [e.target.value, formData.address_city ? `${formData.address_postal || ''} ${formData.address_city}`.trim() : ''].filter(Boolean).join(', ')})}
+                      onChange={(e) => setFormData({...formData, address_street: e.target.value})}
                       className="mt-1.5 rounded-xl"
                     />
                   </div>
@@ -707,8 +707,8 @@ export default function ProsjektDetaljer() {
                     <Label>Postnummer</Label>
                     <Input
                       placeholder="0000"
-                      value={formData.address_postal || ''}
-                      onChange={(e) => setFormData({...formData, address_postal: e.target.value, address: [formData.address_street || '', `${e.target.value} ${formData.address_city || ''}`.trim()].filter(Boolean).join(', ')})}
+                      value={formData.address_postal_code || ''}
+                      onChange={(e) => setFormData({...formData, address_postal_code: e.target.value})}
                       className="mt-1.5 rounded-xl"
                     />
                   </div>
@@ -717,7 +717,7 @@ export default function ProsjektDetaljer() {
                     <Input
                       placeholder="By"
                       value={formData.address_city || ''}
-                      onChange={(e) => setFormData({...formData, address_city: e.target.value, address: [formData.address_street || '', `${formData.address_postal || ''} ${e.target.value}`.trim()].filter(Boolean).join(', ')})}
+                      onChange={(e) => setFormData({...formData, address_city: e.target.value})}
                       className="mt-1.5 rounded-xl"
                     />
                   </div>
