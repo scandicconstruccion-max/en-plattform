@@ -347,11 +347,11 @@ export default function Maskiner() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingMaskin ? 'Rediger maskin' : 'Ny maskin'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
             <div>
               <Label>Navn *</Label>
               <Input
@@ -472,21 +472,21 @@ export default function Maskiner() {
                 onCheckedChange={(v) => setFormData({ ...formData, aktiv: v })}
               />
             </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button
-                type="submit"
-                disabled={isPending || !formData.navn || !formData.maskintype || (formData.maskintype === 'egendefinert' && !formData.maskintype_custom)}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingMaskin ? 'Lagre' : 'Opprett'}
-              </Button>
-            </div>
           </form>
+
+          <div className="flex justify-end gap-3 pt-2 flex-wrap mt-4">
+            <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isPending || !formData.navn || !formData.maskintype || (formData.maskintype === 'egendefinert' && !formData.maskintype_custom)}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingMaskin ? 'Lagre' : 'Opprett'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
