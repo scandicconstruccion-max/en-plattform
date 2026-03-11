@@ -659,12 +659,12 @@ export default function ProsjektDetaljer() {
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="px-6 pt-6 flex-shrink-0">
             <DialogTitle>Rediger prosjekt</DialogTitle>
           </DialogHeader>
           {formData && (
-            <form onSubmit={handleUpdate} className="space-y-6">
+            <form onSubmit={handleUpdate} className="space-y-6 overflow-y-auto px-6 pb-6 flex-1">
               {/* Basic Info */}
               <div>
                 <h4 className="font-medium text-slate-900 mb-3">Grunnleggende</h4>
