@@ -227,19 +227,28 @@ export default function Faktura() {
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.total}</p>
             </CardContent>
           </Card>
-          <Card className="border-0 shadow-sm dark:bg-slate-900">
+          <Card
+            className="border-0 shadow-sm dark:bg-slate-900 cursor-pointer hover:shadow-md hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-800 transition-all"
+            onClick={() => setStatusFilter(statusFilter === 'kladd' ? 'all' : 'kladd')}
+          >
             <CardContent className="p-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">Kladd</p>
               <p className="text-2xl font-bold text-blue-600">{stats.draft}</p>
             </CardContent>
           </Card>
-          <Card className="border-0 shadow-sm dark:bg-slate-900">
+          <Card
+            className="border-0 shadow-sm dark:bg-slate-900 cursor-pointer hover:shadow-md hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 transition-all"
+            onClick={() => setStatusFilter(statusFilter === 'sendt' ? 'all' : 'sendt')}
+          >
             <CardContent className="p-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">Ubetalt</p>
               <p className="text-2xl font-bold text-amber-600">{stats.unpaid}</p>
             </CardContent>
           </Card>
-          <Card className="border-0 shadow-sm dark:bg-slate-900">
+          <Card
+            className="border-0 shadow-sm dark:bg-slate-900 cursor-pointer hover:shadow-md hover:ring-2 hover:ring-red-200 dark:hover:ring-red-800 transition-all"
+            onClick={() => setStatusFilter(statusFilter === 'forfalt' ? 'all' : 'forfalt')}
+          >
             <CardContent className="p-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">Forfalt</p>
               <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
