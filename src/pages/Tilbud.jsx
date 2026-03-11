@@ -1014,7 +1014,7 @@ export default function Tilbud() {
 
       {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl p-8">
           <DialogHeader>
             <DialogTitle>Tilbud #{selectedQuote?.quote_number}</DialogTitle>
           </DialogHeader>
