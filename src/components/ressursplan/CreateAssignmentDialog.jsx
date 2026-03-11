@@ -223,16 +223,7 @@ export default function CreateAssignmentDialog({
     }
   }, [selectedResources, maskiner]);
 
-  // Auto-fill machine dates when resource dates are set and machine is selected
-  useEffect(() => {
-    if (formData.machine_id && formData.start_dato_tid && formData.slutt_dato_tid) {
-      setFormData((prev) => ({
-        ...prev,
-        machine_start_dato_tid: prev.machine_start_dato_tid || prev.start_dato_tid,
-        machine_slutt_dato_tid: prev.machine_slutt_dato_tid || prev.slutt_dato_tid
-      }));
-    }
-  }, [formData.machine_id, formData.start_dato_tid, formData.slutt_dato_tid]);
+
 
   // Check machine conflict when machine or time changes
   useEffect(() => {
