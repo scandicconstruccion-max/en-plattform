@@ -53,6 +53,43 @@ export function generateOrderEmailHTML(order, approvalUrl) {
   });
 }
 
+export function generateChangeEmailHTML(change, project, approvalUrl) {
+  const bodyHtml = `
+    ${project?.name ? `
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Prosjekt</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#1e293b;">${project.name}</p>
+    ` : ''}
+
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Tittel</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#1e293b;">${change.title || 'Ingen tittel'}</p>
+
+    ${change.description ? `
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Beskrivelse</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#475569;line-height:1.6;">${change.description}</p>
+    ` : ''}
+
+    ${change.amount != null ? `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0fdf4;border-left:4px solid #10b981;margin-bottom:16px;">
+      <tr>
+        <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#166534;">
+          <strong>Beløp:</strong> ${change.amount.toLocaleString('nb-NO')} kr
+        </td>
+      </tr>
+    </table>
+    ` : ''}
+  `;
+
+  return generateApprovalEmailHTML({
+    title: `Endringsmelding: ${change.title || ''}`,
+    heading: 'Endringsmelding',
+    subheading: change.change_number ? `Nummer: ${change.change_number}` : '',
+    headerColor: '#7c3aed',
+    bodyHtml,
+    approvalUrl,
+    buttonText: 'Godkjenn endringsmelding',
+  });
+}
+
 export function generateEmailHTML({ title, content, companyName, companyLogo }) {
   return `
 <!DOCTYPE html>
