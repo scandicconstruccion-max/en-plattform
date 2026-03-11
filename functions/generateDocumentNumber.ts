@@ -27,10 +27,8 @@ Deno.serve(async (req) => {
 
     } else if (type === 'quote_revision') {
       // Revisjon av eksisterende tilbud
-      const { baseNumber, currentRevision } = await req.json().catch(() => ({})) || {};
-      const body = await req.clone().json().catch(() => ({}));
-      const base = body.baseNumber;
-      const currentRev = body.currentRevision ?? 0;
+      const base = bodyBaseNumber;
+      const currentRev = bodyCurrentRevision ?? 0;
       const nextRev = currentRev + 1;
       const revStr = String(nextRev).padStart(2, '0');
       return Response.json({ documentNumber: `${base}-REV${revStr}`, revisionNumber: nextRev });
