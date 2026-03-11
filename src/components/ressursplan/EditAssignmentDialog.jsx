@@ -176,10 +176,10 @@ export default function EditAssignmentDialog({
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="text-sm font-medium">Arbeidsdager</Label>
-                <p className="text-2xl font-bold text-blue-700 mt-1">{workDays} dager</p>
+                <p className="text-sm font-medium text-slate-700">Arbeidsdager</p>
+                <p className="text-2xl font-bold text-blue-700 mt-1">{workDays}</p>
               </div>
               <Button
                 type="button"
@@ -194,19 +194,15 @@ export default function EditAssignmentDialog({
             {editingWorkDays && (
               <div className="mt-4 pt-4 border-t border-blue-200">
                 <Label htmlFor="work-days-input" className="text-sm">Antall arbeidsdager</Label>
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    id="work-days-input"
-                    type="number"
-                    min="0"
-                    value={workDays}
-                    onChange={(e) => handleWorkDaysChange(parseInt(e.target.value) || 0)}
-                    className="rounded-xl"
-                  />
-                  <p className="text-xs text-slate-500 self-center">
-                    Sluttdato oppdateres automatisk
-                  </p>
-                </div>
+                <Input
+                  id="work-days-input"
+                  type="number"
+                  min="0"
+                  value={workDays}
+                  onChange={(e) => handleWorkDaysChange(parseInt(e.target.value) || 0)}
+                  className="rounded-xl mt-2"
+                />
+                <p className="text-xs text-slate-500 mt-2">Sluttdato oppdateres automatisk</p>
               </div>
             )}
           </div>
