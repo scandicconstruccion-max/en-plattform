@@ -587,14 +587,7 @@ export default function Tilbud() {
             <Card
               key={status}
               className={`p-4 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all ${statusFilter === status ? 'ring-2 ring-slate-400' : 'hover:ring-2 hover:ring-slate-200'}`}
-              onClick={() => {
-                if (status === 'avvist') {
-                  setShowRejectedQuotes(true);
-                  setStatusFilter('all');
-                } else {
-                  setStatusFilter(statusFilter === status ? 'all' : status);
-                }
-              }}
+              onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
             >
               <p className="text-2xl font-bold text-slate-900">{count}</p>
               <p className="text-sm text-slate-500">{label}</p>
