@@ -254,6 +254,8 @@ export default function CreateAssignmentDialog({
       kommentar: '',
       machine_id: '',
       machine_navn: '',
+      machine_start_dato_tid: '',
+      machine_slutt_dato_tid: '',
       include_saturday: currentSettings.default_include_saturday || false,
       include_sunday: currentSettings.default_include_sunday || false
     });
