@@ -22,7 +22,7 @@ const statusConfig = {
   CLOSED:      { label: 'Lukket',   classes: 'bg-emerald-100 text-emerald-700' },
 };
 
-const TRADE_TYPES = ['Elektro', 'Rør/VVS', 'Betong', 'Tømrer', 'Maler', 'Gulvlegger', 'Tak', 'Stål/Sveis', 'HVAC', 'Graving/Anlegg', 'Leverandør av materiell', 'Annet'];
+const TRADE_TYPES = ['Elektro', 'Rør/VVS', 'Betong', 'Tømrer', 'Maler', 'Gulvlegger', 'Tak', 'Stål/Sveis', 'HVAC', 'Graving/Anlegg', 'Leverandør av materiell', 'Blikkenslager', 'Membran', 'Taktekker', 'Annet'];
 
 const emptyForm = {
   title: '', description: '', projectId: '', tradeType: '', responseDeadline: '', reminderDeadline: '', fileAttachments: []
