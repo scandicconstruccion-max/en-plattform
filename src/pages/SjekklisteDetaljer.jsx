@@ -146,7 +146,7 @@ export default function SjekklisteDetaljer() {
     const url = await uploadFile(file);
     const responses = [...(checklist?.responses || [])];
     const idx = responses.findIndex(r => r.item_order === itemIndex);
-    const newImage = { url, uploaded_by: user?.email, uploaded_by_name: user?.full_name || user?.email, uploaded_date: new Date().toISOString() };
+    const newImage = { url, uploaded_by: user?.email, uploaded_by_name: user?.display_name || user?.full_name || user?.email, uploaded_date: new Date().toISOString() };
     if (idx >= 0) {
       const existing = (responses[idx].images || []).map(img => typeof img === 'string' ? { url: img } : img);
       responses[idx] = { ...responses[idx], images: [...existing, newImage] };
