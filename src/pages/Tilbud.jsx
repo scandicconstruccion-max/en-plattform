@@ -65,6 +65,7 @@ export default function Tilbud() {
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
   const [showRejectedQuotes, setShowRejectedQuotes] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
   const [formData, setFormData] = useState({
     quote_number: '',
     customer_name: '',
