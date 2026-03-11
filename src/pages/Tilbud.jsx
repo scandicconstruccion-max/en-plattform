@@ -722,8 +722,8 @@ export default function Tilbud() {
               )}
             </div>
 
-            {/* Rejected/Expired Quotes Section */}
-            {rejectedQuotes.length > 0 &&
+            {/* Rejected/Expired Quotes Section - only show when no status filter active */}
+            {rejectedQuotes.length > 0 && statusFilter === 'all' &&
             <Card className="border-0 shadow-sm mt-8">
                 <button
                 onClick={() => setShowRejectedQuotes(!showRejectedQuotes)}
