@@ -126,11 +126,11 @@ export default function Ressursplan() {
           kommentar: data.kommentar,
           status: 'planlagt',
           opprettet_av: user?.email,
-          opprettet_av_navn: user?.full_name,
+          opprettet_av_navn: user?.display_name || user?.full_name,
           change_log: [{
             timestamp: new Date().toISOString(),
             user_email: user?.email,
-            user_name: user?.full_name,
+            user_name: user?.display_name || user?.full_name,
             action: 'Opprettet',
             changes: 'Ressursplanlegging opprettet'
           }]
@@ -285,7 +285,7 @@ export default function Ressursplan() {
       {
         timestamp: new Date().toISOString(),
         user_email: user?.email,
-        user_name: user?.full_name,
+        user_name: user?.display_name || user?.full_name,
         action: 'Flyttet',
         changes: `Planlegging flyttet via drag-and-drop`
       }]
@@ -322,7 +322,7 @@ export default function Ressursplan() {
           {
             timestamp: new Date().toISOString(),
             user_email: user?.email,
-            user_name: user?.full_name,
+            user_name: user?.display_name || user?.full_name,
             action: 'Flyttet med konflikt',
             changes: `Ressurs endret med overlappende planlegging`
           }]
@@ -376,7 +376,7 @@ export default function Ressursplan() {
       {
         timestamp: new Date().toISOString(),
         user_email: user?.email,
-        user_name: user?.full_name,
+        user_name: user?.display_name || user?.full_name,
         action: 'Redigert',
         changes: 'Planlegging oppdatert via inline-redigering'
       }]
@@ -406,7 +406,7 @@ export default function Ressursplan() {
       {
         timestamp: new Date().toISOString(),
         user_email: user?.email,
-        user_name: user?.full_name,
+        user_name: user?.display_name || user?.full_name,
         action: 'Utvidet',
         changes: `Aktivitet utvidet via drag`
       }]
