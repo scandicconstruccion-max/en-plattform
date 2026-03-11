@@ -71,7 +71,7 @@ const moduleInfo = {
   },
   grunnpakke: {
     title: 'Grunnpakke',
-    body: 'Grunnpakken er kjernen i plattformen og tilfredsstiller lovpålagte krav til kontroll, oppfølging og HMS for håndverksbedrifter. Med Dashboard, Prosjekter og Prosjektfiler får du full oversikt over alle pågående oppdrag. Sjekklister og Avvik sikrer systematisk kvalitetskontroll og sporbarhet, mens HMS & Risiko-modulen dekker myndighetskravene til helse, miljø og sikkerhet – inkludert SJA, RUH og risikoanalyser. Alt du trenger for å drifte trygt og lovlig er inkludert fra dag én.'
+    body: 'Grunnpakken er kjernen i plattformen og tilfredsstiller lovpålagte krav til kontroll, oppfølging og HMS for håndverksbedrifter. Med Dashboard, Prosjekter og Prosjektfiler får du full oversikt over alle pågående oppdrag. Kundeoversikten gir deg et samlet register over alle kunder og kontakter, tilgjengelig på tvers av hele plattformen. Maskinmodulen lar deg registrere og holde oversikt over bedriftens maskinpark og utstyr – du ser til enhver tid hvor en maskin befinner seg, om den er i bruk eller ledig. Sjekklister og Avvik sikrer systematisk kvalitetskontroll og sporbarhet, mens HMS & Risiko-modulen dekker myndighetskravene til helse, miljø og sikkerhet – inkludert SJA, RUH og risikoanalyser. Alt du trenger for å drifte trygt og lovlig er inkludert fra dag én.'
   },
   crm: {
     title: 'CRM',
@@ -473,14 +473,14 @@ export default function MinBedrift() {
                       <Info className="text-emerald-600 h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko og Maskiner</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">Dashboard, Prosjekter, Kundeoversikt, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko og Maskiner</p>
                 </div>
                 <div className="text-right flex-shrink-0 ml-4">
                   <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{grunnpakkePrice} kr/mnd</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {['Dashboard', 'Prosjekter', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko', 'Maskiner'].map((name) =>
+                {['Dashboard', 'Prosjekter', 'Kundeoversikt', 'Prosjektfiler', 'Sjekklister', 'Avvik', 'HMS & Risiko', 'Maskiner'].map((name) =>
                 <span key={name} className="inline-flex items-center gap-1 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-lg">
                     <Check className="h-3 w-3" /> {name}
                   </span>
