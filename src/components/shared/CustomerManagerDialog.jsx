@@ -133,7 +133,7 @@ export default function CustomerManagerDialog({ open, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <Label>Kunde *</Label>
-                <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required placeholder="Firmanavn" className="mt-1.5 rounded-xl" />
+                <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required placeholder="Kunde" className="mt-1.5 rounded-xl" />
               </div>
               <div>
                 <Label>Org.nummer</Label>
