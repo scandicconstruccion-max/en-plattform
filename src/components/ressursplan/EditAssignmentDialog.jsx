@@ -88,12 +88,18 @@ export default function EditAssignmentDialog({
     if (assignment) {
       const startDato = assignment.start_dato_tid ? assignment.start_dato_tid.slice(0, 16) : '';
       const sluttDato = assignment.slutt_dato_tid ? assignment.slutt_dato_tid.slice(0, 16) : '';
+      const machineStartDato = assignment.machine_start_dato_tid ? assignment.machine_start_dato_tid.slice(0, 16) : startDato;
+      const machineSluttDato = assignment.machine_slutt_dato_tid ? assignment.machine_slutt_dato_tid.slice(0, 16) : sluttDato;
       setFormData({
         start_dato_tid: startDato,
         slutt_dato_tid: sluttDato,
         rolle_pa_prosjekt: assignment.rolle_pa_prosjekt || '',
         kommentar: assignment.kommentar || '',
         status: assignment.status || 'planlagt',
+        machine_id: assignment.machine_id || '',
+        machine_navn: assignment.machine_navn || '',
+        machine_start_dato_tid: machineStartDato,
+        machine_slutt_dato_tid: machineSluttDato,
         include_saturday: assignment.include_saturday || false,
         include_sunday: assignment.include_sunday || false
       });
