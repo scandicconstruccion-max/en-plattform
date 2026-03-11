@@ -1105,7 +1105,7 @@ export default function Tilbud() {
                   variant="outline">
 
                     <FileEdit className="h-4 w-4" />
-                    Opprett revisjon
+                    Revider tilbud
                   </Button>
                   {!selectedQuote.sent_to_customer &&
                 <Button
