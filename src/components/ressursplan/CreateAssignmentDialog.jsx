@@ -223,24 +223,24 @@ export default function CreateAssignmentDialog({
 
   // Check machine conflict when machine or time changes
   useEffect(() => {
-    if (!formData.machine_id || !formData.start_dato_tid || !formData.slutt_dato_tid) {
-      setMachineConflict(false);
-      return;
-    }
-    const start = new Date(formData.start_dato_tid);
-    const end = new Date(formData.slutt_dato_tid);
-    const conflict = allAssignments.some((a) => {
-      if (a.machine_id !== formData.machine_id) return false;
-      const aStart = parseISO(a.start_dato_tid);
-      const aEnd = parseISO(a.slutt_dato_tid);
-      return (
-        isWithinInterval(start, { start: aStart, end: aEnd }) ||
-        isWithinInterval(end, { start: aStart, end: aEnd }) ||
-        isWithinInterval(aStart, { start, end }));
+     if (!formData.machine_id || !formData.machine_start_dato_tid || !formData.machine_slutt_dato_tid) {
+       setMachineConflict(false);
+       return;
+     }
+     const start = new Date(formData.machine_start_dato_tid);
+     const end = new Date(formData.machine_slutt_dato_tid);
+     const conflict = allAssignments.some((a) => {
+       if (a.machine_id !== formData.machine_id) return false;
+       const aStart = parseISO(a.machine_start_dato_tid || a.start_dato_tid);
+       const aEnd = parseISO(a.machine_slutt_dato_tid || a.slutt_dato_tid);
+       return (
+         isWithinInterval(start, { start: aStart, end: aEnd }) ||
+         isWithinInterval(end, { start: aStart, end: aEnd }) ||
+         isWithinInterval(aStart, { start, end }));
 
-    });
-    setMachineConflict(conflict);
-  }, [formData.machine_id, formData.start_dato_tid, formData.slutt_dato_tid, allAssignments]);
+     });
+     setMachineConflict(conflict);
+   }, [formData.machine_id, formData.machine_start_dato_tid, formData.machine_slutt_dato_tid, allAssignments]);
 
   const resetForm = () => {
     setFormData({
