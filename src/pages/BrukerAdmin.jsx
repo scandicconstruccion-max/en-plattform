@@ -292,7 +292,7 @@ export default function BrukerAdmin() {
                           />
                         </td>
                         <td className="p-4">
-                          <div className="font-medium text-slate-900">{user.full_name || 'Ikke angitt'}</div>
+                          <div className="font-medium text-slate-900">{user.display_name || user.full_name || 'Ikke angitt'}</div>
                         </td>
                         <td className="p-4 text-sm text-slate-600">{user.email}</td>
                         <td className="p-4">
