@@ -145,6 +145,7 @@ export default function Layout({ children, currentPageName }) {
                        location.pathname.includes('AnbudSvarForm') ||
                        location.pathname.includes('Priser') || 
                        location.pathname.includes('Landing') ||
+                       location.pathname.includes('godkjenning') ||
                        fullUrl.includes('AnbudSvar') ||
                        fullUrl.includes('AnbudSvarForm');
 
