@@ -126,11 +126,11 @@ export default function EditAssignmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Rediger ressursplanlegging</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-4">
           <div className="bg-slate-50 p-3 rounded-lg">
             <p className="text-sm text-slate-600">
               <strong>Ressurs:</strong> {assignment.resource_navn}
