@@ -132,7 +132,7 @@ export default function CustomerManagerDialog({ open, onClose }) {
           <form onSubmit={handleSave} className="flex-1 overflow-y-auto space-y-4 pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <Label>Firmanavn *</Label>
+                <Label>Kunde *</Label>
                 <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required placeholder="Firmanavn" className="mt-1.5 rounded-xl" />
               </div>
               <div>
