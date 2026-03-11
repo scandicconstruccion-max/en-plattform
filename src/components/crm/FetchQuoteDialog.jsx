@@ -165,11 +165,12 @@ export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, c
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Hent tilbud fra modulen</DialogTitle>
         </DialogHeader>
 
+        <div className="overflow-y-auto flex-1">
         {!selectedQuote ? (
           <div className="space-y-4">
             <div className="relative">
@@ -295,6 +296,7 @@ export default function FetchQuoteDialog({ open, onOpenChange, existingQuotes, c
             </div>
           </form>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );

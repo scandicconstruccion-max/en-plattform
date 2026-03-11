@@ -86,12 +86,12 @@ ${user.full_name}
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Send avvik til kunde</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1">
           <div>
             <Label>Kunde e-post</Label>
             <Input
@@ -118,15 +118,15 @@ ${user.full_name}
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex justify-end gap-3 pt-4 flex-wrap mt-4">
+          <Button variant="outline" onClick={onClose} className="rounded-xl">
             Avbryt
           </Button>
-          <Button onClick={handleSend} disabled={isSending}>
+          <Button onClick={handleSend} disabled={isSending} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
             {isSending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Send til kunde
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

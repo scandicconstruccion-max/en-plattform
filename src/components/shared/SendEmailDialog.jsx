@@ -149,14 +149,14 @@ export default function SendEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5 text-emerald-600" />
             Send {typeLabels[type]} på e-post
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1">
           <div>
             <Label>Mottaker e-post *</Label>
             {customers.length > 0 && (
@@ -201,28 +201,28 @@ export default function SendEmailDialog({
               className="mt-1.5 rounded-xl"
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => onOpenChange(false)} 
-              className="rounded-xl"
-            >
-              Avbryt
-            </Button>
-            <Button 
-              onClick={handleSend}
-              disabled={sending || !email}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
-            >
-              {sending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              {sending ? 'Sender...' : 'Send e-post'}
-            </Button>
-          </div>
+        </div>
+        <div className="flex justify-end gap-3 pt-4 flex-wrap mt-4">
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => onOpenChange(false)} 
+            className="rounded-xl"
+          >
+            Avbryt
+          </Button>
+          <Button 
+            onClick={handleSend}
+            disabled={sending || !email}
+            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {sending ? 'Sender...' : 'Send e-post'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
