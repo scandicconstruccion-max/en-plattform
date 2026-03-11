@@ -196,6 +196,9 @@ export default function Tilbud() {
       customer_name: '',
       customer_email: '',
       customer_phone: '',
+      address_street: '',
+      address_postal_code: '',
+      address_city: '',
       project_description: '',
       items: [{ description: '', quantity: 1, unit: 'stk', unit_price: 0 }],
       valid_until: ''
