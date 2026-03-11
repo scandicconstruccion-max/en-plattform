@@ -16,6 +16,11 @@ export default function CustomerManagerDialog({ open, onClose }) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // null = list, 'new' or customer obj = form
   const [form, setForm] = useState(emptyCustomer);
+
+  // Reset to list view whenever dialog opens
+  React.useEffect(() => {
+    if (open) { setEditing(null); setSearch(''); }
+  }, [open]);
   const queryClient = useQueryClient();
 
   const { data: customers = [] } = useQuery({
