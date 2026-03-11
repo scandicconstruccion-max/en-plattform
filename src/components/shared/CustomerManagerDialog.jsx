@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import {
@@ -18,7 +18,7 @@ export default function CustomerManagerDialog({ open, onClose }) {
   const [form, setForm] = useState(emptyCustomer);
 
   // Reset to list view whenever dialog opens
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) { setEditing(null); setSearch(''); }
   }, [open]);
   const queryClient = useQueryClient();
@@ -56,11 +56,13 @@ export default function CustomerManagerDialog({ open, onClose }) {
     }
   };
 
-  const filtered = customers.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.contact_person?.toLowerCase().includes(search.toLowerCase()) ||
-    c.org_number?.includes(search)
-  );
+  const filtered = customers
+    .filter(c =>
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.contact_person?.toLowerCase().includes(search.toLowerCase()) ||
+      c.org_number?.includes(search)
+    )
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nb'));
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
