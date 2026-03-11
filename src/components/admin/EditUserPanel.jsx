@@ -154,6 +154,17 @@ KS System
         {/* Form */}
         <ScrollArea className="flex-1">
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* Display Name */}
+            <div className="space-y-2">
+              <Label>Fullt navn</Label>
+              <Input
+                value={formData.display_name}
+                onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
+                placeholder="Fornavn Etternavn"
+              />
+              <p className="text-xs text-slate-500">Navn som vises i systemet</p>
+            </div>
+
             {/* Role Selection */}
             <div className="space-y-2">
               <Label>Rolle</Label>
