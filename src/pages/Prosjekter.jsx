@@ -163,6 +163,11 @@ export default function Prosjekter() {
         subtitle={`${projects.length} prosjekter totalt`}
         onAdd={() => setShowDialog(true)}
         addLabel="Nytt prosjekt"
+        actions={
+          <Button variant="outline" onClick={() => setShowCustomerManager(true)} className="rounded-xl gap-2 text-sm">
+            <Users className="h-4 w-4" /> Kunder
+          </Button>
+        }
       />
 
       <div className="px-6 lg:px-8 py-6">
