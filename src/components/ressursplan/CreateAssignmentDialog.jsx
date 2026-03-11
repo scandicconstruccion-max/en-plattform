@@ -584,7 +584,7 @@ export default function CreateAssignmentDialog({
                   <SelectValue placeholder="Ingen maskin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Ingen maskin</SelectItem>
+                  <SelectItem value={null}>Ingen maskin</SelectItem>
                   {maskiner.
                 filter((m) => m.aktiv).
                 map((m) =>
