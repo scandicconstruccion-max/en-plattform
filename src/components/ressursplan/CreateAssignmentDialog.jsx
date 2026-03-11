@@ -449,27 +449,71 @@ export default function CreateAssignmentDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Start dato og tid *</Label>
-              <Input
-                type="datetime-local"
-                value={formData.start_dato_tid}
-                onChange={(e) => setFormData({ ...formData, start_dato_tid: e.target.value })}
-                required
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-            <div>
-              <Label>Slutt dato og tid *</Label>
-              <Input
-                type="datetime-local"
-                value={formData.slutt_dato_tid}
-                onChange={(e) => setFormData({ ...formData, slutt_dato_tid: e.target.value })}
-                required
-                className="mt-1.5 rounded-xl"
-              />
-            </div>
-          </div>
+             <div>
+               <Label>Start dato og tid *</Label>
+               <Input
+                 type="datetime-local"
+                 value={formData.start_dato_tid}
+                 onChange={(e) => {
+                   setFormData({ ...formData, start_dato_tid: e.target.value });
+                   if (formData.slutt_dato_tid) {
+                     const days = calculateWorkDays(e.target.value, formData.slutt_dato_tid, formData.include_saturday, formData.include_sunday);
+                     setWorkDays(days);
+                   }
+                 }}
+                 required
+                 className="mt-1.5 rounded-xl"
+               />
+             </div>
+             <div>
+               <Label>Slutt dato og tid *</Label>
+               <Input
+                 type="datetime-local"
+                 value={formData.slutt_dato_tid}
+                 onChange={(e) => {
+                   setFormData({ ...formData, slutt_dato_tid: e.target.value });
+                   if (formData.start_dato_tid) {
+                     const days = calculateWorkDays(formData.start_dato_tid, e.target.value, formData.include_saturday, formData.include_sunday);
+                     setWorkDays(days);
+                   }
+                 }}
+                 required
+                 className="mt-1.5 rounded-xl"
+               />
+             </div>
+           </div>
+
+           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+             <div className="flex items-center justify-between gap-4">
+               <div>
+                 <p className="text-sm font-medium text-slate-700">Arbeidsdager</p>
+                 <p className="text-2xl font-bold text-blue-700 mt-1">{workDays}</p>
+               </div>
+               <Button
+                 type="button"
+                 variant="outline"
+                 size="sm"
+                 onClick={() => setEditingWorkDays(!editingWorkDays)}
+                 className="rounded-xl"
+               >
+                 {editingWorkDays ? 'Ferdig' : 'Endre'}
+               </Button>
+             </div>
+             {editingWorkDays && (
+               <div className="mt-4 pt-4 border-t border-blue-200">
+                 <Label htmlFor="work-days-input-create" className="text-sm">Antall arbeidsdager</Label>
+                 <Input
+                   id="work-days-input-create"
+                   type="number"
+                   min="0"
+                   value={workDays}
+                   onChange={(e) => handleWorkDaysChange(parseInt(e.target.value) || 0)}
+                   className="rounded-xl mt-2"
+                 />
+                 <p className="text-xs text-slate-500 mt-2">Sluttdato oppdateres automatisk</p>
+               </div>
+             )}
+           </div>
 
           {/* Weekend Inclusion Options */}
           <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
