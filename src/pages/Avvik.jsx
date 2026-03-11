@@ -522,6 +522,25 @@ export default function Avvik() {
 
 
       <div className="px-6 lg:px-8 py-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: 'Ikke startet', status: 'opprettet', count: deviations.filter(d => d.status === 'opprettet').length },
+            { label: 'Sendt til kunde', status: 'sendt_kunde', count: deviations.filter(d => d.status === 'sendt_kunde').length },
+            { label: 'Pågående', status: 'godkjent_kunde', count: deviations.filter(d => d.status === 'godkjent_kunde').length },
+            { label: 'Utført', status: 'utfort', count: deviations.filter(d => d.status === 'utfort').length },
+          ].map(({ label, status, count }) => (
+            <Card
+              key={status}
+              className={`p-4 border-0 shadow-sm cursor-pointer hover:shadow-md transition-all ${statusFilter === status ? 'ring-2 ring-slate-400' : 'hover:ring-2 hover:ring-slate-200'}`}
+              onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
+            >
+              <p className="text-2xl font-bold text-slate-900">{count}</p>
+              <p className="text-sm text-slate-500">{label}</p>
+            </Card>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <div className="relative lg:col-span-2">
