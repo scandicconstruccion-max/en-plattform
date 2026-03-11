@@ -175,10 +175,10 @@ export default function AnbudsmodulForesporsler() {
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-lg dark:bg-slate-900 max-h-[90vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
+          <DialogHeader>
             <DialogTitle>Opprett forespørsel</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 pr-4 px-6">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
             <div>
               <Label>Tittel *</Label>
               <Input
