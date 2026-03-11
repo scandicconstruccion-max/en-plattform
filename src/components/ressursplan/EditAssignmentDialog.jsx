@@ -291,6 +291,40 @@ export default function EditAssignmentDialog({
             />
           </div>
 
+          {/* Machine Section */}
+          {assignment?.assignment_type === 'arbeid' && (
+            <div>
+              <Label>Maskin</Label>
+              <p className="text-xs text-slate-500 mt-1 mb-2">
+                {formData.machine_id ? 'Maskinperiode kan være kortere enn ressursperioden' : 'Ingen maskin valgt'}
+              </p>
+              {formData.machine_id && (
+                <div className="mt-3 pt-3 border-t space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Maskin start</Label>
+                      <Input
+                        type="datetime-local"
+                        value={formData.machine_start_dato_tid}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, machine_start_dato_tid: e.target.value }))}
+                        className="mt-1 rounded-xl text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Maskin slutt</Label>
+                      <Input
+                        type="datetime-local"
+                        value={formData.machine_slutt_dato_tid}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, machine_slutt_dato_tid: e.target.value }))}
+                        className="mt-1 rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Required Competencies */}
           {assignment?.assignment_type === 'arbeid' && (
             <div>
