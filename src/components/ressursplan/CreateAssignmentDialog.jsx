@@ -82,6 +82,64 @@ export default function CreateAssignmentDialog({
   const [competencyInput, setCompetencyInput] = useState('');
   const [requiredCompetencies, setRequiredCompetencies] = useState([]);
   const [machineConflict, setMachineConflict] = useState(false);
+  const [workDays, setWorkDays] = useState(0);
+  const [editingWorkDays, setEditingWorkDays] = useState(false);
+
+  const calculateWorkDays = (startDate, endDate, includeSaturday, includeSunday) => {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (start > end) return 0;
+
+    let workDays = 0;
+    const current = new Date(start);
+
+    while (current < end) {
+      const dayOfWeek = current.getDay();
+      const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+      const isSaturday = dayOfWeek === 6;
+      const isSunday = dayOfWeek === 0;
+
+      if (isWeekday || (isSaturday && includeSaturday) || (isSunday && includeSunday)) {
+        workDays++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    return workDays;
+  };
+
+  const addWorkDays = (startDate, days, includeSaturday, includeSunday) => {
+    const date = new Date(startDate);
+    let addedDays = 0;
+
+    while (addedDays < days) {
+      date.setDate(date.getDate() + 1);
+      const dayOfWeek = date.getDay();
+      const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+      const isSaturday = dayOfWeek === 6;
+      const isSunday = dayOfWeek === 0;
+
+      if (isWeekday || (isSaturday && includeSaturday) || (isSunday && includeSunday)) {
+        addedDays++;
+      }
+    }
+
+    return date;
+  };
+
+  const handleWorkDaysChange = (newWorkDays) => {
+    setWorkDays(newWorkDays);
+    if (formData.start_dato_tid && newWorkDays > 0) {
+      const newEndDate = addWorkDays(formData.start_dato_tid, newWorkDays, formData.include_saturday, formData.include_sunday);
+      const year = newEndDate.getFullYear();
+      const month = String(newEndDate.getMonth() + 1).padStart(2, '0');
+      const date = String(newEndDate.getDate()).padStart(2, '0');
+      const hours = String(newEndDate.getHours()).padStart(2, '0');
+      const minutes = String(newEndDate.getMinutes()).padStart(2, '0');
+      setFormData({ ...formData, slutt_dato_tid: `${year}-${month}-${date}T${hours}:${minutes}` });
+    }
+  };
 
   useEffect(() => {
      if (open) {
