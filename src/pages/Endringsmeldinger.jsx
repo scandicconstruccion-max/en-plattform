@@ -97,7 +97,8 @@ export default function Endringsmeldinger() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ChangeNotification.create({
       ...data,
-      requested_by: user?.email
+      requested_by: user?.email,
+      requested_by_name: user?.display_name || user?.full_name
     }),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['changeNotifications'] });
