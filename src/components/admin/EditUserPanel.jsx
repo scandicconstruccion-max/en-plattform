@@ -144,7 +144,7 @@ KS System
         <div className="p-6 border-b flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Rediger bruker</h2>
-            <p className="text-sm text-slate-600 mt-1">{user.full_name} ({user.email})</p>
+            <p className="text-sm text-slate-600 mt-1">{user.display_name || user.full_name} ({user.email})</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-5 w-5" />
