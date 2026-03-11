@@ -83,7 +83,7 @@ export default function RUHDetaljer() {
       setFormData(prev => ({
         ...prev,
         rapportert_av: user.email,
-        rapportert_av_navn: user.full_name
+        rapportert_av_navn: user.display_name || user.full_name
       }));
     }
   }, [user, isNew]);
@@ -107,7 +107,7 @@ export default function RUHDetaljer() {
         action: ruhId ? 'oppdatert' : 'opprettet',
         timestamp: new Date().toISOString(),
         user_email: user?.email,
-        user_name: user?.full_name,
+        user_name: user?.display_name || user?.full_name,
         details: ruhId ? 'RUH oppdatert' : 'RUH opprettet'
       };
 
@@ -135,7 +135,7 @@ export default function RUHDetaljer() {
         action: 'lukket',
         timestamp: new Date().toISOString(),
         user_email: user?.email,
-        user_name: user?.full_name,
+        user_name: user?.display_name || user?.full_name,
         details: 'RUH lukket'
       };
 
@@ -143,7 +143,7 @@ export default function RUHDetaljer() {
         status: 'lukket',
         lukket_dato: new Date().toISOString(),
         lukket_av: user?.email,
-        lukket_av_navn: user?.full_name,
+        lukket_av_navn: user?.display_name || user?.full_name,
         aktivitetslogg: [...(ruh.aktivitetslogg || []), activityLog]
       });
     },
@@ -304,7 +304,7 @@ export default function RUHDetaljer() {
                 <div>
                   <Label>Rapportert av</Label>
                   <Input
-                    value={formData.rapportert_av_navn || user?.full_name}
+                    value={formData.rapportert_av_navn || user?.display_name || user?.full_name}
                     className="mt-1.5 rounded-xl"
                     disabled
                   />
