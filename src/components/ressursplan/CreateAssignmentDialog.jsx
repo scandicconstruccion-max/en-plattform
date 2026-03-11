@@ -574,13 +574,16 @@ export default function CreateAssignmentDialog({
           <div>
               <Label>Maskin (valgfritt)</Label>
               <Select
-              value={formData.machine_id}
+              value={formData.machine_id || ''}
               onValueChange={(v) => {
                 const selected = maskiner.find((m) => m.id === v);
                 setFormData((prev) => ({
                   ...prev,
                   machine_id: v,
-                  machine_navn: selected ? selected.navn : ''
+                  machine_navn: selected ? selected.navn : '',
+                  // Auto-fill machine dates with resource dates on first selection
+                  machine_start_dato_tid: prev.machine_start_dato_tid || prev.start_dato_tid,
+                  machine_slutt_dato_tid: prev.machine_slutt_dato_tid || prev.slutt_dato_tid
                 }));
               }}>
 
@@ -606,6 +609,31 @@ export default function CreateAssignmentDialog({
                 )}
                 </SelectContent>
               </Select>
+
+              {formData.machine_id &&
+              <div className="mt-4 pt-4 border-t space-y-3">
+                <p className="text-sm font-medium text-slate-700">Maskinperiode</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Maskin start</Label>
+                    <Input
+                      type="datetime-local"
+                      value={formData.machine_start_dato_tid}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, machine_start_dato_tid: e.target.value }))}
+                      className="mt-1 rounded-xl text-sm" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Maskin slutt</Label>
+                    <Input
+                      type="datetime-local"
+                      value={formData.machine_slutt_dato_tid}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, machine_slutt_dato_tid: e.target.value }))}
+                      className="mt-1 rounded-xl text-sm" />
+                  </div>
+                </div>
+              </div>
+              }
+
               {machineConflict &&
             <div className="mt-2 flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
                   <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
