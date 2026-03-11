@@ -64,19 +64,21 @@ export default function CreateAssignmentDialog({
   };
 
   const [formData, setFormData] = useState({
-    prosjekt_id: '',
-    resource_type: 'employee',
-    resource_ids: [],
-    assignment_type: 'arbeid',
-    start_dato_tid: '',
-    slutt_dato_tid: '',
-    rolle_pa_prosjekt: '',
-    kommentar: '',
-    machine_id: '',
-    machine_navn: '',
-    include_saturday: currentSettings.default_include_saturday || false,
-    include_sunday: currentSettings.default_include_sunday || false
-  });
+     prosjekt_id: '',
+     resource_type: 'employee',
+     resource_ids: [],
+     assignment_type: 'arbeid',
+     start_dato_tid: '',
+     slutt_dato_tid: '',
+     rolle_pa_prosjekt: '',
+     kommentar: '',
+     machine_id: '',
+     machine_navn: '',
+     machine_start_dato_tid: '',
+     machine_slutt_dato_tid: '',
+     include_saturday: currentSettings.default_include_saturday || false,
+     include_sunday: currentSettings.default_include_sunday || false
+   });
 
   const [selectedResources, setSelectedResources] = useState([]);
   const [competencyInput, setCompetencyInput] = useState('');
