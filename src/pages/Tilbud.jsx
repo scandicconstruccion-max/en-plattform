@@ -332,9 +332,10 @@ export default function Tilbud() {
       const matchesSearch = q.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
       q.quote_number?.toLowerCase().includes(search.toLowerCase());
       const matchesProject = projectFilter === 'all' || q.project_id === projectFilter;
-      return matchesSearch && matchesProject;
+      const matchesStatus = statusFilter === 'all' || q.status === statusFilter;
+      return matchesSearch && matchesProject && matchesStatus;
     });
-  }, [activeQuotes, search, projectFilter]);
+  }, [activeQuotes, search, projectFilter, statusFilter]);
 
   const toggleSelectQuote = (quoteId) => {
     setSelectedQuotes((prev) =>
