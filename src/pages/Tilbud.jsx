@@ -840,13 +840,40 @@ export default function Tilbud() {
               </div>
             </div>
 
+            {/* Project Address */}
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-slate-700">Prosjektadresse</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-3 space-y-1.5">
+                  <Label className="text-xs text-slate-500">Gatenavn og nummer</Label>
+                  <Input
+                    placeholder="f.eks. Storgata 12"
+                    value={formData.address_street || ''}
+                    onChange={(e) => setFormData({ ...formData, address_street: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Postnummer</Label>
+                  <Input
+                    placeholder="f.eks. 0182"
+                    value={formData.address_postal_code || ''}
+                    onChange={(e) => setFormData({ ...formData, address_postal_code: e.target.value })} />
+                </div>
+                <div className="md:col-span-2 space-y-1.5">
+                  <Label className="text-xs text-slate-500">Poststed</Label>
+                  <Input
+                    placeholder="f.eks. Oslo"
+                    value={formData.address_city || ''}
+                    onChange={(e) => setFormData({ ...formData, address_city: e.target.value })} />
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Prosjektbeskrivelse</Label>
               <Textarea
                 value={formData.project_description}
                 onChange={(e) => setFormData({ ...formData, project_description: e.target.value })}
                 rows={3} />
-
             </div>
 
             {/* Items */}
