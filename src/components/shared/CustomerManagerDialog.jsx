@@ -174,8 +174,16 @@ export default function CustomerManagerDialog({ open, onClose }) {
                 <Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="Telefon" className="mt-1.5 rounded-xl" />
               </div>
               <div className="col-span-2">
-                <Label>Adresse</Label>
-                <Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} placeholder="Gateadresse, postnummer, by" className="mt-1.5 rounded-xl" />
+                <Label>Gateadresse</Label>
+                <Input value={form.street || ''} onChange={e => setForm({...form, street: e.target.value})} placeholder="Gatenavn og nummer" className="mt-1.5 rounded-xl" />
+              </div>
+              <div>
+                <Label>Postnummer</Label>
+                <Input value={form.postal_code || ''} onChange={e => setForm({...form, postal_code: e.target.value})} placeholder="0000" className="mt-1.5 rounded-xl" />
+              </div>
+              <div>
+                <Label>Poststed</Label>
+                <Input value={form.city || ''} onChange={e => setForm({...form, city: e.target.value})} placeholder="By/sted" className="mt-1.5 rounded-xl" />
               </div>
               <div className="col-span-2">
                 <Label>Nettside</Label>
