@@ -363,7 +363,7 @@ export default function Layout({ children, currentPageName }) {
                 <>
                     <div className="flex-1 text-left">
                       <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        {user?.full_name || 'Bruker'}
+                        {user?.display_name || user?.full_name || 'Bruker'}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
                     </div>
