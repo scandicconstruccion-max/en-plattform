@@ -375,6 +375,56 @@ export default function Maskiner() {
                     <p className="text-xs text-slate-500">Nr: {maskin.maskinnummer}</p>
                   )}
 
+                  {/* Reservasjoner toggle */}
+                  {(() => {
+                    const maskinRes = allReservasjoner.filter(
+                      (r) => r.maskin_id === maskin.id && r.status !== 'kansellert'
+                    );
+                    const activeCount = maskinRes.filter((r) => {
+                      const now = new Date();
+                      return new Date(r.slutt_dato_tid) >= now;
+                    }).length;
+                    const isExpanded = expandedMaskinId === maskin.id;
+                    return (
+                      <div className="border-t border-slate-100 pt-2">
+                        <button
+                          onClick={() => setExpandedMaskinId(isExpanded ? null : maskin.id)}
+                          className="flex items-center justify-between w-full text-xs text-slate-600 hover:text-slate-900 transition-colors"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <CalendarRange className="h-3.5 w-3.5" />
+                            Reservasjoner
+                            {activeCount > 0 && (
+                              <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                                {activeCount}
+                              </span>
+                            )}
+                          </span>
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-2 space-y-1">
+                            <MaskinTidslinje
+                              reservasjoner={maskinRes}
+                              canEdit={true}
+                              onEdit={(r) => { setReservasjonTarget(maskin); setEditingReservasjon(r); }}
+                              onDelete={(r) => setDeleteReservasjonTarget(r)}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full h-7 text-xs mt-1"
+                              onClick={() => { setReservasjonTarget(maskin); setEditingReservasjon(null); }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Ny reservasjon
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100">
                     <Button
                       size="sm"
@@ -383,6 +433,15 @@ export default function Maskiner() {
                     >
                       <MapPin className="h-3 w-3 mr-1" />
                       Plassering
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => { setReservasjonTarget(maskin); setEditingReservasjon(null); }}
+                    >
+                      <CalendarRange className="h-3 w-3 mr-1" />
+                      Reserver
                     </Button>
                     <Button
                       variant="outline"
