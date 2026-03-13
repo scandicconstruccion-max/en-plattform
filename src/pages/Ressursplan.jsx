@@ -579,17 +579,28 @@ export default function Ressursplan() {
 
   // For machine view: build machine assignments (assignments where machine_id === resource.id)
   // Use machine-specific dates if available, otherwise fall back to resource dates
-  const machineAssignments = assignments.filter(a => a.machine_id).map(a => ({
-    ...a,
-    _isMachineRow: true,
-    resource_id: a.machine_id, // Override so calendar renders on machine row
-    // Use machine-specific period if set, otherwise fall back to resource period
-    start_dato_tid: a.machine_start_dato_tid || a.start_dato_tid,
-    slutt_dato_tid: a.machine_slutt_dato_tid || a.slutt_dato_tid,
-    // Keep originals accessible
-    _resource_start_dato_tid: a.start_dato_tid,
-    _resource_slutt_dato_tid: a.slutt_dato_tid,
-  }));
+  const machineAssignments = assignments.filter(a => a.machine_id).map(a => {
+    const mapped = {
+      ...a,
+      _isMachineRow: true,
+      resource_id: a.machine_id, // Override so calendar renders on machine row
+      // Use machine-specific period if set, otherwise fall back to resource period
+      start_dato_tid: a.machine_start_dato_tid || a.start_dato_tid,
+      slutt_dato_tid: a.machine_slutt_dato_tid || a.slutt_dato_tid,
+      // Keep originals accessible
+      _resource_start_dato_tid: a.start_dato_tid,
+      _resource_slutt_dato_tid: a.slutt_dato_tid,
+    };
+    console.log('[MachineAssignment] id:', a.id, '| machine:', a.machine_navn,
+      '| raw machine_start:', a.machine_start_dato_tid,
+      '| raw machine_slutt:', a.machine_slutt_dato_tid,
+      '| resource start:', a.start_dato_tid,
+      '| resource slutt:', a.slutt_dato_tid,
+      '| → using start:', mapped.start_dato_tid,
+      '| → using slutt:', mapped.slutt_dato_tid
+    );
+    return mapped;
+  });
 
   const baseFilteredAssignments = assignments.filter((a) => {
     if (filters.projectId !== 'all' && a.prosjekt_id !== filters.projectId) return false;
