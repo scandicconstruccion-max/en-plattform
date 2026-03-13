@@ -89,8 +89,9 @@ export default function EditAssignmentDialog({
     if (assignment) {
       const startDato = assignment.start_dato_tid ? assignment.start_dato_tid.slice(0, 16) : '';
       const sluttDato = assignment.slutt_dato_tid ? assignment.slutt_dato_tid.slice(0, 16) : '';
-      const machineStartDato = assignment.machine_start_dato_tid ? assignment.machine_start_dato_tid.slice(0, 16) : startDato;
-      const machineSluttDato = assignment.machine_slutt_dato_tid ? assignment.machine_slutt_dato_tid.slice(0, 16) : sluttDato;
+      // Machine dates are independent - do NOT fall back to resource dates
+      const machineStartDato = assignment.machine_start_dato_tid ? assignment.machine_start_dato_tid.slice(0, 16) : '';
+      const machineSluttDato = assignment.machine_slutt_dato_tid ? assignment.machine_slutt_dato_tid.slice(0, 16) : '';
       setFormData({
         start_dato_tid: startDato,
         slutt_dato_tid: sluttDato,
