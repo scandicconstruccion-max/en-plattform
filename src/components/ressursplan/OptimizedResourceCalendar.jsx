@@ -272,8 +272,19 @@ const AssignmentBlock = memo(({
              <AlertTriangle className="h-3 w-3 flex-shrink-0" title="Mangler nødvendige kompetanser" />
            )}
          </span>
-         {/* Show machine name under project name (resource view) */}
-         {assignment.machine_navn && !assignment._isMachineRow && (
+         {/* Show machine name under project name (resource view) — only on days within machine period */}
+         {assignment.machine_navn && !assignment._isMachineRow && (() => {
+           if (!currentDay) return true; // fallback: show if no day context
+           const machineStart = assignment.machine_start_dato_tid
+             ? parseISO(assignment.machine_start_dato_tid)
+             : parseISO(assignment.start_dato_tid);
+           const machineEnd = assignment.machine_slutt_dato_tid
+             ? parseISO(assignment.machine_slutt_dato_tid)
+             : parseISO(assignment.slutt_dato_tid);
+           const dayStart = new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate(), 0, 0, 0);
+           const dayEnd = new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate(), 23, 59, 59);
+           return machineStart < dayEnd && machineEnd > dayStart;
+         })() && (
            <span className="truncate text-white/75 text-[9px] leading-none mt-0.5">🚜 {assignment.machine_navn}</span>
          )}
          {/* In machine row view: show resource name */}
