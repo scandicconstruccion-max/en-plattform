@@ -57,7 +57,8 @@ const AssignmentBlock = memo(({
   dayWidth,
   isMultiple = false,
   hasTopBorder = false,
-  hasCompetencyIssue = false
+  hasCompetencyIssue = false,
+  currentDay = null
 }) => {
   const [isResizingLocal, setIsResizingLocal] = React.useState(false);
 
