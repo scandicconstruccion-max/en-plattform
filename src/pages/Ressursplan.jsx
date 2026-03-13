@@ -205,37 +205,47 @@ export default function Ressursplan() {
   const updateAssignmentMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ResourceAssignment.update(id, data),
     onMutate: async ({ id, data }) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['resourceAssignments'] });
-
-      // Snapshot previous value
       const previousAssignments = queryClient.getQueryData(['resourceAssignments']);
-
-      // Optimistically update
       queryClient.setQueryData(['resourceAssignments'], (old) =>
-      old.map((a) => a.id === id ? { ...a, ...data } : a)
+        old.map((a) => a.id === id ? { ...a, ...data } : a)
       );
-
       return { previousAssignments };
     },
     onError: (err, variables, context) => {
-      // Rollback on error
       queryClient.setQueryData(['resourceAssignments'], context.previousAssignments);
       toast.error('Kunne ikke oppdatere planlegging');
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
     },
-    onSuccess: () => {
+    onSuccess: (result, { id, data }) => {
+      // Sync maskin reservasjon if machine is involved
+      if (data.machine_id || data.machine_start_dato_tid) {
+        const allData = queryClient.getQueryData(['resourceAssignments']) || [];
+        const full = allData.find((a) => a.id === id) || data;
+        syncMaskinReservasjon({ ...full, ...data }, id);
+      }
       toast.success('Planlegging oppdatert');
     }
   });
 
   // Delete assignment mutation
   const deleteAssignmentMutation = useMutation({
-    mutationFn: (id) => base44.entities.ResourceAssignment.delete(id),
+    mutationFn: async (id) => {
+      // Cancel linked maskin reservasjon
+      const linked = await base44.entities.MaskinReservasjon.filter({
+        ressurs_assignment_id: id,
+        kilde: 'ressursplan',
+      });
+      for (const r of (linked || [])) {
+        await base44.entities.MaskinReservasjon.update(r.id, { status: 'kansellert' });
+      }
+      return base44.entities.ResourceAssignment.delete(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resourceAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['maskinReservasjoner'] });
       toast.success('Planlegging slettet');
     },
     onError: () => {
