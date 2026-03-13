@@ -722,7 +722,8 @@ const ResourceRow = memo(({
                       resizePreview={isCurrentlyResizing ? activeResize : null}
                       dayWidth={style.dayWidth}
                       isMultiple={dayAssignments.length > 1}
-                      hasTopBorder={idx > 0} />);
+                      hasTopBorder={idx > 0}
+                      currentDay={day} />);
 
 
                 })}
