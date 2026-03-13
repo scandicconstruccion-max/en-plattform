@@ -93,7 +93,18 @@ export default function InlineEditDialog({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (formData._isMachineRow) {
+      // Save dates to machine-specific fields, preserve resource dates
+      const { _isMachineRow, start_dato_tid, slutt_dato_tid, ...rest } = formData;
+      onSubmit({
+        ...rest,
+        machine_start_dato_tid: start_dato_tid ? `${start_dato_tid}:00` : null,
+        machine_slutt_dato_tid: slutt_dato_tid ? `${slutt_dato_tid}:00` : null,
+      });
+    } else {
+      const { _isMachineRow, ...rest } = formData;
+      onSubmit(rest);
+    }
   };
 
   if (!assignment) return null;
