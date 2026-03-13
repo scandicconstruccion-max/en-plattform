@@ -68,15 +68,25 @@ export default function InlineEditDialog({
 
   useEffect(() => {
     if (assignment) {
+      // If this is a machine-row assignment, show machine-specific dates
+      const isMachineRow = assignment._isMachineRow;
+      const startVal = isMachineRow
+        ? (assignment.machine_start_dato_tid || assignment._resource_start_dato_tid || assignment.start_dato_tid)
+        : assignment.start_dato_tid;
+      const endVal = isMachineRow
+        ? (assignment.machine_slutt_dato_tid || assignment._resource_slutt_dato_tid || assignment.slutt_dato_tid)
+        : assignment.slutt_dato_tid;
+
       setFormData({
         prosjekt_id: assignment.prosjekt_id || '',
-        start_dato_tid: assignment.start_dato_tid?.slice(0, 16) || '',
-        slutt_dato_tid: assignment.slutt_dato_tid?.slice(0, 16) || '',
+        start_dato_tid: startVal?.slice(0, 16) || '',
+        slutt_dato_tid: endVal?.slice(0, 16) || '',
         rolle_pa_prosjekt: assignment.rolle_pa_prosjekt || '',
         kommentar: assignment.kommentar || '',
         status: assignment.status || 'planlagt',
         machine_id: assignment.machine_id || '',
         machine_navn: assignment.machine_navn || '',
+        _isMachineRow: isMachineRow || false,
       });
     }
   }, [assignment]);
