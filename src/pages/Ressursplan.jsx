@@ -402,27 +402,46 @@ export default function Ressursplan() {
   };
 
   const handleAssignmentResize = (assignment, newStartDatoTid, newSluttDatoTid) => {
-    const foundConflicts = checkConflicts(
+    // If this is a machine row assignment, update machine dates, not resource dates
+    const isMachineRow = assignment._isMachineRow;
+    const resourceIdToCheck = isMachineRow ? assignment._resource_id_original || assignment.id : assignment.resource_id;
+
+    const foundConflicts = isMachineRow ? [] : checkConflicts(
       assignment.resource_id,
       newStartDatoTid,
       newSluttDatoTid,
       assignment.id
     );
 
-    const updatedData = {
-      start_dato_tid: newStartDatoTid,
-      slutt_dato_tid: newSluttDatoTid,
-      change_log: [
-      ...(assignment.change_log || []),
-      {
-        timestamp: new Date().toISOString(),
-        user_email: user?.email,
-        user_name: user?.display_name || user?.full_name,
-        action: 'Utvidet',
-        changes: `Aktivitet utvidet via drag`
-      }]
-
-    };
+    const updatedData = isMachineRow
+      ? {
+          machine_start_dato_tid: newStartDatoTid,
+          machine_slutt_dato_tid: newSluttDatoTid,
+          change_log: [
+            ...(assignment.change_log || []),
+            {
+              timestamp: new Date().toISOString(),
+              user_email: user?.email,
+              user_name: user?.display_name || user?.full_name,
+              action: 'Maskinperiode utvidet',
+              changes: `Maskinperiode endret via drag`
+            }
+          ]
+        }
+      : {
+          start_dato_tid: newStartDatoTid,
+          slutt_dato_tid: newSluttDatoTid,
+          change_log: [
+            ...(assignment.change_log || []),
+            {
+              timestamp: new Date().toISOString(),
+              user_email: user?.email,
+              user_name: user?.display_name || user?.full_name,
+              action: 'Utvidet',
+              changes: `Aktivitet utvidet via drag`
+            }
+          ]
+        };
 
     if (foundConflicts.length > 0) {
       setConflicts(foundConflicts);
