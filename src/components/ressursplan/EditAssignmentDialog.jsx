@@ -292,7 +292,36 @@ export default function EditAssignmentDialog({
             />
           </div>
 
-
+          {/* Machine period - independent from resource period */}
+          {assignment?.machine_id && (
+            <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-amber-800">🚜 Maskinperiode</span>
+                <span className="text-xs text-amber-600">({assignment.machine_navn})</span>
+              </div>
+              <p className="text-xs text-amber-700">Maskinens periode er uavhengig av ressursens periode og kan ha en annen varighet.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Maskin start</Label>
+                  <Input
+                    type="datetime-local"
+                    value={formData.machine_start_dato_tid}
+                    onChange={(e) => setFormData({ ...formData, machine_start_dato_tid: e.target.value })}
+                    className="mt-1 rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Maskin slutt</Label>
+                  <Input
+                    type="datetime-local"
+                    value={formData.machine_slutt_dato_tid}
+                    onChange={(e) => setFormData({ ...formData, machine_slutt_dato_tid: e.target.value })}
+                    className="mt-1 rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Required Competencies */}
           {assignment?.assignment_type === 'arbeid' && (
