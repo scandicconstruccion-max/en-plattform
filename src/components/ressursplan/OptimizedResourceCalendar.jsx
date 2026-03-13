@@ -322,6 +322,16 @@ const ResourceRow = memo(({
         const start = typeof a.start_dato_tid === 'string' ? parseISO(a.start_dato_tid) : a.start_dato_tid;
         const end = typeof a.slutt_dato_tid === 'string' ? parseISO(a.slutt_dato_tid) : a.slutt_dato_tid;
 
+        if (a._isMachineRow) {
+          console.log('[getAssignmentsForDay] MachineRow id:', a.id,
+            '| machine:', a.machine_navn,
+            '| day:', format(day, 'yyyy-MM-dd'),
+            '| start used:', a.start_dato_tid,
+            '| slutt used:', a.slutt_dato_tid,
+            '| has_machine_start:', !!a.machine_start_dato_tid
+          );
+        }
+
         // Check if assignment overlaps with the day
         const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
         const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
