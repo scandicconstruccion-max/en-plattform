@@ -540,11 +540,17 @@ export default function Ressursplan() {
   }
 
   // For machine view: build machine assignments (assignments where machine_id === resource.id)
-  // We re-map machine assignments so resource_id points to the machine's id
+  // Use machine-specific dates if available, otherwise fall back to resource dates
   const machineAssignments = assignments.filter(a => a.machine_id).map(a => ({
     ...a,
     _isMachineRow: true,
     resource_id: a.machine_id, // Override so calendar renders on machine row
+    // Use machine-specific period if set, otherwise fall back to resource period
+    start_dato_tid: a.machine_start_dato_tid || a.start_dato_tid,
+    slutt_dato_tid: a.machine_slutt_dato_tid || a.slutt_dato_tid,
+    // Keep originals accessible
+    _resource_start_dato_tid: a.start_dato_tid,
+    _resource_slutt_dato_tid: a.slutt_dato_tid,
   }));
 
   const baseFilteredAssignments = assignments.filter((a) => {
