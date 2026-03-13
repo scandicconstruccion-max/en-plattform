@@ -101,6 +101,43 @@ export default function Ressursplan() {
     initialData: []
   });
 
+  // Helper: sync machine reservation from assignment
+  const syncMaskinReservasjon = async (assignment, assignmentId) => {
+    if (!assignment.machine_id) return;
+    const maskinStart = assignment.machine_start_dato_tid || assignment.start_dato_tid;
+    const maskinSlutt = assignment.machine_slutt_dato_tid || assignment.slutt_dato_tid;
+    if (!maskinStart || !maskinSlutt) return;
+
+    // Find existing reservasjon linked to this assignment
+    const existing = await base44.entities.MaskinReservasjon.filter({
+      ressurs_assignment_id: assignmentId,
+      kilde: 'ressursplan',
+    });
+
+    const reservasjonData = {
+      maskin_id: assignment.machine_id,
+      maskin_navn: assignment.machine_navn || '',
+      prosjekt_id: assignment.prosjekt_id || '',
+      prosjekt_navn: assignment.prosjekt_navn || '',
+      reservert_av_id: assignment.resource_id || '',
+      reservert_av_navn: assignment.resource_navn || '',
+      reservert_av_epost: assignment.opprettet_av || user?.email || '',
+      start_dato_tid: maskinStart,
+      slutt_dato_tid: maskinSlutt,
+      kommentar: assignment.kommentar || '',
+      kilde: 'ressursplan',
+      ressurs_assignment_id: assignmentId,
+      status: 'aktiv',
+    };
+
+    if (existing && existing.length > 0) {
+      await base44.entities.MaskinReservasjon.update(existing[0].id, reservasjonData);
+    } else {
+      await base44.entities.MaskinReservasjon.create(reservasjonData);
+    }
+    queryClient.invalidateQueries({ queryKey: ['maskinReservasjoner'] });
+  };
+
   // Create assignment mutation
   const createAssignmentMutation = useMutation({
     mutationFn: async (data) => {
@@ -147,7 +184,10 @@ export default function Ressursplan() {
           }]
         };
 
-        results.push(await base44.entities.ResourceAssignment.create(assignmentData));
+        const created = await base44.entities.ResourceAssignment.create(assignmentData);
+        results.push(created);
+        // Sync maskin reservasjon
+        await syncMaskinReservasjon(assignmentData, created.id);
       }
       return results;
     },
