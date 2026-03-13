@@ -127,6 +127,17 @@ export default function Ressursplan() {
           status: 'planlagt',
           opprettet_av: user?.email,
           opprettet_av_navn: user?.display_name || user?.full_name,
+          // Machine fields - independent period
+          ...(data.machine_id ? {
+            machine_id: data.machine_id,
+            machine_navn: data.machine_navn,
+            machine_start_dato_tid: data.machine_start_dato_tid
+              ? (data.machine_start_dato_tid.includes('T') ? new Date(data.machine_start_dato_tid.length === 16 ? data.machine_start_dato_tid + ':00' : data.machine_start_dato_tid).toISOString() : data.machine_start_dato_tid)
+              : null,
+            machine_slutt_dato_tid: data.machine_slutt_dato_tid
+              ? (data.machine_slutt_dato_tid.includes('T') ? new Date(data.machine_slutt_dato_tid.length === 16 ? data.machine_slutt_dato_tid + ':00' : data.machine_slutt_dato_tid).toISOString() : data.machine_slutt_dato_tid)
+              : null,
+          } : {}),
           change_log: [{
             timestamp: new Date().toISOString(),
             user_email: user?.email,
