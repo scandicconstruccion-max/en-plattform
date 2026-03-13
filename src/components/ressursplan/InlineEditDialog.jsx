@@ -141,7 +141,7 @@ export default function InlineEditDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Start</Label>
+                <Label>{formData._isMachineRow ? 'Maskin start' : 'Start'}</Label>
                 <Input
                   type="datetime-local"
                   value={formData.start_dato_tid}
@@ -150,7 +150,7 @@ export default function InlineEditDialog({
                 />
               </div>
               <div>
-                <Label>Slutt</Label>
+                <Label>{formData._isMachineRow ? 'Maskin slutt' : 'Slutt'}</Label>
                 <Input
                   type="datetime-local"
                   value={formData.slutt_dato_tid}
