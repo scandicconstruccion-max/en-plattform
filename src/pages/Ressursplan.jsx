@@ -378,10 +378,17 @@ export default function Ressursplan() {
   };
 
   const handleInlineEdit = (formData) => {
+    const toISO = (val) => {
+      if (!val) return null;
+      if (val.length === 16) return new Date(val + ':00').toISOString();
+      return val;
+    };
     const updatedData = {
       ...formData,
-      start_dato_tid: formData.start_dato_tid.includes('T') ? `${formData.start_dato_tid}:00` : formData.start_dato_tid,
-      slutt_dato_tid: formData.slutt_dato_tid.includes('T') ? `${formData.slutt_dato_tid}:00` : formData.slutt_dato_tid,
+      start_dato_tid: toISO(formData.start_dato_tid),
+      slutt_dato_tid: toISO(formData.slutt_dato_tid),
+      machine_start_dato_tid: toISO(formData.machine_start_dato_tid),
+      machine_slutt_dato_tid: toISO(formData.machine_slutt_dato_tid),
       change_log: [
       ...(selectedAssignment.change_log || []),
       {
