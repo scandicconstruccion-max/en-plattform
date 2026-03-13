@@ -101,8 +101,17 @@ export default function Maskiner() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [sjekkUtTarget, setSjekkUtTarget] = useState(null);
   const [filterLokasjon, setFilterLokasjon] = useState('alle');
+  const [reservasjonTarget, setReservasjonTarget] = useState(null);
+  const [editingReservasjon, setEditingReservasjon] = useState(null);
+  const [deleteReservasjonTarget, setDeleteReservasjonTarget] = useState(null);
+  const [expandedMaskinId, setExpandedMaskinId] = useState(null);
 
   const queryClient = useQueryClient();
+
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
 
   const { data: maskiner = [], isLoading } = useQuery({
     queryKey: ['maskiner'],
@@ -118,6 +127,58 @@ export default function Maskiner() {
     },
     initialData: [],
   });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.filter({ status: 'aktiv' }),
+    initialData: [],
+  });
+
+  const { data: allReservasjoner = [] } = useQuery({
+    queryKey: ['maskinReservasjoner'],
+    queryFn: () => base44.entities.MaskinReservasjon.list('-start_dato_tid'),
+    initialData: [],
+  });
+
+  const createReservasjonMutation = useMutation({
+    mutationFn: (data) => base44.entities.MaskinReservasjon.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['maskinReservasjoner'] });
+      setReservasjonTarget(null);
+      setEditingReservasjon(null);
+      toast.success('Reservasjon opprettet');
+    },
+    onError: () => toast.error('Kunne ikke opprette reservasjon'),
+  });
+
+  const updateReservasjonMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.MaskinReservasjon.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['maskinReservasjoner'] });
+      setReservasjonTarget(null);
+      setEditingReservasjon(null);
+      toast.success('Reservasjon oppdatert');
+    },
+    onError: () => toast.error('Kunne ikke oppdatere reservasjon'),
+  });
+
+  const deleteReservasjonMutation = useMutation({
+    mutationFn: (id) => base44.entities.MaskinReservasjon.update(id, { status: 'kansellert' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['maskinReservasjoner'] });
+      setDeleteReservasjonTarget(null);
+      toast.success('Reservasjon kansellert');
+    },
+    onError: () => toast.error('Kunne ikke kansellere reservasjon'),
+  });
+
+  const handleReservasjonSubmit = (data) => {
+    if (editingReservasjon) {
+      updateReservasjonMutation.mutate({ id: editingReservasjon.id, data });
+    } else {
+      createReservasjonMutation.mutate(data);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Maskin.create(data),
