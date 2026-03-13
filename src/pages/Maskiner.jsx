@@ -622,6 +622,41 @@ export default function Maskiner() {
         onSave={(data) => sjekkUtMutation.mutate({ id: sjekkUtTarget.id, data })}
       />
 
+      {/* Reservasjon dialog */}
+      <MaskinReservasjonDialog
+        open={!!reservasjonTarget}
+        onOpenChange={(open) => { if (!open) { setReservasjonTarget(null); setEditingReservasjon(null); } }}
+        maskin={reservasjonTarget}
+        projects={projects}
+        employees={employees}
+        existingReservasjoner={allReservasjoner.filter((r) => r.maskin_id === reservasjonTarget?.id)}
+        currentUser={currentUser}
+        editingReservasjon={editingReservasjon}
+        onSubmit={handleReservasjonSubmit}
+        isLoading={createReservasjonMutation.isPending || updateReservasjonMutation.isPending}
+      />
+
+      {/* Delete reservasjon confirm */}
+      <AlertDialog open={!!deleteReservasjonTarget} onOpenChange={(open) => !open && setDeleteReservasjonTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kanseller reservasjon?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil kansellere denne reservasjonen?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteReservasjonMutation.mutate(deleteReservasjonTarget.id)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Kanseller
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Delete confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
