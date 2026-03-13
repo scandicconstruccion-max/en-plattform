@@ -253,8 +253,9 @@ export default function Ressursplan() {
       if (a.id === excludeId) return false;
       if (a.machine_id !== machineId) return false;
 
-      const aStart = parseISO(a.start_dato_tid);
-      const aEnd = parseISO(a.slutt_dato_tid);
+      // Use machine-specific dates if available
+      const aStart = parseISO(a.machine_start_dato_tid || a.start_dato_tid);
+      const aEnd = parseISO(a.machine_slutt_dato_tid || a.slutt_dato_tid);
 
       return (
         isWithinInterval(start, { start: aStart, end: aEnd }) ||
