@@ -117,6 +117,11 @@ export default function InlineEditDialog({
             <DialogTitle>Rediger planlegging</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {formData._isMachineRow && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                🚜 Du redigerer <strong>maskinperioden</strong> for {assignment?.machine_navn}. Start/slutt gjelder kun maskinen — ressursens arbeidsperiode er uendret.
+              </div>
+            )}
             <div>
               <Label>Prosjekt</Label>
               <Select 
