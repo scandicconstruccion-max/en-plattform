@@ -73,20 +73,26 @@ export default function AssignmentDetailsDialog({
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Calendar className="h-4 w-4" />
-                <span>Start</span>
+                <span>{assignment._isMachineRow ? 'Maskin start' : 'Start'}</span>
               </div>
               <p className="font-medium">
-                {format(parseISO(assignment.start_dato_tid), 'dd.MM.yyyy HH:mm', { locale: nb })}
+                {format(parseISO(assignment._isMachineRow
+                  ? (assignment.machine_start_dato_tid || assignment.start_dato_tid)
+                  : assignment.start_dato_tid
+                ), 'dd.MM.yyyy HH:mm', { locale: nb })}
               </p>
             </div>
 
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Clock className="h-4 w-4" />
-                <span>Slutt</span>
+                <span>{assignment._isMachineRow ? 'Maskin slutt' : 'Slutt'}</span>
               </div>
               <p className="font-medium">
-                {format(parseISO(assignment.slutt_dato_tid), 'dd.MM.yyyy HH:mm', { locale: nb })}
+                {format(parseISO(assignment._isMachineRow
+                  ? (assignment.machine_slutt_dato_tid || assignment.slutt_dato_tid)
+                  : assignment.slutt_dato_tid
+                ), 'dd.MM.yyyy HH:mm', { locale: nb })}
               </p>
             </div>
           </div>
