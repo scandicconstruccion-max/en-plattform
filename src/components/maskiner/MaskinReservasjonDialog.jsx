@@ -113,9 +113,17 @@ export default function MaskinReservasjonDialog({
 
   if (!maskin) return null;
 
+  // Helpers to split/combine date+time
+  const getDate = (val) => val ? val.slice(0, 10) : '';
+  const getTime = (val) => val ? val.slice(11, 16) : '';
+  const combine = (date, time) => date && time ? `${date}T${time}` : '';
+
+  const startDate = formData.start_dato_tid ? new Date(formData.start_dato_tid + ':00') : undefined;
+  const endDate = formData.slutt_dato_tid ? new Date(formData.slutt_dato_tid + ':00') : undefined;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarRange className="h-5 w-5 text-emerald-600" />
@@ -142,26 +150,66 @@ export default function MaskinReservasjonDialog({
             </div>
           )}
 
+          {/* Calendar */}
+          <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+            <Calendar
+              mode="range"
+              selected={{ from: startDate, to: endDate }}
+              onSelect={(range) => {
+                const startD = range?.from ? format(range.from, 'yyyy-MM-dd') : '';
+                const endD = range?.to ? format(range.to, 'yyyy-MM-dd') : startD;
+                setFormData(prev => ({
+                  ...prev,
+                  start_dato_tid: combine(startD, getTime(prev.start_dato_tid) || '07:00'),
+                  slutt_dato_tid: combine(endD, getTime(prev.slutt_dato_tid) || '15:30'),
+                }));
+              }}
+              locale={nb}
+              className="mx-auto"
+              classNames={{
+                months: "flex flex-col",
+                month: "space-y-3",
+                caption: "flex justify-center pt-1 relative items-center text-base font-semibold",
+                nav_button: "h-8 w-8",
+                head_cell: "text-slate-500 font-medium text-sm w-10",
+                cell: "text-center text-sm p-0 relative",
+                day: "h-10 w-10 p-0 font-normal text-sm rounded-lg hover:bg-emerald-50 hover:text-emerald-700",
+                day_selected: "bg-emerald-600 text-white hover:bg-emerald-600 hover:text-white rounded-lg",
+                day_range_middle: "bg-emerald-50 text-emerald-800 rounded-none",
+                day_range_start: "bg-emerald-600 text-white rounded-l-lg rounded-r-none",
+                day_range_end: "bg-emerald-600 text-white rounded-r-lg rounded-l-none",
+                day_today: "border border-emerald-400 font-semibold",
+              }}
+            />
+          </div>
+
+          {/* Time pickers */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Fra *</Label>
+              <Label className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-slate-400" /> Fra kl. *</Label>
               <Input
-                type="datetime-local"
-                value={formData.start_dato_tid}
-                onChange={(e) => setFormData({ ...formData, start_dato_tid: e.target.value })}
+                type="time"
+                value={getTime(formData.start_dato_tid)}
+                onChange={(e) => setFormData(prev => ({ ...prev, start_dato_tid: combine(getDate(prev.start_dato_tid), e.target.value) }))}
                 required
-                className="mt-1 rounded-xl"
+                className="mt-1 rounded-xl text-base font-medium"
               />
+              {formData.start_dato_tid && (
+                <p className="text-xs text-slate-500 mt-1">{format(new Date(formData.start_dato_tid + ':00'), 'EEE d. MMM', { locale: nb })}</p>
+              )}
             </div>
             <div>
-              <Label>Til *</Label>
+              <Label className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-slate-400" /> Til kl. *</Label>
               <Input
-                type="datetime-local"
-                value={formData.slutt_dato_tid}
-                onChange={(e) => setFormData({ ...formData, slutt_dato_tid: e.target.value })}
+                type="time"
+                value={getTime(formData.slutt_dato_tid)}
+                onChange={(e) => setFormData(prev => ({ ...prev, slutt_dato_tid: combine(getDate(prev.slutt_dato_tid), e.target.value) }))}
                 required
-                className="mt-1 rounded-xl"
+                className="mt-1 rounded-xl text-base font-medium"
               />
+              {formData.slutt_dato_tid && (
+                <p className="text-xs text-slate-500 mt-1">{format(new Date(formData.slutt_dato_tid + ':00'), 'EEE d. MMM', { locale: nb })}</p>
+              )}
             </div>
           </div>
 
