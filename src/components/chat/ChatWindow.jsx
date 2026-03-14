@@ -13,7 +13,12 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { NotificationHelpers } from '@/components/notifications/useNotifications';
 
-export default function ChatWindow({ group, user }) {
+export default function ChatWindow({ group, user, allUsers = [], employees = [] }) {
+  // Build a lookup: email -> full name (from employees first, then users)
+  const nameLookup = {};
+  allUsers.forEach(u => { if (u.email) nameLookup[u.email] = u.full_name; });
+  employees.forEach(e => { if (e.email) nameLookup[e.email] = `${e.first_name} ${e.last_name}`.trim(); });
+
   const [message, setMessage] = useState('');
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
