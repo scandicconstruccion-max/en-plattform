@@ -979,6 +979,23 @@ export default function Prosjektfiler() {
         </DialogContent>
       </Dialog>
 
+      {/* Revision Upload Dialog */}
+      <RevisionUploadDialog
+        open={!!revisionDialogFile}
+        onClose={() => setRevisionDialogFile(null)}
+        existingFile={revisionDialogFile}
+        user={user}
+        allProjectUsers={allProjectUserEmails}
+      />
+
+      {/* Revision History Panel */}
+      <RevisionHistoryPanel
+        open={!!historyFile}
+        onClose={() => setHistoryFile(null)}
+        revisions={historyFile ? getRevisions(historyFile) : []}
+        baseName={historyFile?.base_name || historyFile?.name}
+      />
+
       {/* Create Category Dialog */}
       <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
         <DialogContent>
