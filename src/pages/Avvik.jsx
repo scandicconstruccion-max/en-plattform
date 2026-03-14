@@ -205,7 +205,10 @@ export default function Avvik() {
       ...formData,
       deviation_number: numRes.data.documentNumber,
       cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
-      images: attachments.map((a) => a.file_url).filter(Boolean)
+      images: attachments.map((a) => a.file_url).filter(Boolean),
+      location_lat: geoLocation?.lat || null,
+      location_lng: geoLocation?.lng || null,
+      location_label: geoLocation?.label || null,
     });
   };
 
