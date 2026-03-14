@@ -19,6 +19,7 @@ export default function ChatWindow({ group, user }) {
   const [uploadingFile, setUploadingFile] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const prevMessageCountRef = useRef(null);
   const queryClient = useQueryClient();
 
   const channelId = `group_${group.id}`;
@@ -30,12 +31,54 @@ export default function ChatWindow({ group, user }) {
     enabled: !!group.id,
   });
 
+  // Show toast popup for new incoming messages (from others)
+  useEffect(() => {
+    if (prevMessageCountRef.current === null) {
+      prevMessageCountRef.current = messages.length;
+      return;
+    }
+    if (messages.length > prevMessageCountRef.current) {
+      const newMessages = messages.slice(prevMessageCountRef.current);
+      newMessages.forEach(msg => {
+        if (msg.sender_email !== user?.email) {
+          toast(
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <MessageSquare className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{msg.sender_name} – {group.name}</p>
+                <p className="text-xs text-slate-500 truncate">{msg.message || 'Sendte et vedlegg'}</p>
+              </div>
+            </div>,
+            { duration: 4000 }
+          );
+        }
+      });
+      prevMessageCountRef.current = messages.length;
+    }
+  }, [messages]);
+
+  // Reset message count ref when switching groups
+  useEffect(() => {
+    prevMessageCountRef.current = null;
+  }, [group.id]);
+
   const sendMutation = useMutation({
     mutationFn: (data) => base44.entities.ChatMessage.create(data),
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['chatMessages', channelId] });
       setMessage('');
       setAttachmentFile(null);
+
+      // Send notifications to all group members except sender
+      const otherMembers = (group.members || []).filter(email => email !== user?.email);
+      const preview = variables.message || 'Sendte et vedlegg';
+      await Promise.all(
+        otherMembers.map(email =>
+          NotificationHelpers.chatNyMelding(email, user?.full_name, group.name, group.id, preview)
+        )
+      );
     },
   });
 
