@@ -983,23 +983,23 @@ export default function Tilbud() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-slate-100">
+              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl w-full sm:w-auto order-last sm:order-first">
                 Avbryt
               </Button>
               <Button
                 type="submit"
                 disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl w-full sm:w-auto">
                 {createMutation.isPending && !sendAfterCreate ? 'Lagrer...' : 'Opprett tilbud'}
               </Button>
               <Button
                 type="button"
                 disabled={createMutation.isPending || !formData.customer_email}
                 onClick={(e) => handleSubmit(e, true)}
-                className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2">
+                className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2 w-full sm:w-auto">
                 <Send className="h-4 w-4" />
-                {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send tilbud'}
+                {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send'}
               </Button>
             </div>
           </form>
