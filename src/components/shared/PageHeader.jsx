@@ -16,7 +16,7 @@ export default function PageHeader({
 
   return (
     <div className="bg-white border-b border-slate-200">
-      <div className="px-6 lg:px-8 py-6">
+      <div className="px-4 lg:px-8 py-4 lg:py-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             {showBack &&
