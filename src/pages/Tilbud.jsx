@@ -884,71 +884,65 @@ export default function Tilbud() {
 
             {/* Items */}
             <div className="space-y-3">
-              
-              <div className="grid grid-cols-12 gap-2 mb-2">
-                <div className="col-span-4">
-                  <span className="text-slate-900 text-base font-semibold">Beskrivelse</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-900 text-base font-semibold">Mengde</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-900 text-base font-semibold">Enhet</span>
-                </div>
-                <div className="text-slate-900 col-span-3">
-                  <span className="text-slate-900 text-base font-semibold">Enhetspris</span>
-                </div>
+              <Label className="text-sm font-semibold text-slate-700">Postliste</Label>
+              {/* Desktop header */}
+              <div className="hidden sm:grid grid-cols-12 gap-2 mb-1 text-sm font-semibold text-slate-700">
+                <div className="col-span-4">Beskrivelse</div>
+                <div className="col-span-2">Mengde</div>
+                <div className="col-span-2">Enhet</div>
+                <div className="col-span-3">Enhetspris</div>
                 <div className="col-span-1"></div>
               </div>
               {formData.items.map((item, index) =>
-              <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-4">
+              <div key={index} className="space-y-2 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-2 sm:items-end p-3 sm:p-0 bg-slate-50 sm:bg-transparent rounded-xl sm:rounded-none border sm:border-0 border-slate-200">
+                  {/* Mobile label row */}
+                  <div className="flex items-center justify-between sm:hidden mb-1">
+                    <span className="text-xs font-semibold text-slate-500">Post {index + 1}</span>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveItem(index)} disabled={formData.items.length === 1}>
+                      <Trash2 className="h-4 w-4 text-red-400" />
+                    </Button>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <Label className="text-xs text-slate-500 sm:hidden">Beskrivelse</Label>
                     <Input
                     placeholder="Beskrivelse"
                     value={item.description}
                     onChange={(e) => handleItemChange(index, 'description', e.target.value)} />
-
                   </div>
-                  <div className="col-span-2">
-                    <Input
-                    type="number"
-                    placeholder="Mengde"
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))} />
-
+                  <div className="grid grid-cols-3 gap-2 sm:contents">
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-slate-500 sm:hidden">Mengde</Label>
+                      <Input
+                      type="number"
+                      placeholder="Mengde"
+                      value={item.quantity}
+                      onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value))} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-slate-500 sm:hidden">Enhet</Label>
+                      <Select value={item.unit} onValueChange={(value) => handleItemChange(index, 'unit', value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Enhet" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="stk">stk</SelectItem>
+                          <SelectItem value="m²">m²</SelectItem>
+                          <SelectItem value="LM">LM</SelectItem>
+                          <SelectItem value="RS">RS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-3">
+                      <Label className="text-xs text-slate-500 sm:hidden">Enhetspris</Label>
+                      <Input
+                      type="number"
+                      placeholder="Pris"
+                      value={item.unit_price}
+                      onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))} />
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <Select
-                    value={item.unit}
-                    onValueChange={(value) => handleItemChange(index, 'unit', value)}>
-
-                      <SelectTrigger>
-                        <SelectValue placeholder="Enhet" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="stk">stk</SelectItem>
-                        <SelectItem value="m²">m²</SelectItem>
-                        <SelectItem value="LM">LM</SelectItem>
-                        <SelectItem value="RS">RS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-3">
-                    <Input
-                    type="number"
-                    placeholder="Pris"
-                    value={item.unit_price}
-                    onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value))} />
-
-                  </div>
-                  <div className="col-span-1">
-                    <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRemoveItem(index)}
-                    disabled={formData.items.length === 1}>
-
+                  <div className="hidden sm:block sm:col-span-1">
+                    <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} disabled={formData.items.length === 1}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
