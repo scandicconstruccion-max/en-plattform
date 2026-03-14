@@ -11,7 +11,9 @@ import ProjectSelector from '@/components/shared/ProjectSelector';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { format, parseISO, isWithinInterval } from 'date-fns';
-import { Plus, X, Calendar, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { nb } from 'date-fns/locale';
+import { Plus, X, Calendar, AlertTriangle, Clock } from 'lucide-react';
 
 export default function CreateAssignmentDialog({
   open,
