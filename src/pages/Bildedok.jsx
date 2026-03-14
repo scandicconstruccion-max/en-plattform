@@ -552,7 +552,23 @@ export default function Bildedok() {
         <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
           <DialogContent className="max-w-4xl max-h-[90vh]">
             <DialogHeader>
-              <DialogTitle>{selectedImage.title}</DialogTitle>
+              <DialogTitle className="flex items-center justify-between pr-6">
+                <span>{selectedImage.title}</span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm('Er du sikker på at du vil slette dette bildet? Dette kan ikke angres.')) {
+                      deleteMutation.mutate(selectedImage.id);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deleteMutation.isPending ? 'Sletter...' : 'Slett bilde'}
+                </Button>
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="rounded-xl overflow-hidden bg-slate-100">
