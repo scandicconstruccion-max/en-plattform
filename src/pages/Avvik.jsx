@@ -137,6 +137,19 @@ export default function Avvik() {
       queryClient.invalidateQueries({ queryKey: ['deviations'] });
       setShowDialog(false);
       resetForm();
+      toast.success('Avvik registrert');
+
+      // Send notification to assigned person if any
+      if (created.assigned_to) {
+        try {
+          await base44.integrations.Core.SendEmail({
+            to: created.assigned_to,
+            subject: `Nytt avvik tildelt: ${created.title}`,
+            body: `Hei,\n\nDu har fått tildelt et avvik:\n\nTittel: ${created.title}\nBeskrivelse: ${created.description || '-'}\nAlvorlighet: ${created.severity}\n\nLogg inn for å se detaljer.`
+          });
+        } catch {}
+      }
+
       if (sendAfterCreate) {
         setSendAfterCreate(false);
         setJustCreatedDeviation(created);
