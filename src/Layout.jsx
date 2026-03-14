@@ -226,14 +226,12 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile Header */}
       {isMobile &&
       <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
-          <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSidebarOpen(!sidebarOpen)} className="text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-14 w-14 select-none">
-
-
-            {sidebarOpen ? <X className="h-8 w-8" /> : <Menu className="h-8 w-8" />}
-          </Button>
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="flex items-center justify-center h-14 w-14 rounded-xl hover:bg-slate-100 active:bg-slate-200 transition-colors select-none touch-manipulation"
+          >
+            {sidebarOpen ? <X className="h-8 w-8 text-slate-700" strokeWidth={2.5} /> : <Menu className="h-8 w-8 text-slate-700" strokeWidth={2.5} />}
+          </button>
           <span className="text-green-600 font-semibold dark:text-white">En Plattform</span>
           <div className="flex items-center gap-1">
             <NotificationBell userEmail={user?.email} />
