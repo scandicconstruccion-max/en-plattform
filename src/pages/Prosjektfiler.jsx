@@ -701,6 +701,24 @@ export default function Prosjektfiler() {
                 </Card>
             }
 
+              {/* Archive toggle for revision-controlled categories */}
+              {selectedCategory && isRevisionCategory(selectedCategory) && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowArchive(!showArchive)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all",
+                      showArchive
+                        ? "bg-slate-200 border-slate-300 text-slate-700"
+                        : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                    )}
+                  >
+                    <Archive className="h-4 w-4" />
+                    {showArchive ? 'Skjul arkiv' : 'Vis arkiverte revisjoner'}
+                  </button>
+                </div>
+              )}
+
               {/* Files List */}
               {!selectedCategory ?
             <EmptyState
