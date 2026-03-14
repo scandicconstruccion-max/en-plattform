@@ -1008,12 +1008,12 @@ export default function Tilbud() {
 
       {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="sm:max-w-2xl p-8 max-h-[90vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="w-full sm:max-w-2xl p-0 max-h-[92dvh] flex flex-col">
+          <DialogHeader className="flex-shrink-0 px-4 sm:px-8 pt-5 pb-3 border-b border-slate-100">
             <DialogTitle>Tilbud #{selectedQuote?.quote_number}</DialogTitle>
           </DialogHeader>
           {selectedQuote &&
-          <div className="space-y-6 overflow-y-auto flex-1 pr-4">
+          <div className="space-y-5 overflow-y-auto flex-1 px-4 sm:px-8 py-5">
               {/* Customer Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
