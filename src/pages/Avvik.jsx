@@ -960,12 +960,36 @@ export default function Avvik() {
       </div>
 
       {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <Dialog open={showDialog} onOpenChange={(open) => { setShowDialog(open); if (!open) resetForm(); }}>
         <DialogContent className="w-full max-w-lg max-h-[92dvh] flex flex-col p-0" onClick={(e) => e.stopPropagation()}>
           <DialogHeader className="px-4 pt-4 pb-3 sm:px-6 sm:pt-6 border-b border-slate-100 flex-shrink-0">
             <DialogTitle>Registrer avvik</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 px-4 sm:px-6 pb-2">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 px-4 sm:px-6 pb-2 pt-4">
+
+            {/* Template picker */}
+            {showTemplates && (
+              <div className="p-3 bg-slate-50 rounded-xl">
+                <AvvikTemplateSelector onSelect={(tpl) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    title: tpl.title,
+                    description: tpl.description,
+                    corrective_action: tpl.corrective_action,
+                    category: tpl.category,
+                    severity: tpl.severity,
+                    template_used: tpl.label,
+                  }));
+                  setShowTemplates(false);
+                }} />
+              </div>
+            )}
+            {!showTemplates && (
+              <button type="button" onClick={() => setShowTemplates(true)} className="text-xs text-emerald-600 hover:underline flex items-center gap-1">
+                <Tag className="h-3 w-3" /> Bytt avvikstype / mal
+              </button>
+            )}
+
             <div>
               <Label>Tittel *</Label>
               <Input
@@ -982,21 +1006,39 @@ export default function Avvik() {
                 onChange={(v) => setFormData({ ...formData, project_id: v })}
                 className="mt-1.5 rounded-xl" />
             </div>
-            <div>
-              <Label>Alvorlighetsgrad</Label>
-              <Select
-                value={formData.severity}
-                onValueChange={(v) => setFormData({ ...formData, severity: v })}>
-                <SelectTrigger className="mt-1.5 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lav">Lav</SelectItem>
-                  <SelectItem value="middels">Middels</SelectItem>
-                  <SelectItem value="hoy">Høy</SelectItem>
-                  <SelectItem value="kritisk">Kritisk</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Kategori</Label>
+                <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
+                  <SelectTrigger className="mt-1.5 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hms">HMS</SelectItem>
+                    <SelectItem value="sikkerhet">Sikkerhet</SelectItem>
+                    <SelectItem value="kvalitet">Kvalitet</SelectItem>
+                    <SelectItem value="fremdrift">Fremdrift</SelectItem>
+                    <SelectItem value="prosjektering">Prosjektering</SelectItem>
+                    <SelectItem value="dokumentasjon">Dokumentasjon</SelectItem>
+                    <SelectItem value="miljo">Miljø</SelectItem>
+                    <SelectItem value="annet">Annet</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Alvorlighetsgrad</Label>
+                <Select value={formData.severity} onValueChange={(v) => setFormData({ ...formData, severity: v })}>
+                  <SelectTrigger className="mt-1.5 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lav">Lav</SelectItem>
+                    <SelectItem value="middels">Middels</SelectItem>
+                    <SelectItem value="hoy">Høy</SelectItem>
+                    <SelectItem value="kritisk">Kritisk</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label>Beskrivelse</Label>
@@ -1007,12 +1049,19 @@ export default function Avvik() {
                 rows={3}
                 className="mt-1.5 rounded-xl" />
             </div>
+            <div>
+              <Label>Korrigerende tiltak</Label>
+              <Textarea
+                value={formData.corrective_action}
+                onChange={(e) => setFormData({ ...formData, corrective_action: e.target.value })}
+                placeholder="Beskrivelse av tiltak..."
+                rows={2}
+                className="mt-1.5 rounded-xl" />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Ansvarlig</Label>
-                <Select
-                  value={formData.assigned_to}
-                  onValueChange={(v) => setFormData({ ...formData, assigned_to: v })}>
+                <Select value={formData.assigned_to} onValueChange={(v) => setFormData({ ...formData, assigned_to: v })}>
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue placeholder="Velg ansatt" />
                   </SelectTrigger>
@@ -1034,14 +1083,11 @@ export default function Avvik() {
                   className="mt-1.5 rounded-xl" />
               </div>
             </div>
+
+            {/* Geotagging */}
             <div>
-              <Label>Korrigerende tiltak</Label>
-              <Textarea
-                value={formData.corrective_action}
-                onChange={(e) => setFormData({ ...formData, corrective_action: e.target.value })}
-                placeholder="Beskrivelse av tiltak..."
-                rows={2}
-                className="mt-1.5 rounded-xl" />
+              <Label className="mb-1.5 block">Lokasjon (valgfritt)</Label>
+              <GeotagButton value={geoLocation} onChange={setGeoLocation} />
             </div>
 
             {/* File Upload Section */}
