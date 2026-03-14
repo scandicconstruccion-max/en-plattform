@@ -570,11 +570,7 @@ export default function Bildedok() {
                   size="sm"
                   className="rounded-xl gap-1.5"
                   disabled={deleteMutation.isPending}
-                  onClick={() => {
-                    if (window.confirm('Er du sikker på at du vil slette dette bildet? Dette kan ikke angres.')) {
-                      deleteMutation.mutate(selectedImage.id);
-                    }
-                  }}
+                  onClick={() => setShowDeleteConfirm(true)}
                 >
                   <Trash2 className="h-4 w-4" />
                   {deleteMutation.isPending ? 'Sletter...' : 'Slett bilde'}
