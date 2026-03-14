@@ -73,6 +73,16 @@ export default function Bildedok() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.ImageDoc.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['images'] });
+      setShowImageDialog(false);
+      setSelectedImage(null);
+      toast.success('Bilde slettet');
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       title: '',
