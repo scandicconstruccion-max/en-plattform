@@ -204,7 +204,16 @@ export default function AvvikDetaljer() {
         showBack
         backUrl={createPageUrl('Avvik')}
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <DocumentChatDrawer
+              entityName="Deviation"
+              documentId={deviationId}
+              projectId={deviation.project_id}
+              chatGroupId={deviation.chat_group_id}
+              onLinked={(groupId) => {
+                queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
+              }}
+            />
             {deviation.has_cost_consequence && !deviation.sent_to_customer && (
               <Button
                 onClick={() => setShowSendAvvikDialog(true)}
