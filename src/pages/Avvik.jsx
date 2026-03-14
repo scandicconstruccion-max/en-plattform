@@ -601,7 +601,7 @@ export default function Avvik() {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
@@ -621,6 +621,22 @@ export default function Avvik() {
               <SelectItem value="godkjent_kunde">Pågående</SelectItem>
               <SelectItem value="utfort">Utført</SelectItem>
               <SelectItem value="fakturert">Fakturert</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="rounded-xl">
+              <SelectValue placeholder="Kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle kategorier</SelectItem>
+              <SelectItem value="hms">HMS</SelectItem>
+              <SelectItem value="sikkerhet">Sikkerhet</SelectItem>
+              <SelectItem value="kvalitet">Kvalitet</SelectItem>
+              <SelectItem value="fremdrift">Fremdrift</SelectItem>
+              <SelectItem value="prosjektering">Prosjektering</SelectItem>
+              <SelectItem value="dokumentasjon">Dokumentasjon</SelectItem>
+              <SelectItem value="miljo">Miljø</SelectItem>
+              <SelectItem value="annet">Annet</SelectItem>
             </SelectContent>
           </Select>
           <Select value={projectFilter} onValueChange={setProjectFilter}>
