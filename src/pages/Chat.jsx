@@ -6,7 +6,8 @@ import PageHeader from '@/components/shared/PageHeader';
 import GroupSidebar from '@/components/chat/GroupSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import CreateGroupDialog from '@/components/chat/CreateGroupDialog';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 export default function Chat() {
