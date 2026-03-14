@@ -423,7 +423,8 @@ export default function Avvik() {
     const matchesSeverity = severityFilter === 'all' || d.severity === severityFilter;
     const matchesProject = projectFilter === 'all' || d.project_id === projectFilter;
     const matchesAssigned = assignedFilter === 'all' || d.assigned_to === assignedFilter;
-    return matchesSearch && matchesStatus && matchesSeverity && matchesProject && matchesAssigned;
+    const matchesCategory = categoryFilter === 'all' || d.category === categoryFilter;
+    return matchesSearch && matchesStatus && matchesSeverity && matchesProject && matchesAssigned && matchesCategory;
   }).sort((a, b) => {
     let compareValue = 0;
 
