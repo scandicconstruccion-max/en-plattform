@@ -193,12 +193,10 @@ export default function ChatWindow({ group, user, allUsers = [], employees = [] 
                     <div className="w-8" />
                   )}
                   <div className={cn("max-w-[72%]", isOwn && "items-end flex flex-col")}>
-                    {showAvatar && (
-                      <div className={cn("flex items-center gap-2 mb-1", isOwn && "flex-row-reverse")}>
-                        <span className="text-xs font-semibold text-slate-700">{msg.sender_name}</span>
-                        <span className="text-xs text-slate-400">{formatDate(msg.created_date)}</span>
-                      </div>
-                    )}
+                    <div className={cn("flex items-center gap-2 mb-1", isOwn && "flex-row-reverse")}>
+                      <span className="text-xs font-semibold text-slate-700">{msg.sender_name || msg.sender_email}</span>
+                      <span className="text-xs text-slate-400">{formatDate(msg.created_date)}</span>
+                    </div>
                     {msg.message && (
                       <div className={cn(
                         "inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed",
