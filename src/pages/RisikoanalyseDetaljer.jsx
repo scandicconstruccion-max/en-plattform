@@ -237,24 +237,24 @@ export default function RisikoanalyseDetaljer() {
         backUrl={createPageUrl('Risikoanalyse')}
         actions={
           !isNew && !isEditing && (
-            <>
+            <div className="flex flex-wrap gap-2">
               <Button onClick={() => toast.info('PDF-generering kommer snart')} variant="outline" className="rounded-xl gap-2">
                 <Download className="h-4 w-4" />
-                Last ned PDF
+                <span className="hidden sm:inline">Last ned PDF</span>
               </Button>
               {formData.status !== 'lukket' && (
                 <>
                   <Button onClick={() => setIsEditing(true)} variant="outline" className="rounded-xl gap-2">
                     <Edit2 className="h-4 w-4" />
-                    Rediger
+                    <span className="hidden sm:inline">Rediger</span>
                   </Button>
                   <Button onClick={() => lukkMutation.mutate()} className="bg-green-600 hover:bg-green-700 rounded-xl gap-2">
                     <CheckCircle className="h-4 w-4" />
-                    Lukk analyse
+                    <span className="hidden sm:inline">Lukk analyse</span>
                   </Button>
                 </>
               )}
-            </>
+            </div>
           )
         }
       />
