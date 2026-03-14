@@ -344,7 +344,7 @@ export default function RisikoanalyseDetaljer() {
             {isEditing && (
               <div>
                 <Label>Deltakere / involverte personer</Label>
-                <div className="flex gap-2 mb-2">
+                <div className="flex flex-col sm:flex-row gap-2 mb-2">
                   <Input
                     placeholder="Navn"
                     value={nyDeltaker.navn}
@@ -355,7 +355,7 @@ export default function RisikoanalyseDetaljer() {
                     value={nyDeltaker.epost}
                     onChange={(e) => setNyDeltaker(prev => ({ ...prev, epost: e.target.value }))}
                   />
-                  <Button onClick={leggTilDeltaker} variant="outline">Legg til</Button>
+                  <Button onClick={leggTilDeltaker} variant="outline" className="shrink-0">Legg til</Button>
                 </div>
                 {formData.deltakere?.map((deltaker, i) => (
                   <div key={i} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-2 rounded-lg mb-2">
