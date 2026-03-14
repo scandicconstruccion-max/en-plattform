@@ -462,40 +462,92 @@ export default function CreateAssignmentDialog({
             }
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-               <Label>Start dato og tid *</Label>
-               <Input
-                type="datetime-local"
-                value={formData.start_dato_tid}
-                onChange={(e) => {
-                  setFormData({ ...formData, start_dato_tid: e.target.value });
-                  if (formData.slutt_dato_tid) {
-                    const days = calculateWorkDays(e.target.value, formData.slutt_dato_tid, formData.include_saturday, formData.include_sunday);
-                    setWorkDays(days);
-                  }
-                }}
-                required
-                className="mt-1.5 rounded-xl" />
+          {/* Calendar range picker */}
+          {(() => {
+            const getDate = (val) => val ? val.slice(0, 10) : '';
+            const getTime = (val) => val ? val.slice(11, 16) : '';
+            const combine = (date, time) => date && time ? `${date}T${time}` : '';
+            const startDate = formData.start_dato_tid ? new Date(formData.start_dato_tid + ':00') : undefined;
+            const endDate = formData.slutt_dato_tid ? new Date(formData.slutt_dato_tid + ':00') : undefined;
 
-             </div>
-             <div>
-               <Label>Slutt dato og tid *</Label>
-               <Input
-                type="datetime-local"
-                value={formData.slutt_dato_tid}
-                onChange={(e) => {
-                  setFormData({ ...formData, slutt_dato_tid: e.target.value });
-                  if (formData.start_dato_tid) {
-                    const days = calculateWorkDays(formData.start_dato_tid, e.target.value, formData.include_saturday, formData.include_sunday);
-                    setWorkDays(days);
-                  }
-                }}
-                required
-                className="mt-1.5 rounded-xl" />
+            return (
+              <>
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+                  <CalendarComponent
+                    mode="range"
+                    selected={{ from: startDate, to: endDate }}
+                    onSelect={(range) => {
+                      const startD = range?.from ? format(range.from, 'yyyy-MM-dd') : '';
+                      const endD = range?.to ? format(range.to, 'yyyy-MM-dd') : startD;
+                      const newStart = combine(startD, getTime(formData.start_dato_tid) || currentSettings.standard_start_tid);
+                      const newEnd = combine(endD, getTime(formData.slutt_dato_tid) || currentSettings.standard_slutt_tid);
+                      setFormData(prev => ({ ...prev, start_dato_tid: newStart, slutt_dato_tid: newEnd }));
+                      if (newStart && newEnd) {
+                        setWorkDays(calculateWorkDays(newStart, newEnd, formData.include_saturday, formData.include_sunday));
+                      }
+                    }}
+                    locale={nb}
+                    className="mx-auto"
+                    classNames={{
+                      months: "flex flex-col",
+                      month: "space-y-3",
+                      caption: "flex justify-center pt-1 relative items-center text-base font-semibold",
+                      nav_button: "h-8 w-8",
+                      head_cell: "text-slate-500 font-medium text-sm w-10",
+                      cell: "text-center text-sm p-0 relative",
+                      day: "h-10 w-10 p-0 font-normal text-sm rounded-lg hover:bg-emerald-50 hover:text-emerald-700",
+                      day_selected: "bg-emerald-600 text-white hover:bg-emerald-600 hover:text-white rounded-lg",
+                      day_range_middle: "bg-emerald-50 text-emerald-800 rounded-none",
+                      day_range_start: "bg-emerald-600 text-white rounded-l-lg rounded-r-none",
+                      day_range_end: "bg-emerald-600 text-white rounded-r-lg rounded-l-none",
+                      day_today: "border border-emerald-400 font-semibold",
+                    }}
+                  />
+                </div>
 
-             </div>
-           </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-slate-400" /> Fra kl. *</Label>
+                    <Input
+                      type="time"
+                      value={getTime(formData.start_dato_tid)}
+                      onChange={(e) => {
+                        const newVal = combine(getDate(formData.start_dato_tid), e.target.value);
+                        setFormData(prev => ({ ...prev, start_dato_tid: newVal }));
+                        if (formData.slutt_dato_tid) {
+                          setWorkDays(calculateWorkDays(newVal, formData.slutt_dato_tid, formData.include_saturday, formData.include_sunday));
+                        }
+                      }}
+                      required
+                      className="mt-1.5 rounded-xl text-base font-medium"
+                    />
+                    {formData.start_dato_tid && (
+                      <p className="text-xs text-slate-500 mt-1">{format(new Date(formData.start_dato_tid + ':00'), 'EEE d. MMM', { locale: nb })}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-slate-400" /> Til kl. *</Label>
+                    <Input
+                      type="time"
+                      value={getTime(formData.slutt_dato_tid)}
+                      onChange={(e) => {
+                        const newVal = combine(getDate(formData.slutt_dato_tid), e.target.value);
+                        setFormData(prev => ({ ...prev, slutt_dato_tid: newVal }));
+                        if (formData.start_dato_tid) {
+                          setWorkDays(calculateWorkDays(formData.start_dato_tid, newVal, formData.include_saturday, formData.include_sunday));
+                        }
+                      }}
+                      required
+                      className="mt-1.5 rounded-xl text-base font-medium"
+                    />
+                    {formData.slutt_dato_tid && (
+                      <p className="text-xs text-slate-500 mt-1">{format(new Date(formData.slutt_dato_tid + ':00'), 'EEE d. MMM', { locale: nb })}</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
              <div className="flex items-center justify-between gap-4">
