@@ -447,7 +447,7 @@ export default function AvvikDetaljer() {
               </Card>
               <Card className="p-4 border-0 shadow-sm">
                 <div className="text-sm text-slate-600 mb-1">Kategori</div>
-                <div className="font-medium text-slate-900">{categoryLabels[deviation.category]}</div>
+                <div className="font-medium text-slate-900">{categoryLabels[deviation.category] || deviation.category}</div>
               </Card>
               <Card className="p-4 border-0 shadow-sm">
                 <div className="text-sm text-slate-600 mb-1">Registrert</div>
