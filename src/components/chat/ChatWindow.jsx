@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Send, Hash, Users, Paperclip, Image, X } from 'lucide-react';
+import { Send, Hash, Users, Paperclip, X, MessageSquare } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { NotificationHelpers } from '@/components/notifications/useNotifications';
 
 export default function ChatWindow({ group, user }) {
   const [message, setMessage] = useState('');
