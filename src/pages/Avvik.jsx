@@ -956,6 +956,7 @@ export default function Avvik() {
             </div>
           </>
         }
+        </> }
       </div>
 
       {/* Create Dialog */}
