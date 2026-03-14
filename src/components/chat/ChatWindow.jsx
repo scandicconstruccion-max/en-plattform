@@ -234,11 +234,7 @@ export default function ChatWindow({ group, user, allUsers = [], employees = [] 
                         )}
                       </div>
                     )}
-                    {!showAvatar && (
-                      <p className={cn("text-xs text-slate-400 mt-0.5", isOwn && "text-right")}>
-                        {formatDate(msg.created_date)}
-                      </p>
-                    )}
+
                   </div>
                 </div>
               );
