@@ -394,8 +394,10 @@ export default function Prosjektfiler() {
     const { file_url } = await base44.integrations.Core.UploadFile({ file: selectedFile });
     const fileType = selectedFile.name.split('.').pop();
 
+    const isRevCat = isRevisionCategory(selectedCategory);
     const fileData = {
       name: selectedFile.name,
+      base_name: selectedFile.name,
       project_id: projectFilter,
       category_id: selectedCategory,
       file_url,
@@ -405,12 +407,13 @@ export default function Prosjektfiler() {
       access_level: uploadData.access_level,
       uploaded_by: user?.email,
       uploaded_by_name: user?.full_name,
+      ...(isRevCat ? { version: 'Rev01', active_flag: true } : {}),
       activity_log: [{
         action: 'Opprettet',
         timestamp: new Date().toISOString(),
         user_email: user?.email,
         user_name: user?.full_name,
-        details: 'Fil lastet opp'
+        details: isRevCat ? 'Rev01 lastet opp' : 'Fil lastet opp'
       }]
     };
 
