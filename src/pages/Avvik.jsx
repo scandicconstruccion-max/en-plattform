@@ -863,21 +863,29 @@ export default function Avvik() {
                       onCheckedChange={() => toggleSelectDeviation(deviation.id)} />
 
                       <div className="flex-1" onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                        <div className="flex items-start gap-2 mb-2">
-                          <span className="text-lg">{getStatusIcon(deviation.status)}</span>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-slate-900">{deviation.title}</h3>
-                            <p className="text-sm text-slate-500 mt-1">{project?.name || 'Ukjent prosjekt'}</p>
-                          </div>
+                      <div className="flex items-start gap-2 mb-2">
+                        <span className="text-lg">{getStatusIcon(deviation.status)}</span>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-slate-900">{deviation.title}</h3>
+                          <p className="text-sm text-slate-500 mt-1">{project?.name || 'Ukjent prosjekt'}</p>
                         </div>
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(deviation.status)}`}>
-                            {getStatusLabel(deviation.status)}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(deviation.status)}`}>
+                          {getStatusLabel(deviation.status)}
+                        </span>
+                        {deviation.category && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                            {categoryLabels[deviation.category] || deviation.category}
                           </span>
-                          <span className="text-xs text-slate-500">
-                            {format(new Date(deviation.created_date), 'd. MMM yyyy', { locale: nb })}
-                          </span>
-                        </div>
+                        )}
+                        <span className="text-xs text-slate-500">
+                          {format(new Date(deviation.created_date), 'd. MMM yyyy', { locale: nb })}
+                        </span>
+                      </div>
+                      {deviation.location_label && (
+                        <p className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="h-3 w-3" />{deviation.location_label}</p>
+                      )}
                       </div>
                       <div className="flex flex-col gap-2">
                         <Button
