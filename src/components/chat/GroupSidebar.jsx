@@ -134,26 +134,36 @@ export default function GroupSidebar({ groups, projects, activeGroupId, onSelect
 
                 {!collapsed[projectId] && (
                   <div className="space-y-0.5 mt-1 pl-1">
-                    {projectGroups.map(group => (
-                      <button
-                        key={group.id}
-                        onClick={() => onSelectGroup(group)}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-colors",
-                          activeGroupId === group.id
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "text-slate-600 hover:bg-slate-50"
-                        )}
-                      >
-                        <Hash className="h-4 w-4 flex-shrink-0 opacity-60" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{group.name}</p>
-                          {group.members?.length > 0 && (
-                            <p className="text-xs text-slate-400">{group.members.length} medlemmer</p>
+                    {projectGroups.map(group => {
+                      const unread = unreadPerGroup[group.id] || 0;
+                      return (
+                        <button
+                          key={group.id}
+                          onClick={() => handleSelectGroup(group)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-colors",
+                            activeGroupId === group.id
+                              ? "bg-emerald-100 text-emerald-800"
+                              : unread > 0
+                                ? "text-slate-900 bg-emerald-50 hover:bg-emerald-100"
+                                : "text-slate-600 hover:bg-slate-50"
                           )}
-                        </div>
-                      </button>
-                    ))}
+                        >
+                          <Hash className="h-4 w-4 flex-shrink-0 opacity-60" />
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-sm truncate", unread > 0 ? "font-bold" : "font-medium")}>{group.name}</p>
+                            {group.members?.length > 0 && (
+                              <p className="text-xs text-slate-400">{group.members.length} medlemmer</p>
+                            )}
+                          </div>
+                          {unread > 0 && activeGroupId !== group.id && (
+                            <span className="flex-shrink-0 h-5 min-w-5 px-1 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">
+                              {unread > 9 ? '9+' : unread}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
