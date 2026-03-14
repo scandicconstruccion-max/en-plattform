@@ -92,7 +92,7 @@ export default function Chat() {
         {/* Chat Area */}
         <Card className="flex-1 border-0 shadow-sm overflow-hidden flex flex-col">
           {activeGroup ? (
-            <ChatWindow group={activeGroup} user={user} />
+            <ChatWindow group={activeGroup} user={user} allUsers={allUsers} employees={employees} />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <div className="h-20 w-20 rounded-3xl bg-emerald-50 flex items-center justify-center mb-6">
