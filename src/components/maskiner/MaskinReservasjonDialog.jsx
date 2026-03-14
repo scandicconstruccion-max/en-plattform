@@ -46,13 +46,14 @@ export default function MaskinReservasjonDialog({
         kommentar: editingReservasjon.kommentar || '',
       });
     } else {
+      const today = format(new Date(), 'yyyy-MM-dd');
       setFormData({
         prosjekt_id: '',
         prosjekt_navn: '',
         reservert_av_id: currentUser?.id || '',
         reservert_av_navn: currentUser?.full_name || '',
-        start_dato_tid: '',
-        slutt_dato_tid: '',
+        start_dato_tid: `${today}T07:00`,
+        slutt_dato_tid: `${today}T15:30`,
         kommentar: '',
       });
     }
