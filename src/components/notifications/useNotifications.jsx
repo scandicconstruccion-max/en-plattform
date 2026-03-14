@@ -160,4 +160,16 @@ export const NotificationHelpers = {
       link: `/FakturaDetaljer?id=${invoiceId}`,
       entityId: invoiceId,
     }),
+
+  // Chat
+  chatNyMelding: (userEmail, senderName, groupName, groupId, messagePreview) =>
+    createNotification({
+      userEmail,
+      module: 'Chat',
+      type: 'info',
+      title: `${senderName} – ${groupName}`,
+      message: messagePreview?.length > 80 ? messagePreview.substring(0, 80) + '…' : messagePreview,
+      link: `/Chat?groupId=${groupId}`,
+      entityId: groupId,
+    }),
 };
