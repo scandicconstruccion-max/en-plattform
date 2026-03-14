@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils';
 export default function Bildedok() {
   const [showDialog, setShowDialog] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [view, setView] = useState('folders'); // 'folders' or 'timeline'
   const [search, setSearch] = useState('');
