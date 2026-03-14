@@ -885,11 +885,11 @@ export default function Avvik() {
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-          <DialogHeader>
+        <DialogContent className="w-full max-w-lg max-h-[92dvh] flex flex-col p-0" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader className="px-4 pt-4 pb-2 sm:px-6 sm:pt-6">
             <DialogTitle>Registrer avvik</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 px-4 sm:px-6 pb-2">
             <div>
               <Label>Tittel *</Label>
               <Input
@@ -898,7 +898,6 @@ export default function Avvik() {
                 placeholder="Kort beskrivelse av avviket"
                 required
                 className="mt-1.5 rounded-xl" />
-
             </div>
             <div>
               <Label>Prosjekt *</Label>
@@ -906,14 +905,12 @@ export default function Avvik() {
                 value={formData.project_id}
                 onChange={(v) => setFormData({ ...formData, project_id: v })}
                 className="mt-1.5 rounded-xl" />
-
             </div>
             <div>
               <Label>Alvorlighetsgrad</Label>
               <Select
                 value={formData.severity}
                 onValueChange={(v) => setFormData({ ...formData, severity: v })}>
-
                 <SelectTrigger className="mt-1.5 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
@@ -933,9 +930,8 @@ export default function Avvik() {
                 placeholder="Detaljert beskrivelse av avviket..."
                 rows={3}
                 className="mt-1.5 rounded-xl" />
-
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Ansvarlig</Label>
                 <Select
@@ -945,11 +941,11 @@ export default function Avvik() {
                     <SelectValue placeholder="Velg ansatt" />
                   </SelectTrigger>
                   <SelectContent>
-                    {employees.map((employee) =>
-                    <SelectItem key={employee.id} value={employee.email}>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.email}>
                         {employee.first_name} {employee.last_name}
                       </SelectItem>
-                    )}
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -960,7 +956,6 @@ export default function Avvik() {
                   value={formData.due_date}
                   onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
                   className="mt-1.5 rounded-xl" />
-
               </div>
             </div>
             <div>
@@ -971,7 +966,6 @@ export default function Avvik() {
                 placeholder="Beskrivelse av tiltak..."
                 rows={2}
                 className="mt-1.5 rounded-xl" />
-
             </div>
 
             {/* File Upload Section */}
@@ -981,39 +975,31 @@ export default function Avvik() {
               projectId={formData.project_id}
               moduleType="deviation" />
 
-
             {/* Cost Consequence Section */}
             <div className="p-4 bg-slate-50 rounded-xl space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  
-                  <Label className="font-medium">Kostnadskonsekvens</Label>
-                </div>
+                <Label className="font-medium">Kostnadskonsekvens</Label>
                 <Switch
                   checked={formData.has_cost_consequence}
                   onCheckedChange={(checked) => setFormData({ ...formData, has_cost_consequence: checked })} />
-
               </div>
-              
-              {formData.has_cost_consequence &&
-              <div className="space-y-4 pt-2">
-                  <div className="grid grid-cols-2 gap-4">
+              {formData.has_cost_consequence && (
+                <div className="space-y-4 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Beløp (NOK)</Label>
                       <Input
-                      type="number"
-                      value={formData.cost_amount}
-                      onChange={(e) => setFormData({ ...formData, cost_amount: e.target.value })}
-                      placeholder="0"
-                      className="mt-1.5 rounded-xl" />
-
+                        type="number"
+                        value={formData.cost_amount}
+                        onChange={(e) => setFormData({ ...formData, cost_amount: e.target.value })}
+                        placeholder="0"
+                        className="mt-1.5 rounded-xl" />
                     </div>
                     <div>
                       <Label>Ansvarlig part</Label>
                       <Select
-                      value={formData.cost_responsible}
-                      onValueChange={(v) => setFormData({ ...formData, cost_responsible: v })}>
-
+                        value={formData.cost_responsible}
+                        onValueChange={(v) => setFormData({ ...formData, cost_responsible: v })}>
                         <SelectTrigger className="mt-1.5 rounded-xl">
                           <SelectValue placeholder="Velg..." />
                         </SelectTrigger>
@@ -1029,26 +1015,26 @@ export default function Avvik() {
                   <div>
                     <Label>Beskrivelse av kostnad</Label>
                     <Textarea
-                    value={formData.cost_description}
-                    onChange={(e) => setFormData({ ...formData, cost_description: e.target.value })}
-                    placeholder="Hva er kostnaden knyttet til..."
-                    rows={2}
-                    className="mt-1.5 rounded-xl" />
-
+                      value={formData.cost_description}
+                      onChange={(e) => setFormData({ ...formData, cost_description: e.target.value })}
+                      placeholder="Hva er kostnaden knyttet til..."
+                      rows={2}
+                      className="mt-1.5 rounded-xl" />
                   </div>
                 </div>
-              }
+              )}
             </div>
-
           </form>
-          <div className="flex justify-end gap-3 pt-4 flex-wrap mt-4">
-            <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
+
+          {/* Sticky footer buttons */}
+          <div className="px-4 sm:px-6 py-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+            <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl w-full sm:w-auto">
               Avbryt
             </Button>
             <Button
               type="submit"
               disabled={createMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl w-full sm:w-auto"
               onClick={(e) => handleSubmit(e, false)}>
               {createMutation.isPending && !sendAfterCreate ? 'Lagrer...' : 'Registrer avvik'}
             </Button>
@@ -1056,7 +1042,7 @@ export default function Avvik() {
               type="button"
               disabled={createMutation.isPending || !formData.project_id}
               onClick={(e) => handleSubmit(e, true)}
-              className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2">
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl gap-2 w-full sm:w-auto">
               <Send className="h-4 w-4" />
               {createMutation.isPending && sendAfterCreate ? 'Sender...' : 'Opprett og send'}
             </Button>
