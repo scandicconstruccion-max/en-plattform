@@ -101,6 +101,9 @@ export default function Prosjektfiler() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState({});
+  const [showArchive, setShowArchive] = useState(false);
+  const [revisionDialogFile, setRevisionDialogFile] = useState(null);
+  const [historyFile, setHistoryFile] = useState(null);
 
   const queryClient = useQueryClient();
 
