@@ -21,6 +21,7 @@ const moduleColors = {
   Ressursplan: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
   Faktura: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
   Ordre: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
+  Chat: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   System: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
 };
 
