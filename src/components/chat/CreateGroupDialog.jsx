@@ -121,14 +121,14 @@ export default function CreateGroupDialog({ open, onOpenChange, projects, allUse
                     />
                     <Avatar className="h-7 w-7">
                       <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs">
-                        {member.name?.charAt(0) || 'U'}
+                        {member.name ? member.name.split(' ').map(n => n.charAt(0)).join('').substring(0, 2).toUpperCase() : 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <label
                       className="text-sm cursor-pointer flex-1"
                       onClick={() => toggleMember(member.email)}
                     >
-                      <span className="font-medium">{member.name}</span>
+                      <span className="font-medium">{member.name || member.email}</span>
                       <span className="text-slate-500 text-xs ml-2">{member.role}</span>
                     </label>
                   </div>
