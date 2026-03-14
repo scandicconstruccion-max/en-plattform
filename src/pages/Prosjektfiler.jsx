@@ -33,7 +33,8 @@ import {
   FolderOpen, File, Upload, Plus, Search,
   FileText, FileImage, Download, Trash2,
   MoreVertical, Lock, Users, Shield, Camera,
-  Edit, Palette, X, Image as ImageIcon, ChevronDown, ChevronRight } from
+  Edit, Palette, X, Image as ImageIcon, ChevronDown, ChevronRight,
+  CheckCircle2, Archive, History, RefreshCw } from
 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -41,6 +42,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ImageGallery from '@/components/prosjektfiler/ImageGallery';
 import ImageModal from '@/components/prosjektfiler/ImageModal';
+import RevisionUploadDialog from '@/components/prosjektfiler/RevisionUploadDialog';
+import RevisionHistoryPanel from '@/components/prosjektfiler/RevisionHistoryPanel';
 
 const PREDEFINED_CATEGORIES = [
 { name: 'Tegninger / Planer', icon: 'FileText', color: '#3b82f6', order: 1, children: [
