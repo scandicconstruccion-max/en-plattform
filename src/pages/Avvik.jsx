@@ -556,6 +556,31 @@ export default function Avvik() {
 
 
       <div className="px-6 lg:px-8 py-6">
+
+        {/* Tab switcher */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${activeTab === 'list' ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            <List className="h-4 w-4" />
+            Avviksliste
+          </button>
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            <BarChart2 className="h-4 w-4" />
+            Dashboard
+          </button>
+        </div>
+
+        {/* Dashboard tab */}
+        {activeTab === 'dashboard' && (
+          <AvvikDashboard deviations={deviations} />
+        )}
+
+        {activeTab === 'list' && <>
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
