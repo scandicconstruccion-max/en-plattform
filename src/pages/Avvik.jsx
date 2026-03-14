@@ -708,6 +708,7 @@ export default function Avvik() {
                         </button>
                       </TableHead>
                       <TableHead>Prosjekt</TableHead>
+                      <TableHead>Kategori</TableHead>
                       <TableHead>Kunde</TableHead>
                       <TableHead>
                         <button onClick={() => {
