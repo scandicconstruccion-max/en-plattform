@@ -253,6 +253,16 @@ export default function Prosjektfiler() {
     return files.filter((f) => f.category_id === categoryId && f.project_id === projectFilter && canAccess(f.access_level)).length;
   };
 
+  // Determine if a category is revision-controlled (Tegninger or Beskrivelser)
+  const isRevisionCategory = (categoryId) => {
+    if (!categoryId) return false;
+    const cat = categories.find(c => c.id === categoryId);
+    if (!cat) return false;
+    const revNames = ['tegninger', 'beskrivelser', 'spesifikasjoner', 'arkitekttegninger', 'konstruksjonstegninger', 'elektrisk', 'vvs'];
+    const name = (cat.name || '').toLowerCase();
+    return revNames.some(n => name.includes(n)) || (cat.parent_category || '').toLowerCase().includes('tegning') || (cat.parent_category || '').toLowerCase().includes('beskrivelse');
+  };
+
   const filteredFiles = useMemo(() => {
     return files.filter((file) => {
       if (!canAccess(file.access_level)) return false;
@@ -260,9 +270,28 @@ export default function Prosjektfiler() {
       if (selectedCategory && file.category_id !== selectedCategory) return false;
       if (search && !file.name.toLowerCase().includes(search.toLowerCase()) &&
       !file.description?.toLowerCase().includes(search.toLowerCase())) return false;
+      // Filter by archive toggle for revision-controlled categories
+      if (isRevisionCategory(selectedCategory)) {
+        if (!showArchive && file.active_flag === false) return false;
+      }
       return true;
     });
-  }, [files, projectFilter, selectedCategory, search, userAccessLevel]);
+  }, [files, projectFilter, selectedCategory, search, userAccessLevel, showArchive]);
+
+  // Get all revisions for a file (by revision_group_id)
+  const getRevisions = (file) => {
+    const groupId = file.revision_group_id || file.id;
+    return files.filter(f =>
+      f.project_id === file.project_id &&
+      (f.revision_group_id === groupId || f.id === groupId || f.revision_group_id === file.id)
+    ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+  };
+
+  // All project user emails for notifications
+  const allProjectUserEmails = useMemo(() => {
+    const project = projects.find(p => p.id === projectFilter);
+    return project?.assigned_users || [];
+  }, [projects, projectFilter]);
 
   const imageFiles = useMemo(() => {
     return filteredFiles.filter((f) => {
