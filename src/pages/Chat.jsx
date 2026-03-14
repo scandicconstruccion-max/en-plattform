@@ -26,6 +26,19 @@ export default function Chat() {
     queryFn: () => base44.entities.ChatGroup.list('-created_date'),
   });
 
+  // Open group from URL param (e.g. when clicking notification)
+  useEffect(() => {
+    if (!initialGroupResolved && groups.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const groupId = params.get('groupId');
+      if (groupId) {
+        const group = groups.find(g => g.id === groupId);
+        if (group) setActiveGroup(group);
+      }
+      setInitialGroupResolved(true);
+    }
+  }, [groups, initialGroupResolved]);
+
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
