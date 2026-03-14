@@ -12,6 +12,36 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 export default function GroupSidebar({ groups, projects, activeGroupId, onSelectGroup, onCreateGroup, canCreateGroup, user }) {
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState({});
+  const queryClient = useQueryClient();
+
+  // Fetch unread chat notifications for current user
+  const { data: chatNotifications = [] } = useQuery({
+    queryKey: ['chatNotifications', user?.email],
+    queryFn: () => base44.entities.Notification.filter({ userEmail: user?.email, module: 'Chat', status: 'unread' }, '-created_date', 100),
+    enabled: !!user?.email,
+    refetchInterval: 5000,
+  });
+
+  // Count unread per groupId
+  const unreadPerGroup = chatNotifications.reduce((acc, n) => {
+    if (n.entityId) acc[n.entityId] = (acc[n.entityId] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Mark group notifications as read when group is selected
+  const markGroupRead = async (groupId) => {
+    const toRead = chatNotifications.filter(n => n.entityId === groupId);
+    if (toRead.length > 0) {
+      await Promise.all(toRead.map(n => base44.entities.Notification.update(n.id, { status: 'read' })));
+      queryClient.invalidateQueries({ queryKey: ['chatNotifications', user?.email] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.email] });
+    }
+  };
+
+  const handleSelectGroup = (group) => {
+    markGroupRead(group.id);
+    onSelectGroup(group);
+  };
 
   // Filter groups the current user is a member of
   const myGroups = groups.filter(g =>
