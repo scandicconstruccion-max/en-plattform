@@ -22,7 +22,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import FileUploadSection from '@/components/shared/FileUploadSection';
-import { Camera, Search, FolderTree, Clock, MapPin, User, Tag, X, FileText } from 'lucide-react';
+import { Camera, Search, FolderTree, Clock, MapPin, User, Tag, X, FileText, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
