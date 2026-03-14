@@ -692,32 +692,32 @@ export default function Tilbud() {
                       setShowDetailDialog(true);
                     }}>
 
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-slate-900">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <h3 className="font-semibold text-slate-900 shrink-0">
                               #{quote.quote_number}
                               {quote.revision_number > 0 && `-REV${quote.revision_number}`}
                             </h3>
                             <StatusBadge status={quote.status || (quote.sent_to_customer ? 'sendt' : 'utkast')} />
                             {quote.is_revision &&
-                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full shrink-0">
                                 Revisjon
                               </span>
-                          }
+                            }
                           </div>
-                          <p className="text-sm text-slate-600 mt-0.5">{quote.customer_name}</p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            {quote.created_date && format(new Date(quote.created_date), 'd. MMM yyyy', { locale: nb })}
-                            {quote.valid_until && ` • Gyldig til ${format(new Date(quote.valid_until), 'd. MMM', { locale: nb })}`}
-                          </p>
+                          <div className="text-right shrink-0">
+                            <p className="text-base font-bold text-slate-900 whitespace-nowrap">
+                              {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
+                            </p>
+                            <p className="text-xs text-slate-500">eks. mva</p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-slate-900">
-                            {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
-                          </p>
-                          <p className="text-xs text-slate-500">eks. mva</p>
-                        </div>
+                        <p className="text-sm text-slate-600">{quote.customer_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {quote.created_date && format(new Date(quote.created_date), 'd. MMM yyyy', { locale: nb })}
+                          {quote.valid_until && ` • Gyldig til ${format(new Date(quote.valid_until), 'd. MMM', { locale: nb })}`}
+                        </p>
                       </div>
 
                       {/* Delivery Status */}
