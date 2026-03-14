@@ -480,7 +480,7 @@ export default function Tilbud() {
         } />
 
 
-      <div className="px-4 lg:px-8 py-4 lg:py-6">
+      <div className="px-4 lg:px-8 py-4 lg:py-6 max-w-full overflow-x-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
           <TabsList className="bg-white border shadow-sm">
             <TabsTrigger value="quotes">Tilbud</TabsTrigger>
