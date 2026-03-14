@@ -1097,32 +1097,29 @@ export default function Tilbud() {
 
               {/* Actions */}
               <div className="flex flex-col gap-2 pt-4 border-t">
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 sm:flex gap-2">
                   <Button
                   onClick={() => generatePDF(selectedQuote)}
-                  className="flex-1 rounded-xl gap-2"
+                  className="rounded-xl gap-2"
                   variant="outline">
-
                     <Download className="h-4 w-4" />
                     Last ned PDF
                   </Button>
                   <Button
                   onClick={() => handleReviseQuote(selectedQuote)}
-                  className="flex-1 rounded-xl gap-2"
+                  className="rounded-xl gap-2"
                   variant="outline">
-
                     <FileEdit className="h-4 w-4" />
-                    Revider tilbud
+                    Revider
                   </Button>
                   {!selectedQuote.sent_to_customer &&
-                <Button
-                  onClick={() => handleSendEmail(selectedQuote)}
-                  className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
-
+                  <Button
+                    onClick={() => handleSendEmail(selectedQuote)}
+                    className="rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700">
                       <Send className="h-4 w-4" />
                       Send
                     </Button>
-                }
+                  }
                   <Button
                     onClick={() => {
                       setSelectedQuotes([selectedQuote.id]);
