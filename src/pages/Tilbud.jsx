@@ -1015,7 +1015,7 @@ export default function Tilbud() {
           {selectedQuote &&
           <div className="space-y-5 overflow-y-auto flex-1 px-4 sm:px-8 py-5">
               {/* Customer Info */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-slate-400" />
                   <span>{selectedQuote.customer_name}</span>
