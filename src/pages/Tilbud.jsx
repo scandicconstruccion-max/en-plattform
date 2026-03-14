@@ -693,27 +693,26 @@ export default function Tilbud() {
                     }}>
 
                       <div className="flex flex-col gap-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-wrap min-w-0">
-                            <h3 className="font-semibold text-slate-900 shrink-0">
-                              #{quote.quote_number}
-                              {quote.revision_number > 0 && `-REV${quote.revision_number}`}
-                            </h3>
-                            <StatusBadge status={quote.status || (quote.sent_to_customer ? 'sendt' : 'utkast')} />
-                            {quote.is_revision &&
-                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full shrink-0">
-                                Revisjon
-                              </span>
-                            }
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-base font-bold text-slate-900 whitespace-nowrap">
-                              {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
-                            </p>
-                            <p className="text-xs text-slate-500">eks. mva</p>
-                          </div>
+                        {/* Top row: number + badges */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-semibold text-slate-900">
+                            #{quote.quote_number}
+                            {quote.revision_number > 0 && `-REV${quote.revision_number}`}
+                          </h3>
+                          <StatusBadge status={quote.status || (quote.sent_to_customer ? 'sendt' : 'utkast')} />
+                          {quote.is_revision &&
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                              Revisjon
+                            </span>
+                          }
                         </div>
+                        {/* Customer name */}
                         <p className="text-sm text-slate-600">{quote.customer_name}</p>
+                        {/* Amount - always visible on its own line */}
+                        <p className="text-base font-bold text-slate-900">
+                          {(quote.total_amount || 0).toLocaleString('nb-NO')} kr
+                          <span className="text-xs font-normal text-slate-500 ml-1">eks. mva</span>
+                        </p>
                         <p className="text-xs text-slate-500">
                           {quote.created_date && format(new Date(quote.created_date), 'd. MMM yyyy', { locale: nb })}
                           {quote.valid_until && ` • Gyldig til ${format(new Date(quote.valid_until), 'd. MMM', { locale: nb })}`}
