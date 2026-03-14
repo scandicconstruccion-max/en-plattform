@@ -971,9 +971,9 @@ export default function Avvik() {
             })}
             </div>
           </>
-        }
-        </> }
-      </div>
+          }
+          </> }
+          </div>
 
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={(open) => { setShowDialog(open); if (!open) resetForm(); }}>
