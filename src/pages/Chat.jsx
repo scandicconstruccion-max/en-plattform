@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 export default function Chat() {
   const [activeGroup, setActiveGroup] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [initialGroupResolved, setInitialGroupResolved] = useState(false);
 
   const queryClient = useQueryClient();
 
