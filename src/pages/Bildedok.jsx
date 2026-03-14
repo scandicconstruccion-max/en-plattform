@@ -558,6 +558,27 @@ export default function Bildedok() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Slett bilde</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette bildet <strong>"{selectedImage?.title}"</strong>? Dette kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => deleteMutation.mutate(selectedImage.id)}
+            >
+              Slett bilde
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Image Detail Dialog */}
       {selectedImage && (
         <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
