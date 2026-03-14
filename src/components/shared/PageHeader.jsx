@@ -18,7 +18,7 @@ export default function PageHeader({
     <div className="bg-white border-b border-slate-200 overflow-x-hidden">
       <div className="px-4 lg:px-8 py-4 lg:py-6">
         <div className="flex items-center justify-between gap-2 min-w-0">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 min-w-0 flex-1">
             {showBack &&
             <Button
               variant="ghost"
