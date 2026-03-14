@@ -443,6 +443,10 @@ export default function Avvik() {
     sikkerhet: 'Sikkerhet',
     kvalitet: 'Kvalitet',
     miljo: 'Miljø',
+    fremdrift: 'Fremdrift',
+    prosjektering: 'Prosjektering',
+    dokumentasjon: 'Dokumentasjon',
+    hms: 'HMS',
     annet: 'Annet'
   };
 
