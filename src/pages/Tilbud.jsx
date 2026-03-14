@@ -1041,27 +1041,40 @@ export default function Tilbud() {
                 </div>
             }
 
-              {/* Items Table */}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Beskrivelse</TableHead>
-                    <TableHead className="text-center">Antall</TableHead>
-                    <TableHead className="text-right">Enhetspris</TableHead>
-                    <TableHead className="text-right">Totalt</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedQuote.items?.map((item, idx) =>
-                <TableRow key={idx}>
-                      <TableCell>{item.description}</TableCell>
-                      <TableCell className="text-center">{item.quantity} {item.unit}</TableCell>
-                      <TableCell className="text-right">{item.unit_price.toLocaleString('nb-NO')} kr</TableCell>
-                      <TableCell className="text-right">{(item.quantity * item.unit_price).toLocaleString('nb-NO')} kr</TableCell>
+              {/* Items - Desktop Table / Mobile Cards */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Beskrivelse</TableHead>
+                      <TableHead className="text-center">Antall</TableHead>
+                      <TableHead className="text-right">Enhetspris</TableHead>
+                      <TableHead className="text-right">Totalt</TableHead>
                     </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedQuote.items?.map((item, idx) =>
+                    <TableRow key={idx}>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell className="text-center">{item.quantity} {item.unit}</TableCell>
+                        <TableCell className="text-right">{item.unit_price.toLocaleString('nb-NO')} kr</TableCell>
+                        <TableCell className="text-right">{(item.quantity * item.unit_price).toLocaleString('nb-NO')} kr</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="sm:hidden space-y-2">
+                {selectedQuote.items?.map((item, idx) =>
+                  <div key={idx} className="flex justify-between items-start py-2 border-b border-slate-100 last:border-0">
+                    <div>
+                      <p className="font-medium text-slate-900 text-sm">{item.description}</p>
+                      <p className="text-xs text-slate-500">{item.quantity} {item.unit} × {item.unit_price.toLocaleString('nb-NO')} kr</p>
+                    </div>
+                    <span className="font-semibold text-slate-900 text-sm">{(item.quantity * item.unit_price).toLocaleString('nb-NO')} kr</span>
+                  </div>
                 )}
-                </TableBody>
-              </Table>
+              </div>
 
               {/* Totals */}
               <div className="space-y-2 text-right">
