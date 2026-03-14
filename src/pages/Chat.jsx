@@ -67,52 +67,107 @@ export default function Chat() {
 
   const canCreateGroup = user?.role === 'admin' || user?.role === 'prosjektleder';
 
+  // On mobile: show either the group list OR the chat window
+  const handleSelectGroup = (group) => {
+    setActiveGroup(group);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <PageHeader
-        title="Intern Chat"
-        subtitle="Prosjektbasert kommunikasjon"
-        onAdd={canCreateGroup ? () => setShowCreateDialog(true) : undefined}
-        addLabel="Ny gruppe"
-      />
 
-      <div className="flex-1 flex px-4 lg:px-8 py-4 gap-4 h-[calc(100vh-140px)]">
-        {/* Sidebar */}
-        <Card className="w-72 border-0 shadow-sm flex-shrink-0 overflow-hidden flex flex-col">
-          <GroupSidebar
-            groups={groups}
-            projects={projects}
-            activeGroupId={activeGroup?.id}
-            onSelectGroup={setActiveGroup}
-            onCreateGroup={() => setShowCreateDialog(true)}
-            canCreateGroup={canCreateGroup}
-            user={user}
-          />
-        </Card>
-
-        {/* Chat Area */}
-        <Card className="flex-1 border-0 shadow-sm overflow-hidden flex flex-col">
-          {activeGroup ? (
-            <ChatWindow group={activeGroup} user={user} allUsers={allUsers} employees={employees} />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-              <div className="h-20 w-20 rounded-3xl bg-emerald-50 flex items-center justify-center mb-6">
-                <MessageSquare className="h-10 w-10 text-emerald-400" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-2">Velg en gruppe</h3>
-              <p className="text-slate-500 max-w-sm">
-                Velg en chatgruppe fra listen til venstre for å starte, eller opprett en ny gruppe.
-              </p>
-              {groups.filter(g => g.members?.includes(user?.email) || g.created_by === user?.email).length === 0 && (
-                <p className="text-sm text-slate-400 mt-4">
-                  {canCreateGroup
-                    ? 'Du er ikke med i noen grupper ennå. Opprett en ny gruppe for å komme i gang.'
-                    : 'Du er ikke lagt til i noen grupper ennå. Be en administrator om å legge deg til.'}
+      {/* Desktop layout */}
+      <div className="hidden lg:flex flex-col flex-1 min-h-screen">
+        <PageHeader
+          title="Intern Chat"
+          subtitle="Prosjektbasert kommunikasjon"
+          onAdd={canCreateGroup ? () => setShowCreateDialog(true) : undefined}
+          addLabel="Ny gruppe"
+        />
+        <div className="flex-1 flex px-8 py-4 gap-4 h-[calc(100vh-140px)]">
+          <Card className="w-72 border-0 shadow-sm flex-shrink-0 overflow-hidden flex flex-col">
+            <GroupSidebar
+              groups={groups}
+              projects={projects}
+              activeGroupId={activeGroup?.id}
+              onSelectGroup={setActiveGroup}
+              onCreateGroup={() => setShowCreateDialog(true)}
+              canCreateGroup={canCreateGroup}
+              user={user}
+            />
+          </Card>
+          <Card className="flex-1 border-0 shadow-sm overflow-hidden flex flex-col">
+            {activeGroup ? (
+              <ChatWindow group={activeGroup} user={user} allUsers={allUsers} employees={employees} />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                <div className="h-20 w-20 rounded-3xl bg-emerald-50 flex items-center justify-center mb-6">
+                  <MessageSquare className="h-10 w-10 text-emerald-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-2">Velg en gruppe</h3>
+                <p className="text-slate-500 max-w-sm">
+                  Velg en chatgruppe fra listen til venstre for å starte, eller opprett en ny gruppe.
                 </p>
-              )}
+                {groups.filter(g => g.members?.includes(user?.email) || g.created_by === user?.email).length === 0 && (
+                  <p className="text-sm text-slate-400 mt-4">
+                    {canCreateGroup
+                      ? 'Du er ikke med i noen grupper ennå. Opprett en ny gruppe for å komme i gang.'
+                      : 'Du er ikke lagt til i noen grupper ennå. Be en administrator om å legge deg til.'}
+                  </p>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* Mobile layout */}
+      <div className="flex lg:hidden flex-col flex-1 min-h-screen">
+        {!activeGroup ? (
+          /* Mobile: Group list view */
+          <>
+            <PageHeader
+              title="Intern Chat"
+              subtitle="Prosjektbasert kommunikasjon"
+              onAdd={canCreateGroup ? () => setShowCreateDialog(true) : undefined}
+              addLabel="Ny gruppe"
+            />
+            <div className="flex-1 overflow-hidden flex flex-col px-4 py-4">
+              <Card className="flex-1 border-0 shadow-sm overflow-hidden flex flex-col">
+                <GroupSidebar
+                  groups={groups}
+                  projects={projects}
+                  activeGroupId={activeGroup?.id}
+                  onSelectGroup={handleSelectGroup}
+                  onCreateGroup={() => setShowCreateDialog(true)}
+                  canCreateGroup={canCreateGroup}
+                  user={user}
+                />
+              </Card>
             </div>
-          )}
-        </Card>
+          </>
+        ) : (
+          /* Mobile: Chat window view (full screen) */
+          <div className="flex flex-col h-screen bg-white">
+            {/* Mobile chat header with back button */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-white flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl"
+                onClick={() => setActiveGroup(null)}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-900 truncate">{activeGroup.name}</p>
+                <p className="text-xs text-slate-500 truncate">{activeGroup.project_name}</p>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0">
+              <ChatWindow group={activeGroup} user={user} allUsers={allUsers} employees={employees} />
+            </div>
+          </div>
+        )}
       </div>
 
       <CreateGroupDialog
