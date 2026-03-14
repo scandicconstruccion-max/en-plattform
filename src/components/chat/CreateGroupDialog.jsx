@@ -41,21 +41,33 @@ export default function CreateGroupDialog({ open, onOpenChange, projects, allUse
     );
   };
 
+  // Build employee lookup by email for full name resolution
+  const employeeByEmail = {};
+  employees.forEach(e => {
+    if (e.email) employeeByEmail[e.email] = e;
+  });
+
   // Merge users and employees into one list (deduplicated by email)
+  // Employee full name (first_name + last_name) takes priority over User.full_name
   const memberOptions = [];
   const seen = new Set();
 
   allUsers.forEach(u => {
     if (u.email && !seen.has(u.email)) {
       seen.add(u.email);
-      memberOptions.push({ email: u.email, name: u.full_name, role: u.role });
+      const emp = employeeByEmail[u.email];
+      const name = emp
+        ? `${emp.first_name} ${emp.last_name}`.trim()
+        : (u.full_name || u.email);
+      const role = emp ? (emp.position || 'Ansatt') : (u.role || '');
+      memberOptions.push({ email: u.email, name, role });
     }
   });
 
   employees.forEach(e => {
     if (e.email && !seen.has(e.email)) {
       seen.add(e.email);
-      memberOptions.push({ email: e.email, name: `${e.first_name} ${e.last_name}`, role: e.position || 'Ansatt' });
+      memberOptions.push({ email: e.email, name: `${e.first_name} ${e.last_name}`.trim(), role: e.position || 'Ansatt' });
     }
   });
 
