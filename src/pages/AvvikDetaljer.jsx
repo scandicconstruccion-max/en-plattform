@@ -22,7 +22,7 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import SendAvvikDialog from '@/components/avvik/SendAvvikDialog';
 import ActivityLog from '@/components/avvik/ActivityLog';
-import { AlertTriangle, Calendar, User, DollarSign, Mail, Image as ImageIcon, CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { AlertTriangle, Calendar, User, DollarSign, Mail, Image as ImageIcon, CheckCircle2, FileText, Loader2, MapPin } from 'lucide-react';
 import DocumentChatDrawer from '@/components/chat/DocumentChatDrawer';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
