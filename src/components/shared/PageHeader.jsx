@@ -36,7 +36,7 @@ export default function PageHeader({
 
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {actions}
             {onAdd &&
             <Button
