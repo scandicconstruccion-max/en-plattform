@@ -259,7 +259,7 @@ export default function RisikoanalyseDetaljer() {
         }
       />
 
-      <div className="px-6 lg:px-8 py-8 max-w-5xl mx-auto">
+      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-8 max-w-5xl mx-auto">
         {/* Grunninfo */}
         <Card className="mb-6 dark:bg-slate-900">
           <CardHeader>
