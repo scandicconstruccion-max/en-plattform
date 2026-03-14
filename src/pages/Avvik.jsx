@@ -182,16 +182,19 @@ export default function Avvik() {
       project_id: '',
       category: 'annet',
       severity: 'middels',
-      status: 'ny',
+      status: 'opprettet',
       assigned_to: '',
       due_date: '',
       corrective_action: '',
       has_cost_consequence: false,
       cost_amount: '',
       cost_description: '',
-      cost_responsible: ''
+      cost_responsible: '',
+      template_used: ''
     });
     setAttachments([]);
+    setGeoLocation(null);
+    setShowTemplates(true);
   };
 
   const handleSubmit = async (e, andSend = false) => {
