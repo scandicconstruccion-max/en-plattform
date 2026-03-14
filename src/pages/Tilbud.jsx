@@ -424,7 +424,7 @@ export default function Tilbud() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 overflow-x-hidden">
       <PageHeader
         title="Tilbud"
         subtitle={`${activeQuotes.length} aktive tilbud${rejectedQuotes.length > 0 ? ` • ${rejectedQuotes.length} ikke akseptert` : ''}`}
