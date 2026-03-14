@@ -757,6 +757,13 @@ export default function Avvik() {
                               <span className="text-slate-600">{project?.name || '-'}</span>
                             </TableCell>
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
+                              {deviation.category && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600">
+                                  {categoryLabels[deviation.category] || deviation.category}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
                               <span className="text-slate-600">{project?.client_name || '-'}</span>
                             </TableCell>
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
