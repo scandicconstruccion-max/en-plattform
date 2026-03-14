@@ -523,6 +523,25 @@ export default function AvvikDetaljer() {
                     </div>
                   </div>
                 )}
+                {deviation.location_label && (
+                  <div className="flex gap-3">
+                    <MapPin className="h-5 w-5 text-slate-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-sm text-slate-600">Lokasjon</div>
+                      <div className="font-medium text-slate-900">{deviation.location_label}</div>
+                      {deviation.location_lat && (
+                        <a
+                          href={`https://maps.google.com/?q=${deviation.location_lat},${deviation.location_lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-emerald-600 hover:underline"
+                        >
+                          Åpne i kart
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 
