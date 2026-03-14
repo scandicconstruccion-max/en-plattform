@@ -824,7 +824,7 @@ export default function Avvik() {
                           </TableRow>
                           {isExpanded &&
                         <TableRow>
-                              <TableCell colSpan={7} className="bg-slate-50 p-4">
+                              <TableCell colSpan={8} className="bg-slate-50 p-4">
                                 <div className="grid grid-cols-2 gap-4 text-sm">
                                   <div>
                                     <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
