@@ -886,7 +886,7 @@ export default function Avvik() {
       {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="w-full max-w-lg max-h-[92dvh] flex flex-col p-0" onClick={(e) => e.stopPropagation()}>
-          <DialogHeader className="px-4 pt-4 pb-2 sm:px-6 sm:pt-6">
+          <DialogHeader className="px-4 pt-4 pb-3 sm:px-6 sm:pt-6 border-b border-slate-100 flex-shrink-0">
             <DialogTitle>Registrer avvik</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 px-4 sm:px-6 pb-2">
