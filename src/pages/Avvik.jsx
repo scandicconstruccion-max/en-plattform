@@ -67,6 +67,7 @@ import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 export default function Avvik() {
+  const [activeTab, setActiveTab] = useState('list'); // 'list' | 'dashboard'
   const [showDialog, setShowDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showSentConfirmDialog, setShowSentConfirmDialog] = useState(false);
@@ -89,8 +90,11 @@ export default function Avvik() {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
   const [assignedFilter, setAssignedFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created_date');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [showTemplates, setShowTemplates] = useState(true);
+  const [geoLocation, setGeoLocation] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -104,7 +108,8 @@ export default function Avvik() {
     has_cost_consequence: false,
     cost_amount: '',
     cost_description: '',
-    cost_responsible: ''
+    cost_responsible: '',
+    template_used: ''
   });
   const [attachments, setAttachments] = useState([]);
   const [uploadAttachments, setUploadAttachments] = useState([]);
