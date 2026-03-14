@@ -689,7 +689,7 @@ export default function RisikoanalyseDetaljer() {
 
         {/* Action buttons */}
         {isEditing && (
-          <div className="flex gap-3 justify-end">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pb-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -700,7 +700,7 @@ export default function RisikoanalyseDetaljer() {
                   setFormData(analyse);
                 }
               }}
-              className="rounded-xl"
+              className="rounded-xl w-full sm:w-auto"
             >
               <X className="h-4 w-4 mr-2" />
               Avbryt
@@ -708,7 +708,7 @@ export default function RisikoanalyseDetaljer() {
             <Button
               onClick={handleSubmit}
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl w-full sm:w-auto"
             >
               <Save className="h-4 w-4 mr-2" />
               {isNew ? 'Opprett risikoanalyse' : 'Lagre endringer'}
