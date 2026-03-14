@@ -57,9 +57,14 @@ import SendEmailDialog from '@/components/shared/SendEmailDialog';
 import DeliveryStatus from '@/components/shared/DeliveryStatus';
 import FileUploadSection from '@/components/shared/FileUploadSection';
 import ViewDeviationsDialog from '@/components/avvik/ViewDeviationsDialog';
-import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download, Trash2 } from 'lucide-react';
+import AvvikDashboard from '@/components/avvik/AvvikDashboard';
+import AvvikTemplateSelector from '@/components/avvik/AvvikTemplates';
+import GeotagButton from '@/components/avvik/GeotagButton';
+import DocumentChatDrawer from '@/components/chat/DocumentChatDrawer';
+import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download, Trash2, BarChart2, List, MapPin, Tag } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 export default function Avvik() {
   const [showDialog, setShowDialog] = useState(false);
