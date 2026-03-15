@@ -234,6 +234,7 @@ export default function Avvik() {
     setAttachments([]);
     setGeoLocation(null);
     setShowTemplates(true);
+    setPendingEkstrakostnad(null);
   };
 
   const handleSubmit = async (e, andSend = false) => {
