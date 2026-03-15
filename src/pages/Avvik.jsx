@@ -540,9 +540,7 @@ export default function Avvik() {
     }
   };
 
-  const handleQuickStatusChange = async (deviation, newStatusValue, e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleQuickStatusChange = async (deviation, newStatusValue) => {
     await updateMutation.mutateAsync({ id: deviation.id, data: { status: newStatusValue } });
   };
 
