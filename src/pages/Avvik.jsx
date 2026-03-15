@@ -1265,6 +1265,8 @@ export default function Avvik() {
               {(() => {
                 const selectedProject = projects.find((p) => p.id === formData.project_id);
                 const subcontractors = selectedProject?.subcontractors || [];
+                const architects = selectedProject?.architects || [];
+                const consultants = selectedProject?.consultants || [];
                 return (
                   <Select value={formData.responsible_for_remediation} onValueChange={(v) => setFormData({ ...formData, responsible_for_remediation: v })}>
                     <SelectTrigger className="mt-1.5 rounded-xl">
@@ -1287,6 +1289,26 @@ export default function Avvik() {
                           {subcontractors.map((sub, idx) =>
                         <SelectItem key={`sub-${idx}`} value={sub.name}>
                               {sub.name}{sub.contact_person ? ` – ${sub.contact_person}` : ''}
+                            </SelectItem>
+                        )}
+                        </>
+                      }
+                      {architects.length > 0 &&
+                      <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">Rådgivende arkitekter</div>
+                          {architects.map((a, idx) =>
+                        <SelectItem key={`arch-${idx}`} value={a.company || a.contact_person}>
+                              {a.company}{a.contact_person ? ` – ${a.contact_person}` : ''}
+                            </SelectItem>
+                        )}
+                        </>
+                      }
+                      {consultants.length > 0 &&
+                      <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">Rådgivende ingeniører</div>
+                          {consultants.map((c, idx) =>
+                        <SelectItem key={`cons-${idx}`} value={c.company || c.contact_person}>
+                              {c.company}{c.discipline ? ` (${c.discipline})` : ''}{c.contact_person ? ` – ${c.contact_person}` : ''}
                             </SelectItem>
                         )}
                         </>
