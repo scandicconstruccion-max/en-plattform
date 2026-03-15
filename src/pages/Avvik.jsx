@@ -964,7 +964,7 @@ export default function Avvik() {
             </div>
 
             {/* Mobile Card View */}
-            <div className="lg:hidden space-y-4">
+            <div className="lg:hidden space-y-4 pb-8">
               {filteredDeviations.map((deviation) => {
                 const project = projects.find((p) => p.id === deviation.project_id);
                 const isExpanded = expandedRow === deviation.id;
