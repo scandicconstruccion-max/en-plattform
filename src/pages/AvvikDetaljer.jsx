@@ -25,6 +25,7 @@ import ActivityLog from '@/components/avvik/ActivityLog';
 import { AlertTriangle, Calendar, User, DollarSign, Mail, Image as ImageIcon, CheckCircle2, FileText, Loader2, MapPin } from 'lucide-react';
 import DocumentChatDrawer from '@/components/chat/DocumentChatDrawer';
 import EkstrakostnadDialog from '@/components/avvik/EkstrakostnadDialog';
+import AvvikPDFGenerator from '@/components/avvik/AvvikPDFGenerator';
 
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
@@ -221,6 +222,7 @@ export default function AvvikDetaljer() {
                 queryClient.invalidateQueries({ queryKey: ['deviation', deviationId] });
               }}
             />
+            <AvvikPDFGenerator deviation={deviation} projectName={getProjectName(deviation.project_id)} />
             {deviation.has_cost_consequence && !deviation.sent_to_customer && (
               <Button
                 onClick={() => setShowSendAvvikDialog(true)}
