@@ -241,6 +241,12 @@ export default function AvvikDetaljer() {
               </Button>
             )}
 
+            <Button
+              onClick={() => setShowEkstrakostnadDialog(true)}
+              className="rounded-xl gap-2 bg-orange-500 hover:bg-orange-600 text-white">
+              <DollarSign className="h-4 w-4" />
+              Ekstrakostnad
+            </Button>
             {deviation.invoice_id && (
               <Button
                 onClick={() => navigate(createPageUrl('FakturaDetaljer') + '?id=' + deviation.invoice_id)}
