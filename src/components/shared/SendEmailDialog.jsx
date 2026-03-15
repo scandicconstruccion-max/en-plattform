@@ -40,6 +40,12 @@ export default function SendEmailDialog({
     queryFn: () => base44.entities.Customer.list(),
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+    enabled: type === 'avvik',
+  });
+
   React.useEffect(() => {
     if (open && item) {
       setEmail(defaultEmail || item.customer_email || item.sent_to_email || '');
