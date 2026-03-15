@@ -1035,13 +1035,28 @@ export default function Avvik() {
                           </span>
                         </div>
                         <div>
-                          <span className="font-medium text-slate-700">Ansvarlig:</span>
+                          <span className="font-medium text-slate-700">Ansvarlig for utbedring:</span>
                           <span className="ml-2 text-slate-600">{deviation.assigned_to || '-'}</span>
                         </div>
                         <div>
                           <span className="font-medium text-slate-700">Registrert av:</span>
                           <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
                         </div>
+                        {deviation.status === 'lukket' && (
+                          <div>
+                            <span className="font-medium text-slate-700">Lukket av:</span>
+                            <span className="ml-2 text-slate-600">
+                              {deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.includes('lukket'))?.user_name
+                                || deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.includes('lukket'))?.user_email
+                                || '-'}
+                            </span>
+                            {deviation.closed_date && (
+                              <span className="ml-2 text-slate-400 text-xs">
+                                ({format(new Date(deviation.closed_date), 'd. MMM yyyy', { locale: nb })})
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     }
                   </Card>);
