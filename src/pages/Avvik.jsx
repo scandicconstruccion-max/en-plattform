@@ -945,10 +945,20 @@ export default function Avvik() {
                           <p className="text-sm text-slate-500 mt-1">{project?.name || 'Ukjent prosjekt'}</p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(deviation.status)}`}>
-                          {getStatusLabel(deviation.status)}
-                        </span>
+                      <div className="flex flex-wrap gap-2 mb-2" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={['apent','avventer_godkjenning','lukket'].includes(deviation.status) ? deviation.status : 'apent'}
+                          onValueChange={(val) => handleQuickStatusChange(deviation, val, { preventDefault: () => {}, stopPropagation: () => {} })}
+                        >
+                          <SelectTrigger className={`h-7 text-xs rounded-lg border font-medium w-44 ${getStatusColor(deviation.status)}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="apent"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />Åpen</span></SelectItem>
+                            <SelectItem value="avventer_godkjenning"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Avventer godkjenning</span></SelectItem>
+                            <SelectItem value="lukket"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Lukket</span></SelectItem>
+                          </SelectContent>
+                        </Select>
                         {deviation.category &&
                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
                             {categoryLabels[deviation.category] || deviation.category}
@@ -1425,29 +1435,14 @@ export default function Avvik() {
                   <SelectValue placeholder="Velg status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="opprettet">
-                    <div className="flex items-center gap-2">
-                      <span>🔴</span>
-                      <span>Ikke startet</span>
-                    </div>
+                  <SelectItem value="apent">
+                    <div className="flex items-center gap-2"><span>🔴</span><span>Åpen</span></div>
                   </SelectItem>
-                  <SelectItem value="sendt_kunde">
-                    <div className="flex items-center gap-2">
-                      <span>🔵</span>
-                      <span>Sendt til kunde</span>
-                    </div>
+                  <SelectItem value="avventer_godkjenning">
+                    <div className="flex items-center gap-2"><span>🔵</span><span>Avventer godkjenning</span></div>
                   </SelectItem>
-                  <SelectItem value="godkjent_kunde">
-                    <div className="flex items-center gap-2">
-                      <span>🟡</span>
-                      <span>Pågående</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="utfort">
-                    <div className="flex items-center gap-2">
-                      <span>🟢</span>
-                      <span>Utført</span>
-                    </div>
+                  <SelectItem value="lukket">
+                    <div className="flex items-center gap-2"><span>🟢</span><span>Lukket</span></div>
                   </SelectItem>
                 </SelectContent>
               </Select>
