@@ -4,8 +4,15 @@ import { Button } from '@/components/ui/button';
 
 const categoryLabels = {
   'tømrer': '🪵 Tømrer',
-  'betong': '🏗️ Betong',
-  'tak': '🏠 Tak',
+  'betong': '🏗️ Betongarbeider',
+  'blikkenslager': '🔩 Blikkenslager',
+  'elektrikker': '⚡ Elektrikker',
+  'maler': '🖌️ Maler',
+  'membranlegger': '🛡️ Membranlegger',
+  'murerer': '🧱 Murerer',
+  'rørlegger': '🔧 Rørlegger',
+  'sveiser': '🔥 Sveiser',
+  'tak': '🏠 Taktekker',
   'våtrom': '💧 Våtrom',
   'internkontroll': '✓ Internkontroll',
   'overtakelse': '🎯 Overtakelse',
