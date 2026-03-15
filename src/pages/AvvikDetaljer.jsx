@@ -25,7 +25,7 @@ import ActivityLog from '@/components/avvik/ActivityLog';
 import { AlertTriangle, Calendar, User, DollarSign, Mail, Image as ImageIcon, CheckCircle2, FileText, Loader2, MapPin } from 'lucide-react';
 import DocumentChatDrawer from '@/components/chat/DocumentChatDrawer';
 import EkstrakostnadDialog from '@/components/avvik/EkstrakostnadDialog';
-import { useQuery as useEkQuery } from '@tanstack/react-query';
+
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { toast } from 'sonner';
