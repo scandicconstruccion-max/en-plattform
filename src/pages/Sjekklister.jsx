@@ -178,16 +178,16 @@ export default function Sjekklister() {
           subtitle="Opprett og gjennomfør sjekklister for dine prosjekter"
           actions={
             selectedProject && (
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <Button 
                   onClick={() => setShowTemplateDialog(true)}
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700"
                   size="lg"
                 >
                   <Plus className="h-5 w-5" />
-                  Ny sjekkliste
+                  <span className="hidden sm:inline">Ny sjekkliste</span>
                 </Button>
-                <Link to={createPageUrl('SjekklisteMaler')}>
+                <Link to={createPageUrl('SjekklisteMaler')} className="hidden sm:block">
                   <Button variant="outline" className="gap-2" size="lg">
                     📋 Maler
                   </Button>
