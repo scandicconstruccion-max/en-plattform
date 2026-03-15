@@ -228,18 +228,18 @@ export default function Sjekklister() {
                 <p className="text-slate-600">Ingen sjekklister ennå. Opprett en ny sjekkliste fra malen din.</p>
               </Card>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredChecklists.map((checklist) => {
                   const progress = getProgressPercentage(checklist);
                   return (
                     <Card
                       key={checklist.id}
-                      className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300"
+                      className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300 flex flex-col"
                       onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-base line-clamp-2">{checklist.name}</h3>
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm sm:text-base line-clamp-2">{checklist.name}</h3>
                           {checklist.location && (
                             <p className="text-xs text-slate-500 mt-1">📍 {checklist.location}</p>
                           )}
@@ -251,7 +251,7 @@ export default function Sjekklister() {
                              e.stopPropagation();
                              setChecklistToDelete(checklist);
                            }}
-                           className="text-red-500 hover:text-red-700 h-8 w-8"
+                           className="text-red-500 hover:text-red-700 h-9 w-9 flex-shrink-0"
                          >
                            <Trash2 className="h-4 w-4" />
                          </Button>
