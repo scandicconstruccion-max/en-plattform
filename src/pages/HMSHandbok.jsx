@@ -230,7 +230,7 @@ export default function HMSHandbok() {
             )}
           </TabsContent>
 
-          <TabsContent value="egne" className="space-y-4 mt-6">
+          <TabsContent value="egne" className="space-y-3 mt-4">
             {editMode &&
             <Button onClick={() => setCustomChapterDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
