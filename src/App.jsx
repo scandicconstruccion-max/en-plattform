@@ -59,6 +59,7 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
+      <Route path="/GodkjennEkstrakostnad" element={<GodkjennEkstrakostnad />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
