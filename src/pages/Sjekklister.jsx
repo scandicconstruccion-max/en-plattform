@@ -294,12 +294,12 @@ export default function Sjekklister() {
       </div>
 
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
+        <DialogContent className="max-w-2xl max-h-[90vh] w-[95vw] sm:w-full">
           <DialogHeader>
             <DialogTitle>Velg sjekklistemal</DialogTitle>
             <DialogDescription>Velg en mal for å opprette en ny sjekkliste</DialogDescription>
           </DialogHeader>
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className="max-h-[60vh] sm:max-h-[70vh] overflow-y-auto">
             <TemplateSelector
               templates={templates}
               onSelect={(template) => createChecklistMutation.mutate(template)}
