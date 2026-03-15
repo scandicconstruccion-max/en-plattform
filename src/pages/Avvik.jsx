@@ -1099,7 +1099,7 @@ export default function Avvik() {
                 </Select>
               </div>
               <div>
-                <Label>Frist</Label>
+                <Label>Frist for utbedring</Label>
                 <Input
                   type="date"
                   value={formData.due_date}
