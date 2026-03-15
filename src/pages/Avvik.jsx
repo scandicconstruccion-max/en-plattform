@@ -97,6 +97,8 @@ export default function Avvik() {
   const [sortOrder, setSortOrder] = useState('desc');
   const [showTemplates, setShowTemplates] = useState(true);
   const [geoLocation, setGeoLocation] = useState(null);
+  const [textPickerModal, setTextPickerModal] = useState(null); // { field, category, templateId }
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [showEkstrakostnadDialog, setShowEkstrakostnadDialog] = useState(false);
   const [ekstrakostnadDeviation, setEkstrakostnadDeviation] = useState(null);
   const [pendingEkstrakostnad, setPendingEkstrakostnad] = useState(null); // { belop, arsak, tidsplan_pavirkning, kunde_epost }
