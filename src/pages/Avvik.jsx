@@ -824,7 +824,7 @@ export default function Avvik() {
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <Select
                                 value={['apent','avventer_godkjenning','lukket'].includes(deviation.status) ? deviation.status : 'apent'}
-                                onValueChange={(val) => handleQuickStatusChange(deviation, val, { preventDefault: () => {}, stopPropagation: () => {} })}
+                                onValueChange={(val) => handleQuickStatusChange(deviation, val)}
                               >
                                 <SelectTrigger className={`h-8 text-xs rounded-lg border font-medium w-44 ${getStatusColor(deviation.status)}`}>
                                   <SelectValue />
