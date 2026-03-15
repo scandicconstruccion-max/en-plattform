@@ -640,10 +640,10 @@ export default function Avvik() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Ikke startet', status: 'opprettet', count: deviations.filter((d) => d.status === 'opprettet').length },
-            { label: 'Sendt til kunde', status: 'sendt_kunde', count: deviations.filter((d) => d.status === 'sendt_kunde').length },
-            { label: 'Pågående', status: 'godkjent_kunde', count: deviations.filter((d) => d.status === 'godkjent_kunde').length },
-            { label: 'Utført', status: 'utfort', count: deviations.filter((d) => d.status === 'utfort').length }].
+            { label: 'Åpen', status: 'apent', count: deviations.filter((d) => d.status === 'apent' || d.status === 'opprettet').length },
+            { label: 'Avventer godkjenning', status: 'avventer_godkjenning', count: deviations.filter((d) => d.status === 'avventer_godkjenning' || d.status === 'sendt_kunde' || d.status === 'godkjent_kunde').length },
+            { label: 'Lukket', status: 'lukket', count: deviations.filter((d) => d.status === 'lukket' || d.status === 'utfort' || d.status === 'fakturert').length },
+            { label: 'Totalt', status: 'all', count: deviations.length }].
             map(({ label, status, count }) =>
             <Card
               key={status}
@@ -672,11 +672,9 @@ export default function Avvik() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle statuser</SelectItem>
-              <SelectItem value="opprettet">Ikke startet</SelectItem>
-              <SelectItem value="sendt_kunde">Sendt til kunde</SelectItem>
-              <SelectItem value="godkjent_kunde">Pågående</SelectItem>
-              <SelectItem value="utfort">Utført</SelectItem>
-              <SelectItem value="fakturert">Fakturert</SelectItem>
+              <SelectItem value="apent">Åpen</SelectItem>
+              <SelectItem value="avventer_godkjenning">Avventer godkjenning</SelectItem>
+              <SelectItem value="lukket">Lukket</SelectItem>
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
