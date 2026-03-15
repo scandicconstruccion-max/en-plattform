@@ -35,9 +35,10 @@ export default function TemplateSelector({ templates, onSelect, isLoading }) {
     return acc;
   }, {});
 
-  // Sort categories by display order, templates within each category alphabetically
-  const categoryOrder = ['tømrer', 'betong', 'tak', 'våtrom', 'internkontroll', 'overtakelse', 'hms', 'kvalitet', 'annet'];
-  const sortedCategories = categoryOrder.filter(cat => groupedTemplates[cat]);
+  // Sort categories alphabetically by label, templates within each category alphabetically
+  const sortedCategories = Object.keys(groupedTemplates).sort((a, b) => 
+    (categoryLabels[a] || a).localeCompare(categoryLabels[b] || b)
+  );
 
   return (
     <div className="space-y-6">
