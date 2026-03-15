@@ -184,11 +184,6 @@ export default function Sjekklister() {
                   <Plus className="h-4 w-4" />
                   Ny sjekkliste
                 </Button>
-                <Link to={createPageUrl('SjekklisteBibliotek')}>
-                  <Button variant="outline" className="gap-2">
-                    📚 Bibliotek
-                  </Button>
-                </Link>
                 <Link to={createPageUrl('SjekklisteMaler')}>
                   <Button variant="outline" className="gap-2">
                     📋 Maler
