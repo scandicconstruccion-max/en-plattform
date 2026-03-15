@@ -1038,7 +1038,7 @@ export default function Avvik() {
                         </div>
                         <div>
                           <span className="font-medium text-slate-700">Ansvarlig for utbedring:</span>
-                          <span className="ml-2 text-slate-600">{deviation.assigned_to || '-'}</span>
+                          <span className="ml-2 text-slate-600">{deviation.responsible_for_remediation || deviation.assigned_to || '-'}</span>
                         </div>
                         <div>
                           <span className="font-medium text-slate-700">Registrert av:</span>
