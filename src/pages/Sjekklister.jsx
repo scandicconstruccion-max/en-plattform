@@ -187,7 +187,7 @@ export default function Sjekklister() {
                   <Plus className="h-5 w-5" />
                   <span className="hidden sm:inline">Ny sjekkliste</span>
                 </Button>
-                <Link to={createPageUrl('SjekklisteMaler')} className="hidden sm:block">
+                <Link to={createPageUrl('SjekklisteMaler')}>
                   <Button variant="outline" className="gap-2" size="lg">
                     📋 Maler
                   </Button>
