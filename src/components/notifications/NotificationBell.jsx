@@ -94,7 +94,7 @@ export default function NotificationBell({ userEmail }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-96 max-w-[calc(100vw-2rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+        <div className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-[4.5rem] sm:top-12 w-auto sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
