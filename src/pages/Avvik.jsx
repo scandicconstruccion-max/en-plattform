@@ -1022,38 +1022,46 @@ export default function Avvik() {
                 onChange={(v) => setFormData({ ...formData, project_id: v })}
                 className="mt-1.5 rounded-xl" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Kategori</Label>
-                <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
-                  <SelectTrigger className="mt-1.5 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hms">HMS</SelectItem>
-                    <SelectItem value="sikkerhet">Sikkerhet</SelectItem>
-                    <SelectItem value="kvalitet">Kvalitet</SelectItem>
-                    <SelectItem value="fremdrift">Fremdrift</SelectItem>
-                    <SelectItem value="prosjektering">Prosjektering</SelectItem>
-                    <SelectItem value="dokumentasjon">Dokumentasjon</SelectItem>
-                    <SelectItem value="miljo">Miljø</SelectItem>
-                    <SelectItem value="annet">Annet</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Alvorlighetsgrad</Label>
-                <Select value={formData.severity} onValueChange={(v) => setFormData({ ...formData, severity: v })}>
-                  <SelectTrigger className="mt-1.5 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lav">Lav</SelectItem>
-                    <SelectItem value="middels">Middels</SelectItem>
-                    <SelectItem value="hoy">Høy</SelectItem>
-                    <SelectItem value="kritisk">Kritisk</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div>
+              <Label>Kategori</Label>
+              <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
+                <SelectTrigger className="mt-1.5 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hms">HMS</SelectItem>
+                  <SelectItem value="sikkerhet">Sikkerhet</SelectItem>
+                  <SelectItem value="kvalitet">Kvalitet</SelectItem>
+                  <SelectItem value="fremdrift">Fremdrift</SelectItem>
+                  <SelectItem value="prosjektering">Prosjektering</SelectItem>
+                  <SelectItem value="dokumentasjon">Dokumentasjon</SelectItem>
+                  <SelectItem value="miljo">Miljø</SelectItem>
+                  <SelectItem value="annet">Annet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Alvorlighetsgrad</Label>
+              <div className="flex gap-3 mt-1.5">
+                {[
+                  { value: 'lav', label: 'Lav', color: '#22c55e' },
+                  { value: 'hoy', label: 'Høy', color: '#f59e0b' },
+                  { value: 'kritisk', label: 'Kritisk', color: '#ef4444' },
+                ].map(({ value, label, color }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, severity: value })}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full border-2 text-sm font-medium transition-all ${
+                      formData.severity === value
+                        ? 'border-slate-400 bg-slate-100 shadow-sm'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
             <div>
