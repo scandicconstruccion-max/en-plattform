@@ -59,6 +59,7 @@ import FileUploadSection from '@/components/shared/FileUploadSection';
 import ViewDeviationsDialog from '@/components/avvik/ViewDeviationsDialog';
 import AvvikDashboard from '@/components/avvik/AvvikDashboard';
 import AvvikTemplateSelector from '@/components/avvik/AvvikTemplates';
+import AvvikTextPickerModal from '@/components/avvik/AvvikTextPickerModal';
 import GeotagButton from '@/components/avvik/GeotagButton';
 import DocumentChatDrawer from '@/components/chat/DocumentChatDrawer';
 import EkstrakostnadDialog from '@/components/avvik/EkstrakostnadDialog';
