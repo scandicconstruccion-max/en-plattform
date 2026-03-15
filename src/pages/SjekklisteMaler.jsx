@@ -97,6 +97,12 @@ export default function SjekklisteMaler() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-6 pb-20 md:pb-6">
       <div className="max-w-6xl mx-auto">
+        <div className="mb-4">
+          <Button variant="ghost" onClick={() => navigate(createPageUrl('Sjekklister'))} className="gap-2 text-slate-600 hover:text-slate-900 -ml-2">
+            <ArrowLeft className="h-4 w-4" />
+            Tilbake til sjekklister
+          </Button>
+        </div>
         <PageHeader
           title="Sjekklistemaler"
           subtitle="Opprett og administrer maler for dine sjekklister"
