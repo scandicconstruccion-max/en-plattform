@@ -105,7 +105,7 @@ export default function Avvik() {
     project_id: '',
     category: 'annet',
     severity: 'middels',
-    status: 'opprettet',
+    status: 'apent',
     assigned_to: '',
     due_date: '',
     corrective_action: '',
