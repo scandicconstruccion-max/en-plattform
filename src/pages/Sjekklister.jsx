@@ -170,6 +170,21 @@ export default function Sjekklister() {
     }
   };
 
+  const getCalculatedStatus = (checklist) => {
+    const totalItems = checklist.sections && checklist.sections.length > 0
+      ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+      : (checklist.items?.length || 0);
+    const answered = checklist.responses?.filter(r => r.status).length || 0;
+    const hasSignatures = checklist.signatures && checklist.signatures.length > 0;
+
+    if (hasSignatures && answered === totalItems) {
+      return 'fullfort';
+    } else if (answered > 0) {
+      return 'pagaende';
+    }
+    return checklist.status || 'ikke_startet';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-6 pb-20 md:pb-6">
       <div className="max-w-6xl mx-auto">
