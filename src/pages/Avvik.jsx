@@ -892,28 +892,47 @@ export default function Avvik() {
                           {isExpanded &&
                           <TableRow>
                               <TableCell colSpan={8} className="bg-slate-50 p-4">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                  <div>
-                                    <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
-                                    <span className="ml-2 text-slate-600">
-                                      {deviation.has_cost_consequence ? `${deviation.cost_amount?.toLocaleString('nb-NO')} kr - ${deviation.cost_description}` : 'Nei'}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-slate-700">Frist:</span>
-                                    <span className="ml-2 text-slate-600">
-                                      {deviation.due_date ? format(new Date(deviation.due_date), 'd. MMM yyyy', { locale: nb }) : '-'}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-slate-700">Ansvarlig:</span>
-                                    <span className="ml-2 text-slate-600">{deviation.assigned_to || '-'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-slate-700">Registrert av:</span>
-                                    <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
-                                  </div>
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
+                                  <span className="ml-2 text-slate-600">
+                                    {deviation.has_cost_consequence ? `${deviation.cost_amount?.toLocaleString('nb-NO')} kr - ${deviation.cost_description}` : 'Nei'}
+                                  </span>
                                 </div>
+                                <div>
+                                  <span className="font-medium text-slate-700">Frist:</span>
+                                  <span className="ml-2 text-slate-600">
+                                    {deviation.due_date ? format(new Date(deviation.due_date), 'd. MMM yyyy', { locale: nb }) : '-'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-slate-700">Ansvarlig (meldt til):</span>
+                                  <span className="ml-2 text-slate-600">{deviation.assigned_to || '-'}</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-slate-700">Ansvarlig for utbedring:</span>
+                                  <span className="ml-2 text-slate-600">{deviation.responsible_for_remediation || '-'}</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-slate-700">Registrert av:</span>
+                                  <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
+                                </div>
+                                {deviation.status === 'lukket' && (
+                                  <div>
+                                    <span className="font-medium text-slate-700">Lukket av:</span>
+                                    <span className="ml-2 text-slate-600">
+                                      {deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_name
+                                        || deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_email
+                                        || '-'}
+                                    </span>
+                                    {deviation.closed_date && (
+                                      <span className="ml-2 text-slate-400 text-xs">
+                                        ({format(new Date(deviation.closed_date), 'd. MMM yyyy', { locale: nb })})
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                               </TableCell>
                             </TableRow>
                           }
