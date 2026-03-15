@@ -543,7 +543,26 @@ export default function Avvik() {
   };
 
   const handleQuickStatusChange = async (deviation, newStatusValue) => {
-    await updateMutation.mutateAsync({ id: deviation.id, data: { status: newStatusValue } });
+    const user = await base44.auth.me();
+    const newActivityLog = [...(deviation.activity_log || [])];
+    newActivityLog.push({
+      action: 'status_endret',
+      timestamp: new Date().toISOString(),
+      user_email: user.email,
+      user_name: user.display_name || user.full_name,
+      details: `Status endret til ${getStatusLabel(newStatusValue)}`
+    });
+
+    const updateData = {
+      status: newStatusValue,
+      activity_log: newActivityLog,
+    };
+
+    if (newStatusValue === 'lukket') {
+      updateData.closed_date = new Date().toISOString();
+    }
+
+    await updateMutation.mutateAsync({ id: deviation.id, data: updateData });
   };
 
   const uniqueAssignees = [...new Set(deviations.map((d) => d.assigned_to).filter(Boolean))];
