@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Mail, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { generateOrderEmailHTML, generateQuoteEmailHTML } from './generateEmailHTML';
+import { generateOrderEmailHTML, generateQuoteEmailHTML, generateAvvikEmailHTML } from './generateEmailHTML';
 
 export default function SendEmailDialog({ 
   open, 
