@@ -139,6 +139,28 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Swipe-to-go-back on mobile
+  const touchStartX = React.useRef(null);
+  const touchStartY = React.useRef(null);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+    // Only trigger if swipe is mostly horizontal, starts from left edge (<40px), and swipes right >80px
+    const startedFromRightEdge = window.innerWidth - touchStartX.current < 40;
+    if (startedFromRightEdge && dx < -80 && dy < 60) {
+      navigate(-1);
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   // Check public pages - check pathname and full URL (including from_url param)
   const fullUrl = window.location.href;
   const isPublicPage = location.pathname.includes('AnbudSvar') || 
