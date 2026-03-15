@@ -306,6 +306,29 @@ export default function Sjekklister() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!checklistToDelete} onOpenChange={(open) => !open && setChecklistToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Slett sjekkliste?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Er du sikker på at du vil slette "{checklistToDelete?.name}"? Denne handlingen kan ikke angres.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-2 justify-end">
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                deleteChecklistMutation.mutate(checklistToDelete.id);
+                setChecklistToDelete(null);
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Slett
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
