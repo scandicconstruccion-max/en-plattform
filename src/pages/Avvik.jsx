@@ -946,7 +946,7 @@ export default function Avvik() {
                                     </span>
                                     {deviation.closed_date && (
                                       <span className="ml-2 text-slate-400 text-xs">
-                                        ({format(new Date(deviation.closed_date), 'd. MMM yyyy', { locale: nb })})
+                                        ({format(new Date(deviation.closed_date), 'd. MMM yyyy HH:mm', { locale: nb })})
                                       </span>
                                     )}
                                   </div>
