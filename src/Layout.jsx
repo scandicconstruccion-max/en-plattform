@@ -140,8 +140,8 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
 
   // Swipe-to-go-back on mobile
-  const touchStartX = React.useRef(null);
-  const touchStartY = React.useRef(null);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
@@ -418,6 +418,8 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Main Content */}
       <main
+        onTouchStart={isMobile ? handleTouchStart : undefined}
+        onTouchEnd={isMobile ? handleTouchEnd : undefined}
         className={cn(
           "transition-all duration-300",
           isMobile ? "pt-16 pb-20" : sidebarCollapsed ? "ml-16 pt-16" : "ml-64 pt-16",
