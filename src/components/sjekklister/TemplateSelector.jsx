@@ -27,31 +27,51 @@ export default function TemplateSelector({ templates, onSelect, isLoading }) {
     );
   }
 
+  // Group templates by category and sort alphabetically within each group
+  const groupedTemplates = templates.reduce((acc, template) => {
+    const category = template.category || 'annet';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(template);
+    return acc;
+  }, {});
+
+  // Sort categories by display order, templates within each category alphabetically
+  const categoryOrder = ['tømrer', 'betong', 'tak', 'våtrom', 'internkontroll', 'overtakelse', 'hms', 'kvalitet', 'annet'];
+  const sortedCategories = categoryOrder.filter(cat => groupedTemplates[cat]);
+
   return (
-    <div className="grid gap-3">
-      {templates.map((template) => (
-        <Card
-          key={template.id}
-          className="p-4 cursor-pointer hover:bg-slate-50 transition-colors border hover:border-emerald-300"
-          onClick={() => onSelect(template)}
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="font-semibold">{template.name}</h3>
-              {template.description && (
-                <p className="text-sm text-slate-600 mt-1">{template.description}</p>
-              )}
-              <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                <span>{categoryLabels[template.category] || template.category}</span>
-                <span>{template.items?.length || 0} punkter</span>
-                <span>v{template.version}</span>
-              </div>
-            </div>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 ml-4">
-              Bruk
-            </Button>
+    <div className="space-y-6">
+      {sortedCategories.map((category) => (
+        <div key={category}>
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 px-1">{categoryLabels[category] || category}</h3>
+          <div className="space-y-2">
+            {groupedTemplates[category]
+              .sort((a, b) => (a.name || '').localeCompare(b.name))
+              .map((template) => (
+                <Card
+                  key={template.id}
+                  className="p-4 cursor-pointer hover:bg-slate-50 transition-colors border hover:border-emerald-300"
+                  onClick={() => onSelect(template)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm">{template.name}</h3>
+                      {template.description && (
+                        <p className="text-xs text-slate-600 mt-1">{template.description}</p>
+                      )}
+                      <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                        <span>{template.items?.length || 0} punkter</span>
+                        <span>v{template.version}</span>
+                      </div>
+                    </div>
+                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 ml-4">
+                      Bruk
+                    </Button>
+                  </div>
+                </Card>
+              ))}
           </div>
-        </Card>
+        </div>
       ))}
     </div>
   );
