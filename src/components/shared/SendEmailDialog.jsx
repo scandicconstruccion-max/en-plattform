@@ -95,12 +95,15 @@ export default function SendEmailDialog({
         ? `${window.location.origin}/${type === 'ordre' ? 'approve-order' : 'approve-quote'}?token=${approvalToken}`
         : null;
 
-      // Generate HTML email for ordre and tilbud
+      // Generate HTML email for ordre, tilbud and avvik
       let htmlBody = null;
       if (type === 'ordre' && approvalUrl) {
         htmlBody = generateOrderEmailHTML({ ...item, approval_token: approvalToken }, approvalUrl);
       } else if (type === 'tilbud' && approvalUrl) {
         htmlBody = generateQuoteEmailHTML({ ...item, approval_token: approvalToken }, approvalUrl);
+      } else if (type === 'avvik') {
+        const project = projects.find(p => p.id === item?.project_id);
+        htmlBody = generateAvvikEmailHTML(item, project);
       }
 
       const now = new Date().toISOString();
