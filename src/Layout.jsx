@@ -152,9 +152,9 @@ export default function Layout({ children, currentPageName }) {
     if (touchStartX.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-    // Only trigger if swipe is mostly horizontal, starts from left edge (<40px), and swipes right >80px
-    const startedFromRightEdge = window.innerWidth - touchStartX.current < 40;
-    if (startedFromRightEdge && dx < -80 && dy < 60) {
+    // Swipe right (from left edge) = go back
+    const startedFromLeftEdge = touchStartX.current < 40;
+    if (startedFromLeftEdge && dx > 80 && dy < 80) {
       navigate(-1);
     }
     touchStartX.current = null;
