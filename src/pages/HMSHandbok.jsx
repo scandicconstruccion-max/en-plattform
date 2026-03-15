@@ -271,7 +271,7 @@ export default function HMSHandbok() {
             }
           </TabsContent>
 
-          <TabsContent value="vedlegg" className="mt-6">
+          <TabsContent value="vedlegg" className="mt-4">
             <Card>
               <CardContent className="p-6">
                 {editMode ?
