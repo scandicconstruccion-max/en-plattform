@@ -499,35 +499,51 @@ export default function Avvik() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'sendt_kunde':return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'utfort':return 'bg-green-100 text-green-700 border-green-200';
-      case 'godkjent_kunde':return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'opprettet':return 'bg-red-100 text-red-700 border-red-200';
-      case 'fakturert':return 'bg-purple-100 text-purple-700 border-purple-200';
-      default:return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'apent': return 'bg-red-100 text-red-700 border-red-200';
+      case 'avventer_godkjenning': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'lukket': return 'bg-green-100 text-green-700 border-green-200';
+      // Legacy support
+      case 'opprettet': return 'bg-red-100 text-red-700 border-red-200';
+      case 'sendt_kunde': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'godkjent_kunde': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'utfort': return 'bg-green-100 text-green-700 border-green-200';
+      case 'fakturert': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'sendt_kunde':return '🔵';
-      case 'utfort':return '🟢';
-      case 'godkjent_kunde':return '🟡';
-      case 'opprettet':return '🔴';
-      case 'fakturert':return '🟣';
-      default:return '⚪';
+      case 'apent': return '🔴';
+      case 'avventer_godkjenning': return '🔵';
+      case 'lukket': return '🟢';
+      case 'opprettet': return '🔴';
+      case 'sendt_kunde': return '🔵';
+      case 'godkjent_kunde': return '🔵';
+      case 'utfort': return '🟢';
+      default: return '⚪';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'opprettet':return 'Ikke startet';
-      case 'sendt_kunde':return 'Sendt til kunde';
-      case 'godkjent_kunde':return 'Pågående';
-      case 'utfort':return 'Utført';
-      case 'fakturert':return 'Fakturert';
-      default:return status;
+      case 'apent': return 'Åpen';
+      case 'avventer_godkjenning': return 'Avventer godkjenning';
+      case 'lukket': return 'Lukket';
+      // Legacy
+      case 'opprettet': return 'Åpen';
+      case 'sendt_kunde': return 'Avventer godkjenning';
+      case 'godkjent_kunde': return 'Avventer godkjenning';
+      case 'utfort': return 'Lukket';
+      case 'fakturert': return 'Lukket';
+      default: return status;
     }
+  };
+
+  const handleQuickStatusChange = async (deviation, newStatusValue, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await updateMutation.mutateAsync({ id: deviation.id, data: { status: newStatusValue } });
   };
 
   const uniqueAssignees = [...new Set(deviations.map((d) => d.assigned_to).filter(Boolean))];
