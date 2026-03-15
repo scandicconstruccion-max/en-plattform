@@ -797,15 +797,18 @@ export default function Avvik() {
 
                             </TableCell>
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg">{getStatusIcon(deviation.status)}</span>
-                                <div>
-                                  <div className="font-medium text-slate-900">{deviation.title}</div>
-                                  {deviation.description &&
-                                  <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
-                                  }
-                                </div>
-                              </div>
+                             <div className="flex items-center gap-2">
+                               <span className="text-lg">{getStatusIcon(deviation.status)}</span>
+                               <div>
+                                 {deviation.deviation_number && (
+                                   <div className="text-xs text-slate-400 font-mono">{deviation.deviation_number}</div>
+                                 )}
+                                 <div className="font-medium text-slate-900">{deviation.title}</div>
+                                 {deviation.description &&
+                                 <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
+                                 }
+                               </div>
+                             </div>
                             </TableCell>
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
                               <span className="text-slate-600">{project?.name || '-'}</span>
@@ -820,10 +823,20 @@ export default function Avvik() {
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
                               <span className="text-slate-600">{project?.client_name || '-'}</span>
                             </TableCell>
-                            <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
-                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(deviation.status)}`}>
-                                {getStatusLabel(deviation.status)}
-                              </span>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <Select
+                                value={['apent','avventer_godkjenning','lukket'].includes(deviation.status) ? deviation.status : 'apent'}
+                                onValueChange={(val) => handleQuickStatusChange(deviation, val, { preventDefault: () => {}, stopPropagation: () => {} })}
+                              >
+                                <SelectTrigger className={`h-8 text-xs rounded-lg border font-medium w-44 ${getStatusColor(deviation.status)}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="apent"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />Åpen</span></SelectItem>
+                                  <SelectItem value="avventer_godkjenning"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Avventer godkjenning</span></SelectItem>
+                                  <SelectItem value="lukket"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Lukket</span></SelectItem>
+                                </SelectContent>
+                              </Select>
                             </TableCell>
                             <TableCell onClick={() => window.location.href = createPageUrl('AvvikDetaljer') + `?id=${deviation.id}`}>
                               <span className="text-slate-600">
