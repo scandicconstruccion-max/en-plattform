@@ -941,6 +941,9 @@ export default function Avvik() {
                       <div className="flex items-start gap-2 mb-2">
                         <span className="text-lg">{getStatusIcon(deviation.status)}</span>
                         <div className="flex-1">
+                          {deviation.deviation_number && (
+                            <div className="text-xs text-slate-400 font-mono">{deviation.deviation_number}</div>
+                          )}
                           <h3 className="font-semibold text-slate-900">{deviation.title}</h3>
                           <p className="text-sm text-slate-500 mt-1">{project?.name || 'Ukjent prosjekt'}</p>
                         </div>
