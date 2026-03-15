@@ -61,6 +61,7 @@ import AvvikDashboard from '@/components/avvik/AvvikDashboard';
 import AvvikTemplateSelector from '@/components/avvik/AvvikTemplates';
 import GeotagButton from '@/components/avvik/GeotagButton';
 import DocumentChatDrawer from '@/components/chat/DocumentChatDrawer';
+import EkstrakostnadDialog from '@/components/avvik/EkstrakostnadDialog';
 import { AlertTriangle, Search, Calendar, User, DollarSign, Mail, CheckCircle2, Eye, MessageSquare, Upload, History, MoreVertical, ChevronDown, ChevronUp, Send, Download, Trash2, BarChart2, List, MapPin, Tag } from 'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
