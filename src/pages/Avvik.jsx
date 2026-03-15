@@ -1208,22 +1208,32 @@ export default function Avvik() {
               </div>
             </div>
             <div>
-              <Label>Beskrivelse</Label>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label>Beskrivelse</Label>
+                <button type="button" onClick={() => setTextPickerModal({ field: 'description', category: formData.category, templateId: selectedTemplateId })} className="text-xs text-emerald-600 hover:underline flex items-center gap-1">
+                  <BookOpen className="h-3 w-3" /> Velg tekst
+                </button>
+              </div>
               <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Detaljert beskrivelse av avviket..."
                 rows={3}
-                className="mt-1.5 rounded-xl" />
+                className="rounded-xl" />
             </div>
             <div>
-              <Label>Korrigerende tiltak</Label>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label>Korrigerende tiltak</Label>
+                <button type="button" onClick={() => setTextPickerModal({ field: 'corrective_action', category: formData.category, templateId: selectedTemplateId })} className="text-xs text-emerald-600 hover:underline flex items-center gap-1">
+                  <BookOpen className="h-3 w-3" /> Velg tekst
+                </button>
+              </div>
               <Textarea
                 value={formData.corrective_action}
                 onChange={(e) => setFormData({ ...formData, corrective_action: e.target.value })}
                 placeholder="Beskrivelse av tiltak..."
                 rows={2}
-                className="mt-1.5 rounded-xl" />
+                className="rounded-xl" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
