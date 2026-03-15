@@ -1314,7 +1314,7 @@ export default function Avvik() {
             <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="font-medium flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-orange-500" />
+                  
                   Ekstrakostnad (valgfritt)
                 </Label>
                 <Switch
