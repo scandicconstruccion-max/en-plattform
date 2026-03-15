@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/toaster"
 import GodkjennEkstrakostnad from './pages/GodkjennEkstrakostnad';
+import SjekklisteBibliotek from './pages/SjekklisteBibliotek';
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -60,6 +61,7 @@ const AuthenticatedApp = () => {
         />
       ))}
       <Route path="/GodkjennEkstrakostnad" element={<GodkjennEkstrakostnad />} />
+      <Route path="/SjekklisteBibliotek" element={<LayoutWrapper currentPageName="SjekklisteBibliotek"><SjekklisteBibliotek /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
