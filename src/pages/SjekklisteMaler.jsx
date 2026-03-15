@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Search, Copy } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, ArrowLeft } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import TemplateEditor from '@/components/sjekklister/TemplateEditor.jsx';
 
