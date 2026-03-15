@@ -76,7 +76,7 @@ export default function TemplateSelector({ templates, onSelect, isLoading }) {
                         <p className="text-xs text-slate-600 mt-1">{template.description}</p>
                       )}
                       <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                        <span>{template.items?.length || 0} punkter</span>
+                        <span>{getItemCount(template)} punkter</span>
                         <span>v{template.version}</span>
                       </div>
                     </div>
