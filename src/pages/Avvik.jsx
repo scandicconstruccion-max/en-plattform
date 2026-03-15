@@ -1084,7 +1084,7 @@ export default function Avvik() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label>Ansvarlig</Label>
+                <Label>Avvik meldt til</Label>
                 <Select value={formData.assigned_to} onValueChange={(v) => setFormData({ ...formData, assigned_to: v })}>
                   <SelectTrigger className="mt-1.5 rounded-xl">
                     <SelectValue placeholder="Velg ansatt" />
