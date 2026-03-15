@@ -75,7 +75,7 @@ export const DEVIATION_TEMPLATES = [
     severity: 'kritisk',
     icon: ShieldAlert,
     color: 'bg-red-50 border-red-200 text-red-700',
-    label: 'Brannsikkerhet',
+    label: 'Sikkerhet',
     title: 'Brannsikkerhet – avvik',
     description: 'Det er avdekket avvik fra brannkrav eller branntekniske løsninger. Brannceller, tetninger, dører eller rømningsveier er ikke i henhold til krav.',
     corrective_action: 'Varsle brannansvarlig umiddelbart. Sett krav om utbedring til ansvarlig utfører. Dokumenter med foto og beskriv nøyaktig plassering.',
