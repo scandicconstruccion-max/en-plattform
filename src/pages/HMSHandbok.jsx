@@ -196,15 +196,15 @@ export default function HMSHandbok() {
         } />
 
 
-      <div className="px-6 lg:px-8 py-8">
+      <div className="px-4 lg:px-8 py-4 lg:py-8">
         <Tabs defaultValue="innhold" className="w-full">
-          <TabsList>
+          <TabsList className="w-full grid grid-cols-3">
             <TabsTrigger value="innhold">Innhold</TabsTrigger>
             <TabsTrigger value="egne">Egne kapitler</TabsTrigger>
             <TabsTrigger value="vedlegg">Vedlegg</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="innhold" className="space-y-4 mt-6">
+          <TabsContent value="innhold" className="space-y-3 mt-4">
             {sections.map((section) =>
             <Card key={section.key}>
                 <CardHeader>
