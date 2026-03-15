@@ -34,6 +34,14 @@ export default function TemplateSelector({ templates, onSelect, isLoading }) {
     );
   }
 
+  // Calculate total items in a template (from sections or legacy items)
+  const getItemCount = (template) => {
+    if (template.sections && template.sections.length > 0) {
+      return template.sections.reduce((sum, section) => sum + (section.items?.length || 0), 0);
+    }
+    return template.items?.length || 0;
+  };
+
   // Group templates by category and sort alphabetically within each group
   const groupedTemplates = templates.reduce((acc, template) => {
     const category = template.category || 'annet';
