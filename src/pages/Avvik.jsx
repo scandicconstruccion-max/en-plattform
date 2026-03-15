@@ -1145,13 +1145,18 @@ export default function Avvik() {
             }
 
             <div>
-              <Label>Tittel *</Label>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label>Tittel *</Label>
+                <button type="button" onClick={() => setTextPickerModal({ field: 'title', category: formData.category, templateId: selectedTemplateId })} className="text-xs text-emerald-600 hover:underline flex items-center gap-1">
+                  <BookOpen className="h-3 w-3" /> Velg tekst
+                </button>
+              </div>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Kort beskrivelse av avviket"
                 required
-                className="mt-1.5 rounded-xl" />
+                className="rounded-xl" />
             </div>
             <div>
               <Label>Prosjekt *</Label>
