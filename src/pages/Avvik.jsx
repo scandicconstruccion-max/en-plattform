@@ -1061,7 +1061,7 @@ export default function Avvik() {
                       </div>
                     </div>
                     {isExpanded &&
-                    <div className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-sm">
+                    <div className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-sm pb-4">
                         <div>
                           <span className="font-medium text-slate-700">Kostnadskonsekvens:</span>
                           <span className="ml-2 text-slate-600">
