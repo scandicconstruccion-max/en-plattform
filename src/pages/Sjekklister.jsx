@@ -310,14 +310,14 @@ export default function Sjekklister() {
       </Dialog>
 
       <AlertDialog open={!!checklistToDelete} onOpenChange={(open) => !open && setChecklistToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[95vw] sm:w-full">
           <AlertDialogHeader>
             <AlertDialogTitle>Slett sjekkliste?</AlertDialogTitle>
             <AlertDialogDescription>
               Er du sikker på at du vil slette "{checklistToDelete?.name}"? Denne handlingen kan ikke angres.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="flex gap-2 justify-end">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
