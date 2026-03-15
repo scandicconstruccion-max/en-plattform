@@ -327,11 +327,9 @@ export default function AvvikDetaljer() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                     <SelectItem value="opprettet">Opprettet</SelectItem>
-                     <SelectItem value="sendt_kunde">Sendt kunde</SelectItem>
-                     <SelectItem value="godkjent_kunde">Godkjent av kunde</SelectItem>
-                     <SelectItem value="utfort">Utført</SelectItem>
-                     <SelectItem value="fakturert">Fakturert</SelectItem>
+                     <SelectItem value="apent">Åpen</SelectItem>
+                     <SelectItem value="avventer_godkjenning">Avventer godkjenning</SelectItem>
+                     <SelectItem value="lukket">Lukket</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
