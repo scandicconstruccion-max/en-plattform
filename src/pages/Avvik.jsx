@@ -150,7 +150,7 @@ export default function Avvik() {
           const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
           const tokenExp = new Date();
           tokenExp.setDate(tokenExp.getDate() + 7);
-          const project = projects.find((p) => p.id === created.project_id);
+          const project = projects.find(p => p.id === created.project_id);
           const ek = await base44.entities.Ekstrakostnad.create({
             avvik_id: created.id,
             avvik_tittel: created.title,
@@ -1165,46 +1165,46 @@ export default function Avvik() {
             <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="font-medium flex items-center gap-2">
-                  
+                  <DollarSign className="h-4 w-4 text-orange-500" />
                   Ekstrakostnad (valgfritt)
                 </Label>
                 <Switch
                   checked={!!pendingEkstrakostnad}
                   onCheckedChange={(checked) => setPendingEkstrakostnad(checked ? { belop: '', arsak: '', tidsplan_pavirkning: 'nei', kunde_epost: '' } : null)} />
               </div>
-              {pendingEkstrakostnad &&
-              <div className="space-y-3 pt-1">
+              {pendingEkstrakostnad && (
+                <div className="space-y-3 pt-1">
                   <div>
                     <Label>Estimert kostnad (NOK) *</Label>
                     <div className="relative mt-1.5">
                       <Input
-                      type="number"
-                      min="1"
-                      value={pendingEkstrakostnad.belop}
-                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, belop: e.target.value })}
-                      placeholder="f.eks. 650"
-                      className="rounded-xl pr-12" />
-
+                        type="number"
+                        min="1"
+                        value={pendingEkstrakostnad.belop}
+                        onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, belop: e.target.value })}
+                        placeholder="f.eks. 650"
+                        className="rounded-xl pr-12"
+                      />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">kr</span>
                     </div>
                   </div>
                   <div>
                     <Label>Årsak til merkostnad *</Label>
                     <Textarea
-                    value={pendingEkstrakostnad.arsak}
-                    onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, arsak: e.target.value })}
-                    placeholder="F.eks. Uforutsett skade oppdaget under arbeidet..."
-                    rows={2}
-                    className="mt-1.5 rounded-xl"
-                    minLength={10} />
-
+                      value={pendingEkstrakostnad.arsak}
+                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, arsak: e.target.value })}
+                      placeholder="F.eks. Uforutsett skade oppdaget under arbeidet..."
+                      rows={2}
+                      className="mt-1.5 rounded-xl"
+                      minLength={10}
+                    />
                   </div>
                   <div>
                     <Label>Påvirkning på tidsplan</Label>
                     <Select
-                    value={pendingEkstrakostnad.tidsplan_pavirkning}
-                    onValueChange={(v) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, tidsplan_pavirkning: v })}>
-
+                      value={pendingEkstrakostnad.tidsplan_pavirkning}
+                      onValueChange={(v) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, tidsplan_pavirkning: v })}
+                    >
                       <SelectTrigger className="mt-1.5 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
@@ -1219,16 +1219,16 @@ export default function Avvik() {
                   <div>
                     <Label>Send varsling til (e-post)</Label>
                     <Input
-                    type="email"
-                    value={pendingEkstrakostnad.kunde_epost}
-                    onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, kunde_epost: e.target.value })}
-                    placeholder="kunde@example.com"
-                    className="mt-1.5 rounded-xl" />
-
+                      type="email"
+                      value={pendingEkstrakostnad.kunde_epost}
+                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, kunde_epost: e.target.value })}
+                      placeholder="kunde@example.com"
+                      className="mt-1.5 rounded-xl"
+                    />
                     <p className="text-xs text-slate-400 mt-1">La stå tom for å lagre uten å sende e-post</p>
                   </div>
                 </div>
-              }
+              )}
             </div>
           </form>
 
