@@ -1202,6 +1202,42 @@ export default function Avvik() {
                   className="mt-1.5 rounded-xl" />
               </div>
             </div>
+            <div>
+              <Label>Ansvarlig for utbedring</Label>
+              {(() => {
+                const selectedProject = projects.find(p => p.id === formData.project_id);
+                const subcontractors = selectedProject?.subcontractors || [];
+                return (
+                  <Select value={formData.responsible_for_remediation} onValueChange={(v) => setFormData({ ...formData, responsible_for_remediation: v })}>
+                    <SelectTrigger className="mt-1.5 rounded-xl">
+                      <SelectValue placeholder="Velg ansvarlig" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">Ansatte</div>
+                          {employees.map((emp) => (
+                            <SelectItem key={`emp-${emp.id}`} value={`${emp.first_name} ${emp.last_name} (${emp.email})`}>
+                              {emp.first_name} {emp.last_name}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      {subcontractors.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">Underentreprenører</div>
+                          {subcontractors.map((sub, idx) => (
+                            <SelectItem key={`sub-${idx}`} value={sub.name}>
+                              {sub.name}{sub.contact_person ? ` – ${sub.contact_person}` : ''}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
+            </div>
 
             {/* Geotagging */}
             <div>
