@@ -207,23 +207,21 @@ export default function HMSHandbok() {
           <TabsContent value="innhold" className="space-y-3 mt-4">
             {sections.map((section) =>
             <Card key={section.key}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{section.label}</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{section.label}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {editMode ?
                 <Textarea
                   value={formData[section.key] || ''}
                   onChange={(e) => setFormData({ ...formData, [section.key]: e.target.value })}
-                  rows={6}
+                  rows={5}
+                  className="text-sm"
                   placeholder={`Beskriv ${section.label.toLowerCase()}...`} /> :
-
-
                 <div className="prose max-w-none">
                       {formData[section.key] ?
-                  <p className="whitespace-pre-wrap">{formData[section.key]}</p> :
-
-                  <p className="text-slate-400 italic">Ikke utfylt</p>
+                  <p className="whitespace-pre-wrap text-sm">{formData[section.key]}</p> :
+                  <p className="text-slate-400 italic text-sm">Ikke utfylt</p>
                   }
                     </div>
                 }
