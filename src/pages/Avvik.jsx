@@ -1086,8 +1086,8 @@ export default function Avvik() {
                           <div>
                             <span className="font-medium text-slate-700">Lukket av:</span>
                             <span className="ml-2 text-slate-600">
-                              {deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.includes('lukket'))?.user_name
-                                || deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.includes('lukket'))?.user_email
+                              {deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_name
+                                || deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_email
                                 || '-'}
                             </span>
                             {deviation.closed_date && (
