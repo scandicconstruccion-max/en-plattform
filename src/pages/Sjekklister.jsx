@@ -244,63 +244,64 @@ export default function Sjekklister() {
             ) : (
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredChecklists.map((checklist) => {
-                  const progress = getProgressPercentage(checklist);
-                  return (
-                    <Card
-                      key={checklist.id}
-                      className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300 flex flex-col"
-                      onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm sm:text-base line-clamp-2">{checklist.name}</h3>
-                          {checklist.location && (
-                            <p className="text-xs text-slate-500 mt-1">📍 {checklist.location}</p>
-                          )}
-                        </div>
-                        <Button
-                           variant="ghost"
-                           size="icon"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setChecklistToDelete(checklist);
-                           }}
-                           className="text-red-500 hover:text-red-700 h-9 w-9 flex-shrink-0"
-                         >
-                           <Trash2 className="h-4 w-4" />
-                         </Button>
-                      </div>
+                   const progress = getProgressPercentage(checklist);
+                   const calculatedStatus = getCalculatedStatus(checklist);
+                   return (
+                     <Card
+                       key={checklist.id}
+                       className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300 flex flex-col"
+                       onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}
+                     >
+                       <div className="flex items-start justify-between gap-2 mb-3">
+                         <div className="flex-1 min-w-0">
+                           <h3 className="font-semibold text-sm sm:text-base line-clamp-2">{checklist.name}</h3>
+                           {checklist.location && (
+                             <p className="text-xs text-slate-500 mt-1">📍 {checklist.location}</p>
+                           )}
+                         </div>
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChecklistToDelete(checklist);
+                            }}
+                            className="text-red-500 hover:text-red-700 h-9 w-9 flex-shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                       </div>
 
-                      <div className="mb-3">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs text-slate-600">Fremdrift</span>
-                          <span className="text-xs font-semibold text-slate-700">{progress}%</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                          <div
-                            className="bg-emerald-600 h-2 rounded-full transition-all"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
+                       <div className="mb-3">
+                         <div className="flex justify-between items-center mb-1">
+                           <span className="text-xs text-slate-600">Fremdrift</span>
+                           <span className="text-xs font-semibold text-slate-700">{progress}%</span>
+                         </div>
+                         <div className="w-full bg-slate-200 rounded-full h-2">
+                           <div
+                             className="bg-emerald-600 h-2 rounded-full transition-all"
+                             style={{ width: `${progress}%` }}
+                           />
+                         </div>
+                       </div>
 
-                      <div className="flex items-center justify-between text-xs">
-                        <span className={cn('px-2 py-1 rounded-full', getStatusColor(checklist.status))}>
-                          {checklist.status === 'fullfort' ? 'Fullført' : checklist.status === 'pagaende' ? 'Pågår' : 'Ikke startet'}
-                        </span>
-                        <span className="text-slate-500">
-                          {(() => {
-                            const totalItems = checklist.sections && checklist.sections.length > 0
-                              ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
-                              : (checklist.items?.length || 0);
-                            const answered = checklist.responses?.filter(r => r.status).length || 0;
-                            return `${answered} av ${totalItems} punkter`;
-                          })()}
-                        </span>
-                      </div>
-                    </Card>
-                  );
-                })}
+                       <div className="flex items-center justify-between text-xs">
+                         <span className={cn('px-2 py-1 rounded-full', getStatusColor(calculatedStatus))}>
+                           {calculatedStatus === 'fullfort' ? 'Fullført' : calculatedStatus === 'pagaende' ? 'Pågår' : 'Ikke startet'}
+                         </span>
+                         <span className="text-slate-500">
+                           {(() => {
+                             const totalItems = checklist.sections && checklist.sections.length > 0
+                               ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+                               : (checklist.items?.length || 0);
+                             const answered = checklist.responses?.filter(r => r.status).length || 0;
+                             return `${answered} av ${totalItems} punkter`;
+                           })()}
+                         </span>
+                       </div>
+                     </Card>
+                   );
+                 })}
               </div>
             )}
           </div>
