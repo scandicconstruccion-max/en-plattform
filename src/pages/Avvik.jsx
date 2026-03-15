@@ -1133,6 +1133,7 @@ export default function Avvik() {
                   severity: tpl.severity,
                   template_used: tpl.label
                 }));
+                setSelectedTemplateId(tpl.id);
                 setShowTemplates(false);
               }} />
               </div>
