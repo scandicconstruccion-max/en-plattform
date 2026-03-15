@@ -178,17 +178,19 @@ export default function Sjekklister() {
           subtitle="Opprett og gjennomfør sjekklister for dine prosjekter"
           actions={
             selectedProject && (
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                 <Button 
                   onClick={() => setShowTemplateDialog(true)}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none"
+                  size="sm"
                 >
                   <Plus className="h-4 w-4" />
-                  Ny sjekkliste
+                  <span className="hidden sm:inline">Ny sjekkliste</span>
+                  <span className="sm:hidden">Ny</span>
                 </Button>
-                <Link to={createPageUrl('SjekklisteMaler')}>
-                  <Button variant="outline" className="gap-2">
-                    📋 Maler
+                <Link to={createPageUrl('SjekklisteMaler')} className="flex-1 sm:flex-none">
+                  <Button variant="outline" className="gap-2 w-full sm:w-auto" size="sm">
+                    📋 <span className="hidden sm:inline">Maler</span>
                   </Button>
                 </Link>
               </div>
