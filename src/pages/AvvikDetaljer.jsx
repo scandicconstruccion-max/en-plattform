@@ -682,6 +682,13 @@ export default function AvvikDetaljer() {
          </Card>
        )}
 
+      <EkstrakostnadDialog
+        open={showEkstrakostnadDialog}
+        onOpenChange={setShowEkstrakostnadDialog}
+        deviation={deviation}
+        project={projects.find(p => p.id === deviation.project_id)}
+      />
+
     </div>
   );
 }
