@@ -1160,54 +1160,74 @@ export default function Avvik() {
               projectId={formData.project_id}
               moduleType="deviation" />
 
-            {/* Cost Consequence Section */}
-            <div className="p-4 bg-slate-50 rounded-xl space-y-4">
+            {/* Ekstrakostnad Section */}
+            <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="font-medium">Kostnadskonsekvens</Label>
+                <Label className="font-medium flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-orange-500" />
+                  Ekstrakostnad (valgfritt)
+                </Label>
                 <Switch
-                  checked={formData.has_cost_consequence}
-                  onCheckedChange={(checked) => setFormData({ ...formData, has_cost_consequence: checked })} />
+                  checked={!!pendingEkstrakostnad}
+                  onCheckedChange={(checked) => setPendingEkstrakostnad(checked ? { belop: '', arsak: '', tidsplan_pavirkning: 'nei', kunde_epost: '' } : null)} />
               </div>
-              {formData.has_cost_consequence &&
-              <div className="space-y-4 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Beløp (NOK)</Label>
+              {pendingEkstrakostnad && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <Label>Estimert kostnad (NOK) *</Label>
+                    <div className="relative mt-1.5">
                       <Input
-                      type="number"
-                      value={formData.cost_amount}
-                      onChange={(e) => setFormData({ ...formData, cost_amount: e.target.value })}
-                      placeholder="0"
-                      className="mt-1.5 rounded-xl" />
-                    </div>
-                    <div>
-                      <Label>Ansvarlig part</Label>
-                      <Select
-                      value={formData.cost_responsible}
-                      onValueChange={(v) => setFormData({ ...formData, cost_responsible: v })}>
-                        <SelectTrigger className="mt-1.5 rounded-xl">
-                          <SelectValue placeholder="Velg..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="byggherre">Byggherre</SelectItem>
-                          <SelectItem value="entreprenor">Entreprenør</SelectItem>
-                          <SelectItem value="underentreprenor">Underentreprenør</SelectItem>
-                          <SelectItem value="annet">Annet</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        type="number"
+                        min="1"
+                        value={pendingEkstrakostnad.belop}
+                        onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, belop: e.target.value })}
+                        placeholder="f.eks. 650"
+                        className="rounded-xl pr-12"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">kr</span>
                     </div>
                   </div>
                   <div>
-                    <Label>Beskrivelse av kostnad</Label>
+                    <Label>Årsak til merkostnad *</Label>
                     <Textarea
-                    value={formData.cost_description}
-                    onChange={(e) => setFormData({ ...formData, cost_description: e.target.value })}
-                    placeholder="Hva er kostnaden knyttet til..."
-                    rows={2}
-                    className="mt-1.5 rounded-xl" />
+                      value={pendingEkstrakostnad.arsak}
+                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, arsak: e.target.value })}
+                      placeholder="F.eks. Uforutsett skade oppdaget under arbeidet..."
+                      rows={2}
+                      className="mt-1.5 rounded-xl"
+                      minLength={10}
+                    />
+                  </div>
+                  <div>
+                    <Label>Påvirkning på tidsplan</Label>
+                    <Select
+                      value={pendingEkstrakostnad.tidsplan_pavirkning}
+                      onValueChange={(v) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, tidsplan_pavirkning: v })}
+                    >
+                      <SelectTrigger className="mt-1.5 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nei">Nei – ingen forsinkelse</SelectItem>
+                        <SelectItem value="1_dag">Ja, forsinkelse 1 dag</SelectItem>
+                        <SelectItem value="2_3_dager">Ja, forsinkelse 2-3 dager</SelectItem>
+                        <SelectItem value="flere_dager">Ja, forsinkelse flere dager</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Send varsling til (e-post)</Label>
+                    <Input
+                      type="email"
+                      value={pendingEkstrakostnad.kunde_epost}
+                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, kunde_epost: e.target.value })}
+                      placeholder="kunde@example.com"
+                      className="mt-1.5 rounded-xl"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">La stå tom for å lagre uten å sende e-post</p>
                   </div>
                 </div>
-              }
+              )}
             </div>
           </form>
 
