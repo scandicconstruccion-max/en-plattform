@@ -143,6 +143,41 @@ export default function Avvik() {
       resetForm();
       toast.success('Avvik registrert');
 
+      // If user filled in ekstrakostnad fields, create it now
+      if (pendingEkstrakostnad && pendingEkstrakostnad.belop && parseFloat(pendingEkstrakostnad.belop) > 0) {
+        try {
+          const user = await base44.auth.me();
+          const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+          const tokenExp = new Date();
+          tokenExp.setDate(tokenExp.getDate() + 7);
+          const project = projects.find(p => p.id === created.project_id);
+          const ek = await base44.entities.Ekstrakostnad.create({
+            avvik_id: created.id,
+            avvik_tittel: created.title,
+            avvik_nummer: created.deviation_number,
+            avvik_kategori: created.category,
+            prosjekt_id: created.project_id,
+            prosjekt_navn: project?.name || '',
+            belop: parseFloat(pendingEkstrakostnad.belop),
+            arsak: pendingEkstrakostnad.arsak,
+            tidsplan_pavirkning: pendingEkstrakostnad.tidsplan_pavirkning,
+            status: 'venter_godkjenning',
+            opprettet_av_navn: user.display_name || user.full_name,
+            opprettet_av_epost: user.email,
+            godkjennings_token: token,
+            token_utloper: tokenExp.toISOString(),
+            kunde_epost: pendingEkstrakostnad.kunde_epost
+          });
+          if (pendingEkstrakostnad.kunde_epost) {
+            await base44.functions.invoke('sendEkstrakostnadEmail', { ekstrakostnad_id: ek.id });
+          }
+          toast.success('Ekstrakostnad registrert og kunde varslet');
+        } catch (e) {
+          toast.error('Avvik lagret, men ekstrakostnad feilet');
+        }
+        setPendingEkstrakostnad(null);
+      }
+
       // Send notification to assigned person if any
       if (created.assigned_to) {
         try {
