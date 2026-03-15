@@ -240,6 +240,7 @@ export default function Avvik() {
     setGeoLocation(null);
     setShowTemplates(true);
     setPendingEkstrakostnad(null);
+    setSelectedTemplateId(null);
   };
 
   const handleSubmit = async (e, andSend = false) => {
