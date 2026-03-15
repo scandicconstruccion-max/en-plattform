@@ -163,33 +163,32 @@ export default function HMSHandbok() {
         title="HMS-håndbok"
         subtitle={handbook ? `Versjon ${handbook.version} • Sist oppdatert ${format(new Date(handbook.sist_endret_dato || handbook.created_date), 'dd.MM.yyyy', { locale: nb })}` : 'Opprett HMS-håndbok for bedriften'}
         actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
             {handbook &&
           <Button
             variant="outline"
+            size="sm"
             onClick={() => generateHMSHandbookPDF(formData, company)}
             className="gap-2">
-
                 <Download className="h-4 w-4" />
-                Last ned PDF
+                <span className="hidden sm:inline">Last ned PDF</span>
               </Button>
           }
-            <Button variant="outline" onClick={() => setVersionDialog(true)}>
-              <History className="h-4 w-4 mr-2" />
-              Versjonshistorikk
+            <Button variant="outline" size="sm" onClick={() => setVersionDialog(true)}>
+              <History className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Versjonshistorikk</span>
             </Button>
             {!editMode ?
-          <Button onClick={() => setEditMode(true)} className="bg-green-700 text-primary-foreground px-4 py-2 text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9">
+          <Button size="sm" onClick={() => setEditMode(true)} className="bg-green-700 hover:bg-green-800 text-white">
                 Rediger
               </Button> :
-
           <>
-                <Button variant="outline" onClick={() => {setEditMode(false);if (handbook) setFormData(handbook);}}>
+                <Button variant="outline" size="sm" onClick={() => {setEditMode(false);if (handbook) setFormData(handbook);}}>
                   Avbryt
                 </Button>
-                <Button onClick={handleSave} className="bg-green-700 text-primary-foreground px-4 py-2 text-sm font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9">
-                  <Save className="h-4 w-4 mr-2" />
-                  Lagre
+                <Button size="sm" onClick={handleSave} className="bg-green-700 hover:bg-green-800 text-white">
+                  <Save className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Lagre</span>
                 </Button>
               </>
           }
