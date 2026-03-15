@@ -1631,6 +1631,19 @@ export default function Avvik() {
         deviationList={deviations}
         projects={projects} />
 
+      {/* Text Picker Modal */}
+      {textPickerModal && (
+        <AvvikTextPickerModal
+          open={!!textPickerModal}
+          onOpenChange={(open) => { if (!open) setTextPickerModal(null); }}
+          field={textPickerModal.field}
+          category={textPickerModal.category}
+          templateId={textPickerModal.templateId}
+          onSelect={(text) => {
+            setFormData((prev) => ({ ...prev, [textPickerModal.field]: text }));
+          }}
+        />
+      )}
 
     </div>);
 
