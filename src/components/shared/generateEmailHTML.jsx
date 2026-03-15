@@ -1,6 +1,90 @@
 import { formatAmount } from './formatNumber';
 import { generateApprovalEmailHTML } from './approvalEmailTemplate';
 
+export function generateAvvikEmailHTML(deviation, project) {
+  const categoryLabels = {
+    sikkerhet: 'Sikkerhet', kvalitet: 'Kvalitet', miljo: 'Miljø',
+    fremdrift: 'Fremdrift', prosjektering: 'Prosjektering',
+    dokumentasjon: 'Dokumentasjon', hms: 'HMS', annet: 'Annet'
+  };
+  const severityLabels = { lav: 'Lav', middels: 'Middels', hoy: 'Høy', kritisk: 'Kritisk' };
+  const severityColors = { lav: '#22c55e', middels: '#f59e0b', hoy: '#f97316', kritisk: '#ef4444' };
+  const severity = deviation.severity || 'middels';
+
+  const bodyHtml = `
+    ${project?.name ? `
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Prosjekt</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#1e293b;">${project.name}</p>
+    ` : ''}
+
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Tittel</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#1e293b;">${deviation.title}</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+      <tr>
+        <td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b;width:160px;">Kategori:</td>
+        <td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:600;color:#1e293b;">${categoryLabels[deviation.category] || deviation.category || '-'}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b;">Alvorlighetsgrad:</td>
+        <td style="padding:4px 0;">
+          <span style="display:inline-block;padding:2px 10px;border-radius:20px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#fff;background-color:${severityColors[severity] || '#94a3b8'};">
+            ${severityLabels[severity] || severity}
+          </span>
+        </td>
+      </tr>
+      ${deviation.due_date ? `
+      <tr>
+        <td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b;">Frist:</td>
+        <td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:600;color:#1e293b;">${new Date(deviation.due_date).toLocaleDateString('nb-NO')}</td>
+      </tr>
+      ` : ''}
+    </table>
+
+    ${deviation.description ? `
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Beskrivelse</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#475569;line-height:1.6;">${deviation.description}</p>
+    ` : ''}
+
+    ${deviation.corrective_action ? `
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Korrigerende tiltak</p>
+    <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#475569;line-height:1.6;">${deviation.corrective_action}</p>
+    ` : ''}
+
+    ${deviation.has_cost_consequence && deviation.cost_amount ? `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff7ed;border-left:4px solid #f97316;margin-bottom:16px;">
+      <tr>
+        <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#9a3412;">
+          <strong>Kostnadskonsekvens:</strong> ${deviation.cost_amount.toLocaleString('nb-NO')} kr
+          ${deviation.cost_description ? `<br>${deviation.cost_description}` : ''}
+        </td>
+      </tr>
+    </table>
+    ` : ''}
+
+    ${deviation.images?.length > 0 ? `
+    <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">Vedlegg (${deviation.images.length} bilde${deviation.images.length > 1 ? 'r' : ''})</p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
+      ${deviation.images.slice(0, 4).map(url => `
+      <tr><td style="padding:4px 0;">
+        <img src="${url}" alt="Avviksbilde" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #e2e8f0;" />
+      </td></tr>
+      `).join('')}
+    </table>
+    ` : ''}
+  `;
+
+  return generateApprovalEmailHTML({
+    title: `Avvik: ${deviation.title}`,
+    heading: 'Avvik',
+    subheading: deviation.deviation_number ? `Avviksnummer: ${deviation.deviation_number}` : '',
+    headerColor: '#ef4444',
+    bodyHtml,
+    approvalUrl: null,
+    buttonText: '',
+  });
+}
+
 export function generateOrderEmailHTML(order, approvalUrl) {
   const items = order.items || [];
   const totalWithVat = (order.total_amount || 0) + (order.vat_amount || order.total_amount * 0.25);
