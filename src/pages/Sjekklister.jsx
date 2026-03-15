@@ -18,6 +18,7 @@ export default function Sjekklister() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [checklistToDelete, setChecklistToDelete] = useState(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
