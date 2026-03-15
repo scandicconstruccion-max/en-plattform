@@ -154,7 +154,7 @@ export default function Avvik() {
           const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
           const tokenExp = new Date();
           tokenExp.setDate(tokenExp.getDate() + 7);
-          const project = projects.find(p => p.id === created.project_id);
+          const project = projects.find((p) => p.id === created.project_id);
           const ek = await base44.entities.Ekstrakostnad.create({
             avvik_id: created.id,
             avvik_tittel: created.title,
@@ -505,44 +505,44 @@ export default function Avvik() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'apent': return 'bg-red-100 text-red-700 border-red-200';
-      case 'avventer_godkjenning': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'lukket': return 'bg-green-100 text-green-700 border-green-200';
+      case 'apent':return 'bg-red-100 text-red-700 border-red-200';
+      case 'avventer_godkjenning':return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'lukket':return 'bg-green-100 text-green-700 border-green-200';
       // Legacy support
-      case 'opprettet': return 'bg-red-100 text-red-700 border-red-200';
-      case 'sendt_kunde': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'godkjent_kunde': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'utfort': return 'bg-green-100 text-green-700 border-green-200';
-      case 'fakturert': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'opprettet':return 'bg-red-100 text-red-700 border-red-200';
+      case 'sendt_kunde':return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'godkjent_kunde':return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'utfort':return 'bg-green-100 text-green-700 border-green-200';
+      case 'fakturert':return 'bg-green-100 text-green-700 border-green-200';
+      default:return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'apent': return '🔴';
-      case 'avventer_godkjenning': return '🔵';
-      case 'lukket': return '🟢';
-      case 'opprettet': return '🔴';
-      case 'sendt_kunde': return '🔵';
-      case 'godkjent_kunde': return '🔵';
-      case 'utfort': return '🟢';
-      default: return '⚪';
+      case 'apent':return '🔴';
+      case 'avventer_godkjenning':return '🔵';
+      case 'lukket':return '🟢';
+      case 'opprettet':return '🔴';
+      case 'sendt_kunde':return '🔵';
+      case 'godkjent_kunde':return '🔵';
+      case 'utfort':return '🟢';
+      default:return '⚪';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'apent': return 'Åpen';
-      case 'avventer_godkjenning': return 'Avventer godkjenning';
-      case 'lukket': return 'Lukket';
+      case 'apent':return 'Åpen';
+      case 'avventer_godkjenning':return 'Avventer godkjenning';
+      case 'lukket':return 'Lukket';
       // Legacy
-      case 'opprettet': return 'Åpen';
-      case 'sendt_kunde': return 'Avventer godkjenning';
-      case 'godkjent_kunde': return 'Avventer godkjenning';
-      case 'utfort': return 'Lukket';
-      case 'fakturert': return 'Lukket';
-      default: return status;
+      case 'opprettet':return 'Åpen';
+      case 'sendt_kunde':return 'Avventer godkjenning';
+      case 'godkjent_kunde':return 'Avventer godkjenning';
+      case 'utfort':return 'Lukket';
+      case 'fakturert':return 'Lukket';
+      default:return status;
     }
   };
 
@@ -559,7 +559,7 @@ export default function Avvik() {
 
     const updateData = {
       status: newStatusValue,
-      activity_log: newActivityLog,
+      activity_log: newActivityLog
     };
 
     if (newStatusValue === 'lukket') {
@@ -823,13 +823,13 @@ export default function Avvik() {
                              <div className="flex items-center gap-2">
                                <span className="text-lg">{getStatusIcon(deviation.status)}</span>
                                <div>
-                                 {deviation.deviation_number && (
-                                   <div className="text-xs text-slate-400 font-mono">{deviation.deviation_number}</div>
-                                 )}
+                                 {deviation.deviation_number &&
+                                  <div className="text-xs text-slate-400 font-mono">{deviation.deviation_number}</div>
+                                  }
                                  <div className="font-medium text-slate-900">{deviation.title}</div>
                                  {deviation.description &&
-                                 <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
-                                 }
+                                  <div className="text-sm text-slate-500 line-clamp-1">{deviation.description}</div>
+                                  }
                                </div>
                              </div>
                             </TableCell>
@@ -848,9 +848,9 @@ export default function Avvik() {
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <Select
-                                value={['apent','avventer_godkjenning','lukket'].includes(deviation.status) ? deviation.status : 'apent'}
-                                onValueChange={(val) => handleQuickStatusChange(deviation, val)}
-                              >
+                                value={['apent', 'avventer_godkjenning', 'lukket'].includes(deviation.status) ? deviation.status : 'apent'}
+                                onValueChange={(val) => handleQuickStatusChange(deviation, val)}>
+
                                 <SelectTrigger className={`h-8 text-xs rounded-lg border font-medium w-44 ${getStatusColor(deviation.status)}`}>
                                   <SelectValue />
                                 </SelectTrigger>
@@ -940,21 +940,21 @@ export default function Avvik() {
                                   <span className="font-medium text-slate-700">Registrert av:</span>
                                   <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
                                 </div>
-                                {deviation.status === 'lukket' && (
-                                  <div>
+                                {deviation.status === 'lukket' &&
+                                <div>
                                     <span className="font-medium text-slate-700">Lukket av:</span>
                                     <span className="ml-2 text-slate-600">
-                                      {deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_name
-                                        || deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_email
-                                        || '-'}
+                                      {deviation.activity_log?.slice().reverse().find((l) => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_name ||
+                                    deviation.activity_log?.slice().reverse().find((l) => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_email ||
+                                    '-'}
                                     </span>
-                                    {deviation.closed_date && (
-                                      <span className="ml-2 text-slate-400 text-xs">
+                                    {deviation.closed_date &&
+                                  <span className="ml-2 text-slate-400 text-xs">
                                         ({format(new Date(deviation.closed_date), 'd. MMM yyyy HH:mm', { locale: nb })})
                                       </span>
-                                    )}
+                                  }
                                   </div>
-                                )}
+                                }
                               </div>
                               </TableCell>
                             </TableRow>
@@ -983,18 +983,18 @@ export default function Avvik() {
                       <div className="flex items-start gap-2 mb-2">
                         <span className="text-lg">{getStatusIcon(deviation.status)}</span>
                         <div className="flex-1">
-                          {deviation.deviation_number && (
+                          {deviation.deviation_number &&
                             <div className="text-xs text-slate-400 font-mono">{deviation.deviation_number}</div>
-                          )}
+                            }
                           <h3 className="font-semibold text-slate-900">{deviation.title}</h3>
                           <p className="text-sm text-slate-500 mt-1">{project?.name || 'Ukjent prosjekt'}</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 mb-2" onClick={(e) => e.stopPropagation()}>
                         <Select
-                          value={['apent','avventer_godkjenning','lukket'].includes(deviation.status) ? deviation.status : 'apent'}
-                          onValueChange={(val) => handleQuickStatusChange(deviation, val, { preventDefault: () => {}, stopPropagation: () => {} })}
-                        >
+                            value={['apent', 'avventer_godkjenning', 'lukket'].includes(deviation.status) ? deviation.status : 'apent'}
+                            onValueChange={(val) => handleQuickStatusChange(deviation, val, { preventDefault: () => {}, stopPropagation: () => {} })}>
+
                           <SelectTrigger className={`h-7 text-xs rounded-lg border font-medium w-44 ${getStatusColor(deviation.status)}`}>
                             <SelectValue />
                           </SelectTrigger>
@@ -1086,21 +1086,21 @@ export default function Avvik() {
                           <span className="font-medium text-slate-700">Registrert av:</span>
                           <span className="ml-2 text-slate-600">{deviation.created_by || '-'}</span>
                         </div>
-                        {deviation.status === 'lukket' && (
-                          <div>
+                        {deviation.status === 'lukket' &&
+                      <div>
                             <span className="font-medium text-slate-700">Lukket av:</span>
                             <span className="ml-2 text-slate-600">
-                              {deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_name
-                                || deviation.activity_log?.slice().reverse().find(l => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_email
-                                || '-'}
+                              {deviation.activity_log?.slice().reverse().find((l) => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_name ||
+                          deviation.activity_log?.slice().reverse().find((l) => l.action === 'status_endret' && l.details?.toLowerCase().includes('lukket'))?.user_email ||
+                          '-'}
                             </span>
-                            {deviation.closed_date && (
-                              <span className="ml-2 text-slate-400 text-xs">
+                            {deviation.closed_date &&
+                        <span className="ml-2 text-slate-400 text-xs">
                                 ({format(new Date(deviation.closed_date), 'd. MMM yyyy HH:mm', { locale: nb })})
                               </span>
-                            )}
+                        }
                           </div>
-                        )}
+                      }
                       </div>
                     }
                   </Card>);
@@ -1116,7 +1116,7 @@ export default function Avvik() {
       <Dialog open={showDialog} onOpenChange={(open) => {setShowDialog(open);if (!open) resetForm();}}>
         <DialogContent className="w-full max-w-lg max-h-[92dvh] flex flex-col p-0" onClick={(e) => e.stopPropagation()}>
           <DialogHeader className="px-4 pt-4 pb-3 sm:px-6 sm:pt-6 border-b border-slate-100 flex-shrink-0">
-            <DialogTitle className="my-2 text-lg font-semibold tracking-tight leading-none">Registrer avvik</DialogTitle>
+            <DialogTitle className="my-4 text-lg font-semibold tracking-tight leading-none">Registrer avvik</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 px-4 sm:px-6 pb-2 pt-4">
 
@@ -1263,7 +1263,7 @@ export default function Avvik() {
             <div>
               <Label>Ansvarlig for utbedring</Label>
               {(() => {
-                const selectedProject = projects.find(p => p.id === formData.project_id);
+                const selectedProject = projects.find((p) => p.id === formData.project_id);
                 const subcontractors = selectedProject?.subcontractors || [];
                 return (
                   <Select value={formData.responsible_for_remediation} onValueChange={(v) => setFormData({ ...formData, responsible_for_remediation: v })}>
@@ -1271,29 +1271,29 @@ export default function Avvik() {
                       <SelectValue placeholder="Velg ansvarlig" />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees.length > 0 && (
-                        <>
+                      {employees.length > 0 &&
+                      <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">Ansatte</div>
-                          {employees.map((emp) => (
-                            <SelectItem key={`emp-${emp.id}`} value={`${emp.first_name} ${emp.last_name} (${emp.email})`}>
+                          {employees.map((emp) =>
+                        <SelectItem key={`emp-${emp.id}`} value={`${emp.first_name} ${emp.last_name} (${emp.email})`}>
                               {emp.first_name} {emp.last_name}
                             </SelectItem>
-                          ))}
+                        )}
                         </>
-                      )}
-                      {subcontractors.length > 0 && (
-                        <>
+                      }
+                      {subcontractors.length > 0 &&
+                      <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">Underentreprenører</div>
-                          {subcontractors.map((sub, idx) => (
-                            <SelectItem key={`sub-${idx}`} value={sub.name}>
+                          {subcontractors.map((sub, idx) =>
+                        <SelectItem key={`sub-${idx}`} value={sub.name}>
                               {sub.name}{sub.contact_person ? ` – ${sub.contact_person}` : ''}
                             </SelectItem>
-                          ))}
+                        )}
                         </>
-                      )}
+                      }
                     </SelectContent>
-                  </Select>
-                );
+                  </Select>);
+
               })()}
             </div>
 
@@ -1321,39 +1321,39 @@ export default function Avvik() {
                   checked={!!pendingEkstrakostnad}
                   onCheckedChange={(checked) => setPendingEkstrakostnad(checked ? { belop: '', arsak: '', tidsplan_pavirkning: 'nei', kunde_epost: '' } : null)} />
               </div>
-              {pendingEkstrakostnad && (
-                <div className="space-y-3 pt-1">
+              {pendingEkstrakostnad &&
+              <div className="space-y-3 pt-1">
                   <div>
                     <Label>Estimert kostnad (NOK) *</Label>
                     <div className="relative mt-1.5">
                       <Input
-                        type="number"
-                        min="1"
-                        value={pendingEkstrakostnad.belop}
-                        onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, belop: e.target.value })}
-                        placeholder="f.eks. 650"
-                        className="rounded-xl pr-12"
-                      />
+                      type="number"
+                      min="1"
+                      value={pendingEkstrakostnad.belop}
+                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, belop: e.target.value })}
+                      placeholder="f.eks. 650"
+                      className="rounded-xl pr-12" />
+
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">kr</span>
                     </div>
                   </div>
                   <div>
                     <Label>Årsak til merkostnad *</Label>
                     <Textarea
-                      value={pendingEkstrakostnad.arsak}
-                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, arsak: e.target.value })}
-                      placeholder="F.eks. Uforutsett skade oppdaget under arbeidet..."
-                      rows={2}
-                      className="mt-1.5 rounded-xl"
-                      minLength={10}
-                    />
+                    value={pendingEkstrakostnad.arsak}
+                    onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, arsak: e.target.value })}
+                    placeholder="F.eks. Uforutsett skade oppdaget under arbeidet..."
+                    rows={2}
+                    className="mt-1.5 rounded-xl"
+                    minLength={10} />
+
                   </div>
                   <div>
                     <Label>Påvirkning på tidsplan</Label>
                     <Select
-                      value={pendingEkstrakostnad.tidsplan_pavirkning}
-                      onValueChange={(v) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, tidsplan_pavirkning: v })}
-                    >
+                    value={pendingEkstrakostnad.tidsplan_pavirkning}
+                    onValueChange={(v) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, tidsplan_pavirkning: v })}>
+
                       <SelectTrigger className="mt-1.5 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
@@ -1368,16 +1368,16 @@ export default function Avvik() {
                   <div>
                     <Label>Send varsling til (e-post)</Label>
                     <Input
-                      type="email"
-                      value={pendingEkstrakostnad.kunde_epost}
-                      onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, kunde_epost: e.target.value })}
-                      placeholder="kunde@example.com"
-                      className="mt-1.5 rounded-xl"
-                    />
+                    type="email"
+                    value={pendingEkstrakostnad.kunde_epost}
+                    onChange={(e) => setPendingEkstrakostnad({ ...pendingEkstrakostnad, kunde_epost: e.target.value })}
+                    placeholder="kunde@example.com"
+                    className="mt-1.5 rounded-xl" />
+
                     <p className="text-xs text-slate-400 mt-1">La stå tom for å lagre uten å sende e-post</p>
                   </div>
                 </div>
-              )}
+              }
             </div>
           </form>
 
@@ -1632,18 +1632,18 @@ export default function Avvik() {
         projects={projects} />
 
       {/* Text Picker Modal */}
-      {textPickerModal && (
-        <AvvikTextPickerModal
-          open={!!textPickerModal}
-          onOpenChange={(open) => { if (!open) setTextPickerModal(null); }}
-          field={textPickerModal.field}
-          category={textPickerModal.category}
-          templateId={textPickerModal.templateId}
-          onSelect={(text) => {
-            setFormData((prev) => ({ ...prev, [textPickerModal.field]: text }));
-          }}
-        />
-      )}
+      {textPickerModal &&
+      <AvvikTextPickerModal
+        open={!!textPickerModal}
+        onOpenChange={(open) => {if (!open) setTextPickerModal(null);}}
+        field={textPickerModal.field}
+        category={textPickerModal.category}
+        templateId={textPickerModal.templateId}
+        onSelect={(text) => {
+          setFormData((prev) => ({ ...prev, [textPickerModal.field]: text }));
+        }} />
+
+      }
 
     </div>);
 
