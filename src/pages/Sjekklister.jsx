@@ -56,9 +56,9 @@ export default function Sjekklister() {
 
   const { data: checklists = [], isLoading: checklistsLoading, error: checklistsError } = useQuery({
     queryKey: ['checklists', selectedProject?.id],
-    queryFn: () => selectedProject?.id 
-      ? base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100)
-      : Promise.resolve([]),
+    queryFn: () => selectedProject?.id ?
+    base44.entities.Checklist.filter({ project_id: selectedProject.id }, '-updated_date', 100) :
+    Promise.resolve([]),
     enabled: !!selectedProject?.id
   });
 
@@ -67,13 +67,13 @@ export default function Sjekklister() {
       const projectName = selectedProject?.name || 'Prosjekt';
       const date = new Date().toLocaleDateString('no-NO', { day: '2-digit', month: '2-digit', year: 'numeric' });
       const checklistName = `${template.name} - ${projectName} (${date})`;
-      
+
       // Properly structure sections from template
-      const sections = (template.sections || []).map(section => ({
+      const sections = (template.sections || []).map((section) => ({
         title: section.title || '',
         description: section.description || '',
         order: section.order || 0,
-        items: (section.items || []).map(item => ({
+        items: (section.items || []).map((item) => ({
           order: item.order || 0,
           title: item.title || '',
           description: item.description || '',
@@ -85,7 +85,7 @@ export default function Sjekklister() {
       }));
 
       // Structure custom fields data
-      const custom_fields_data = (template.custom_fields || []).map(field => ({
+      const custom_fields_data = (template.custom_fields || []).map((field) => ({
         field_id: field.id,
         label: field.label,
         field_type: field.field_type,
@@ -149,32 +149,32 @@ export default function Sjekklister() {
     }
   });
 
-  const filteredChecklists = checklists.filter(c =>
-    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredChecklists = checklists.filter((c) =>
+  (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getProgressPercentage = (checklist) => {
-    const totalItems = checklist.sections && checklist.sections.length > 0
-      ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
-      : (checklist.items?.length || 0);
+    const totalItems = checklist.sections && checklist.sections.length > 0 ?
+    checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0) :
+    checklist.items?.length || 0;
     if (!totalItems) return 0;
-    const answered = checklist.responses?.filter(r => r.status).length || 0;
-    return Math.round((answered / totalItems) * 100);
+    const answered = checklist.responses?.filter((r) => r.status).length || 0;
+    return Math.round(answered / totalItems * 100);
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'fullfort': return 'bg-green-100 text-green-800';
-      case 'pagaende': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'fullfort':return 'bg-green-100 text-green-800';
+      case 'pagaende':return 'bg-blue-100 text-blue-800';
+      default:return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getCalculatedStatus = (checklist) => {
-    const totalItems = checklist.sections && checklist.sections.length > 0
-      ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
-      : (checklist.items?.length || 0);
-    const answered = checklist.responses?.filter(r => r.status).length || 0;
+    const totalItems = checklist.sections && checklist.sections.length > 0 ?
+    checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0) :
+    checklist.items?.length || 0;
+    const answered = checklist.responses?.filter((r) => r.status).length || 0;
     const hasSignatures = checklist.signatures && checklist.signatures.length > 0;
 
     if (hasSignatures && answered === totalItems) {
@@ -192,13 +192,13 @@ export default function Sjekklister() {
           title="Sjekklister"
           subtitle="Opprett og gjennomfør sjekklister for dine prosjekter"
           actions={
-            selectedProject && (
-              <div className="flex gap-2 sm:gap-3">
-                <Button 
-                  onClick={() => setShowTemplateDialog(true)}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                  size="lg"
-                >
+          selectedProject &&
+          <div className="flex gap-2 sm:gap-3">
+                <Button
+              onClick={() => setShowTemplateDialog(true)} className="bg-emerald-600 text-primary-foreground mx-1 px-16 text-sm font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow h-10 gap-2 hover:bg-emerald-700"
+
+              size="lg">
+
                   <Plus className="h-5 w-5" />
                   <span className="hidden sm:inline">Ny sjekkliste</span>
                 </Button>
@@ -208,66 +208,66 @@ export default function Sjekklister() {
                   </Button>
                 </Link>
               </div>
-            )
-          }
-        />
 
-        {!selectedProject && (
-          <Card className="p-8 text-center bg-white">
+          } />
+
+
+        {!selectedProject &&
+        <Card className="p-8 text-center bg-white">
             <p className="text-slate-600 text-lg">Velg et prosjekt fra dropdown øverst til høyre for å komme i gang</p>
           </Card>
-        )}
+        }
 
-        {selectedProject && (
-          <div className="space-y-6">
+        {selectedProject &&
+        <div className="space-y-6">
             <div className="relative">
               <Search className="absolute left-4 top-3 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Søk i sjekklister..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-white"
-              />
+              placeholder="Søk i sjekklister..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-white" />
+
             </div>
 
-            {checklistsError && (
-              <Card className="p-6 bg-red-50 border-red-200">
+            {checklistsError &&
+          <Card className="p-6 bg-red-50 border-red-200">
                 <p className="text-red-800">⚠️ Feil ved lasting av sjekklister. Prøv igjen senere.</p>
               </Card>
-            )}
-            {checklistsLoading ? (
-              <div className="text-center py-8">Laster sjekklister...</div>
-            ) : filteredChecklists.length === 0 ? (
-              <Card className="p-8 text-center bg-white">
+          }
+            {checklistsLoading ?
+          <div className="text-center py-8">Laster sjekklister...</div> :
+          filteredChecklists.length === 0 ?
+          <Card className="p-8 text-center bg-white">
                 <p className="text-slate-600">Ingen sjekklister ennå. Opprett en ny sjekkliste fra malen din.</p>
-              </Card>
-            ) : (
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              </Card> :
+
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredChecklists.map((checklist) => {
-                   const progress = getProgressPercentage(checklist);
-                   const calculatedStatus = getCalculatedStatus(checklist);
-                   return (
-                     <Card
-                       key={checklist.id}
-                       className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300 flex flex-col"
-                       onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}
-                     >
+              const progress = getProgressPercentage(checklist);
+              const calculatedStatus = getCalculatedStatus(checklist);
+              return (
+                <Card
+                  key={checklist.id}
+                  className="p-4 cursor-pointer hover:shadow-lg transition-all bg-white border hover:border-emerald-300 flex flex-col"
+                  onClick={() => navigate(createPageUrl('SjekklisteDetaljer') + `?id=${checklist.id}`)}>
+
                        <div className="flex items-start justify-between gap-2 mb-3">
                          <div className="flex-1 min-w-0">
                            <h3 className="font-semibold text-sm sm:text-base line-clamp-2">{checklist.name}</h3>
-                           {checklist.location && (
-                             <p className="text-xs text-slate-500 mt-1">📍 {checklist.location}</p>
-                           )}
+                           {checklist.location &&
+                      <p className="text-xs text-slate-500 mt-1">📍 {checklist.location}</p>
+                      }
                          </div>
                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setChecklistToDelete(checklist);
-                            }}
-                            className="text-red-500 hover:text-red-700 h-9 w-9 flex-shrink-0"
-                          >
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChecklistToDelete(checklist);
+                      }}
+                      className="text-red-500 hover:text-red-700 h-9 w-9 flex-shrink-0">
+
                             <Trash2 className="h-4 w-4" />
                           </Button>
                        </div>
@@ -279,9 +279,9 @@ export default function Sjekklister() {
                          </div>
                          <div className="w-full bg-slate-200 rounded-full h-2">
                            <div
-                             className="bg-emerald-600 h-2 rounded-full transition-all"
-                             style={{ width: `${progress}%` }}
-                           />
+                        className="bg-emerald-600 h-2 rounded-full transition-all"
+                        style={{ width: `${progress}%` }} />
+
                          </div>
                        </div>
 
@@ -291,21 +291,21 @@ export default function Sjekklister() {
                          </span>
                          <span className="text-slate-500">
                            {(() => {
-                             const totalItems = checklist.sections && checklist.sections.length > 0
-                               ? checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
-                               : (checklist.items?.length || 0);
-                             const answered = checklist.responses?.filter(r => r.status).length || 0;
-                             return `${answered} av ${totalItems} punkter`;
-                           })()}
+                        const totalItems = checklist.sections && checklist.sections.length > 0 ?
+                        checklist.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0) :
+                        checklist.items?.length || 0;
+                        const answered = checklist.responses?.filter((r) => r.status).length || 0;
+                        return `${answered} av ${totalItems} punkter`;
+                      })()}
                          </span>
                        </div>
-                     </Card>
-                   );
-                 })}
+                     </Card>);
+
+            })}
               </div>
-            )}
+          }
           </div>
-        )}
+        }
       </div>
 
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
@@ -318,8 +318,8 @@ export default function Sjekklister() {
             <TemplateSelector
               templates={templates}
               onSelect={(template) => createChecklistMutation.mutate(template)}
-              isLoading={false}
-            />
+              isLoading={false} />
+
           </div>
         </DialogContent>
       </Dialog>
@@ -339,13 +339,13 @@ export default function Sjekklister() {
                 deleteChecklistMutation.mutate(checklistToDelete.id);
                 setChecklistToDelete(null);
               }}
-              className="bg-red-600 hover:bg-red-700"
-            >
+              className="bg-red-600 hover:bg-red-700">
+
               Slett
             </AlertDialogAction>
           </div>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
+    </div>);
+
 }
