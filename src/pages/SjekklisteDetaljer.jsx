@@ -333,7 +333,7 @@ export default function SjekklisteDetaljer() {
               </Button>
             )}
             <Button variant="outline" onClick={() => setShowSignDialog(true)} className="gap-2 text-sm">
-              <PenLine className="h-4 w-4" /> Signer
+              <PenLine className="h-4 w-4" /> Signer og avslutt
               {checklist.signatures?.length > 0 && (
                 <Badge className="ml-1 bg-green-100 text-green-700 border-0 text-xs px-1.5">{checklist.signatures.length}</Badge>
               )}
