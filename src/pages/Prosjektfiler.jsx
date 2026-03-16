@@ -852,8 +852,8 @@ export default function Prosjektfiler() {
                             checked={selectedFiles.includes(file.id)}
                             onCheckedChange={() => toggleFileSelection(file.id)} />
 
-                                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", isActive && isRevCat ? "bg-emerald-100" : "bg-blue-100")}>
-                                  <FileIcon className={cn("h-5 w-5", isActive && isRevCat ? "text-emerald-600" : "text-blue-600")} />
+                                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", isActive && isRevCat ? "bg-emerald-100" : "bg-red-100")}>
+                                  <FileIcon className={cn("h-5 w-5", isActive && isRevCat ? "text-emerald-600" : "text-red-500")} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
