@@ -846,85 +846,87 @@ export default function Prosjektfiler() {
                     const isActive = file.active_flag !== false;
                     const isArchived = file.active_flag === false;
                     return (
-                      <Card key={file.id} className={cn("p-4 hover:shadow-md transition-shadow", isArchived && "opacity-60 bg-slate-50")}>
-                              <div className="flex items-center gap-4">
-                                <Checkbox
+                      <Card key={file.id} className={cn("p-3 sm:p-4 hover:shadow-md transition-shadow", isArchived && "opacity-60 bg-slate-50")}>
+                        <div className="flex items-start gap-3">
+                          <Checkbox
                             checked={selectedFiles.includes(file.id)}
-                            onCheckedChange={() => toggleFileSelection(file.id)} />
-
-                                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", isActive && isRevCat ? "bg-emerald-100" : "bg-red-100")}>
-                                  <FileIcon className={cn("h-5 w-5", isActive && isRevCat ? "text-emerald-600" : "text-red-500")} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="font-medium truncate">{file.base_name || file.name}</p>
-                                    {isRevCat && file.version && (
-                                      <span className={cn(
-                                        "text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0",
-                                        isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                                      )}>
-                                        {file.version}
-                                        {isActive && <CheckCircle2 className="h-3 w-3 inline ml-1" />}
-                                        {isArchived && <Archive className="h-3 w-3 inline ml-1" />}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                    <span>{formatFileSize(file.file_size)}</span>
-                                    <span>•</span>
-                                    <span>{format(new Date(file.created_date), 'dd.MM.yyyy', { locale: nb })}</span>
-                                    {file.uploaded_by_name && <><span>•</span><span>{file.uploaded_by_name}</span></>}
-                                  </div>
-                                  {file.description &&
-                            <p className="text-sm text-slate-600 mt-1">{file.description}</p>
-                            }
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {isRevCat && isActive && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="text-xs rounded-lg hidden sm:flex gap-1"
-                                      onClick={() => setRevisionDialogFile(file)}
-                                    >
-                                      <RefreshCw className="h-3 w-3" /> Ny revisjon
-                                    </Button>
-                                  )}
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon">
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem asChild>
-                                        <a href={file.file_url} target="_blank" rel="noopener noreferrer">
-                                          <Download className="h-4 w-4 mr-2" /> Last ned
-                                        </a>
-                                      </DropdownMenuItem>
-                                      {isRevCat && isActive && (
-                                        <DropdownMenuItem onClick={() => setRevisionDialogFile(file)}>
-                                          <RefreshCw className="h-4 w-4 mr-2" /> Last opp ny revisjon
-                                        </DropdownMenuItem>
-                                      )}
-                                      {isRevCat && (
-                                        <DropdownMenuItem onClick={() => setHistoryFile(file)}>
-                                          <History className="h-4 w-4 mr-2" /> Revisjonshistorikk
-                                        </DropdownMenuItem>
-                                      )}
-                                      <DropdownMenuItem
-                                  onClick={() => {
-                                    deleteFileMutation.mutate(file.id);
-                                    logActivity(file.id, 'Slettet', 'Fil slettet');
-                                  }}
-                                  className="text-red-600">
-                                        <Trash2 className="h-4 w-4 mr-2" /> Slett
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
+                            onCheckedChange={() => toggleFileSelection(file.id)}
+                            className="mt-1 flex-shrink-0"
+                          />
+                          <div className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5", isActive && isRevCat ? "bg-emerald-100" : "bg-red-100")}>
+                            <FileIcon className={cn("h-4 w-4 sm:h-5 sm:w-5", isActive && isRevCat ? "text-emerald-600" : "text-red-500")} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm leading-tight break-words">{file.base_name || file.name}</p>
+                                {isRevCat && file.version && (
+                                  <span className={cn(
+                                    "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold mt-1",
+                                    isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                                  )}>
+                                    {file.version}
+                                    {isActive && <CheckCircle2 className="h-3 w-3" />}
+                                    {isArchived && <Archive className="h-3 w-3" />}
+                                  </span>
+                                )}
                               </div>
-                            </Card>);
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {isRevCat && isActive && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs rounded-lg hidden sm:flex gap-1"
+                                    onClick={() => setRevisionDialogFile(file)}
+                                  >
+                                    <RefreshCw className="h-3 w-3" /> Ny revisjon
+                                  </Button>
+                                )}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem asChild>
+                                      <a href={file.file_url} target="_blank" rel="noopener noreferrer">
+                                        <Download className="h-4 w-4 mr-2" /> Last ned
+                                      </a>
+                                    </DropdownMenuItem>
+                                    {isRevCat && isActive && (
+                                      <DropdownMenuItem onClick={() => setRevisionDialogFile(file)}>
+                                        <RefreshCw className="h-4 w-4 mr-2" /> Last opp ny revisjon
+                                      </DropdownMenuItem>
+                                    )}
+                                    {isRevCat && (
+                                      <DropdownMenuItem onClick={() => setHistoryFile(file)}>
+                                        <History className="h-4 w-4 mr-2" /> Revisjonshistorikk
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        deleteFileMutation.mutate(file.id);
+                                        logActivity(file.id, 'Slettet', 'Fil slettet');
+                                      }}
+                                      className="text-red-600">
+                                      <Trash2 className="h-4 w-4 mr-2" /> Slett
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 mt-1">
+                              {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
+                              <span>{format(new Date(file.created_date), 'dd.MM.yyyy', { locale: nb })}</span>
+                              {file.uploaded_by_name && <span className="truncate max-w-[120px]">{file.uploaded_by_name}</span>}
+                            </div>
+                            {file.description && (
+                              <p className="text-xs text-slate-600 mt-1 line-clamp-2">{file.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </Card>);
 
                   })}
                       </div>
