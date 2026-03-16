@@ -69,6 +69,7 @@ import FDV from './pages/FDV';
 import FDVDetaljer from './pages/FDVDetaljer';
 import Faktura from './pages/Faktura';
 import FakturaDetaljer from './pages/FakturaDetaljer';
+import GodkjennEkstrakostnad from './pages/GodkjennEkstrakostnad';
 import Godkjenning from './pages/Godkjenning';
 import HMS from './pages/HMS';
 import HMSHandbok from './pages/HMSHandbok';
@@ -93,6 +94,7 @@ import Risikoanalyse from './pages/Risikoanalyse';
 import RisikoanalyseDetaljer from './pages/RisikoanalyseDetaljer';
 import SJA from './pages/SJA';
 import SJADetaljer from './pages/SJADetaljer';
+import SjekklisteBibliotek from './pages/SjekklisteBibliotek';
 import SjekklisteDetaljer from './pages/SjekklisteDetaljer';
 import SjekklisteMaler from './pages/SjekklisteMaler';
 import Sjekklister from './pages/Sjekklister';
@@ -125,6 +127,7 @@ export const PAGES = {
     "FDVDetaljer": FDVDetaljer,
     "Faktura": Faktura,
     "FakturaDetaljer": FakturaDetaljer,
+    "GodkjennEkstrakostnad": GodkjennEkstrakostnad,
     "Godkjenning": Godkjenning,
     "HMS": HMS,
     "HMSHandbok": HMSHandbok,
@@ -149,6 +152,7 @@ export const PAGES = {
     "RisikoanalyseDetaljer": RisikoanalyseDetaljer,
     "SJA": SJA,
     "SJADetaljer": SJADetaljer,
+    "SjekklisteBibliotek": SjekklisteBibliotek,
     "SjekklisteDetaljer": SjekklisteDetaljer,
     "SjekklisteMaler": SjekklisteMaler,
     "Sjekklister": Sjekklister,
