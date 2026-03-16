@@ -195,10 +195,10 @@ export default function Sjekklister() {
           selectedProject &&
           <div className="flex gap-2 sm:gap-3">
                 <Button
-              onClick={() => setShowTemplateDialog(true)} className="bg-emerald-600 text-primary-foreground mx-1 px-16 text-sm font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow h-10 gap-2 hover:bg-emerald-700"
-
-              size="lg">
-
+                  onClick={() => setShowTemplateDialog(true)}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  size="lg"
+                >
                   <Plus className="h-5 w-5" />
                   <span className="hidden sm:inline">Ny sjekkliste</span>
                 </Button>
