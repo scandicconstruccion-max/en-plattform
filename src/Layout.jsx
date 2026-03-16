@@ -254,7 +254,11 @@ export default function Layout({ children, currentPageName }) {
           >
             {sidebarOpen ? <X className="h-8 w-8 text-slate-700" strokeWidth={2.5} /> : <Menu className="h-8 w-8 text-slate-700" strokeWidth={2.5} />}
           </button>
-          <span className="text-green-600 font-semibold dark:text-white">En Plattform</span>
+          <img
+            src="https://media.base44.com/images/public/699376a31a2b8a2014ee8ac9/724f65eff_Logo1.jpg"
+            alt="En Plattform"
+            className="h-9 w-auto object-contain"
+          />
           <div className="flex items-center gap-1">
             <NotificationBell userEmail={user?.email} />
             <ProjectDropdown />
