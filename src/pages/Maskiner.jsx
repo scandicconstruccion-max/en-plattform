@@ -105,6 +105,7 @@ export default function Maskiner() {
   const [editingReservasjon, setEditingReservasjon] = useState(null);
   const [deleteReservasjonTarget, setDeleteReservasjonTarget] = useState(null);
   const [expandedMaskinId, setExpandedMaskinId] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
 
   const queryClient = useQueryClient();
 
