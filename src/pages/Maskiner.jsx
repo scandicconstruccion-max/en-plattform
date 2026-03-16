@@ -285,7 +285,8 @@ export default function Maskiner() {
       <div className="px-6 lg:px-8 py-6">
         {/* Filter bar */}
         {!isLoading && maskiner.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-5">
+          <div className="flex flex-wrap gap-2 mb-5 items-center justify-between">
+            <div className="flex flex-wrap gap-2">
             {['alle', 'lager', 'hos_ansatt', 'prosjekt', 'service'].map((key) => {
               const cfg = LOKASJON_CONFIG[key];
               const Icon = cfg?.icon;
