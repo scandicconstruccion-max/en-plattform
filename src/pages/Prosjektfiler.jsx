@@ -495,39 +495,76 @@ export default function Prosjektfiler() {
     toast.success(`${selectedFiles.length} filer lastet ned`);
   };
 
+  // Build flat list of all selectable categories (parents without children + all subcategories)
+  const allSelectableCategories = useMemo(() => {
+    const parents = projectCategories.filter(c => !c.parent_category).filter((c, i, self) => i === self.findIndex(x => x.name === c.name));
+    const result = [];
+    parents.forEach(parent => {
+      const subs = projectCategories.filter(c => c.parent_category === parent.name).reduce((u, s) => {
+        if (!u.find(x => x.name === s.name)) u.push(s);
+        return u;
+      }, []);
+      if (subs.length > 0) {
+        subs.forEach(sub => result.push({ ...sub, parentName: parent.name, parentColor: parent.color }));
+      } else {
+        result.push(parent);
+      }
+    });
+    return result;
+  }, [projectCategories]);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <PageHeader
         title="Prosjektfiler"
         subtitle="Administrer filer og bilder per kategori" />
 
-
-      <div className="px-6 lg:px-8 py-6">
-        {/* Project Filter */}
-        <div className="mb-6">
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-64 rounded-xl">
-              <SelectValue placeholder="Velg prosjekt" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Velg prosjekt</SelectItem>
-              {projects.map((p) =>
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+      <div className="px-4 lg:px-8 py-4 lg:py-6">
+        {/* Project Filter - mobile: scrollable buttons, desktop: select */}
+        <div className="mb-4">
+          {/* Mobile: scrollable project buttons */}
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:hidden" style={{ scrollbarWidth: 'none' }}>
+            {projects.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setProjectFilter(p.id)}
+                className={cn(
+                  'flex-shrink-0 px-4 py-3 rounded-xl text-sm font-semibold border-2 transition-all min-h-[48px]',
+                  projectFilter === p.id
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-white text-slate-700 border-slate-200'
+                )}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          {/* Desktop: select */}
+          <div className="hidden lg:block">
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-64 rounded-xl">
+                <SelectValue placeholder="Velg prosjekt" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Velg prosjekt</SelectItem>
+                {projects.map((p) =>
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {projectFilter === 'all' ?
         <Card className="p-8 text-center border-0 shadow-sm">
             <FolderOpen className="h-12 w-12 text-slate-300 mx-auto mb-4" />
             <h3 className="font-medium text-slate-900 mb-1">Velg et prosjekt</h3>
-            <p className="text-slate-500">Velg et prosjekt for å administrere filer</p>
+            <p className="text-slate-500">Velg et prosjekt for å se filer</p>
           </Card> :
 
         <div className="grid lg:grid-cols-[280px_1fr] gap-6">
-            {/* Left Panel - Categories */}
-            <div className="space-y-3">
+            {/* Left Panel - Categories (desktop) */}
+            <div className="hidden lg:block space-y-3">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-slate-900">Kategorier</h3>
                 <Button
@@ -535,7 +572,6 @@ export default function Prosjektfiler() {
                 size="sm"
                 onClick={() => setShowCategoryDialog(true)}
                 className="h-8 w-8 p-0">
-
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
@@ -609,7 +645,6 @@ export default function Prosjektfiler() {
                         </div>
                       </button>
 
-                      {/* Subcategories - collapsible */}
                       {hasChildren && !isCollapsed && subcategories.map((sub) =>
                         <button
                           key={`sub-${sub.id}`}
@@ -629,6 +664,45 @@ export default function Prosjektfiler() {
                     </div>
                   );
                 })}
+            </div>
+
+            {/* Mobile Category Pills */}
+            <div className="lg:hidden -mx-4 px-4 mb-3">
+              <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+                {allSelectableCategories.map((cat) => {
+                  const isSelected = selectedCategory === cat.id;
+                  const count = getFilesCountForCategory(cat.id);
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={cn(
+                        'flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-2xl border-2 transition-all min-w-[90px] min-h-[70px] text-center',
+                        isSelected
+                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg'
+                          : 'bg-white border-slate-200 text-slate-700'
+                      )}
+                      style={!isSelected ? { borderColor: `${cat.color}60` } : {}}
+                    >
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center mb-1"
+                        style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : `${cat.color}20` }}
+                      >
+                        <FileText className="h-4 w-4" style={{ color: isSelected ? 'white' : cat.color }} />
+                      </div>
+                      <p className="text-xs font-semibold leading-tight">{cat.name}</p>
+                      <p className={cn('text-[10px] mt-0.5', isSelected ? 'text-emerald-100' : 'text-slate-400')}>{count} filer</p>
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setShowCategoryDialog(true)}
+                  className="flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 min-w-[70px] min-h-[70px]"
+                >
+                  <Plus className="h-5 w-5" />
+                  <p className="text-[10px] mt-1">Ny</p>
+                </button>
+              </div>
             </div>
 
             {/* Right Panel - Files */}
