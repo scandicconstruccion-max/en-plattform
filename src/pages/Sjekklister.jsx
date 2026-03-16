@@ -200,7 +200,7 @@ export default function Sjekklister() {
                   size="lg"
                 >
                   <Plus className="h-5 w-5" />
-                  <span className="hidden sm:inline">Ny sjekkliste</span>
+                  Ny sjekkliste
                 </Button>
                 <Link to={createPageUrl('SjekklisteMaler')}>
                   <Button variant="outline" className="gap-2" size="lg">
