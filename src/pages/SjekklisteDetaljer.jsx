@@ -207,7 +207,7 @@ export default function SjekklisteDetaljer() {
       signed_date: new Date().toISOString()
     });
     const activity_log = logActivity(`Signert av ${user?.display_name || user?.full_name || user?.email}`, `Rolle: ${role}`);
-    updateMutation.mutate({ signatures, activity_log });
+    updateMutation.mutate({ signatures, status: 'fullfort', completed_date: new Date().toISOString(), activity_log });
   };
 
   const addItemToSection = (sectionIndex) => {
