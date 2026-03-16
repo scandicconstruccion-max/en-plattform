@@ -696,7 +696,7 @@ export default function Prosjektfiler() {
 
             {/* Mobile Category Pills */}
             <div className="lg:hidden -mx-4 px-4 mb-3">
-              <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', touchAction: 'pan-x', overscrollBehavior: 'contain' }}>
+              <div ref={catScrollRef} className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }} {...catScrollHandlers}>
                 {allSelectableCategories.map((cat) => {
                   const isSelected = selectedCategory === cat.id;
                   const count = getFilesCountForCategory(cat.id);
