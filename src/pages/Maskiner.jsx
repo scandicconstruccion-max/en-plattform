@@ -340,7 +340,7 @@ export default function Maskiner() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className={cn(viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'flex flex-col gap-2')}>
             {maskiner
               .filter((m) => filterLokasjon === 'alle' || (m.lokasjon || 'lager') === filterLokasjon)
               .map((maskin) => {
@@ -348,6 +348,43 @@ export default function Maskiner() {
               const typeCfg = MASKINTYPES.find((t) => t.value === maskin.maskintype);
               const lokCfg = LOKASJON_CONFIG[maskin.lokasjon || 'lager'];
               const LokIcon = lokCfg.icon;
+
+              if (viewMode === 'list') {
+                return (
+                  <div
+                    key={maskin.id}
+                    className={cn('bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex items-center gap-4', !maskin.aktiv && 'opacity-60')}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-900 truncate">{maskin.navn}</p>
+                      <p className="text-xs text-slate-500">{typeCfg?.label || maskin.maskintype}{maskin.maskinnummer ? ` · ${maskin.maskinnummer}` : ''}</p>
+                    </div>
+                    <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium flex-shrink-0', lokCfg.badgeClass)}>
+                      <LokIcon className="h-3.5 w-3.5" />
+                      <span>{lokCfg.label}</span>
+                      {maskin.lokasjon === 'hos_ansatt' && maskin.hos_ansatt_navn && (
+                        <span className="hidden sm:inline">· {maskin.hos_ansatt_navn}</span>
+                      )}
+                    </div>
+                    <Badge className={cn('flex-shrink-0 text-xs hidden sm:flex', statusCfg.class)}>{statusCfg.label}</Badge>
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 px-2" onClick={() => setSjekkUtTarget(maskin)}>
+                        <MapPin className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setReservasjonTarget(maskin); setEditingReservasjon(null); }}>
+                        <CalendarRange className="h-3 w-3" />
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(maskin)}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setDeleteTarget(maskin)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={maskin.id}
