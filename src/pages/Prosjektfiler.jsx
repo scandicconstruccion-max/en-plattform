@@ -680,21 +680,23 @@ export default function Prosjektfiler() {
                       key={cat.id}
                       onClick={() => setSelectedCategory(cat.id)}
                       className={cn(
-                        'flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-2xl border-2 transition-all min-w-[90px] min-h-[70px] text-center',
+                        'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left',
                         isSelected
-                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg'
+                          ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm'
                           : 'bg-white border-slate-200 text-slate-700'
                       )}
-                      style={!isSelected ? { borderColor: `${cat.color}60` } : {}}
                     >
                       <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center mb-1"
-                        style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : `${cat.color}20` }}
+                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: isSelected ? '#d1fae5' : `${cat.color}20` }}
                       >
-                        <FileText className="h-4 w-4" style={{ color: isSelected ? 'white' : cat.color }} />
+                        <FileText className="h-4 w-4" style={{ color: isSelected ? '#059669' : cat.color }} />
                       </div>
-                      <p className="text-xs font-semibold leading-tight">{cat.name}</p>
-                      <p className={cn('text-[10px] mt-0.5', isSelected ? 'text-emerald-100' : 'text-slate-400')}>{count} filer</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate">{cat.name}</p>
+                        {cat.parentName && <p className="text-xs text-slate-400 truncate">{cat.parentName}</p>}
+                      </div>
+                      <p className={cn('text-xs flex-shrink-0', isSelected ? 'text-emerald-600' : 'text-slate-400')}>{count} filer</p>
                     </button>
                   );
                 })}
