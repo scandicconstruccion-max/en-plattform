@@ -196,8 +196,6 @@ export default function SjekklisteDetaljer() {
   const handleComplete = () => {
     const activity_log = logActivity('Sjekkliste fullført', '');
     updateMutation.mutate({ status: 'fullfort', completed_date: new Date().toISOString(), activity_log });
-    // Merk: status settes til fullfort for fremdriftsvisning, men sjekklisten
-    // fjernes IKKE fra dashbordet før den er signert via "Signer og avslutt"
   };
 
   const handleSign = ({ role }) => {
