@@ -702,10 +702,10 @@ export default function Prosjektfiler() {
                 })}
                 <button
                   onClick={() => setShowCategoryDialog(true)}
-                  className="flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 min-w-[70px] min-h-[70px]"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed border-slate-300 text-slate-400"
                 >
-                  <Plus className="h-5 w-5" />
-                  <p className="text-[10px] mt-1">Ny</p>
+                  <Plus className="h-4 w-4" />
+                  <p className="text-sm">Ny kategori</p>
                 </button>
               </div>
             </div>
