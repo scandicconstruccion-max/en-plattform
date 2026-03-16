@@ -20,8 +20,7 @@ export default function UnfinishedChecklists() {
       ]);
       const existingProjectIds = new Set(projects.map(p => p.id));
       return all.filter(c => {
-        // Ekskluder fullførte eller signerte
-        if (c.status === 'fullfort') return false;
+        // Kun signerte sjekklister skal fjernes fra dashbordet
         if (c.signatures && c.signatures.length > 0) return false;
         // Ekskluder sjekklister tilknyttet slettede prosjekter
         if (!existingProjectIds.has(c.project_id)) return false;
