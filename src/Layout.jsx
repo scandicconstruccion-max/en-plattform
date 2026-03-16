@@ -354,7 +354,7 @@ export default function Layout({ children, currentPageName }) {
                         onClick={() => isMobile && setSidebarOpen(false)}
                         title={sidebarCollapsed ? label : undefined}
                         className={cn(
-                          "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all select-none",
+                          "flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-all select-none",
                           sidebarCollapsed && "justify-center px-2",
                           isActive ?
                           "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" :
