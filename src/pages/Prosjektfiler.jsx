@@ -526,7 +526,7 @@ export default function Prosjektfiler() {
         {/* Project Filter - mobile: scrollable buttons, desktop: select */}
         <div className="mb-4">
           {/* Mobile: scrollable project buttons */}
-          <div ref={projScrollRef} className="flex gap-2 overflow-x-auto pb-2 lg:hidden" style={{ scrollbarWidth: 'none', touchAction: 'pan-x' }}>
+          <div ref={projScrollRef} className="flex flex-col gap-2 lg:hidden">
             {projects.map((p) => (
               <button
                 key={p.id}
