@@ -495,6 +495,34 @@ export default function Prosjektfiler() {
     toast.success(`${selectedFiles.length} filer lastet ned`);
   };
 
+  // Horizontal scroll ref handler - prevents vertical page scroll while scrolling horizontally
+  const catScrollRef = useRef(null);
+  const projScrollRef = useRef(null);
+
+  const makeHorizScrollHandler = (ref) => {
+    let startX = 0, startY = 0, startScrollLeft = 0;
+    return {
+      onTouchStart: (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        startScrollLeft = ref.current?.scrollLeft || 0;
+      },
+      onTouchMove: (e) => {
+        if (!ref.current) return;
+        const dx = startX - e.touches[0].clientX;
+        const dy = Math.abs(startY - e.touches[0].clientY);
+        // Only hijack horizontal-dominant swipes
+        if (Math.abs(dx) > dy) {
+          e.preventDefault();
+          ref.current.scrollLeft = startScrollLeft + dx;
+        }
+      }
+    };
+  };
+
+  const catScrollHandlers = makeHorizScrollHandler(catScrollRef);
+  const projScrollHandlers = makeHorizScrollHandler(projScrollRef);
+
   // Build flat list of all selectable categories (parents without children + all subcategories)
   const allSelectableCategories = useMemo(() => {
     const parents = projectCategories.filter(c => !c.parent_category).filter((c, i, self) => i === self.findIndex(x => x.name === c.name));
