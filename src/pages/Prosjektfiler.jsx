@@ -495,40 +495,8 @@ export default function Prosjektfiler() {
     toast.success(`${selectedFiles.length} filer lastet ned`);
   };
 
-  // Prevent layout's swipe-back from interfering with horizontal scroll strips
   const catScrollRef = useRef(null);
   const projScrollRef = useRef(null);
-
-  useEffect(() => {
-    const handleTouchMove = (e) => {
-      if (e.touches.length !== 1) return;
-      // If horizontal movement dominates, stop propagation so Layout swipe-back doesn't fire
-      const touch = e.touches[0];
-      const el = e.currentTarget;
-      if (!el._touchStartX) return;
-      const dx = Math.abs(touch.clientX - el._touchStartX);
-      const dy = Math.abs(touch.clientY - el._touchStartY);
-      if (dx > dy) e.stopPropagation();
-    };
-    const handleTouchStart = (e) => {
-      e.currentTarget._touchStartX = e.touches[0].clientX;
-      e.currentTarget._touchStartY = e.touches[0].clientY;
-    };
-    [catScrollRef, projScrollRef].forEach(ref => {
-      const el = ref.current;
-      if (!el) return;
-      el.addEventListener('touchstart', handleTouchStart, { passive: true });
-      el.addEventListener('touchmove', handleTouchMove, { passive: true });
-    });
-    return () => {
-      [catScrollRef, projScrollRef].forEach(ref => {
-        const el = ref.current;
-        if (!el) return;
-        el.removeEventListener('touchstart', handleTouchStart);
-        el.removeEventListener('touchmove', handleTouchMove);
-      });
-    };
-  }, [projectFilter]);
 
   // Build flat list of all selectable categories (parents without children + all subcategories)
   const allSelectableCategories = useMemo(() => {
