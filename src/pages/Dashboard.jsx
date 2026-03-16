@@ -12,82 +12,82 @@ import KPISection from '@/components/dashboard/KPISection';
 import UnfinishedChecklists from '@/components/dashboard/UnfinishedChecklists';
 import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
 import {
-  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare
-} from 'lucide-react';
+  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare } from
+'lucide-react';
 import { format } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
 export default function Dashboard() {
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => base44.auth.me()
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date', 10),
+    queryFn: () => base44.entities.Project.list('-created_date', 10)
   });
 
   const { data: deviations = [] } = useQuery({
     queryKey: ['deviations'],
-    queryFn: () => base44.entities.Deviation.list('-created_date', 10),
+    queryFn: () => base44.entities.Deviation.list('-created_date', 10)
   });
 
   const { data: timesheets = [] } = useQuery({
     queryKey: ['timesheets'],
-    queryFn: () => base44.entities.Timesheet.list('-date', 50),
+    queryFn: () => base44.entities.Timesheet.list('-date', 50)
   });
 
   const { data: events = [] } = useQuery({
     queryKey: ['events'],
-    queryFn: () => base44.entities.CalendarEvent.list('-start_time', 5),
+    queryFn: () => base44.entities.CalendarEvent.list('-start_time', 5)
   });
 
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
-    queryFn: () => base44.entities.Invoice.list('-invoice_date', 50),
+    queryFn: () => base44.entities.Invoice.list('-invoice_date', 50)
   });
 
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
-    queryFn: () => base44.entities.Company.list(),
+    queryFn: () => base44.entities.Company.list()
   });
 
   const company = companies?.[0];
   const activeModules = user ? getAvailableModules(user) : [];
-  
+
   // Filter projects based on user access
   const accessibleProjects = user ? filterProjectsByAccess(user, projects) : projects;
 
-  const activeProjects = accessibleProjects.filter(p => p.status === 'aktiv').length;
-  const openDeviations = deviations.filter(d => d.status !== 'lukket').length;
-  const totalHoursThisWeek = timesheets
-    .filter(t => {
-      const date = new Date(t.date);
-      const now = new Date();
-      const weekAgo = new Date(now.setDate(now.getDate() - 7));
-      return date >= weekAgo;
-    })
-    .reduce((sum, t) => sum + (t.hours || 0), 0);
+  const activeProjects = accessibleProjects.filter((p) => p.status === 'aktiv').length;
+  const openDeviations = deviations.filter((d) => d.status !== 'lukket').length;
+  const totalHoursThisWeek = timesheets.
+  filter((t) => {
+    const date = new Date(t.date);
+    const now = new Date();
+    const weekAgo = new Date(now.setDate(now.getDate() - 7));
+    return date >= weekAgo;
+  }).
+  reduce((sum, t) => sum + (t.hours || 0), 0);
 
-  const unpaidInvoices = invoices.filter(i => 
-    i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert'
+  const unpaidInvoices = invoices.filter((i) =>
+  i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert'
   ).length;
-  
-  const overdueInvoices = invoices.filter(i => {
+
+  const overdueInvoices = invoices.filter((i) => {
     if (i.status === 'betalt' || i.status === 'kladd') return false;
     return new Date(i.due_date) < new Date();
   }).length;
 
-  const monthlyRevenue = invoices
-    .filter(i => {
-      const invoiceDate = new Date(i.invoice_date);
-      const now = new Date();
-      return invoiceDate.getMonth() === now.getMonth() && 
-             invoiceDate.getFullYear() === now.getFullYear() &&
-             i.status !== 'kladd';
-    })
-    .reduce((sum, i) => sum + (i.total_amount || 0), 0);
+  const monthlyRevenue = invoices.
+  filter((i) => {
+    const invoiceDate = new Date(i.invoice_date);
+    const now = new Date();
+    return invoiceDate.getMonth() === now.getMonth() &&
+    invoiceDate.getFullYear() === now.getFullYear() &&
+    i.status !== 'kladd';
+  }).
+  reduce((sum, i) => sum + (i.total_amount || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -121,21 +121,21 @@ export default function Dashboard() {
         <UnfinishedChecklists />
 
         {/* Checklist Templates Quick Access */}
-        <Link 
+        <Link
           to={createPageUrl('Sjekklister')}
-          className="block"
-        >
+          className="block">
+
           <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950">
-            <div className="p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center">
-                <CheckSquare className="h-6 w-6 text-emerald-700 dark:text-emerald-300" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">Sjekklistemaler</h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Opprett og administrer sjekklistemaler for prosjektene dine</p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400 ml-auto" />
-            </div>
+            
+
+
+
+
+
+
+
+
+
           </Card>
         </Link>
 
@@ -146,21 +146,21 @@ export default function Dashboard() {
             <div className="p-6 border-b border-slate-100">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-slate-900">Siste prosjekter</h2>
-                <Link 
+                <Link
                   to={createPageUrl('Prosjekter')}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
-                >
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1">
+
                   Se alle <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {accessibleProjects.slice(0, 5).map((project) => (
-                <Link
-                  key={project.id}
-                  to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
-                  className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
-                >
+              {accessibleProjects.slice(0, 5).map((project) =>
+              <Link
+                key={project.id}
+                to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
+                className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
                       <Building2 className="h-5 w-5 text-slate-600" />
@@ -172,12 +172,12 @@ export default function Dashboard() {
                   </div>
                   <StatusBadge status={project.status} />
                 </Link>
-              ))}
-              {accessibleProjects.length === 0 && (
-                <div className="p-8 text-center text-slate-500">
+              )}
+              {accessibleProjects.length === 0 &&
+              <div className="p-8 text-center text-slate-500">
                   Ingen prosjekter tilgjengelig
                 </div>
-              )}
+              }
             </div>
           </Card>
 
@@ -186,17 +186,17 @@ export default function Dashboard() {
             <div className="p-6 border-b border-slate-100">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-slate-900">Kommende hendelser</h2>
-                <Link 
+                <Link
                   to={createPageUrl('Kalender')}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
-                >
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1">
+
                   Se kalender <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {events.filter(e => new Date(e.start_time) >= new Date()).slice(0, 4).map((event) => (
-                <div key={event.id} className="flex items-center gap-4 p-4">
+              {events.filter((e) => new Date(e.start_time) >= new Date()).slice(0, 4).map((event) =>
+              <div key={event.id} className="flex items-center gap-4 p-4">
                   <div className="w-12 h-12 rounded-xl bg-blue-100 flex flex-col items-center justify-center">
                     <span className="text-xs font-medium text-blue-600">
                       {format(new Date(event.start_time), 'MMM', { locale: nb }).toUpperCase()}
@@ -213,16 +213,16 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-              ))}
-              {events.filter(e => new Date(e.start_time) >= new Date()).length === 0 && (
-                <div className="p-8 text-center text-slate-500">
+              )}
+              {events.filter((e) => new Date(e.start_time) >= new Date()).length === 0 &&
+              <div className="p-8 text-center text-slate-500">
                   Ingen kommende hendelser
                 </div>
-              )}
+              }
             </div>
           </Card>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 }
