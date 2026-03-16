@@ -158,7 +158,7 @@ export default function HMSHandbok() {
 
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pb-20 lg:pb-0">
       <PageHeader
         title="HMS-håndbok"
         subtitle={handbook ? `Versjon ${handbook.version} • Sist oppdatert ${format(new Date(handbook.sist_endret_dato || handbook.created_date), 'dd.MM.yyyy', { locale: nb })}` : 'Opprett HMS-håndbok for bedriften'}
