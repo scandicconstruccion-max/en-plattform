@@ -495,65 +495,39 @@ export default function Prosjektfiler() {
     toast.success(`${selectedFiles.length} filer lastet ned`);
   };
 
-  // Horizontal scroll ref handler - prevents vertical page scroll while scrolling horizontally
+  // Prevent layout's swipe-back from interfering with horizontal scroll strips
   const catScrollRef = useRef(null);
   const projScrollRef = useRef(null);
 
-  const makeHorizScrollHandler = (ref) => {
-    let startX = 0, startY = 0, startScrollLeft = 0;
-    return {
-      onTouchStart: (e) => {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        startScrollLeft = ref.current?.scrollLeft || 0;
-      },
-      onTouchMove: (e) => {
-        if (!ref.current) return;
-        const dx = startX - e.touches[0].clientX;
-        const dy = Math.abs(startY - e.touches[0].clientY);
-        // Only hijack horizontal-dominant swipes
-        if (Math.abs(dx) > dy) {
-          e.preventDefault();
-          ref.current.scrollLeft = startScrollLeft + dx;
-        }
-      }
-    };
-  };
-
-  const catScrollHandlers = makeHorizScrollHandler(catScrollRef);
-  const projScrollHandlers = makeHorizScrollHandler(projScrollRef);
-
   useEffect(() => {
-    const addPassiveListeners = (ref, handlers) => {
+    const handleTouchMove = (e) => {
+      if (e.touches.length !== 1) return;
+      // If horizontal movement dominates, stop propagation so Layout swipe-back doesn't fire
+      const touch = e.touches[0];
+      const el = e.currentTarget;
+      if (!el._touchStartX) return;
+      const dx = Math.abs(touch.clientX - el._touchStartX);
+      const dy = Math.abs(touch.clientY - el._touchStartY);
+      if (dx > dy) e.stopPropagation();
+    };
+    const handleTouchStart = (e) => {
+      e.currentTarget._touchStartX = e.touches[0].clientX;
+      e.currentTarget._touchStartY = e.touches[0].clientY;
+    };
+    [catScrollRef, projScrollRef].forEach(ref => {
       const el = ref.current;
       if (!el) return;
-      el.addEventListener('touchstart', handlers.onTouchStart, { passive: true });
-      el.addEventListener('touchmove', handlers.onTouchMove, { passive: false });
-      return () => {
-        el.removeEventListener('touchstart', handlers.onTouchStart);
-        el.removeEventListener('touchmove', handlers.onTouchMove);
-      };
+      el.addEventListener('touchstart', handleTouchStart, { passive: true });
+      el.addEventListener('touchmove', handleTouchMove, { passive: true });
+    });
+    return () => {
+      [catScrollRef, projScrollRef].forEach(ref => {
+        const el = ref.current;
+        if (!el) return;
+        el.removeEventListener('touchstart', handleTouchStart);
+        el.removeEventListener('touchmove', handleTouchMove);
+      });
     };
-    const c1 = addPassiveListeners(catScrollRef, catScrollHandlers);
-    const c2 = addPassiveListeners(projScrollRef, projScrollHandlers);
-    return () => { c1?.(); c2?.(); };
-  }, []);
-
-  // Re-attach when project changes (refs might not be mounted yet on first render)
-  useEffect(() => {
-    const addPassiveListeners = (ref, handlers) => {
-      const el = ref.current;
-      if (!el) return;
-      el.addEventListener('touchstart', handlers.onTouchStart, { passive: true });
-      el.addEventListener('touchmove', handlers.onTouchMove, { passive: false });
-      return () => {
-        el.removeEventListener('touchstart', handlers.onTouchStart);
-        el.removeEventListener('touchmove', handlers.onTouchMove);
-      };
-    };
-    const c1 = addPassiveListeners(catScrollRef, catScrollHandlers);
-    const c2 = addPassiveListeners(projScrollRef, projScrollHandlers);
-    return () => { c1?.(); c2?.(); };
   }, [projectFilter]);
 
   // Build flat list of all selectable categories (parents without children + all subcategories)
