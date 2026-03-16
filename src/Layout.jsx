@@ -333,7 +333,7 @@ export default function Layout({ children, currentPageName }) {
             return (
               <div key={sectionIndex} className="mb-6">
                 {!sidebarCollapsed && section.title &&
-                <div className="px-4 mb-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                <div className="px-4 mb-2 text-sm font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     {section.title}
                   </div>
                 }
