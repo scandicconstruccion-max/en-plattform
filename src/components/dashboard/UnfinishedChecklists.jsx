@@ -14,8 +14,19 @@ export default function UnfinishedChecklists() {
   const { data: checklists = [] } = useQuery({
     queryKey: ['unfinishedChecklists'],
     queryFn: async () => {
-      const all = await base44.entities.Checklist.list('-updated_date', 100);
-      return all.filter(c => c.status !== 'fullfort').slice(0, 5);
+      const [all, projects] = await Promise.all([
+        base44.entities.Checklist.list('-updated_date', 100),
+        base44.entities.Project.list()
+      ]);
+      const existingProjectIds = new Set(projects.map(p => p.id));
+      return all.filter(c => {
+        // Ekskluder fullførte eller signerte
+        if (c.status === 'fullfort') return false;
+        if (c.signatures && c.signatures.length > 0) return false;
+        // Ekskluder sjekklister tilknyttet slettede prosjekter
+        if (!existingProjectIds.has(c.project_id)) return false;
+        return true;
+      }).slice(0, 5);
     }
   });
 
