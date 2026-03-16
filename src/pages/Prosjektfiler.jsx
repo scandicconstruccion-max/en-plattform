@@ -523,6 +523,39 @@ export default function Prosjektfiler() {
   const catScrollHandlers = makeHorizScrollHandler(catScrollRef);
   const projScrollHandlers = makeHorizScrollHandler(projScrollRef);
 
+  useEffect(() => {
+    const addPassiveListeners = (ref, handlers) => {
+      const el = ref.current;
+      if (!el) return;
+      el.addEventListener('touchstart', handlers.onTouchStart, { passive: true });
+      el.addEventListener('touchmove', handlers.onTouchMove, { passive: false });
+      return () => {
+        el.removeEventListener('touchstart', handlers.onTouchStart);
+        el.removeEventListener('touchmove', handlers.onTouchMove);
+      };
+    };
+    const c1 = addPassiveListeners(catScrollRef, catScrollHandlers);
+    const c2 = addPassiveListeners(projScrollRef, projScrollHandlers);
+    return () => { c1?.(); c2?.(); };
+  }, []);
+
+  // Re-attach when project changes (refs might not be mounted yet on first render)
+  useEffect(() => {
+    const addPassiveListeners = (ref, handlers) => {
+      const el = ref.current;
+      if (!el) return;
+      el.addEventListener('touchstart', handlers.onTouchStart, { passive: true });
+      el.addEventListener('touchmove', handlers.onTouchMove, { passive: false });
+      return () => {
+        el.removeEventListener('touchstart', handlers.onTouchStart);
+        el.removeEventListener('touchmove', handlers.onTouchMove);
+      };
+    };
+    const c1 = addPassiveListeners(catScrollRef, catScrollHandlers);
+    const c2 = addPassiveListeners(projScrollRef, projScrollHandlers);
+    return () => { c1?.(); c2?.(); };
+  }, [projectFilter]);
+
   // Build flat list of all selectable categories (parents without children + all subcategories)
   const allSelectableCategories = useMemo(() => {
     const parents = projectCategories.filter(c => !c.parent_category).filter((c, i, self) => i === self.findIndex(x => x.name === c.name));
