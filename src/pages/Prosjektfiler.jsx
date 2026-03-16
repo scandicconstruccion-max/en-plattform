@@ -523,7 +523,7 @@ export default function Prosjektfiler() {
         {/* Project Filter - mobile: scrollable buttons, desktop: select */}
         <div className="mb-4">
           {/* Mobile: scrollable project buttons */}
-          <div className="flex gap-2 overflow-x-auto pb-2 lg:hidden" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:hidden" style={{ scrollbarWidth: 'none' }} onTouchMove={e => e.stopPropagation()}>
             {projects.map((p) => (
               <button
                 key={p.id}
