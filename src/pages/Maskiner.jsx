@@ -287,27 +287,42 @@ export default function Maskiner() {
         {!isLoading && maskiner.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-5 items-center justify-between">
             <div className="flex flex-wrap gap-2">
-            {['alle', 'lager', 'hos_ansatt', 'prosjekt', 'service'].map((key) => {
-              const cfg = LOKASJON_CONFIG[key];
-              const Icon = cfg?.icon;
-              const count = key === 'alle' ? maskiner.length : maskiner.filter((m) => (m.lokasjon || 'lager') === key).length;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setFilterLokasjon(key)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all',
-                    filterLokasjon === key
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                  )}
-                >
-                  {Icon && <Icon className="h-3.5 w-3.5" />}
-                  {key === 'alle' ? 'Alle' : cfg.label}
-                  <span className={cn('ml-0.5 text-xs', filterLokasjon === key ? 'text-emerald-100' : 'text-slate-400')}>({count})</span>
-                </button>
-              );
-            })}
+              {['alle', 'lager', 'hos_ansatt', 'prosjekt', 'service'].map((key) => {
+                const cfg = LOKASJON_CONFIG[key];
+                const Icon = cfg?.icon;
+                const count = key === 'alle' ? maskiner.length : maskiner.filter((m) => (m.lokasjon || 'lager') === key).length;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setFilterLokasjon(key)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all',
+                      filterLokasjon === key
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    )}
+                  >
+                    {Icon && <Icon className="h-3.5 w-3.5" />}
+                    {key === 'alle' ? 'Alle' : cfg.label}
+                    <span className={cn('ml-0.5 text-xs', filterLokasjon === key ? 'text-emerald-100' : 'text-slate-400')}>({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white flex-shrink-0">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn('p-2 transition-colors', viewMode === 'grid' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50')}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn('p-2 transition-colors', viewMode === 'list' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50')}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
 
