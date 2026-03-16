@@ -14,7 +14,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import SjekkUtDialog from '@/components/maskiner/SjekkUtDialog';
 import MaskinReservasjonDialog from '@/components/maskiner/MaskinReservasjonDialog';
 import MaskinTidslinje from '@/components/maskiner/MaskinTidslinje';
-import { Plus, Pencil, Trash2, Loader2, MapPin, User, Warehouse, Wrench, CalendarRange, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, MapPin, User, Warehouse, Wrench, CalendarRange, ChevronDown, ChevronUp, LayoutGrid, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
