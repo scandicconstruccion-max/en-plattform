@@ -83,7 +83,7 @@ export default function NotificationBell({ userEmail }) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        className="relative h-11 w-11 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors touch-manipulation"
       >
         <Bell className="h-5 w-5 text-slate-600 dark:text-slate-400" />
         {unreadCount > 0 && (
