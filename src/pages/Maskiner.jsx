@@ -523,11 +523,11 @@ export default function Maskiner() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90dvh] flex flex-col rounded-2xl">
           <DialogHeader>
             <DialogTitle>{editingMaskin ? 'Rediger maskin' : 'Ny maskin'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
+          <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1">
             <div>
               <Label>Navn *</Label>
               <Input
