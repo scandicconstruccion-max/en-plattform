@@ -231,13 +231,13 @@ export default function ProsjektDetaljer() {
         showBack
         backUrl={createPageUrl('Dashboard')}
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {project.type !== 'unit' && (
               <Button 
                 onClick={() => setShowSubprojectDialog(true)} 
                 className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2">
                 <Plus className="h-4 w-4" />
-                Opprett underprosjekt
+                <span className="hidden sm:inline">Opprett underprosjekt</span>
               </Button>
             )}
             {project.status === 'fullfort' && (
@@ -245,19 +245,18 @@ export default function ProsjektDetaljer() {
                 onClick={() => setShowFDVDialog(true)} 
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
                 <FileText className="h-4 w-4" />
-                Generer FDV
+                <span className="hidden sm:inline">Generer FDV</span>
               </Button>
             )}
             <Button variant="outline" onClick={handleEdit} className="rounded-xl gap-2">
               <Edit className="h-4 w-4" />
-              Rediger
+              <span className="hidden sm:inline">Rediger</span>
             </Button>
             <Button 
               variant="outline" 
               onClick={() => setShowDeleteDialog(true)} 
               className="rounded-xl gap-2 border-red-200 text-red-600 hover:bg-red-50">
               <Trash2 className="h-4 w-4" />
-              Slett
             </Button>
           </div>
         }
