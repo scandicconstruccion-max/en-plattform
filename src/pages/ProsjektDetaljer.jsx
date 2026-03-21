@@ -660,7 +660,7 @@ export default function ProsjektDetaljer() {
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90dvh] flex flex-col overflow-hidden rounded-2xl">
           <DialogHeader className="px-6 pt-6 flex-shrink-0">
             <DialogTitle>Rediger prosjekt</DialogTitle>
           </DialogHeader>
