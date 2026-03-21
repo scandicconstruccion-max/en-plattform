@@ -669,8 +669,8 @@ export default function ProsjektDetaljer() {
               {/* Basic Info */}
               <div>
                 <h4 className="font-medium text-slate-900 mb-3">Grunnleggende</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="col-span-1 sm:col-span-2">
                     <Label>Prosjektnavn *</Label>
                     <Input
                       value={formData.name}
