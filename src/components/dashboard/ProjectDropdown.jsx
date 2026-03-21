@@ -18,14 +18,26 @@ import StatusBadge from '@/components/shared/StatusBadge';
 export default function ProjectDropdown() {
   const [selectedProject, setSelectedProject] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date')
   });
 
+  // Sync with URL: if we're on a project detail page, auto-select that project
   useEffect(() => {
     if (projects.length === 0) return;
+    const params = new URLSearchParams(location.search);
+    const urlProjectId = params.get('id');
+    if (urlProjectId && location.pathname.includes('ProsjektDetaljer')) {
+      const found = projects.find(p => p.id === urlProjectId);
+      if (found) {
+        setSelectedProject(found);
+        localStorage.setItem('selectedProject', JSON.stringify(found));
+        return;
+      }
+    }
     const stored = localStorage.getItem('selectedProject');
     if (stored) {
       const parsed = JSON.parse(stored);
@@ -37,7 +49,7 @@ export default function ProjectDropdown() {
         setSelectedProject(null);
       }
     }
-  }, [projects]);
+  }, [projects, location]);
 
   useEffect(() => {
     const handleProjectSelected = () => {
