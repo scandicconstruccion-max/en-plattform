@@ -408,27 +408,29 @@ export default function ProsjektDetaljer() {
             {/* Subcontractors, Architects, Consultants */}
             <Card className="border-0 shadow-sm overflow-hidden">
               <Tabs defaultValue="subcontractors" className="w-full">
-                <div className="border-b border-slate-200 px-6">
-                  <TabsList className="h-14 bg-transparent gap-4 -mb-px">
+                <div className="border-b border-slate-200 px-2 sm:px-6 overflow-x-auto">
+                  <TabsList className="h-14 bg-transparent gap-1 sm:gap-4 -mb-px flex w-full min-w-max">
                     <TabsTrigger 
                       value="subcontractors" 
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap"
                     >
-                      <HardHat className="h-4 w-4 mr-2" />
-                      Underentreprenører ({project.subcontractors?.length || 0})
+                      <HardHat className="h-4 w-4 mr-1 sm:mr-2 flex-shrink-0" />
+                      <span className="hidden sm:inline">Underentreprenører</span>
+                      <span className="sm:hidden">UE</span>
+                      <span className="ml-1">({project.subcontractors?.length || 0})</span>
                     </TabsTrigger>
                     <TabsTrigger 
                       value="architects"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap"
                     >
-                      <Ruler className="h-4 w-4 mr-2" />
+                      <Ruler className="h-4 w-4 mr-1 sm:mr-2 flex-shrink-0" />
                       Arkitekter ({project.architects?.length || 0})
                     </TabsTrigger>
                     <TabsTrigger 
                       value="consultants"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap"
                     >
-                      <Wrench className="h-4 w-4 mr-2" />
+                      <Wrench className="h-4 w-4 mr-1 sm:mr-2 flex-shrink-0" />
                       Rådgivere ({project.consultants?.length || 0})
                     </TabsTrigger>
                   </TabsList>
