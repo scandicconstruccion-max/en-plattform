@@ -704,7 +704,7 @@ export default function ProsjektDetaljer() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-1 sm:col-span-2">
                     <Label>Gateadresse</Label>
                     <Input
                       placeholder="Gatenavn og nummer, f.eks. Storgata 12"
