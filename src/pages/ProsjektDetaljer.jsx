@@ -749,7 +749,7 @@ export default function ProsjektDetaljer() {
                       className="mt-1.5 rounded-xl"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-1 sm:col-span-2">
                     <Label>Budsjett (NOK)</Label>
                     <Input
                       type="number"
