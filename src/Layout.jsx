@@ -250,9 +250,10 @@ export default function Layout({ children, currentPageName }) {
       <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="flex items-center justify-center h-14 w-14 rounded-xl hover:bg-slate-100 active:bg-slate-200 transition-colors select-none touch-manipulation"
+            className="flex items-center justify-center rounded-xl hover:bg-slate-100 active:bg-slate-200 transition-colors select-none touch-manipulation"
+            style={{ width: 56, height: 56, minWidth: 56, minHeight: 56 }}
           >
-            {sidebarOpen ? <X className="h-8 w-8 text-slate-700" strokeWidth={2.5} /> : <Menu className="h-8 w-8 text-slate-700" strokeWidth={2.5} />}
+            {sidebarOpen ? <X className="h-7 w-7 text-slate-700" strokeWidth={2.5} /> : <Menu className="h-7 w-7 text-slate-700" strokeWidth={2.5} />}
           </button>
           <img
             src="https://media.base44.com/images/public/699376a31a2b8a2014ee8ac9/724f65eff_Logo1.jpg"
