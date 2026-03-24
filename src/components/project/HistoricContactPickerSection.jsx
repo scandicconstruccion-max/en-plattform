@@ -95,35 +95,41 @@ export default function HistoricContactPickerSection({ type, items, onChange, cu
       {items.map((item, index) => (
         <div key={index} className="mb-2 p-3 bg-slate-50 rounded-xl">
           {type === 'subcontractor' && (
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-              <Input placeholder="Firma" value={item.name} onChange={e => update(index, 'name', e.target.value)} className="col-span-2 rounded-lg" />
-              <Input placeholder="Fag" value={item.trade} onChange={e => update(index, 'trade', e.target.value)} className="rounded-lg" />
-              <Input placeholder="Kontakt" value={item.contact_person} onChange={e => update(index, 'contact_person', e.target.value)} className="rounded-lg" />
-              <Input placeholder="Telefon" value={item.phone} onChange={e => update(index, 'phone', e.target.value)} className="rounded-lg" />
-              <div className="flex gap-1 col-span-2 sm:col-span-1">
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input placeholder="Firma" value={item.name} onChange={e => update(index, 'name', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Fag" value={item.trade} onChange={e => update(index, 'trade', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Kontakt" value={item.contact_person} onChange={e => update(index, 'contact_person', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Telefon" value={item.phone} onChange={e => update(index, 'phone', e.target.value)} className="rounded-lg" />
+              </div>
+              <div className="flex gap-1">
                 <Input placeholder="E-post" value={item.email} onChange={e => update(index, 'email', e.target.value)} className="rounded-lg flex-1" />
                 <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-red-500 hover:text-red-600 flex-shrink-0"><Trash2 className="h-4 w-4" /></Button>
               </div>
             </div>
           )}
           {type === 'architect' && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <Input placeholder="Firma" value={item.company} onChange={e => update(index, 'company', e.target.value)} className="col-span-2 rounded-lg" />
-              <Input placeholder="Kontakt" value={item.contact_person} onChange={e => update(index, 'contact_person', e.target.value)} className="rounded-lg" />
-              <Input placeholder="Telefon" value={item.phone} onChange={e => update(index, 'phone', e.target.value)} className="rounded-lg" />
-              <div className="flex gap-1 col-span-2 sm:col-span-1">
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input placeholder="Firma" value={item.company} onChange={e => update(index, 'company', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Kontakt" value={item.contact_person} onChange={e => update(index, 'contact_person', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Telefon" value={item.phone} onChange={e => update(index, 'phone', e.target.value)} className="rounded-lg" />
+              </div>
+              <div className="flex gap-1">
                 <Input placeholder="E-post" value={item.email} onChange={e => update(index, 'email', e.target.value)} className="rounded-lg flex-1" />
                 <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-red-500 hover:text-red-600 flex-shrink-0"><Trash2 className="h-4 w-4" /></Button>
               </div>
             </div>
           )}
           {type === 'consultant' && (
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-              <Input placeholder="Firma" value={item.company} onChange={e => update(index, 'company', e.target.value)} className="col-span-2 rounded-lg" />
-              <Input placeholder="Fagområde" value={item.discipline} onChange={e => update(index, 'discipline', e.target.value)} className="rounded-lg" />
-              <Input placeholder="Kontakt" value={item.contact_person} onChange={e => update(index, 'contact_person', e.target.value)} className="rounded-lg" />
-              <Input placeholder="Telefon" value={item.phone} onChange={e => update(index, 'phone', e.target.value)} className="rounded-lg" />
-              <div className="flex gap-1 col-span-2 sm:col-span-1">
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input placeholder="Firma" value={item.company} onChange={e => update(index, 'company', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Fagområde" value={item.discipline} onChange={e => update(index, 'discipline', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Kontakt" value={item.contact_person} onChange={e => update(index, 'contact_person', e.target.value)} className="rounded-lg" />
+                <Input placeholder="Telefon" value={item.phone} onChange={e => update(index, 'phone', e.target.value)} className="rounded-lg" />
+              </div>
+              <div className="flex gap-1">
                 <Input placeholder="E-post" value={item.email} onChange={e => update(index, 'email', e.target.value)} className="rounded-lg flex-1" />
                 <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-red-500 hover:text-red-600 flex-shrink-0"><Trash2 className="h-4 w-4" /></Button>
               </div>
