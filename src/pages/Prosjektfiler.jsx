@@ -669,49 +669,155 @@ export default function Prosjektfiler() {
                 })}
             </div>
 
-            {/* Mobile Category Pills */}
-            <div className="lg:hidden -mx-4 px-4 mb-3">
-              <div ref={catScrollRef} className="flex flex-col gap-2">
-                {allSelectableCategories.map((cat) => {
-                  const isSelected = selectedCategory === cat.id;
-                  const count = getFilesCountForCategory(cat.id);
-                  return (
+            {/* Mobile: Accordion-style categories with files inline */}
+            <div className="lg:hidden space-y-2">
+              {/* Search and Upload */}
+              <div className="flex gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input placeholder="Søk etter filer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 rounded-xl" />
+                </div>
+                <Button
+                  onClick={() => setShowUploadDialog(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-1"
+                  disabled={!selectedCategory}
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {allSelectableCategories.map((cat) => {
+                const isOpen = selectedCategory === cat.id;
+                const catFiles = files.filter(f =>
+                  f.category_id === cat.id &&
+                  f.project_id === projectFilter &&
+                  canAccess(f.access_level) &&
+                  (!search || f.name.toLowerCase().includes(search.toLowerCase()) || f.description?.toLowerCase().includes(search.toLowerCase())) &&
+                  (isRevisionCategory(cat.id) ? (showArchive || f.active_flag !== false) : true)
+                );
+                const count = catFiles.length;
+
+                return (
+                  <div key={cat.id} className="rounded-xl border-2 overflow-hidden bg-white" style={{ borderColor: isOpen ? cat.color : '#e2e8f0' }}>
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={cn(
-                        'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left',
-                        isSelected
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-700'
-                      )}
+                      onClick={() => setSelectedCategory(isOpen ? null : cat.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left"
                     >
-                      <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: isSelected ? '#d1fae5' : `${cat.color}20` }}
-                      >
-                        <FileText className="h-4 w-4" style={{ color: isSelected ? '#059669' : cat.color }} />
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${cat.color}20` }}>
+                        <FileText className="h-4 w-4" style={{ color: cat.color }} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{cat.name}</p>
                         {cat.parentName && <p className="text-xs text-slate-400 truncate">{cat.parentName}</p>}
                       </div>
-                      <p className={cn('text-xs flex-shrink-0', isSelected ? 'text-emerald-600' : 'text-slate-400')}>{count} filer</p>
+                      <span className="text-xs text-slate-400 flex-shrink-0 mr-1">{count} filer</span>
+                      {isOpen ? <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />}
                     </button>
-                  );
-                })}
-                <button
-                  onClick={() => setShowCategoryDialog(true)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed border-slate-300 text-slate-400"
-                >
-                  <Plus className="h-4 w-4" />
-                  <p className="text-sm">Ny kategori</p>
-                </button>
-              </div>
+
+                    {isOpen && (
+                      <div className="border-t px-3 pb-3 pt-2 space-y-2" style={{ borderColor: `${cat.color}30` }}>
+                        {isRevisionCategory(cat.id) && (
+                          <button
+                            onClick={() => setShowArchive(!showArchive)}
+                            className={cn("flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all mb-2",
+                              showArchive ? "bg-slate-200 border-slate-300 text-slate-700" : "bg-white border-slate-200 text-slate-500")}
+                          >
+                            <Archive className="h-3 w-3" />
+                            {showArchive ? 'Skjul arkiv' : 'Vis arkiverte revisjoner'}
+                          </button>
+                        )}
+                        {catFiles.length === 0 ? (
+                          <p className="text-xs text-slate-400 text-center py-3">Ingen filer i denne kategorien</p>
+                        ) : (
+                          catFiles.map((file) => {
+                            const FileIcon = getFileIcon(file.file_type);
+                            const isRevCat = isRevisionCategory(file.category_id);
+                            const isActive = file.active_flag !== false;
+                            const isArchived = file.active_flag === false;
+                            const isImg = ['jpg','jpeg','png','gif','webp','svg'].includes(file.file_type?.toLowerCase());
+                            return (
+                              <Card key={file.id} className={cn("p-3 hover:shadow-md transition-shadow", isArchived && "opacity-60 bg-slate-50")}>
+                                <div className="flex items-start gap-2">
+                                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5", isActive && isRevCat ? "bg-emerald-100" : "bg-blue-50")}>
+                                    <FileIcon className={cn("h-4 w-4", isActive && isRevCat ? "text-emerald-600" : "text-blue-500")} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-1">
+                                      <p className="font-medium text-sm leading-tight break-words flex-1">{file.base_name || file.name}</p>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
+                                            <MoreVertical className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem asChild>
+                                            <a href={file.file_url} target="_blank" rel="noopener noreferrer">
+                                              <Download className="h-4 w-4 mr-2" /> Last ned
+                                            </a>
+                                          </DropdownMenuItem>
+                                          {isRevCat && isActive && (
+                                            <DropdownMenuItem onClick={() => setRevisionDialogFile(file)}>
+                                              <RefreshCw className="h-4 w-4 mr-2" /> Last opp ny revisjon
+                                            </DropdownMenuItem>
+                                          )}
+                                          {isRevCat && (
+                                            <DropdownMenuItem onClick={() => setHistoryFile(file)}>
+                                              <History className="h-4 w-4 mr-2" /> Revisjonshistorikk
+                                            </DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem
+                                            onClick={() => { deleteFileMutation.mutate(file.id); logActivity(file.id, 'Slettet', 'Fil slettet'); }}
+                                            className="text-red-600"
+                                          >
+                                            <Trash2 className="h-4 w-4 mr-2" /> Slett
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                    {isRevCat && file.version && (
+                                      <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold mt-0.5",
+                                        isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                                        {file.version}
+                                        {isActive && <CheckCircle2 className="h-3 w-3" />}
+                                        {isArchived && <Archive className="h-3 w-3" />}
+                                      </span>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-400 mt-0.5">
+                                      {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
+                                      <span>{format(new Date(file.created_date), 'dd.MM.yyyy', { locale: nb })}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </Card>
+                            );
+                          })
+                        )}
+                        <Button
+                          onClick={() => setShowUploadDialog(true)}
+                          variant="outline"
+                          size="sm"
+                          className="w-full rounded-xl mt-1 border-dashed"
+                        >
+                          <Upload className="h-3 w-3 mr-1" /> Last opp fil
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={() => setShowCategoryDialog(true)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed border-slate-300 text-slate-400"
+              >
+                <Plus className="h-4 w-4" />
+                <p className="text-sm">Ny kategori</p>
+              </button>
             </div>
 
-            {/* Right Panel - Files */}
-            <div className="space-y-6">
+            {/* Right Panel - Files (desktop only) */}
+            <div className="hidden lg:block space-y-6">
               {/* Search and Actions */}
               <div className="flex gap-3">
                 <div className="relative flex-1">
@@ -721,13 +827,11 @@ export default function Prosjektfiler() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-10 rounded-xl" />
-
                 </div>
                 <Button
                 onClick={() => setShowUploadDialog(true)}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"
                 disabled={!selectedCategory}>
-
                   <Upload className="h-4 w-4" /> Last opp fil
                 </Button>
               </div>
@@ -738,19 +842,12 @@ export default function Prosjektfiler() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-emerald-700">{selectedFiles.length} filer valgt</p>
                     <div className="flex gap-2">
-                      <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBulkDownload}
-                    className="rounded-xl">
-
+                      <Button variant="outline" size="sm" onClick={handleBulkDownload} className="rounded-xl">
                         <Download className="h-4 w-4 mr-2" /> Last ned
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="rounded-xl">
-                            Flytt til kategori
-                          </Button>
+                          <Button variant="outline" size="sm" className="rounded-xl">Flytt til kategori</Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                           {projectCategories.map((cat) =>
@@ -760,19 +857,10 @@ export default function Prosjektfiler() {
                       )}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    className="text-red-600 rounded-xl">
-
+                      <Button variant="outline" size="sm" onClick={handleBulkDelete} className="text-red-600 rounded-xl">
                         <Trash2 className="h-4 w-4 mr-2" /> Slett
                       </Button>
-                      <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedFiles([])}>
-
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedFiles([])}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -787,9 +875,7 @@ export default function Prosjektfiler() {
                     onClick={() => setShowArchive(!showArchive)}
                     className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all",
-                      showArchive
-                        ? "bg-slate-200 border-slate-300 text-slate-700"
-                        : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                      showArchive ? "bg-slate-200 border-slate-300 text-slate-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
                     )}
                   >
                     <Archive className="h-4 w-4" />
@@ -800,59 +886,29 @@ export default function Prosjektfiler() {
 
               {/* Files List */}
               {!selectedCategory ?
-            <EmptyState
-              icon={FolderOpen}
-              title="Velg en kategori"
-              description="Velg en kategori fra venstre panel for å se filer" /> :
-
+            <EmptyState icon={FolderOpen} title="Velg en kategori" description="Velg en kategori fra venstre panel for å se filer" /> :
             filteredFiles.length === 0 ?
-            <EmptyState
-              icon={FileText}
-              title="Ingen filer"
-              description="Last opp filer til denne kategorien"
-              actionLabel="Last opp fil"
-              onAction={() => setShowUploadDialog(true)} /> :
-
-
+            <EmptyState icon={FileText} title="Ingen filer" description="Last opp filer til denne kategorien" actionLabel="Last opp fil" onAction={() => setShowUploadDialog(true)} /> :
             <div className="space-y-6">
-                  {/* Images Section */}
                   {imageFiles.length > 0 &&
               <div>
-                      <h3 className="font-semibold text-slate-900 mb-4">
-                        Bilder ({imageFiles.length})
-                      </h3>
-                      <ImageGallery
-                  images={imageFiles}
-                  selectedFiles={selectedFiles}
-                  onToggleSelection={toggleFileSelection}
-                  onOpenImage={handleOpenImage}
-                  onDelete={(id) => deleteFileMutation.mutate(id)}
-                  userAccessLevel={userAccessLevel} />
-
+                      <h3 className="font-semibold text-slate-900 mb-4">Bilder ({imageFiles.length})</h3>
+                      <ImageGallery images={imageFiles} selectedFiles={selectedFiles} onToggleSelection={toggleFileSelection} onOpenImage={handleOpenImage} onDelete={(id) => deleteFileMutation.mutate(id)} userAccessLevel={userAccessLevel} />
                     </div>
               }
-
-                  {/* Documents Section */}
                   {documentFiles.length > 0 &&
               <div>
-                      <h3 className="font-semibold text-slate-900 mb-4">
-                        Dokumenter ({documentFiles.length})
-                      </h3>
+                      <h3 className="font-semibold text-slate-900 mb-4">Dokumenter ({documentFiles.length})</h3>
                       <div className="space-y-2">
                         {documentFiles.map((file) => {
                     const FileIcon = getFileIcon(file.file_type);
-                    const AccessIcon = accessLevelIcons[file.access_level];
                     const isRevCat = isRevisionCategory(file.category_id);
                     const isActive = file.active_flag !== false;
                     const isArchived = file.active_flag === false;
                     return (
                       <Card key={file.id} className={cn("p-3 sm:p-4 hover:shadow-md transition-shadow", isArchived && "opacity-60 bg-slate-50")}>
                         <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={selectedFiles.includes(file.id)}
-                            onCheckedChange={() => toggleFileSelection(file.id)}
-                            className="mt-1 flex-shrink-0"
-                          />
+                          <Checkbox checked={selectedFiles.includes(file.id)} onCheckedChange={() => toggleFileSelection(file.id)} className="mt-1 flex-shrink-0" />
                           <div className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5", isActive && isRevCat ? "bg-emerald-100" : "bg-red-100")}>
                             <FileIcon className={cn("h-4 w-4 sm:h-5 sm:w-5", isActive && isRevCat ? "text-emerald-600" : "text-red-500")} />
                           </div>
@@ -861,10 +917,7 @@ export default function Prosjektfiler() {
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium text-sm leading-tight break-words">{file.base_name || file.name}</p>
                                 {isRevCat && file.version && (
-                                  <span className={cn(
-                                    "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold mt-1",
-                                    isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                                  )}>
+                                  <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold mt-1", isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
                                     {file.version}
                                     {isActive && <CheckCircle2 className="h-3 w-3" />}
                                     {isArchived && <Archive className="h-3 w-3" />}
@@ -873,12 +926,7 @@ export default function Prosjektfiler() {
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 {isRevCat && isActive && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-xs rounded-lg hidden sm:flex gap-1"
-                                    onClick={() => setRevisionDialogFile(file)}
-                                  >
+                                  <Button variant="outline" size="sm" className="text-xs rounded-lg hidden sm:flex gap-1" onClick={() => setRevisionDialogFile(file)}>
                                     <RefreshCw className="h-3 w-3" /> Ny revisjon
                                   </Button>
                                 )}
@@ -904,12 +952,7 @@ export default function Prosjektfiler() {
                                         <History className="h-4 w-4 mr-2" /> Revisjonshistorikk
                                       </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        deleteFileMutation.mutate(file.id);
-                                        logActivity(file.id, 'Slettet', 'Fil slettet');
-                                      }}
-                                      className="text-red-600">
+                                    <DropdownMenuItem onClick={() => { deleteFileMutation.mutate(file.id); logActivity(file.id, 'Slettet', 'Fil slettet'); }} className="text-red-600">
                                       <Trash2 className="h-4 w-4 mr-2" /> Slett
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -921,21 +964,16 @@ export default function Prosjektfiler() {
                               <span>{format(new Date(file.created_date), 'dd.MM.yyyy', { locale: nb })}</span>
                               {file.uploaded_by_name && <span className="truncate max-w-[120px]">{file.uploaded_by_name}</span>}
                             </div>
-                            {file.description && (
-                              <p className="text-xs text-slate-600 mt-1 line-clamp-2">{file.description}</p>
-                            )}
+                            {file.description && <p className="text-xs text-slate-600 mt-1 line-clamp-2">{file.description}</p>}
                           </div>
                         </div>
                       </Card>);
-
                   })}
                       </div>
                     </div>
               }
                 </div>
             }
-
-
             </div>
           </div>
         }
