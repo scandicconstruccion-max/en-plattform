@@ -69,27 +69,25 @@ export default function HistoricContactPickerSection({ type, items, onChange, cu
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <h4 className="font-medium text-slate-900 flex-1 min-w-0">{label}</h4>
-        <div className="flex gap-2 flex-shrink-0">
-          {historicOptions.length > 0 && (
-            <Select onValueChange={addFromHistory}>
-              <SelectTrigger className="h-8 rounded-xl text-xs w-40">
-                <SelectValue placeholder="Hent tidligere..." />
-              </SelectTrigger>
-              <SelectContent>
-                {historicOptions.map((opt, i) => (
-                  <SelectItem key={i} value={String(i)}>
-                    {type === 'subcontractor' ? opt.name : opt.company}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <Button type="button" variant="outline" size="sm" onClick={addBlank} className="rounded-xl whitespace-nowrap">
-            <Plus className="h-4 w-4 mr-1" /> Legg til
-          </Button>
-        </div>
+      <h4 className="font-medium text-slate-900 mb-2">{label}</h4>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {historicOptions.length > 0 && (
+          <Select onValueChange={addFromHistory}>
+            <SelectTrigger className="h-8 rounded-xl text-xs w-44">
+              <SelectValue placeholder="Hent tidligere..." />
+            </SelectTrigger>
+            <SelectContent>
+              {historicOptions.map((opt, i) => (
+                <SelectItem key={i} value={String(i)}>
+                  {type === 'subcontractor' ? opt.name : opt.company}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={addBlank} className="rounded-xl whitespace-nowrap">
+          <Plus className="h-4 w-4 mr-1" /> Legg til
+        </Button>
       </div>
 
       {items.map((item, index) => (
