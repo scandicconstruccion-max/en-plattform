@@ -15,6 +15,8 @@ import { Plus, Trash2 } from 'lucide-react';
  * currentProjectId: exclude current project from history
  */
 export default function HistoricContactPickerSection({ type, items, onChange, currentProjectId }) {
+  const [selectKey, setSelectKey] = useState(0);
+
   const { data: allProjects = [] } = useQuery({
     queryKey: ['allProjects'],
     queryFn: () => base44.entities.Project.list(),
@@ -53,6 +55,7 @@ export default function HistoricContactPickerSection({ type, items, onChange, cu
     const entry = historicOptions[parseInt(index)];
     if (!entry) return;
     onChange([...items, { ...entry }]);
+    setSelectKey(k => k + 1);
   };
 
   const update = (i, field, value) => {
@@ -72,7 +75,7 @@ export default function HistoricContactPickerSection({ type, items, onChange, cu
       <h4 className="font-medium text-slate-900 mb-2">{label}</h4>
       <div className="flex flex-wrap gap-2 mb-3">
         {historicOptions.length > 0 && (
-          <Select onValueChange={addFromHistory}>
+          <Select key={selectKey} onValueChange={addFromHistory}>
             <SelectTrigger className="h-8 rounded-xl text-xs w-44">
               <SelectValue placeholder="Hent tidligere..." />
             </SelectTrigger>
