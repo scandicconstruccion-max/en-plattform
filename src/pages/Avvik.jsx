@@ -580,52 +580,46 @@ export default function Avvik() {
         addLabel="Nytt avvik"
         actions={
         selectedDeviations.length > 0 &&
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 max-w-full">
               <Button
             onClick={() => setShowBulkEmailDialog(true)}
             variant="outline"
-            className="rounded-xl gap-2">
-
+            size="sm"
+            className="rounded-xl gap-1.5">
                 <Send className="h-4 w-4" />
-                Send på nytt ({selectedDeviations.length})
+                <span className="hidden sm:inline">Send på nytt</span>
+                <span>({selectedDeviations.length})</span>
               </Button>
               <Button
             onClick={() => setShowStatusDialog(true)}
             variant="outline"
-            className="rounded-xl gap-2">
-
+            size="sm"
+            className="rounded-xl gap-1.5">
                 <CheckCircle2 className="h-4 w-4" />
-                Endre status
+                <span className="hidden sm:inline">Endre status</span>
               </Button>
-              
-
-
-
-
-
-
-
               <Button
             onClick={handleBulkDownload}
             variant="outline"
-            className="rounded-xl gap-2">
-
+            size="sm"
+            className="rounded-xl gap-1.5">
                 <Download className="h-4 w-4" />
-                Last ned PDF
+                <span className="hidden sm:inline">Last ned PDF</span>
               </Button>
               <Button
             onClick={() => setShowDeleteDialog(true)}
             variant="destructive"
-            className="rounded-xl gap-2">
-
+            size="sm"
+            className="rounded-xl gap-1.5">
                 <Trash2 className="h-4 w-4" />
-                Slett ({selectedDeviations.length})
+                <span className="hidden sm:inline">Slett</span>
+                <span>({selectedDeviations.length})</span>
               </Button>
               <Button
             onClick={() => setSelectedDeviations([])}
             variant="outline"
+            size="sm"
             className="rounded-xl">
-
                 Avbryt
               </Button>
             </div>
