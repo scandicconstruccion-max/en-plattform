@@ -584,25 +584,29 @@ export default function Avvik() {
 
       {/* Bulk actions bar */}
       {selectedDeviations.length > 0 && (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-4 lg:px-8 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-emerald-800 flex-shrink-0">
+        <div className="bg-slate-800 border-b border-slate-700 px-4 lg:px-8 py-2.5">
+          <div className="flex items-center gap-3 overflow-x-auto scrollbar-none">
+            <span className="text-sm font-semibold text-white whitespace-nowrap bg-emerald-600 px-2.5 py-1 rounded-lg flex-shrink-0">
               {selectedDeviations.length} valgt
             </span>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <Button onClick={() => setShowBulkEmailDialog(true)} variant="outline" size="sm" className="rounded-xl gap-1.5 bg-white">
-                <Send className="h-4 w-4" /> Send e-post
+            <div className="w-px h-5 bg-slate-600 flex-shrink-0" />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button onClick={() => setShowBulkEmailDialog(true)} variant="ghost" size="sm" className="rounded-lg gap-1.5 text-slate-200 hover:text-white hover:bg-slate-700 h-8 px-3 whitespace-nowrap">
+                <Send className="h-3.5 w-3.5" /> Send e-post
               </Button>
-              <Button onClick={() => setShowStatusDialog(true)} variant="outline" size="sm" className="rounded-xl gap-1.5 bg-white">
-                <CheckCircle2 className="h-4 w-4" /> Endre status
+              <Button onClick={() => setShowStatusDialog(true)} variant="ghost" size="sm" className="rounded-lg gap-1.5 text-slate-200 hover:text-white hover:bg-slate-700 h-8 px-3 whitespace-nowrap">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Endre status
               </Button>
-              <Button onClick={handleBulkDownload} variant="outline" size="sm" className="rounded-xl gap-1.5 bg-white">
-                <Download className="h-4 w-4" /> Last ned PDF
+              <Button onClick={handleBulkDownload} variant="ghost" size="sm" className="rounded-lg gap-1.5 text-slate-200 hover:text-white hover:bg-slate-700 h-8 px-3 whitespace-nowrap">
+                <Download className="h-3.5 w-3.5" /> Last ned PDF
               </Button>
-              <Button onClick={() => setShowDeleteDialog(true)} variant="destructive" size="sm" className="rounded-xl gap-1.5">
-                <Trash2 className="h-4 w-4" /> Slett
+            </div>
+            <div className="w-px h-5 bg-slate-600 flex-shrink-0" />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button onClick={() => setShowDeleteDialog(true)} variant="ghost" size="sm" className="rounded-lg gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 h-8 px-3 whitespace-nowrap">
+                <Trash2 className="h-3.5 w-3.5" /> Slett
               </Button>
-              <Button onClick={() => setSelectedDeviations([])} variant="ghost" size="sm" className="rounded-xl text-slate-500">
+              <Button onClick={() => setSelectedDeviations([])} variant="ghost" size="sm" className="rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700 h-8 px-3 whitespace-nowrap">
                 Avbryt
               </Button>
             </div>
