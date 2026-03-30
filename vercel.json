@@ -1,2 +1,5 @@
-VITE_SUPABASE_URL=https://yrrhjbhqwakatghxwqwr.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlycmhqYmhxd2FrYXRnaHh3cXdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTQ1ODIsImV4cCI6MjA5MDQ3MDU4Mn0.kwOKhYpNi4EtI0zVH2wQdrcEH20jyuN6nKQvreL__VM
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}

@@ -1,44 +1,42 @@
-{
-  "name": "en-plattform",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@radix-ui/react-avatar": "^1.1.3",
-    "@radix-ui/react-dialog": "^1.1.6",
-    "@radix-ui/react-dropdown-menu": "^2.1.6",
-    "@radix-ui/react-label": "^2.1.2",
-    "@radix-ui/react-select": "^2.1.6",
-    "@radix-ui/react-separator": "^1.1.2",
-    "@radix-ui/react-slot": "^1.1.2",
-    "@radix-ui/react-tabs": "^1.1.3",
-    "@radix-ui/react-toast": "^1.2.2",
-    "@radix-ui/react-tooltip": "^1.1.8",
-    "@supabase/supabase-js": "^2.49.4",
-    "@tanstack/react-query": "^5.84.1",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
-    "framer-motion": "^11.16.4",
-    "lucide-react": "^0.475.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-hot-toast": "^2.6.0",
-    "react-router-dom": "^6.26.0",
-    "recharts": "^2.15.4",
-    "tailwind-merge": "^3.0.2",
-    "tailwindcss-animate": "^1.0.7"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.5.3",
-    "tailwindcss": "^3.4.17",
-    "vite": "^6.1.0"
-  }
-}
+# En Plattform – KS-system for bygg og anlegg
+
+## Oppsett
+
+### 1. Supabase database
+1. Gå til Supabase-prosjektet ditt
+2. Klikk på **SQL Editor**
+3. Kopier innholdet fra `supabase-setup.sql`
+4. Klikk **Run** for å sette opp alle tabeller
+
+### 2. Opprett admin-bruker
+1. I Supabase: gå til **Authentication → Users**
+2. Klikk **Add user**
+3. Fyll inn e-post og passord
+4. Etter at brukeren er opprettet, gå til **Table Editor → profiles**
+5. Finn brukeren og sett `role` til `admin`
+
+### 3. Deploy til Vercel
+1. Push koden til GitHub
+2. Gå til vercel.com og importer repositoryet
+3. Legg til environment variables:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. Klikk Deploy
+
+## Moduler
+- ✅ Dashboard med alle modulkort
+- ✅ Innlogging med Supabase Auth
+- ✅ Kollapsbar sidebar
+- ✅ Rollestyring (admin, prosjektleder, ansatt, regnskapsfører)
+- 🔄 Prosjekter (under utvikling)
+- 🔄 Avvik (under utvikling)
+- 🔄 Sjekklister (under utvikling)
+- ... og alle øvrige moduler
+
+## Teknologi
+- React 18
+- Supabase (database + auth + fillagring)
+- Vercel (hosting)
+- Tailwind CSS
+- React Router
+- TanStack Query
