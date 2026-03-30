@@ -5,7 +5,8 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import Layout from './Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Placeholder from './pages/Placeholder'import Prosjekter from './pages/Prosjekter'
+import Placeholder from './pages/Placeholder'
+  import Prosjekter from './pages/Prosjekter'
 import ProsjektDetaljer from './pages/ProsjektDetaljer'
 
 const queryClient = new QueryClient()
