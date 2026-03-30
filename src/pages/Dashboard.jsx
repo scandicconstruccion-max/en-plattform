@@ -1,228 +1,157 @@
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
-import { Card } from '@/components/ui/card';
-import StatCard from '@/components/shared/StatCard';
-import StatusBadge from '@/components/shared/StatusBadge';
-import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
-import ModuleGrid from '@/components/dashboard/ModuleGrid';
-import KPISection from '@/components/dashboard/KPISection';
-import UnfinishedChecklists from '@/components/dashboard/UnfinishedChecklists';
-import { filterProjectsByAccess, canViewKPI, getAvailableModules } from '@/components/shared/permissions';
+import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '@/lib/AuthContext'
+import { hasModuleAccess } from '@/lib/permissions'
+import { format } from 'date-fns'
+import { nb } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
 import {
-  Building2, AlertTriangle, Clock, TrendingUp, ArrowRight, Calendar, FileText, CheckSquare } from
-'lucide-react';
-import { format } from 'date-fns';
-import { nb } from 'date-fns/locale';
+  AlertTriangle, FileText, Clock, Camera, CheckSquare,
+  FileSpreadsheet, Gavel, MessageSquare, Users, CalendarDays,
+  Building2, LayoutDashboard, ShieldAlert, Construction,
+  TrendingUp, Receipt, PenSquare, BookOpen, PackageCheck,
+  ClipboardCheck, AlertCircle, FileCheck, ShoppingCart, UserCog, Bell
+} from 'lucide-react'
+
+const moduleDefinitions = {
+  prosjekter:       { name: 'Prosjekter',           description: 'Administrer prosjekter',           icon: Building2,      color: 'emerald',  route: '/prosjekter' },
+  prosjektfiler:    { name: 'Prosjektfiler',         description: 'Filer og dokumenter',              icon: FileText,       color: 'slate',    route: '/prosjektfiler' },
+  sjekklister:      { name: 'Sjekklister',           description: 'Kvalitetskontroll',                icon: CheckSquare,    color: 'teal',     route: '/sjekklister' },
+  avvik:            { name: 'Avvik',                 description: 'Avvikshåndtering',                 icon: AlertTriangle,  color: 'amber',    route: '/avvik' },
+  hms:              { name: 'HMS & Risiko',          description: 'Helse, miljø og sikkerhet',        icon: ShieldAlert,    color: 'red',      route: '/hms' },
+  maskiner:         { name: 'Maskiner',              description: 'Maskin- og utstyrsregister',       icon: Construction,   color: 'amber',    route: '/maskiner' },
+  tilbud:           { name: 'Tilbud',                description: 'Tilbudsadministrasjon',            icon: FileSpreadsheet,color: 'cyan',     route: '/tilbud' },
+  anbudsmodul:      { name: 'Anbudsportal',          description: 'Leverandøranbud og tilbud',        icon: Gavel,          color: 'orange',   route: '/anbudsmodul' },
+  ordre:            { name: 'Ordre',                 description: 'Arbeidsordre',                     icon: FileText,       color: 'indigo',   route: '/ordre' },
+  endringsmeldinger:{ name: 'Endringsmeldinger',     description: 'Tillegg og endringer',             icon: PenSquare,      color: 'blue',     route: '/endringsmeldinger' },
+  faktura:          { name: 'Faktura',               description: 'Fakturering og betalinger',        icon: Receipt,        color: 'green',    route: '/faktura' },
+  ansatte:          { name: 'Ansatte',               description: 'Personaladministrasjon',           icon: Users,          color: 'slate',    route: '/ansatte' },
+  timelister:       { name: 'Timelister',            description: 'Timeføring',                       icon: Clock,          color: 'indigo',   route: '/timelister' },
+  ressursplan:      { name: 'Ressursplanlegger',     description: 'Bemanning og planlegging',         icon: Users,          color: 'violet',   route: '/ressursplan' },
+  kalender:         { name: 'Kalender',              description: 'Hendelser og møter',               icon: CalendarDays,   color: 'sky',      route: '/kalender' },
+  chat:             { name: 'Intern Chat',           description: 'Teamkommunikasjon',                icon: MessageSquare,  color: 'pink',     route: '/chat' },
+  befaring:         { name: 'Befaring',              description: 'Befaringer og oppfølging',         icon: CheckSquare,    color: 'cyan',     route: '/befaring' },
+  bildedok:         { name: 'Bildedok.',             description: 'Foto og dokumentasjon',            icon: Camera,         color: 'purple',   route: '/bildedok' },
+  fdv:              { name: 'FDV',                   description: 'Forvaltning, drift og vedlikehold',icon: BookOpen,       color: 'rose',     route: '/fdv' },
+  crm:              { name: 'CRM',                   description: 'Kundeadministrasjon',              icon: TrendingUp,     color: 'rose',     route: '/crm' },
+  minbedrift:       { name: 'Min bedrift',           description: 'Bedriftsinformasjon',              icon: Building2,      color: 'emerald',  route: '/minbedrift' },
+  brukeradmin:      { name: 'Brukere',               description: 'Brukeradministrasjon',             icon: UserCog,        color: 'slate',    route: '/brukeradmin' },
+  varsler:          { name: 'Varsler',               description: 'Notifikasjoner og varsler',        icon: Bell,           color: 'amber',    route: '/varsler' },
+  sja:              { name: 'SJA',                   description: 'Sikker jobb-analyse',              icon: ClipboardCheck, color: 'orange',   route: '/sja' },
+  ruh:              { name: 'RUH',                   description: 'Rapport om uønsket hendelse',      icon: AlertCircle,    color: 'red',      route: '/ruh' },
+  risikoanalyse:    { name: 'Risikoanalyse',         description: 'Kartlegging av risiko',            icon: FileCheck,      color: 'orange',   route: '/risikoanalyse' },
+  hmshandbok:       { name: 'HMS-håndbok',           description: 'Retningslinjer og prosedyrer',     icon: BookOpen,       color: 'teal',     route: '/hmshandbok' },
+  mottakskontroll:  { name: 'Mottakskontroll',       description: 'Kontroll ved mottak',              icon: PackageCheck,   color: 'green',    route: '/mottakskontroll' },
+  bestillinger:     { name: 'Bestillinger',          description: 'Innkjøp og bestillinger',          icon: ShoppingCart,   color: 'blue',     route: '/bestillinger' },
+  kompetanser:      { name: 'Kompetanser',           description: 'Kurs og sertifikater',             icon: ShieldAlert,    color: 'purple',   route: '/kompetanser' },
+}
+
+const moduleSections = [
+  { title: '🔹 GRUNNPAKKE',                   modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner'] },
+  { title: '💰 ØKONOMI & KONTRAKT',           modules: ['tilbud', 'anbudsmodul', 'ordre', 'endringsmeldinger', 'faktura'] },
+  { title: '👷 PERSONELL & RESSURSER',        modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat'] },
+  { title: '📸 DOKUMENTASJON & OVERLEVERING', modules: ['befaring', 'bildedok', 'fdv'] },
+  { title: '⚙ SALG & ADMIN',                 modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser', 'varsler'] },
+]
+
+const colorClasses = {
+  emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
+  green:   { bg: 'bg-green-100',   text: 'text-green-600' },
+  amber:   { bg: 'bg-amber-100',   text: 'text-amber-600' },
+  blue:    { bg: 'bg-blue-100',    text: 'text-blue-600' },
+  indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-600' },
+  purple:  { bg: 'bg-purple-100',  text: 'text-purple-600' },
+  teal:    { bg: 'bg-teal-100',    text: 'text-teal-600' },
+  cyan:    { bg: 'bg-cyan-100',    text: 'text-cyan-600' },
+  orange:  { bg: 'bg-orange-100',  text: 'text-orange-600' },
+  pink:    { bg: 'bg-pink-100',    text: 'text-pink-600' },
+  violet:  { bg: 'bg-violet-100',  text: 'text-violet-600' },
+  rose:    { bg: 'bg-rose-100',    text: 'text-rose-600' },
+  sky:     { bg: 'bg-sky-100',     text: 'text-sky-600' },
+  slate:   { bg: 'bg-slate-100',   text: 'text-slate-600' },
+  red:     { bg: 'bg-red-100',     text: 'text-red-600' },
+}
 
 export default function Dashboard() {
-  const { data: user } = useQuery({
-    queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me()
-  });
+  const { profile } = useAuth()
+  const [collapsedSections, setCollapsedSections] = useState({})
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date', 10)
-  });
+  const toggleSection = (index) => {
+    setCollapsedSections(prev => ({ ...prev, [index]: !prev[index] }))
+  }
 
-  const { data: deviations = [] } = useQuery({
-    queryKey: ['deviations'],
-    queryFn: () => base44.entities.Deviation.list('-created_date', 10)
-  });
-
-  const { data: timesheets = [] } = useQuery({
-    queryKey: ['timesheets'],
-    queryFn: () => base44.entities.Timesheet.list('-date', 50)
-  });
-
-  const { data: events = [] } = useQuery({
-    queryKey: ['events'],
-    queryFn: () => base44.entities.CalendarEvent.list('-start_time', 5)
-  });
-
-  const { data: invoices = [] } = useQuery({
-    queryKey: ['invoices'],
-    queryFn: () => base44.entities.Invoice.list('-invoice_date', 50)
-  });
-
-  const { data: companies = [] } = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => base44.entities.Company.list()
-  });
-
-  const company = companies?.[0];
-  const activeModules = user ? getAvailableModules(user) : [];
-
-  // Filter projects based on user access
-  const accessibleProjects = user ? filterProjectsByAccess(user, projects) : projects;
-
-  const activeProjects = accessibleProjects.filter((p) => p.status === 'aktiv').length;
-  const openDeviations = deviations.filter((d) => d.status !== 'lukket').length;
-  const totalHoursThisWeek = timesheets.
-  filter((t) => {
-    const date = new Date(t.date);
-    const now = new Date();
-    const weekAgo = new Date(now.setDate(now.getDate() - 7));
-    return date >= weekAgo;
-  }).
-  reduce((sum, t) => sum + (t.hours || 0), 0);
-
-  const unpaidInvoices = invoices.filter((i) =>
-  i.status !== 'betalt' && i.status !== 'kladd' && i.status !== 'kreditert'
-  ).length;
-
-  const overdueInvoices = invoices.filter((i) => {
-    if (i.status === 'betalt' || i.status === 'kladd') return false;
-    return new Date(i.due_date) < new Date();
-  }).length;
-
-  const monthlyRevenue = invoices.
-  filter((i) => {
-    const invoiceDate = new Date(i.invoice_date);
-    const now = new Date();
-    return invoiceDate.getMonth() === now.getMonth() &&
-    invoiceDate.getFullYear() === now.getFullYear() &&
-    i.status !== 'kladd';
-  }).
-  reduce((sum, i) => sum + (i.total_amount || 0), 0);
+  const firstName = profile?.full_name?.split(' ')[0] || 'Bruker'
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+      <div className="bg-white border-b border-slate-200">
         <div className="px-6 lg:px-8 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Velkommen tilbake, {(user?.display_name || user?.full_name)?.split(' ')[0] || 'Bruker'}
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">
-                {format(new Date(), "EEEE d. MMMM yyyy", { locale: nb })}
-              </p>
-            </div>
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Velkommen tilbake, {firstName}
+          </h1>
+          <p className="text-slate-500 mt-1">
+            {format(new Date(), "EEEE d. MMMM yyyy", { locale: nb })}
+          </p>
         </div>
       </div>
 
       <div className="px-6 lg:px-8 py-8 space-y-8">
-        {/* KPI Section - Only for users with permission */}
-        {canViewKPI(user, 'company') && <KPISection />}
-
-        {/* Modules Grid */}
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Moduler</h2>
-          <ModuleGrid activeModules={activeModules} />
-        </div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-6">Moduler</h2>
+          <div className="space-y-8">
+            {moduleSections.map((section, sectionIndex) => {
+              const isCollapsed = collapsedSections[sectionIndex]
+              const sectionModules = section.modules
+                .filter(key => moduleDefinitions[key] && (!profile || hasModuleAccess(profile, key)))
+                .map(key => ({ key, ...moduleDefinitions[key] }))
 
-        {/* Unfinished Checklists */}
-        <UnfinishedChecklists />
+              if (sectionModules.length === 0) return null
 
-        {/* Checklist Templates Quick Access */}
-        <Link
-          to={createPageUrl('Sjekklister')}
-          className="block">
-
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950">
-            
-
-
-
-
-
-
-
-
-
-          </Card>
-        </Link>
-
-        {/* Bottom Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Projects */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-slate-900">Siste prosjekter</h2>
-                <Link
-                  to={createPageUrl('Prosjekter')}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1">
-
-                  Se alle <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {accessibleProjects.slice(0, 5).map((project) =>
-              <Link
-                key={project.id}
-                to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}
-                className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
-
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-                      <Building2 className="h-5 w-5 text-slate-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-slate-900">{project.name}</p>
-                      <p className="text-sm text-slate-500">{project.client_name || 'Ingen kunde'}</p>
-                    </div>
-                  </div>
-                  <StatusBadge status={project.status} />
-                </Link>
-              )}
-              {accessibleProjects.length === 0 &&
-              <div className="p-8 text-center text-slate-500">
-                  Ingen prosjekter tilgjengelig
-                </div>
-              }
-            </div>
-          </Card>
-
-          {/* Upcoming Events */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-slate-900">Kommende hendelser</h2>
-                <Link
-                  to={createPageUrl('Kalender')}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1">
-
-                  Se kalender <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {events.filter((e) => new Date(e.start_time) >= new Date()).slice(0, 4).map((event) =>
-              <div key={event.id} className="flex items-center gap-4 p-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex flex-col items-center justify-center">
-                    <span className="text-xs font-medium text-blue-600">
-                      {format(new Date(event.start_time), 'MMM', { locale: nb }).toUpperCase()}
+              return (
+                <div key={sectionIndex}>
+                  <button
+                    onClick={() => toggleSection(sectionIndex)}
+                    className="flex items-center gap-3 mb-4 w-full text-left group"
+                  >
+                    <h3 className="text-sm font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">
+                      {section.title}
+                    </h3>
+                    <div className="flex-1 h-px bg-slate-200" />
+                    <span className="text-xs text-slate-400">
+                      {isCollapsed ? 'Vis' : 'Skjul'}
                     </span>
-                    <span className="text-lg font-bold text-blue-700">
-                      {format(new Date(event.start_time), 'd')}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-900">{event.title}</p>
-                    <p className="text-sm text-slate-500">
-                      {format(new Date(event.start_time), 'HH:mm')} 
-                      {event.location && ` • ${event.location}`}
-                    </p>
-                  </div>
+                  </button>
+
+                  {!isCollapsed && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                      {sectionModules.map((module) => {
+                        const colors = colorClasses[module.color] || colorClasses.slate
+                        return (
+                          <Link key={module.key} to={module.route}>
+                            <div className="group bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer h-full">
+                              <div className={cn(
+                                "w-12 h-12 rounded-xl flex items-center justify-center mb-4",
+                                colors.bg
+                              )}>
+                                <module.icon className={cn("h-6 w-6", colors.text)} />
+                              </div>
+                              <h3 className="font-semibold text-slate-900 group-hover:text-emerald-600 transition-colors text-sm">
+                                {module.name}
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-1">{module.description}</p>
+                            </div>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-              {events.filter((e) => new Date(e.start_time) >= new Date()).length === 0 &&
-              <div className="p-8 text-center text-slate-500">
-                  Ingen kommende hendelser
-                </div>
-              }
-            </div>
-          </Card>
+              )
+            })}
+          </div>
         </div>
       </div>
-    </div>);
-
+    </div>
+  )
 }

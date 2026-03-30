@@ -1,29 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { createPageUrl } from './utils';
-import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useAuth } from '@/lib/AuthContext'
+import { hasModuleAccess } from '@/lib/permissions'
+import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, AlertTriangle, FileText, Clock, Camera, CheckSquare,
   FileSpreadsheet, ShoppingCart, MessageSquare, Users, CalendarDays,
-  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft, ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle, FileCheck, BookOpen, PackageCheck, Gavel, Bell, Construction } from
-'lucide-react';
-import ProjectDropdown from '@/components/dashboard/ProjectDropdown';
-import NotificationBell from '@/components/notifications/NotificationBell';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { hasModuleAccess, MODULES } from '@/components/shared/permissions';
-import { useCompanyModuleAccess } from '@/components/shared/useCompanyModuleAccess';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger } from
-'@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import BottomNav from '@/components/navigation/BottomNav';
+  Building2, Settings, LogOut, Menu, X, ChevronDown, ChevronLeft,
+  ChevronRight, UserCog, ShieldAlert, ClipboardCheck, AlertCircle,
+  FileCheck, BookOpen, PackageCheck, Gavel, Bell, Construction,
+  Wrench, TrendingUp, Receipt, PenSquare
+} from 'lucide-react'
 
 const moduleIcons = {
   maskiner: Construction,
@@ -31,19 +19,19 @@ const moduleIcons = {
   avvik: AlertTriangle,
   befaring: CheckSquare,
   prosjektfiler: FileText,
-  endringsmeldinger: FileText,
+  endringsmeldinger: PenSquare,
   timelister: Clock,
   bildedok: Camera,
   sjekklister: CheckSquare,
   tilbud: FileSpreadsheet,
   ordre: FileText,
-  faktura: FileText,
-  fdv: FileText,
+  faktura: Receipt,
+  fdv: BookOpen,
   bestillinger: ShoppingCart,
   chat: MessageSquare,
   ressursplan: Users,
   prosjekter: Building2,
-  crm: Users,
+  crm: TrendingUp,
   kalender: CalendarDays,
   ansatte: Users,
   minbedrift: Building2,
@@ -55,10 +43,10 @@ const moduleIcons = {
   risikoanalyse: FileCheck,
   hmshandbok: BookOpen,
   mottakskontroll: PackageCheck,
-  anbudsportal: FileText,
   anbudsmodul: Gavel,
-  varsler: Bell
-};
+  varsler: Bell,
+  lonnsgrunnlag: Receipt,
+}
 
 const moduleLabels = {
   maskiner: 'Maskiner',
@@ -80,7 +68,6 @@ const moduleLabels = {
   chat: 'Intern Chat',
   ressursplan: 'Ressursplanlegger',
   prosjekter: 'Prosjekter',
-  varsler: 'Varsler',
   crm: 'CRM',
   kalender: 'Kalender',
   ansatte: 'Ansatte',
@@ -93,109 +80,50 @@ const moduleLabels = {
   risikoanalyse: 'Risikoanalyse',
   hmshandbok: 'HMS-håndbok',
   mottakskontroll: 'Mottakskontroll',
-  anbudsportal: 'Anbudsportal'
-};
+  lonnsgrunnlag: 'Lønnsgrunnlag',
+}
 
-const modulePages = {
-  maskiner: 'Maskiner',
-  anbudsmodul: 'Anbudsmodul',
-  dashboard: 'Dashboard',
-  avvik: 'Avvik',
-  befaring: 'Befaring',
-  prosjektfiler: 'Prosjektfiler',
-  endringsmeldinger: 'Endringsmeldinger',
-  timelister: 'Timelister',
-  bildedok: 'Bildedok',
-  sjekklister: 'Sjekklister',
-  sjekkliste_maler: 'SjekklisteMaler',
-  tilbud: 'Tilbud',
-  ordre: 'Ordre',
-  faktura: 'Faktura',
-  fdv: 'FDV',
-  bestillinger: 'Bestillinger',
-  chat: 'Chat',
-  ressursplan: 'Ressursplan',
-  prosjekter: 'Prosjekter',
-  varsler: 'Varsler',
-  crm: 'CRM',
-  kalender: 'Kalender',
-  ansatte: 'Ansatte',
-  minbedrift: 'MinBedrift',
-  brukeradmin: 'BrukerAdmin',
-  kompetanser: 'Kompetanser',
-  hms: 'HMS',
-  sja: 'SJA',
-  ruh: 'RUH',
-  risikoanalyse: 'Risikoanalyse',
-  hmshandbok: 'HMSHandbok',
-  mottakskontroll: 'Mottakskontroll',
-  anbudsportal: 'Anbudsportal'
-};
+const moduleRoutes = {
+  dashboard: '/dashboard',
+  prosjekter: '/prosjekter',
+  prosjektfiler: '/prosjektfiler',
+  sjekklister: '/sjekklister',
+  avvik: '/avvik',
+  hms: '/hms',
+  maskiner: '/maskiner',
+  tilbud: '/tilbud',
+  anbudsmodul: '/anbudsmodul',
+  ordre: '/ordre',
+  endringsmeldinger: '/endringsmeldinger',
+  faktura: '/faktura',
+  ansatte: '/ansatte',
+  timelister: '/timelister',
+  ressursplan: '/ressursplan',
+  kalender: '/kalender',
+  chat: '/chat',
+  befaring: '/befaring',
+  bildedok: '/bildedok',
+  fdv: '/fdv',
+  crm: '/crm',
+  minbedrift: '/minbedrift',
+  brukeradmin: '/brukeradmin',
+  kompetanser: '/kompetanser',
+  varsler: '/varsler',
+  sja: '/sja',
+  ruh: '/ruh',
+  risikoanalyse: '/risikoanalyse',
+  hmshandbok: '/hmshandbok',
+  mottakskontroll: '/mottakskontroll',
+  lonnsgrunnlag: '/lonnsgrunnlag',
+  bestillinger: '/bestillinger',
+}
 
-export default function Layout({ children, currentPageName }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // Swipe-to-go-back on mobile
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
-
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e) => {
-    if (touchStartX.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-    // Swipe right (from left edge) = go back
-    const startedFromLeftEdge = touchStartX.current < 40;
-    if (startedFromLeftEdge && dx > 80 && dy < 80) {
-      navigate(-1);
-    }
-    touchStartX.current = null;
-    touchStartY.current = null;
-  };
-
-  // Check public pages - check pathname and full URL (including from_url param)
-  const fullUrl = window.location.href;
-  const isPublicPage = location.pathname.includes('AnbudSvar') || 
-                       location.pathname.includes('AnbudSvarForm') ||
-                       location.pathname.includes('Priser') || 
-                       location.pathname.includes('Landing') ||
-                       location.pathname.includes('godkjenning') ||
-                       fullUrl.includes('AnbudSvar') ||
-                       fullUrl.includes('AnbudSvarForm');
-
-  const { data: user, isLoading } = useQuery({
-    queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
-    enabled: !isPublicPage // Skip auth check on public pages
-  });
-
-  const { data: companies } = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => base44.entities.Company.list(),
-    initialData: [],
-    enabled: !isPublicPage
-  });
-
-  const company = companies?.[0];
-  const { hasAccess: hasModuleSubscriptionAccess } = useCompanyModuleAccess(company?.id);
-
-  // Module sections
-  const moduleSections = [
+const moduleSections = [
   {
     title: 'GRUNNPAKKE',
     modules: ['dashboard', 'prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner']
   },
-  {
-    separator: true
-  },
+  { separator: true },
   {
     title: 'ØKONOMI & KONTRAKT',
     modules: ['tilbud', 'anbudsmodul', 'ordre', 'endringsmeldinger', 'faktura']
@@ -211,243 +139,236 @@ export default function Layout({ children, currentPageName }) {
   {
     title: 'SALG & ADMIN',
     modules: ['crm', 'minbedrift', 'brukeradmin', 'kompetanser', 'varsler']
-  }];
+  },
+]
 
-
+export default function Layout({ children }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024)
+  const { profile, signOut } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 1024);
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(true);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const handleLogout = () => {
-    base44.auth.logout();
-  };
-
-  // Redirect to login if not authenticated (skip for public pages)
-  useEffect(() => {
-    if (!isPublicPage && !user && !isLoading) {
-      base44.auth.redirectToLogin(window.location.href);
+      const mobile = window.innerWidth < 1024
+      setIsMobile(mobile)
+      if (!mobile) setSidebarOpen(true)
     }
-  }, [user, isLoading, isPublicPage]);
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
-  // For public pages, render immediately without auth
-  if (isPublicPage) {
-    return <>{children}</>;
+  const handleLogout = async () => {
+    await signOut()
+    navigate('/login')
   }
 
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?'
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-slate-50">
       {/* Mobile Header */}
-      {isMobile &&
-      <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
+      {isMobile && (
+        <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-50 flex items-center justify-between px-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="flex items-center justify-center rounded-xl hover:bg-slate-100 active:bg-slate-200 transition-colors select-none touch-manipulation"
-            style={{ width: 56, height: 56, minWidth: 56, minHeight: 56 }}
+            className="flex items-center justify-center w-10 h-10 rounded-xl hover:bg-slate-100 transition-colors"
           >
-            {sidebarOpen ? <X className="h-7 w-7 text-slate-700" strokeWidth={2.5} /> : <Menu className="h-7 w-7 text-slate-700" strokeWidth={2.5} />}
+            {sidebarOpen ? <X className="h-6 w-6 text-slate-700" /> : <Menu className="h-6 w-6 text-slate-700" />}
           </button>
-          <img
-            src="https://media.base44.com/images/public/699376a31a2b8a2014ee8ac9/724f65eff_Logo1.jpg"
-            alt="En Plattform"
-            className="h-9 w-auto object-contain"
-          />
-          <div className="flex items-center gap-1">
-            <NotificationBell userEmail={user?.email} />
-            <ProjectDropdown />
-          </div>
+          <span className="font-bold text-emerald-700 text-lg">En Plattform</span>
+          <div className="w-10" />
         </header>
-      }
+      )}
 
-      {/* Desktop Top Bar with Project Dropdown */}
-      {!isMobile &&
-      <div className={cn(
-        "fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 flex items-center justify-end gap-2 px-6 transition-all duration-300",
-        sidebarCollapsed ? "left-16" : "left-64"
-      )}>
-          <NotificationBell userEmail={user?.email} />
-          <ProjectDropdown />
+      {/* Desktop Top Bar */}
+      {!isMobile && (
+        <div className={cn(
+          "fixed top-0 right-0 h-16 bg-white border-b border-slate-200 z-30 flex items-center justify-end px-6 transition-all duration-300",
+          sidebarCollapsed ? "left-16" : "left-64"
+        )}>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-600">{profile?.full_name || profile?.email}</span>
+            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-semibold text-sm">
+              {initials}
+            </div>
+          </div>
         </div>
-      }
+      )}
 
       {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed top-0 left-0 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 transition-all duration-300",
-          isMobile ? "w-72" : sidebarCollapsed ? "w-16" : "w-64",
-          isMobile && !sidebarOpen ? "-translate-x-full" : "translate-x-0",
-          isMobile && "pt-16"
-        )}>
+      <aside className={cn(
+        "fixed top-0 left-0 h-full bg-white border-r border-slate-200 z-40 transition-all duration-300 flex flex-col",
+        isMobile ? "w-72" : sidebarCollapsed ? "w-16" : "w-64",
+        isMobile && !sidebarOpen ? "-translate-x-full" : "translate-x-0",
+        isMobile && "pt-16"
+      )}>
 
         {/* Logo */}
-        {!isMobile &&
-        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 dark:border-slate-800">
-            <div className={cn("flex items-center gap-3", sidebarCollapsed && "justify-center w-full")}>
-              
-
-
-              <Link to={createPageUrl('Dashboard')} className="hover:opacity-80 transition-opacity">
-                {sidebarCollapsed ?
-                  <span className="text-green-700 text-3xl font-bold dark:text-white">EP</span> :
-                  <img
-                    src="https://media.base44.com/images/public/699376a31a2b8a2014ee8ac9/724f65eff_Logo1.jpg"
-                    alt="En Plattform"
-                    className="h-12 w-auto object-contain"
-                  />
-                }
+        {!isMobile && (
+          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 flex-shrink-0">
+            <div className={cn("flex items-center gap-2", sidebarCollapsed && "justify-center w-full")}>
+              <Link to="/dashboard" className="hover:opacity-80 transition-opacity flex items-center gap-2">
+                <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-5 w-5 text-white" />
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="font-bold text-slate-900 text-base">En Plattform</span>
+                )}
               </Link>
             </div>
           </div>
-        }
+        )}
 
-        {/* Collapse Button - Desktop only */}
-        {!isMobile &&
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors z-50">
-
-            {sidebarCollapsed ?
-          <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" /> :
-
-          <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-          }
+        {/* Collapse Button */}
+        {!isMobile && (
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-20 w-6 h-6 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 transition-colors z-50"
+          >
+            {sidebarCollapsed
+              ? <ChevronRight className="h-3 w-3 text-slate-600" />
+              : <ChevronLeft className="h-3 w-3 text-slate-600" />
+            }
           </button>
-        }
+        )}
 
         {/* Navigation */}
-        <nav className={cn("p-4 space-y-1 overflow-y-auto h-[calc(100%-8rem)]", sidebarCollapsed && "px-2")}>
+        <nav className={cn(
+          "flex-1 overflow-y-auto py-4",
+          sidebarCollapsed ? "px-2" : "px-3"
+        )}>
           {moduleSections.map((section, sectionIndex) => {
             if (section.separator) {
-              return !sidebarCollapsed &&
-              <div key={`separator-${sectionIndex}`} className="my-4 border-t border-slate-200 dark:border-slate-700" />;
-
+              return !sidebarCollapsed && (
+                <div key={`sep-${sectionIndex}`} className="my-3 border-t border-slate-100" />
+              )
             }
 
+            const visibleModules = section.modules.filter(moduleKey =>
+              !profile || hasModuleAccess(profile, moduleKey)
+            )
+
+            if (visibleModules.length === 0) return null
+
             return (
-              <div key={sectionIndex} className="mb-6">
-                {!sidebarCollapsed && section.title &&
-                <div className="px-4 mb-2 text-sm font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              <div key={sectionIndex} className="mb-4">
+                {!sidebarCollapsed && section.title && (
+                  <div className="px-3 mb-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                     {section.title}
                   </div>
-                }
-                <div className="space-y-1">
-                  {section.modules.map((moduleKey) => {
-                    if (!user || !hasModuleAccess(user, moduleKey)) return null;
-                    if (!hasModuleSubscriptionAccess(moduleKey)) return null;
-
-                    const Icon = moduleIcons[moduleKey] || LayoutDashboard;
-                    const label = moduleLabels[moduleKey] || moduleKey;
-                    const page = modulePages[moduleKey] || 'Dashboard';
-                    const isActive = currentPageName === page;
+                )}
+                <div className="space-y-0.5">
+                  {visibleModules.map((moduleKey) => {
+                    const Icon = moduleIcons[moduleKey] || LayoutDashboard
+                    const label = moduleLabels[moduleKey] || moduleKey
+                    const route = moduleRoutes[moduleKey] || '/dashboard'
+                    const isActive = location.pathname === route || location.pathname.startsWith(route + '/')
 
                     return (
                       <Link
                         key={moduleKey}
-                        to={createPageUrl(page)}
+                        to={route}
                         onClick={() => isMobile && setSidebarOpen(false)}
                         title={sidebarCollapsed ? label : undefined}
                         className={cn(
-                          "flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-all select-none",
+                          "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                           sidebarCollapsed && "justify-center px-2",
-                          isActive ?
-                          "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" :
-                          "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                        )}>
-
-                        <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600 dark:text-emerald-400")} />
+                          isActive
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        )}
+                      >
+                        <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-emerald-600")} />
                         {!sidebarCollapsed && label}
-                      </Link>);
-
+                      </Link>
+                    )
                   })}
                 </div>
-              </div>);
-
+              </div>
+            )
           })}
         </nav>
 
         {/* User Section */}
-        <div className={cn("absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900", sidebarCollapsed && "p-2")}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors select-none",
-                sidebarCollapsed && "justify-center px-0"
-              )}>
-                <Avatar className="h-9 w-9 flex-shrink-0">
-                  <AvatarFallback className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
-                    {user?.full_name?.charAt(0) || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                {!sidebarCollapsed &&
-                <>
-                    <div className="flex-1 text-left">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        {user?.display_name || user?.full_name || 'Bruker'}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  </>
-                }
+        <div className={cn(
+          "border-t border-slate-100 p-3 flex-shrink-0",
+          sidebarCollapsed && "p-2"
+        )}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-semibold text-sm flex-shrink-0">
+              {initials}
+            </div>
+            {!sidebarCollapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">
+                  {profile?.full_name || 'Bruker'}
+                </p>
+                <p className="text-xs text-slate-500 truncate">{profile?.email || ''}</p>
+              </div>
+            )}
+            {!sidebarCollapsed && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => navigate('/innstillinger')}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Innstillinger"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                  title="Logg ut"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            {sidebarCollapsed && (
+              <button
+                onClick={handleLogout}
+                className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                title="Logg ut"
+              >
+                <LogOut className="h-4 w-4" />
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => navigate(createPageUrl('Innstillinger'))} className="select-none">
-                <Settings className="mr-2 h-4 w-4" />
-                Innstillinger
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-red-600 select-none">
-                <LogOut className="mr-2 h-4 w-4" />
-                Logg ut
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+          </div>
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
-      {isMobile && sidebarOpen &&
-      <div
-        className="fixed inset-0 bg-black/20 dark:bg-black/50 z-30"
-        onClick={() => setSidebarOpen(false)} />
-
-      }
+      {/* Mobile overlay */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Main Content */}
-      <main
-        onTouchStart={isMobile ? handleTouchStart : undefined}
-        onTouchEnd={isMobile ? handleTouchEnd : undefined}
-        className={cn(
-          "transition-all duration-300",
-          isMobile ? "pt-16 pb-20" : sidebarCollapsed ? "ml-16 pt-16" : "ml-64 pt-16",
-          "pb-[env(safe-area-inset-bottom)]"
-        )}>
-
+      <main className={cn(
+        "transition-all duration-300",
+        isMobile ? "pt-16" : sidebarCollapsed ? "ml-16 pt-16" : "ml-64 pt-16"
+      )}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="min-h-screen">
-
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
+            className="min-h-screen"
+          >
             {children}
           </motion.div>
         </AnimatePresence>
       </main>
-
-      {/* Bottom Navigation for Mobile */}
-      {isMobile && <BottomNav currentPageName={currentPageName} />}
-    </div>);
-
+    </div>
+  )
 }
