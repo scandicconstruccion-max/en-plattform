@@ -1,160 +1,83 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/lib/AuthContext'
+import { useProjects, useCreateProject, useDeleteProject } from '@/lib/hooks'
+import { PageHeader, EmptyState, StatusBadge, Modal, Input, Select, Textarea, Button, Card, Spinner } from '@/components/shared'
+import { cn } from '@/lib/utils'
+import { format } from 'date-fns'
+import { nb } from 'date-fns/locale'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import PageHeader from '@/components/shared/PageHeader';
-import StatusBadge from '@/components/shared/StatusBadge';
-import EmptyState from '@/components/shared/EmptyState';
-import EmployeeSearchField from '@/components/shared/EmployeeSearchField';
-import CustomerSelectField from '@/components/shared/CustomerSelectField';
-import HistoricContactPickerSection from '@/components/project/HistoricContactPickerSection';
-import { filterProjectsByAccess } from '@/components/shared/permissions';
-import { buildProjectHierarchy } from '@/components/shared/projectHierarchyUtils';
-import ProjectHierarchyTree from '@/components/project/ProjectHierarchyTree';
-import CreateSubprojectDialog from '@/components/project/CreateSubprojectDialog';
-import CustomerManagerDialog from '@/components/shared/CustomerManagerDialog';
-import { Building2, Search, MapPin, Calendar, Users, LayoutGrid, List, Plus, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { nb } from 'date-fns/locale';
+  Building2, Search, MapPin, Calendar, Users,
+  LayoutGrid, List, Plus, Trash2, ChevronRight
+} from 'lucide-react'
+
+const statusOptions = [
+  { value: 'planlagt', label: 'Planlagt' },
+  { value: 'aktiv',    label: 'Aktiv' },
+  { value: 'pause',    label: 'På pause' },
+  { value: 'fullfort', label: 'Fullført' },
+  { value: 'avbrutt',  label: 'Avbrutt' },
+]
+
+const emptyForm = {
+  name: '',
+  project_number: '',
+  description: '',
+  client_name: '',
+  client_contact: '',
+  client_email: '',
+  client_phone: '',
+  address_street: '',
+  address_postal: '',
+  address_city: '',
+  start_date: '',
+  end_date: '',
+  status: 'planlagt',
+  budget: '',
+}
 
 export default function Prosjekter() {
-  const [showDialog, setShowDialog] = useState(false);
-  const [showSubprojectDialog, setShowSubprojectDialog] = useState(false);
-  const [showCustomerManager, setShowCustomerManager] = useState(false);
-  const [selectedParentProject, setSelectedParentProject] = useState(null);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState('grid');
-  const [formData, setFormData] = useState({
-    name: '',
-    project_number: '',
-    description: '',
-    client_name: '',
-    client_contact: '',
-    client_email: '',
-    client_phone: '',
-    address: '',
-    address_street: '',
-    address_postal: '',
-    address_city: '',
-    start_date: '',
-    end_date: '',
-    status: 'planlagt',
-    budget: '',
-    project_manager: '',
-    project_manager_name: '',
-    project_manager_phone: '',
-    resident_name: '',
-    resident_phone: '',
-    resident_email: '',
-    subcontractors: [],
-    architects: [],
-    consultants: []
-  });
+  const { profile } = useAuth()
+  const { data: projects = [], isLoading } = useProjects()
+  const createProject = useCreateProject()
+  const deleteProject = useDeleteProject()
+  const navigate = useNavigate()
 
-  const queryClient = useQueryClient();
+  const [showDialog, setShowDialog] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [viewMode, setViewMode] = useState('grid')
+  const [formData, setFormData] = useState(emptyForm)
+  const [deleteId, setDeleteId] = useState(null)
 
-  const { data: user } = useQuery({
-    queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me()
-  });
-
-  const { data: allProjects = [], isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date'),
-  });
-  
-  // Filter projects based on user access
-  const projects = user ? filterProjectsByAccess(user, allProjects) : allProjects;
-
-  const { data: employees = [] } = useQuery({
-    queryKey: ['employees'],
-    queryFn: () => base44.entities.Employee.list(),
-    enabled: showDialog
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Project.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setShowDialog(false);
-      resetForm();
-    },
-  });
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      project_number: '',
-      description: '',
-      client_name: '',
-      client_contact: '',
-      client_email: '',
-      client_phone: '',
-      address: '',
-      address_street: '',
-      address_postal: '',
-      address_city: '',
-      start_date: '',
-      end_date: '',
-      status: 'planlagt',
-      budget: '',
-      project_manager: '',
-      project_manager_name: '',
-      project_manager_phone: '',
-      resident_name: '',
-      resident_phone: '',
-      resident_email: '',
-      subcontractors: [],
-      architects: [],
-      consultants: []
-    });
-  };
+  const filtered = projects.filter(p => {
+    const matchSearch = !search ||
+      p.name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.client_name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.project_number?.toLowerCase().includes(search.toLowerCase())
+    const matchStatus = statusFilter === 'all' || p.status === statusFilter
+    return matchSearch && matchStatus
+  })
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    const numRes = await base44.functions.invoke('generateDocumentNumber', { type: 'project' });
-    createMutation.mutate({
+    e.preventDefault()
+    const num = `P-${Date.now().toString().slice(-5)}`
+    await createProject.mutateAsync({
       ...formData,
-      project_number: formData.project_number || numRes.data.documentNumber,
-      budget: formData.budget ? parseFloat(formData.budget) : null
-    });
-  };
+      address: [formData.address_street, `${formData.address_postal} ${formData.address_city}`.trim()].filter(Boolean).join(', '),
+      project_number: formData.project_number || num,
+      budget: formData.budget ? parseFloat(formData.budget) : null,
+      created_by: profile?.id,
+    })
+    setShowDialog(false)
+    setFormData(emptyForm)
+  }
 
-  const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.name?.toLowerCase().includes(search.toLowerCase()) ||
-      p.client_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    const isMainProject = !p.parent_id;
-    return matchesSearch && matchesStatus && isMainProject;
-  });
-
-  const projectHierarchy = buildProjectHierarchy(projects);
-
-  const handleAddSubproject = (parentProject) => {
-    setSelectedParentProject(parentProject);
-    setShowSubprojectDialog(true);
-  };
+  const handleDelete = async () => {
+    if (!deleteId) return
+    await deleteProject.mutateAsync(deleteId)
+    setDeleteId(null)
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -163,11 +86,6 @@ export default function Prosjekter() {
         subtitle={`${projects.length} prosjekter totalt`}
         onAdd={() => setShowDialog(true)}
         addLabel="Nytt prosjekt"
-        actions={
-          <Button variant="outline" onClick={() => setShowCustomerManager(true)} className="rounded-xl gap-2 text-sm">
-            <Users className="h-4 w-4" /> Kunder
-          </Button>
-        }
       />
 
       <div className="px-6 lg:px-8 py-6">
@@ -175,119 +93,104 @@ export default function Prosjekter() {
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
+            <input
               placeholder="Søk etter prosjekt..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-9 rounded-xl border-slate-200 text-sm"
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-44 rounded-xl h-9">
-              <SelectValue placeholder="Alle statuser" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle statuser</SelectItem>
-              <SelectItem value="planlagt">Planlagt</SelectItem>
-              <SelectItem value="aktiv">Påbegynt</SelectItem>
-              <SelectItem value="pause">På pause</SelectItem>
-              <SelectItem value="fullfort">Fullført</SelectItem>
-            </SelectContent>
-          </Select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full sm:w-44 px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            <option value="all">Alle statuser</option>
+            {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
           <div className="flex items-center gap-1 ml-auto">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100'}`}
-              title="Rutenett"
+              className={cn('p-2 rounded-lg transition-colors', viewMode === 'grid' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100')}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100'}`}
-              title="Liste"
+              className={cn('p-2 rounded-lg transition-colors', viewMode === 'list' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100')}
             >
               <List className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('hierarchy')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'hierarchy' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100'}`}
-              title="Hierarki"
-            >
-              <Building2 className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Projects Grid */}
+        {/* Content */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1,2,3].map(i => (
-              <Card key={i} className="p-6 animate-pulse">
-                <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
-                <div className="h-4 bg-slate-200 rounded w-1/2" />
-              </Card>
-            ))}
-          </div>
-        ) : filteredProjects.length === 0 ? (
+          <Spinner />
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={Building2}
             title="Ingen prosjekter"
-            description={search ? "Ingen prosjekter matcher søket ditt" : "Kom i gang ved å opprette ditt første prosjekt"}
+            description={search ? 'Ingen prosjekter matcher søket ditt' : 'Kom i gang ved å opprette ditt første prosjekt'}
             actionLabel="Nytt prosjekt"
             onAction={() => setShowDialog(true)}
           />
-        ) : viewMode === 'hierarchy' ? (
-          <ProjectHierarchyTree 
-            projects={projectHierarchy}
-            onAddSubproject={handleAddSubproject}
-          />
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProjects.map((project) => (
-              <Link key={project.id} to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}>
-                <Card className="p-6 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
-                      <Building2 className="h-6 w-6 text-emerald-600" />
-                    </div>
-                    <StatusBadge status={project.status} />
-                  </div>
-                  <h3 className="font-semibold text-slate-900 mb-1 group-hover:text-emerald-600 transition-colors">
-                    {project.name}
-                  </h3>
-                  {project.project_number && (
-                    <p className="text-sm text-slate-500 mb-3">#{project.project_number}</p>
-                  )}
-                  <div className="space-y-2 text-sm text-slate-500">
-                    {project.client_name && (
-                      <div className="flex items-center gap-2"><Users className="h-4 w-4" />{project.client_name}</div>
-                    )}
-                    {project.address && (
-                      <div className="flex items-center gap-2"><MapPin className="h-4 w-4" />{project.address}</div>
-                    )}
-                    {project.start_date && (
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        {format(new Date(project.start_date), 'd. MMM yyyy', { locale: nb })}
+            {filtered.map(project => (
+              <div key={project.id} className="relative group">
+                <Link to={`/prosjekter/${project.id}`}>
+                  <Card className="p-6 hover:shadow-md transition-all cursor-pointer">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                        <Building2 className="h-6 w-6 text-emerald-600" />
                       </div>
+                      <StatusBadge status={project.status} />
+                    </div>
+                    <h3 className="font-semibold text-slate-900 mb-1 group-hover:text-emerald-600 transition-colors">
+                      {project.name}
+                    </h3>
+                    {project.project_number && (
+                      <p className="text-xs text-slate-400 mb-3">#{project.project_number}</p>
                     )}
-                  </div>
-                </Card>
-              </Link>
+                    <div className="space-y-1.5 text-sm text-slate-500">
+                      {project.client_name && (
+                        <div className="flex items-center gap-2"><Users className="h-3.5 w-3.5" />{project.client_name}</div>
+                      )}
+                      {project.address && (
+                        <div className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5" />{project.address}</div>
+                      )}
+                      {project.start_date && (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {format(new Date(project.start_date), 'd. MMM yyyy', { locale: nb })}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </Link>
+                {profile?.role === 'admin' && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); setDeleteId(project.id) }}
+                    className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 text-slate-400 transition-all"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredProjects.map((project) => (
-              <Link key={project.id} to={createPageUrl(`ProsjektDetaljer?id=${project.id}`)}>
-                <Card className="px-4 py-3 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group">
+            {filtered.map(project => (
+              <Link key={project.id} to={`/prosjekter/${project.id}`}>
+                <Card className="px-4 py-3 hover:shadow-md transition-all cursor-pointer group">
                   <div className="flex items-center gap-4">
-                    <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-200 transition-colors">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
                       <Building2 className="h-4 w-4 text-emerald-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
                         <span className="font-semibold text-slate-900 group-hover:text-emerald-600 transition-colors truncate">
                           {project.name}
                         </span>
@@ -295,22 +198,13 @@ export default function Prosjekter() {
                           <span className="text-xs text-slate-400">#{project.project_number}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-slate-500 mt-0.5 flex-wrap">
-                        {project.client_name && (
-                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{project.client_name}</span>
-                        )}
-                        {project.address && (
-                          <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{project.address}</span>
-                        )}
-                        {project.start_date && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {format(new Date(project.start_date), 'd. MMM yyyy', { locale: nb })}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-4 text-xs text-slate-500 mt-0.5">
+                        {project.client_name && <span>{project.client_name}</span>}
+                        {project.address && <span>{project.address}</span>}
                       </div>
                     </div>
                     <StatusBadge status={project.status} />
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
                   </div>
                 </Card>
               </Link>
@@ -320,239 +214,81 @@ export default function Prosjekter() {
       </div>
 
       {/* Create Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader className="px-6 pt-6 flex-shrink-0">
-            <DialogTitle>Nytt prosjekt</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto px-6 pb-6 flex-1">
-            {/* Basic Info */}
+      <Modal open={showDialog} onClose={() => setShowDialog(false)} title="Nytt prosjekt" size="lg">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <Input label="Prosjektnavn *" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Skriv inn prosjektnavn" required />
+            </div>
             <div>
-              <h4 className="font-medium text-slate-900 mb-3">Grunnleggende</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>Prosjektnavn *</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    placeholder="Skriv inn prosjektnavn"
-                    required
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Prosjektnummer</Label>
-                  <Input
-                    value="Tildeles automatisk"
-                    readOnly
-                    disabled
-                    className="mt-1.5 rounded-xl bg-slate-50 text-slate-400 cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(v) => setFormData({...formData, status: v})}
-                  >
-                    <SelectTrigger className="mt-1.5 rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="planlagt">Planlagt</SelectItem>
-                      <SelectItem value="aktiv">Aktiv</SelectItem>
-                      <SelectItem value="pause">På pause</SelectItem>
-                      <SelectItem value="fullfort">Fullført</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2">
-                  <Label>Gateadresse</Label>
-                  <Input
-                    placeholder="Gatenavn og nummer"
-                    value={formData.address_street}
-                    onChange={(e) => setFormData({...formData, address_street: e.target.value, address: [e.target.value, formData.address_city ? `${formData.address_postal} ${formData.address_city}`.trim() : ''].filter(Boolean).join(', ')})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Postnummer</Label>
-                  <Input
-                    placeholder="0000"
-                    value={formData.address_postal}
-                    onChange={(e) => setFormData({...formData, address_postal: e.target.value, address: [formData.address_street, `${e.target.value} ${formData.address_city}`.trim()].filter(Boolean).join(', ')})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Poststed</Label>
-                  <Input
-                    placeholder="By"
-                    value={formData.address_city}
-                    onChange={(e) => setFormData({...formData, address_city: e.target.value, address: [formData.address_street, `${formData.address_postal} ${e.target.value}`.trim()].filter(Boolean).join(', ')})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Startdato</Label>
-                  <Input
-                    type="date"
-                    value={formData.start_date}
-                    onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Sluttdato</Label>
-                  <Input
-                    type="date"
-                    value={formData.end_date}
-                    onChange={(e) => setFormData({...formData, end_date: e.target.value})}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Budsjett (NOK)</Label>
-                  <Input
-                    type="number"
-                    value={formData.budget}
-                    onChange={(e) => setFormData({...formData, budget: e.target.value})}
-                    placeholder="0"
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Beskrivelse</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    placeholder="Beskrivelse av prosjektet..."
-                    rows={2}
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
+              <Input label="Prosjektnummer" value={formData.project_number} onChange={(e) => setFormData({...formData, project_number: e.target.value})} placeholder="Tildeles automatisk" />
+            </div>
+            <div>
+              <Select label="Status" value={formData.status} onChange={(v) => setFormData({...formData, status: v})} options={statusOptions} />
+            </div>
+            <div className="col-span-2">
+              <Input label="Gateadresse" value={formData.address_street} onChange={(e) => setFormData({...formData, address_street: e.target.value})} placeholder="Gatenavn og nummer" />
+            </div>
+            <div>
+              <Input label="Postnummer" value={formData.address_postal} onChange={(e) => setFormData({...formData, address_postal: e.target.value})} placeholder="0000" />
+            </div>
+            <div>
+              <Input label="Poststed" value={formData.address_city} onChange={(e) => setFormData({...formData, address_city: e.target.value})} placeholder="By" />
+            </div>
+            <div>
+              <Input label="Startdato" type="date" value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})} />
+            </div>
+            <div>
+              <Input label="Sluttdato" type="date" value={formData.end_date} onChange={(e) => setFormData({...formData, end_date: e.target.value})} />
+            </div>
+            <div className="col-span-2">
+              <Input label="Budsjett (NOK)" type="number" value={formData.budget} onChange={(e) => setFormData({...formData, budget: e.target.value})} placeholder="0" />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
+            <h4 className="font-medium text-slate-900 mb-3">Kunde</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Input label="Kundenavn" value={formData.client_name} onChange={(e) => setFormData({...formData, client_name: e.target.value})} placeholder="Navn på kunde" />
+              </div>
+              <div>
+                <Input label="Kontaktperson" value={formData.client_contact} onChange={(e) => setFormData({...formData, client_contact: e.target.value})} placeholder="Navn" />
+              </div>
+              <div>
+                <Input label="Telefon" value={formData.client_phone} onChange={(e) => setFormData({...formData, client_phone: e.target.value})} placeholder="+47 000 00 000" />
+              </div>
+              <div className="col-span-2">
+                <Input label="E-post" type="email" value={formData.client_email} onChange={(e) => setFormData({...formData, client_email: e.target.value})} placeholder="kunde@eksempel.no" />
               </div>
             </div>
+          </div>
 
-            <Separator />
+          <div className="border-t border-slate-100 pt-4">
+            <Textarea label="Beskrivelse" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder="Beskrivelse av prosjektet..." rows={3} />
+          </div>
 
-            {/* Project Manager */}
-            <div>
-              <h4 className="font-medium text-slate-900 mb-3">Prosjektleder</h4>
-              <EmployeeSearchField
-                employees={employees}
-                value={{ name: formData.project_manager_name, email: formData.project_manager, phone: formData.project_manager_phone }}
-                onChange={(emp) => setFormData({
-                  ...formData,
-                  project_manager_name: emp.name,
-                  project_manager: emp.email,
-                  project_manager_phone: emp.phone
-                })}
-              />
-            </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>Avbryt</Button>
+            <Button type="submit" disabled={createProject.isPending}>
+              {createProject.isPending ? 'Oppretter...' : 'Opprett prosjekt'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
-            <Separator />
-
-            {/* Customer */}
-            <div>
-              <h4 className="font-medium text-slate-900 mb-3">Kunde</h4>
-              <CustomerSelectField
-                value={{ name: formData.client_name, contact: formData.client_contact, email: formData.client_email, phone: formData.client_phone }}
-                onChange={(c) => setFormData({...formData, client_name: c.name, client_contact: c.contact, client_email: c.email, client_phone: c.phone})}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Resident/Contact Info */}
-            <div>
-              <h4 className="font-medium text-slate-900 mb-3">Beboer / Annen kontakt</h4>
-              <div className="space-y-3">
-                <div>
-                  <Label>Navn</Label>
-                  <Input
-                    value={formData.resident_name}
-                    onChange={(e) => setFormData({...formData, resident_name: e.target.value})}
-                    placeholder="F.eks. navn på beboer"
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>Telefon</Label>
-                  <Input
-                    value={formData.resident_phone}
-                    onChange={(e) => setFormData({...formData, resident_phone: e.target.value})}
-                    placeholder="Telefonnummer"
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <Label>E-post</Label>
-                  <Input
-                    value={formData.resident_email}
-                    onChange={(e) => setFormData({...formData, resident_email: e.target.value})}
-                    placeholder="E-postadresse"
-                    className="mt-1.5 rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Subcontractors */}
-            <HistoricContactPickerSection
-              type="subcontractor"
-              items={formData.subcontractors}
-              onChange={(v) => setFormData({...formData, subcontractors: v})}
-              currentProjectId={null}
-            />
-
-            <Separator />
-
-            {/* Architects */}
-            <HistoricContactPickerSection
-              type="architect"
-              items={formData.architects}
-              onChange={(v) => setFormData({...formData, architects: v})}
-              currentProjectId={null}
-            />
-
-            <Separator />
-
-            {/* Consultants */}
-            <HistoricContactPickerSection
-              type="consultant"
-              items={formData.consultants}
-              onChange={(v) => setFormData({...formData, consultants: v})}
-              currentProjectId={null}
-            />
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">
-                Avbryt
-              </Button>
-              <Button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                {createMutation.isPending ? 'Oppretter...' : 'Opprett prosjekt'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Customer Manager Dialog */}
-      <CustomerManagerDialog open={showCustomerManager} onClose={() => setShowCustomerManager(false)} />
-
-      {/* Create Subproject Dialog */}
-      <CreateSubprojectDialog
-        open={showSubprojectDialog}
-        onClose={() => setShowSubprojectDialog(false)}
-        parentProject={selectedParentProject}
-      />
+      {/* Delete Confirm */}
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Slett prosjekt" size="sm">
+        <div className="p-6">
+          <p className="text-slate-600 mb-6">Er du sikker på at du vil slette dette prosjektet? Dette kan ikke angres.</p>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Avbryt</Button>
+            <Button variant="danger" onClick={handleDelete} disabled={deleteProject.isPending}>
+              {deleteProject.isPending ? 'Sletter...' : 'Slett prosjekt'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
-  );
+  )
 }
