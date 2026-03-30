@@ -5,7 +5,8 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import Layout from './Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Placeholder from './pages/Placeholder'
+import Placeholder from './pages/Placeholder'import Prosjekter from './pages/Prosjekter'
+import ProsjektDetaljer from './pages/ProsjektDetaljer'
 
 const queryClient = new QueryClient()
 
@@ -42,8 +43,10 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
 
       {/* Protected routes */}
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/prosjekter" element={<ProtectedRoute><Placeholder title="Prosjekter" /></ProtectedRoute>} />
+      <Route path="/prosjekter" element={<ProtectedRoute><Prosjekter /></ProtectedRoute>} />
+<Route path="/prosjekter/:id" element={<ProtectedRoute><ProsjektDetaljer /></ProtectedRoute>} />
+      <Route path="/prosjekter" element={<ProtectedRoute><Prosjekter /></ProtectedRoute>} />
+   <Route path="/prosjekter/:id" element={<ProtectedRoute><ProsjektDetaljer /></ProtectedRoute>} />
       <Route path="/prosjektfiler" element={<ProtectedRoute><Placeholder title="Prosjektfiler" /></ProtectedRoute>} />
       <Route path="/sjekklister" element={<ProtectedRoute><Placeholder title="Sjekklister" /></ProtectedRoute>} />
       <Route path="/avvik" element={<ProtectedRoute><Placeholder title="Avvik" /></ProtectedRoute>} />
