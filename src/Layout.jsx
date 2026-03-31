@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+
 import { useAuth } from '@/lib/AuthContext'
 import { hasModuleAccess } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
@@ -356,18 +356,14 @@ export default function Layout({ children }) {
         "transition-all duration-300",
         isMobile ? "pt-16" : sidebarCollapsed ? "ml-16 pt-16" : "ml-64 pt-16"
       )}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.15 }}
+        <>
+          
+            <div
             className="min-h-screen"
           >
             {children}
-          </motion.div>
-        </AnimatePresence>
+          </div>
+        </>
       </main>
     </div>
   )
