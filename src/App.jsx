@@ -1080,6 +1080,633 @@ function ProsjektfilerPage() {
   )
 }
 
+// ─── DEFAULT TEMPLATES ────────────────────────────────────────────────────
+const DEFAULT_TEMPLATES = [
+  {
+    name: 'Kvalitetskontroll våtrom',
+    description: 'Sjekkliste for kvalitetskontroll av bad, kjøkken og andre våtrom',
+    category: 'kvalitet',
+    sections: [
+      { title: 'Belegning og fuging', items: ['Flisene ligger plant og jevnt', 'Fugene er jevne og uten hull', 'Farge og utseende på fugen'] },
+      { title: 'Fuktighet og tetthet', items: ['Sjekk for fuktighet bak fliser', 'Kontroller drenering ved dusj'] },
+      { title: 'Armaturer og innfatning', items: ['Blandebatteri fungerer korrekt', 'Håndklestang er sikker og festet', 'Inspeksjonsluker for skjulte ledninger'] },
+    ]
+  },
+  {
+    name: 'HMS inspeksjon på byggeplass',
+    description: 'Daglig HMS kontroll på byggeplassen',
+    category: 'hms',
+    sections: [
+      { title: 'Personlig verneutstyr', items: ['Alle arbeidere bruker hjelm', 'Sikkerhetsfottøy på alle', 'Vernebrillerbrukes ved behov'] },
+      { title: 'Byggeområde og sikkerhet', items: ['Byggeplassen er gjort ryddig', 'Sikkerhetsgjerder er på plass', 'Fall og stupefare er merket'] },
+    ]
+  },
+  {
+    name: 'Overtakelse av prosjekt',
+    description: 'Sjekkliste for overtakelse av ferdig prosjekt fra entreprenør',
+    category: 'overtakelse',
+    sections: [
+      { title: 'Generell tilstand', items: ['Hele prosjektet er ferdigstilt', 'Området er ryddig og rengjort', 'All avfall er fjernet'] },
+      { title: 'Funksjonalitet', items: ['Alle dører åpner og lukker korrekt', 'Alle vinduer åpner og lukker', 'Strøm og lys fungerer'] },
+    ]
+  },
+  {
+    name: 'Tømrer- og innfestingskontroll',
+    description: 'Kontroll av tømrer- og innfestingsarbeid',
+    category: 'tømrer',
+    sections: [
+      { title: 'Dørfester og karmer', items: ['Dørkarmer er plant og loddet', 'Dørblader stenger tett', 'Beslag og låser fungerer'] },
+      { title: 'Vinduer', items: ['Vinduer åpner og lukker lett', 'Tetting rundt vindu er OK'] },
+    ]
+  },
+  {
+    name: 'Betongkontroll',
+    description: 'Kontroll av betongarbeid og armering',
+    category: 'betong',
+    sections: [
+      { title: 'Armering', items: ['Armeringsplan er fulgt', 'Overdekning er korrekt', 'Armering er rengjort og fri for rust'] },
+      { title: 'Støping', items: ['Forskaling er tett og stabil', 'Betongkvalitet er kontrollert', 'Herdetid overholdes'] },
+    ]
+  },
+  {
+    name: 'Takarbeid kontroll',
+    description: 'Kontroll av taklegging og taktekking',
+    category: 'tak',
+    sections: [
+      { title: 'Undertak og lekter', items: ['Undertak er riktig lagt', 'Lekter er rett og i riktig avstand', 'Vindsperre er korrekt montert'] },
+      { title: 'Taktekning', items: ['Takstein/plate er korrekt lagt', 'Møner og valley er tette', 'Renner og nedløp fungerer'] },
+    ]
+  },
+  {
+    name: 'Internkontroll generell',
+    description: 'Generell internkontroll for bygg og anlegg',
+    category: 'internkontroll',
+    sections: [
+      { title: 'Dokumentasjon', items: ['Tegninger er oppdaterte og tilgjengelige', 'Avvikslogg er oppdatert', 'Endringsmeldinger er registrert'] },
+      { title: 'Kvalitet', items: ['Materialer er i henhold til spesifikasjon', 'Utførelse er i henhold til tegning', 'Prøving og testing er utført'] },
+    ]
+  },
+]
+
+const CATEGORY_LABELS = {
+  kvalitet: { label: 'Kvalitet', emoji: '🔍' },
+  hms: { label: 'HMS', emoji: '⚠️' },
+  overtakelse: { label: 'Overtakelse', emoji: '🎯' },
+  tømrer: { label: 'Tømrer', emoji: '🪵' },
+  betong: { label: 'Betong', emoji: '🏗️' },
+  tak: { label: 'Tak', emoji: '🏠' },
+  internkontroll: { label: 'Internkontroll', emoji: '✅' },
+  annet: { label: 'Annet', emoji: '📋' },
+}
+
+// ─── SJEKKLISTER PAGE ─────────────────────────────────────────────────────
+function SjekklistePage({ onNavigateDetail }) {
+  const [checklists, setChecklists] = useState([])
+  const [projects, setProjects] = useState([])
+  const [templates, setTemplates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [projectFilter, setProjectFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [view, setView] = useState('lister') // 'lister' or 'maler'
+  const [showNew, setShowNew] = useState(false)
+  const [showNewTemplate, setShowNewTemplate] = useState(false)
+  const [editTemplate, setEditTemplate] = useState(null)
+  const [newForm, setNewForm] = useState({ project_id: '', template_id: '', title: '' })
+  const [saving, setSaving] = useState(false)
+  const { user } = useAuth()
+  const f = { fontFamily: 'system-ui, sans-serif' }
+  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+
+  const loadData = async () => {
+    try {
+      const [cl, pr, tmpl] = await Promise.all([
+        supabase.from('checklists').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        supabase.from('projects').select('id, name').order('name').then(r => r.data || []),
+        supabase.from('checklist_templates').select('*').order('name').then(r => r.data || []),
+      ])
+      setChecklists(cl)
+      setProjects(pr)
+      // If no templates, seed with defaults
+      if (tmpl.length === 0) {
+        const seeds = DEFAULT_TEMPLATES.map(t => ({
+          name: t.name,
+          description: t.description,
+          category: t.category,
+          items: t.sections.flatMap(s => s.items.map(item => ({ title: item, section: s.title, checked: false }))),
+          sections: t.sections,
+        }))
+        await supabase.from('checklist_templates').insert(seeds)
+        const { data: newTmpl } = await supabase.from('checklist_templates').select('*').order('name')
+        setTemplates(newTmpl || [])
+      } else {
+        setTemplates(tmpl)
+      }
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const filtered = checklists.filter(c => {
+    const ms = !search || c.title?.toLowerCase().includes(search.toLowerCase())
+    const mp = projectFilter === 'all' || c.project_id === projectFilter
+    const mst = statusFilter === 'all' || c.status === statusFilter
+    return ms && mp && mst
+  })
+
+  const getProgress = (c) => {
+    const items = c.items || []
+    if (items.length === 0) return 0
+    return Math.round(items.filter(i => i.checked).length / items.length * 100)
+  }
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    if (!newForm.project_id) return alert('Velg et prosjekt')
+    setSaving(true)
+    try {
+      const tmpl = templates.find(t => t.id === newForm.template_id)
+      const title = newForm.title || (tmpl ? `${tmpl.name} – ${projects.find(p => p.id === newForm.project_id)?.name}` : 'Ny sjekkliste')
+      const items = tmpl ? (tmpl.items || tmpl.sections?.flatMap(s => s.items.map(item => ({ title: typeof item === 'string' ? item : item.title, section: s.title, checked: false }))) || []) : []
+      const { data, error } = await supabase.from('checklists').insert({
+        title,
+        project_id: newForm.project_id,
+        template_id: newForm.template_id || null,
+        status: 'ikke_startet',
+        items,
+        created_by: user?.id,
+      }).select().single()
+      if (error) throw error
+      setShowNew(false)
+      setNewForm({ project_id: '', template_id: '', title: '' })
+      loadData()
+      if (data?.id) onNavigateDetail(data.id)
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDeleteChecklist = async (id) => {
+    if (!confirm('Slett sjekkliste?')) return
+    await supabase.from('checklists').delete().eq('id', id)
+    loadData()
+  }
+
+  const handleDeleteTemplate = async (id) => {
+    if (!confirm('Slett mal?')) return
+    await supabase.from('checklist_templates').delete().eq('id', id)
+    loadData()
+  }
+
+  const handleSaveTemplate = async (tmpl) => {
+    setSaving(true)
+    try {
+      if (editTemplate?.id) {
+        await supabase.from('checklist_templates').update(tmpl).eq('id', editTemplate.id)
+      } else {
+        await supabase.from('checklist_templates').insert(tmpl)
+      }
+      setShowNewTemplate(false)
+      setEditTemplate(null)
+      loadData()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const statusOpts2 = [
+    { value: 'all', label: 'Alle statuser' },
+    { value: 'ikke_startet', label: 'Ikke startet' },
+    { value: 'påbegynt', label: 'Påbegynt' },
+    { value: 'fullfort', label: 'Fullført' },
+  ]
+
+  const statusBadge = (status) => {
+    const map = { ikke_startet: ['#f1f5f9','#475569','Ikke startet'], påbegynt: ['#eff6ff','#2563eb','Påbegynt'], fullfort: ['#ecfdf5','#059669','Fullført'] }
+    const [bg, color, label] = map[status] || ['#f1f5f9','#475569', status]
+    return <span style={{ background: bg, color, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '500' }}>{label}</span>
+  }
+
+  const groupedTemplates = Object.entries(CATEGORY_LABELS).map(([cat, { label, emoji }]) => ({
+    cat, label, emoji,
+    templates: templates.filter(t => t.category === cat)
+  })).filter(g => g.templates.length > 0)
+
+  const uncategorized = templates.filter(t => !CATEGORY_LABELS[t.category])
+
+  return (
+    <div style={f}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Sjekklister</h1>
+            <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny mal</button>}
+            {view === 'lister' && <button onClick={() => setShowNew(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny sjekkliste</button>}
+          </div>
+        </div>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 0, marginTop: '16px', borderBottom: '2px solid #f1f5f9' }}>
+          {[{id:'lister',label:'📋 Sjekklister'},{id:'maler',label:'📁 Maler'}].map(tab => (
+            <button key={tab.id} onClick={() => setView(tab.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: view===tab.id?'600':'400', background: 'transparent', color: view===tab.id?'#059669':'#64748b', borderBottom: view===tab.id?'2px solid #059669':'2px solid transparent', marginBottom: '-2px', fontFamily: 'system-ui, sans-serif' }}>{tab.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 32px' }}>
+        {view === 'lister' ? (
+          <>
+            {/* Filters */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>🔍</span>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter sjekkliste..." style={{ ...inp, paddingLeft: '36px' }} />
+              </div>
+              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '180px', background: 'white' }}>
+                <option value="all">Alle prosjekter</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: '160px', background: 'white' }}>
+                {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>Laster sjekklister...</div>
+            ) : filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '12px' }}>✅</div>
+                <h3 style={{ color: '#0f172a', margin: '0 0 8px' }}>Ingen sjekklister</h3>
+                <p style={{ color: '#64748b', margin: '0 0 20px' }}>Opprett din første sjekkliste</p>
+                <button onClick={() => setShowNew(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny sjekkliste</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {filtered.map(c => {
+                  const progress = getProgress(c)
+                  const projectName = projects.find(p => p.id === c.project_id)?.name || '–'
+                  return (
+                    <button key={c.id} onClick={() => onNavigateDetail(c.id)}
+                      style={{ ...card, padding: '16px 20px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '16px' }}
+                      onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
+                      onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                      <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>✅</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                          {statusBadge(c.status)}
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
+                          <span>📁 {projectName}</span>
+                          <span>📝 {c.items?.length || 0} punkter</span>
+                          <span>📅 {new Date(c.created_at).toLocaleDateString('nb-NO')}</span>
+                        </div>
+                        {/* Progress bar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ flex: 1, height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+                            <div style={{ width: `${progress}%`, height: '100%', background: progress === 100 ? '#059669' : '#3b82f6', borderRadius: '999px', transition: 'width 0.3s' }} />
+                          </div>
+                          <span style={{ fontSize: '12px', color: '#64748b', flexShrink: 0 }}>{progress}%</span>
+                        </div>
+                      </div>
+                      <button onClick={e => { e.stopPropagation(); handleDeleteChecklist(c.id) }} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px', flexShrink: 0 }}>🗑️</button>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          /* MALER VIEW */
+          <div>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>Laster maler...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                {groupedTemplates.map(group => (
+                  <div key={group.cat}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '20px' }}>{group.emoji}</span>
+                      <span style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>{group.label}</span>
+                      <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{group.templates.length} maler</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                      {group.templates.map(tmpl => (
+                        <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <div>
+                              <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{tmpl.name}</h3>
+                              {tmpl.description && <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{tmpl.description}</p>}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px' }}>
+                            {tmpl.items?.length || tmpl.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0} kontrollpunkter
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => { setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
+                            <button onClick={() => { setEditTemplate(tmpl); setShowNewTemplate(true) }} style={{ background: '#f8fafc', color: '#475569', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', cursor: 'pointer' }}>✏️</button>
+                            <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {uncategorized.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '20px' }}>📋</span>
+                      <span style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>Andre</span>
+                      <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                      {uncategorized.map(tmpl => (
+                        <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
+                          <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{tmpl.name}</h3>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setShowNew(true)} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
+                            <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* New Checklist Modal */}
+      {showNew && (
+        <>
+          <div onClick={() => setShowNew(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(520px, calc(100vw - 32px))', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Ny sjekkliste</h2>
+              <button onClick={() => setShowNew(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
+            </div>
+            <form onSubmit={handleCreate} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
+                <select value={newForm.project_id} onChange={e => setNewForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
+                  <option value="">Velg prosjekt</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Mal (valgfritt)</label>
+                <select value={newForm.template_id} onChange={e => setNewForm(f => ({...f, template_id: e.target.value}))} style={{ ...inp, background: 'white' }}>
+                  <option value="">Ingen mal – tom sjekkliste</option>
+                  {Object.entries(CATEGORY_LABELS).map(([cat, {label, emoji}]) => {
+                    const catTemplates = templates.filter(t => t.category === cat)
+                    if (catTemplates.length === 0) return null
+                    return (
+                      <optgroup key={cat} label={`${emoji} ${label}`}>
+                        {catTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </optgroup>
+                    )
+                  })}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Tittel (valgfritt)</label>
+                <input value={newForm.title} onChange={e => setNewForm(f => ({...f, title: e.target.value}))} placeholder="Genereres automatisk hvis tom" style={inp} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '8px' }}>
+                <button type="button" onClick={() => setShowNew(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
+                <button type="submit" disabled={saving} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>{saving ? 'Oppretter...' : 'Opprett sjekkliste'}</button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+
+      {/* New/Edit Template Modal */}
+      {showNewTemplate && (
+        <TemplateEditorModal
+          template={editTemplate}
+          onSave={handleSaveTemplate}
+          onClose={() => { setShowNewTemplate(false); setEditTemplate(null) }}
+          saving={saving}
+        />
+      )}
+    </div>
+  )
+}
+
+function TemplateEditorModal({ template, onSave, onClose, saving }) {
+  const [form, setForm] = useState({
+    name: template?.name || '',
+    description: template?.description || '',
+    category: template?.category || 'annet',
+    sections: template?.sections || [{ title: 'Seksjon 1', items: [{ title: '', checked: false }] }],
+  })
+
+  const addSection = () => setForm(f => ({ ...f, sections: [...f.sections, { title: `Seksjon ${f.sections.length + 1}`, items: [{ title: '', checked: false }] }] }))
+  const removeSection = (si) => setForm(f => ({ ...f, sections: f.sections.filter((_, i) => i !== si) }))
+  const updateSection = (si, title) => setForm(f => ({ ...f, sections: f.sections.map((s, i) => i === si ? { ...s, title } : s) }))
+  const addItem = (si) => setForm(f => ({ ...f, sections: f.sections.map((s, i) => i === si ? { ...s, items: [...(s.items||[]), { title: '', checked: false }] } : s) }))
+  const removeItem = (si, ii) => setForm(f => ({ ...f, sections: f.sections.map((s, i) => i === si ? { ...s, items: s.items.filter((_, j) => j !== ii) } : s) }))
+  const updateItem = (si, ii, title) => setForm(f => ({ ...f, sections: f.sections.map((s, i) => i === si ? { ...s, items: s.items.map((item, j) => j === ii ? { ...item, title } : item) } : s) }))
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    const items = form.sections.flatMap(s => (s.items||[]).map(item => ({ title: typeof item === 'string' ? item : item.title, section: s.title, checked: false })))
+    onSave({ ...form, items })
+  }
+
+  const inp2 = { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(620px, calc(100vw - 32px))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>{template ? 'Rediger mal' : 'Ny mal'}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Malnavn *</label>
+                <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} required placeholder="Navn på malen" style={inp2} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Kategori</label>
+                <select value={form.category} onChange={e => setForm(f => ({...f, category: e.target.value}))} style={{ ...inp2, background: 'white' }}>
+                  {Object.entries(CATEGORY_LABELS).map(([k, {label, emoji}]) => <option key={k} value={k}>{emoji} {label}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Beskrivelse</label>
+                <input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} placeholder="Kort beskrivelse av malen" style={inp2} />
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>Seksjoner og kontrollpunkter</h3>
+                <button type="button" onClick={addSection} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', cursor: 'pointer', fontWeight: '600' }}>+ Seksjon</button>
+              </div>
+              {form.sections.map((section, si) => (
+                <div key={si} style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px', marginBottom: '12px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                    <input value={section.title} onChange={e => updateSection(si, e.target.value)} placeholder="Seksjonstittel" style={{ ...inp2, flex: 1, fontWeight: '600' }} />
+                    {form.sections.length > 1 && <button type="button" onClick={() => removeSection(si)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer' }}>🗑️</button>}
+                  </div>
+                  {(section.items||[]).map((item, ii) => (
+                    <div key={ii} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+                      <input value={typeof item === 'string' ? item : item.title} onChange={e => updateItem(si, ii, e.target.value)} placeholder={`Kontrollpunkt ${ii + 1}`} style={{ ...inp2, flex: 1 }} />
+                      <button type="button" onClick={() => removeItem(si, ii)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '6px 8px', cursor: 'pointer', fontSize: '12px' }}>×</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => addItem(si)} style={{ background: 'white', color: '#059669', border: '1px dashed #d1fae5', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer', width: '100%', marginTop: '4px' }}>+ Legg til punkt</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
+            <button type="button" onClick={onClose} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
+            <button type="submit" disabled={saving} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>{saving ? 'Lagrer...' : 'Lagre mal'}</button>
+          </div>
+        </form>
+      </div>
+    </>
+  )
+}
+
+function SjekklisteDetaljerPage({ checklistId, onBack }) {
+  const [checklist, setChecklist] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const f = { fontFamily: 'system-ui, sans-serif' }
+  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', padding: '24px' }
+
+  const load = async () => {
+    try {
+      const { data } = await supabase.from('checklists').select('*').eq('id', checklistId).single()
+      setChecklist(data)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [checklistId])
+
+  const toggleItem = async (index) => {
+    const newItems = [...(checklist.items || [])]
+    newItems[index] = { ...newItems[index], checked: !newItems[index].checked }
+    const allDone = newItems.every(i => i.checked)
+    const newStatus = allDone ? 'fullfort' : newItems.some(i => i.checked) ? 'påbegynt' : 'ikke_startet'
+    const updated = { ...checklist, items: newItems, status: newStatus }
+    setChecklist(updated)
+    await supabase.from('checklists').update({ items: newItems, status: newStatus }).eq('id', checklistId)
+  }
+
+  const updateComment = async (index, comment) => {
+    const newItems = [...(checklist.items || [])]
+    newItems[index] = { ...newItems[index], comment }
+    setChecklist(c => ({ ...c, items: newItems }))
+    await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
+  }
+
+  if (loading) return <div style={{ ...f, textAlign: 'center', padding: '60px', color: '#94a3b8' }}>Laster sjekkliste...</div>
+  if (!checklist) return <div style={{ ...f, textAlign: 'center', padding: '60px' }}><button onClick={onBack} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 16px', cursor: 'pointer' }}>← Tilbake</button></div>
+
+  const items = checklist.items || []
+  const checked = items.filter(i => i.checked).length
+  const progress = items.length > 0 ? Math.round(checked / items.length * 100) : 0
+
+  // Group items by section
+  const sections = {}
+  items.forEach((item, idx) => {
+    const sec = item.section || 'Generelt'
+    if (!sections[sec]) sections[sec] = []
+    sections[sec].push({ ...item, idx })
+  })
+
+  const statusBadge2 = (status) => {
+    const map = { ikke_startet: ['#f1f5f9','#475569','Ikke startet'], påbegynt: ['#eff6ff','#2563eb','Påbegynt'], fullfort: ['#ecfdf5','#059669','Fullført'] }
+    const [bg, color, label] = map[status] || ['#f1f5f9','#475569', status]
+    return <span style={{ background: bg, color, padding: '4px 12px', borderRadius: '999px', fontSize: '13px', fontWeight: '500' }}>{label}</span>
+  }
+
+  return (
+    <div style={f}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '12px', padding: 0, fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>← Tilbake til sjekklister</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+              <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>{checklist.title}</h1>
+              {statusBadge2(checklist.status)}
+            </div>
+            <div style={{ display: 'flex', align: 'center', gap: '16px', fontSize: '13px', color: '#64748b' }}>
+              <span>📝 {checked}/{items.length} fullført</span>
+              <span>📅 {new Date(checklist.created_at).toLocaleDateString('nb-NO')}</span>
+            </div>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ flex: 1, height: '8px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+            <div style={{ width: `${progress}%`, height: '100%', background: progress === 100 ? '#059669' : '#3b82f6', borderRadius: '999px', transition: 'width 0.3s' }} />
+          </div>
+          <span style={{ fontSize: '14px', fontWeight: '600', color: progress === 100 ? '#059669' : '#3b82f6', flexShrink: 0 }}>{progress}%</span>
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 32px', maxWidth: '800px' }}>
+        {Object.entries(sections).map(([sectionTitle, sectionItems]) => (
+          <div key={sectionTitle} style={{ marginBottom: '24px' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: '15px', fontWeight: '700', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669', display: 'inline-block' }} />
+              {sectionTitle}
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {sectionItems.map(item => (
+                <div key={item.idx} style={{ background: 'white', borderRadius: '12px', border: `1px solid ${item.checked ? '#d1fae5' : '#f1f5f9'}`, padding: '14px 16px', transition: 'all 0.2s' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <button onClick={() => toggleItem(item.idx)}
+                      style={{ width: '22px', height: '22px', borderRadius: '6px', border: `2px solid ${item.checked ? '#059669' : '#d1d5db'}`, background: item.checked ? '#059669' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px', transition: 'all 0.2s' }}>
+                      {item.checked && <span style={{ color: 'white', fontSize: '13px', fontWeight: 'bold' }}>✓</span>}
+                    </button>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: '500', color: item.checked ? '#6b7280' : '#0f172a', textDecoration: item.checked ? 'line-through' : 'none' }}>
+                        {item.title}
+                      </p>
+                      <input
+                        value={item.comment || ''}
+                        onChange={e => updateComment(item.idx, e.target.value)}
+                        placeholder="Legg til kommentar..."
+                        style={{ width: '100%', padding: '6px 10px', border: '1px solid #f1f5f9', borderRadius: '8px', fontSize: '12px', outline: 'none', background: '#f8fafc', color: '#475569', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }}
+                        onBlur={e => updateComment(item.idx, e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {progress === 100 && (
+          <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '16px', padding: '20px', textAlign: 'center', marginTop: '16px' }}>
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎉</div>
+            <h3 style={{ margin: '0 0 4px', color: '#059669', fontSize: '16px', fontWeight: '700' }}>Sjekkliste fullført!</h3>
+            <p style={{ margin: 0, color: '#065f46', fontSize: '14px' }}>Alle kontrollpunkter er bekreftet</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -1095,6 +1722,7 @@ function AppContent() {
   const [page, setPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
+  const [checklistId, setChecklistId] = useState(null)
 
   const navigate = (p) => { setPage(p); setProjectId(null) }
   const openProject = (id) => { setPage('prosjekt_detaljer'); setProjectId(id) }
@@ -1157,8 +1785,10 @@ function AppContent() {
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
+        {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
+        {page === 'sjekkliste_detaljer' && <SjekklisteDetaljerPage checklistId={checklistId} onBack={() => setPage('sjekklister')} />}
         {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'prosjekt_detaljer' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
