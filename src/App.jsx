@@ -1158,7 +1158,7 @@ function AppContent() {
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
         {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjekt_detaljer' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'prosjekt_detaljer' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
