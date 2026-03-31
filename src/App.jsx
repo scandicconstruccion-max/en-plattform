@@ -399,14 +399,6 @@ const db = {
     if (error) throw error
   }
 }
-
-// ─── STATUS BADGE ─────────────────────────────────────────────────────────
-function StatusBadge({ status }) {
-  const map = { planlagt: ['#eff6ff','#1d4ed8','Planlagt'], aktiv: ['#ecfdf5','#059669','Aktiv'], pause: ['#fffbeb','#d97706','På pause'], fullfort: ['#f1f5f9','#475569','Fullført'], avbrutt: ['#fef2f2','#dc2626','Avbrutt'] }
-  const [bg, color, label] = map[status] || ['#f1f5f9','#475569', status]
-  return <span style={{ background: bg, color, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '500' }}>{label}</span>
-}
-
 // ─── PROSJEKTER PAGE ──────────────────────────────────────────────────────
 const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'}]
 
