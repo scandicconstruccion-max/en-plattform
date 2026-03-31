@@ -1080,6 +1080,16 @@ function ProsjektfilerPage() {
   )
 }
 
+function ComingSoon({ title }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚧</div>
+      <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginBottom: '8px' }}>{title}</h2>
+      <p style={{ color: '#64748b' }}>Denne modulen er under utvikling</p>
+    </div>
+  )
+}
+
 function AppContent() {
   const { user, loading, supabase } = useAuth()
   const [page, setPage] = useState('dashboard')
