@@ -1715,6 +1715,688 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
   )
 }
 
+// ─── AVVIK MODULE ─────────────────────────────────────────────────────────────
+
+const SEVERITY_CONFIG = {
+  'Lav':     { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', dot: '#22c55e' },
+  'Medium':  { bg: '#fffbeb', color: '#d97706', border: '#fde68a', dot: '#f59e0b' },
+  'Høy':     { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa', dot: '#f97316' },
+  'Kritisk': { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', dot: '#ef4444' },
+}
+
+const AVVIK_STATUS_CONFIG = {
+  'Åpen':              { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+  'Under behandling':  { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
+  'Lukket':            { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+}
+
+function SeverityBadge({ severity }) {
+  const cfg = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG['Medium']
+  return (
+    <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: cfg.dot, display: 'inline-block' }} />
+      {severity}
+    </span>
+  )
+}
+
+function AvvikStatusBadge({ status }) {
+  const cfg = AVVIK_STATUS_CONFIG[status] || AVVIK_STATUS_CONFIG['Åpen']
+  return (
+    <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600' }}>
+      {status}
+    </span>
+  )
+}
+
+function AvvikPage() {
+  const { user } = useAuth()
+  const [deviations, setDeviations] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showNew, setShowNew] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [filterSeverity, setFilterSeverity] = useState('alle')
+  const [filterProject, setFilterProject] = useState('alle')
+  const [search, setSearch] = useState('')
+
+  const loadData = async () => {
+    try {
+      const [devData, projData] = await Promise.all([
+        supabase.from('deviations').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+      ])
+      setDeviations(devData)
+      setProjects(projData)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const filtered = deviations.filter(d => {
+    if (filterStatus !== 'alle' && d.status !== filterStatus) return false
+    if (filterSeverity !== 'alle' && d.severity !== filterSeverity) return false
+    if (filterProject !== 'alle' && d.project_id !== filterProject) return false
+    if (search && !d.title?.toLowerCase().includes(search.toLowerCase()) && !d.description?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  const counts = {
+    open: deviations.filter(d => d.status === 'Åpen').length,
+    inProgress: deviations.filter(d => d.status === 'Under behandling').length,
+    closed: deviations.filter(d => d.status === 'Lukket').length,
+    critical: deviations.filter(d => d.severity === 'Kritisk' && d.status !== 'Lukket').length,
+  }
+
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ width: '36px', height: '36px', border: '3px solid #e2e8f0', borderTop: '3px solid #059669', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
+        <p style={{ color: '#94a3b8', fontSize: '14px' }}>Laster avvik...</p>
+      </div>
+    </div>
+  )
+
+  if (selected) return (
+    <AvvikDetaljer
+      deviation={selected}
+      projects={projects}
+      onBack={() => { setSelected(null); loadData() }}
+      user={user}
+    />
+  )
+
+  return (
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+      {/* Header */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>⚠️ Avvik</h1>
+            <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>Registrer, følg opp og lukk avvik</p>
+          </div>
+          <button onClick={() => setShowNew(true)}
+            style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '12px', padding: '11px 20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            + Registrer avvik
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          {[
+            { label: 'Åpne avvik', value: counts.open, color: '#dc2626', bg: '#fef2f2', emoji: '🔴' },
+            { label: 'Under behandling', value: counts.inProgress, color: '#d97706', bg: '#fffbeb', emoji: '🟡' },
+            { label: 'Lukkede avvik', value: counts.closed, color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
+            { label: 'Kritiske (åpne)', value: counts.critical, color: '#dc2626', bg: '#fef2f2', emoji: '🚨' },
+          ].map((s, i) => (
+            <div key={i} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '20px' }}>{s.emoji}</span>
+                <span style={{ background: s.bg, color: s.color, fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>{s.value}</span>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '16px 20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk i avvik..."
+            style={{ ...inp, maxWidth: '240px', flex: '1' }} />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: '180px' }}>
+            <option value="alle">Alle statuser</option>
+            <option value="Åpen">Åpen</option>
+            <option value="Under behandling">Under behandling</option>
+            <option value="Lukket">Lukket</option>
+          </select>
+          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: '160px' }}>
+            <option value="alle">Alle alvorligheter</option>
+            <option value="Lav">Lav</option>
+            <option value="Medium">Medium</option>
+            <option value="Høy">Høy</option>
+            <option value="Kritisk">Kritisk</option>
+          </select>
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: '220px' }}>
+            <option value="alle">Alle prosjekter</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {(filterStatus !== 'alle' || filterSeverity !== 'alle' || filterProject !== 'alle' || search) && (
+            <button onClick={() => { setFilterStatus('alle'); setFilterSeverity('alle'); setFilterProject('alle'); setSearch('') }}
+              style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '9px 14px', fontSize: '13px', cursor: 'pointer', color: '#64748b', fontWeight: '500' }}>
+              Nullstill
+            </button>
+          )}
+          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#94a3b8' }}>{filtered.length} avvik</span>
+        </div>
+
+        {/* List */}
+        {filtered.length === 0 ? (
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '60px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>✅</div>
+            <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontSize: '16px', fontWeight: '600' }}>Ingen avvik funnet</h3>
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>
+              {deviations.length === 0 ? 'Ingen avvik er registrert ennå.' : 'Prøv å endre filtervalg.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {filtered.map(dev => {
+              const proj = projects.find(p => p.id === dev.project_id)
+              return (
+                <div key={dev.id} onClick={() => setSelected(dev)}
+                  style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px 20px', cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s', display: 'flex', alignItems: 'flex-start', gap: '16px' }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = '#e2e8f0' }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#f1f5f9' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                    {dev.severity === 'Kritisk' ? '🚨' : dev.severity === 'Høy' ? '⚠️' : dev.severity === 'Medium' ? '📋' : '📝'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                      <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '15px' }}>{dev.title}</span>
+                      <SeverityBadge severity={dev.severity} />
+                      <AvvikStatusBadge status={dev.status} />
+                    </div>
+                    {dev.description && <p style={{ margin: '0 0 8px', color: '#64748b', fontSize: '13px', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '600px' }}>{dev.description}</p>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                      {proj && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
+                      {dev.location && <span style={{ fontSize: '12px', color: '#64748b' }}>📍 {dev.location}</span>}
+                      {dev.assigned_to && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to}</span>}
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>
+                      {dev.images?.length > 0 && <span style={{ fontSize: '12px', color: '#94a3b8' }}>📎 {dev.images.length} bilde{dev.images.length > 1 ? 'r' : ''}</span>}
+                    </div>
+                  </div>
+                  <span style={{ color: '#94a3b8', fontSize: '18px', flexShrink: 0 }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNew && (
+        <AvvikModal
+          projects={projects}
+          user={user}
+          onClose={() => setShowNew(false)}
+          onSaved={() => { setShowNew(false); loadData() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function AvvikModal({ projects, user, onClose, onSaved, initial }) {
+  const [form, setForm] = useState(initial || {
+    title: '', description: '', location: '', severity: 'Medium',
+    project_id: '', assigned_to: '',
+  })
+  const [images, setImages] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const fileRef = React.useRef()
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+
+  const handleFiles = (files) => {
+    const imgs = Array.from(files).filter(f => f.type.startsWith('image/'))
+    setImages(prev => [...prev, ...imgs])
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.project_id) return alert('Velg et prosjekt')
+    setUploading(true)
+    try {
+      const imageUrls = []
+      for (const img of images) {
+        const ext = img.name.split('.').pop()
+        const path = `avvik/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const { error } = await supabase.storage.from('plattform-files').upload(path, img)
+        if (!error) imageUrls.push(path)
+      }
+      const { error } = await supabase.from('deviations').insert({
+        title: form.title.trim(),
+        description: form.description,
+        location: form.location,
+        severity: form.severity,
+        project_id: form.project_id,
+        assigned_to: form.assigned_to,
+        status: 'Åpen',
+        images: imageUrls,
+        created_by: user?.id,
+      })
+      if (error) throw error
+      onSaved()
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setUploading(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth: '580px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>⚠️ Registrer avvik</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+        </div>
+
+        <form onSubmit={handleSave} style={{ overflowY: 'auto', flex: 1, padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+
+          {/* Prosjekt */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
+            <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
+              <option value="">Velg prosjekt...</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          {/* Tittel */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Tittel *</label>
+            <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="Kort beskrivelse av avviket" required style={inp} />
+          </div>
+
+          {/* Alvorlighetsgrad */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>Alvorlighetsgrad</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+              {['Lav', 'Medium', 'Høy', 'Kritisk'].map(s => {
+                const cfg = SEVERITY_CONFIG[s]
+                const active = form.severity === s
+                return (
+                  <button key={s} type="button" onClick={() => set('severity', s)}
+                    style={{ padding: '9px 4px', borderRadius: '10px', border: `2px solid ${active ? cfg.dot : '#e2e8f0'}`, background: active ? cfg.bg : 'white', color: active ? cfg.color : '#64748b', fontWeight: active ? '700' : '400', fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Sted og ansvarlig */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Sted / Lokasjon</label>
+              <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="F.eks. 3. etasje, bygg A" style={inp} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Ansvarlig person</label>
+              <input value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} placeholder="Navn på ansvarlig" style={inp} />
+            </div>
+          </div>
+
+          {/* Beskrivelse */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Beskrivelse</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Beskriv avviket i detalj..." rows={4}
+              style={{ ...inp, resize: 'none' }} />
+          </div>
+
+          {/* Bilder */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Bilder / Vedlegg</label>
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
+              onClick={() => fileRef.current?.click()}
+              style={{ border: `2px dashed ${dragOver ? '#059669' : '#e2e8f0'}`, borderRadius: '12px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: dragOver ? '#f0fdf4' : '#f8fafc', transition: 'all 0.15s' }}>
+              <div style={{ fontSize: '24px', marginBottom: '6px' }}>📷</div>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Dra bilder hit eller <span style={{ color: '#059669', fontWeight: '600' }}>klikk for å velge</span></p>
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+            </div>
+            {images.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                {images.map((img, i) => (
+                  <div key={i} style={{ position: 'relative' }}>
+                    <img src={URL.createObjectURL(img)} alt="" style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '10px', border: '1px solid #e2e8f0' }} />
+                    <button type="button" onClick={() => setImages(imgs => imgs.filter((_, idx) => idx !== i))}
+                      style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '4px' }}>
+            <button type="button" onClick={onClose} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+            <button type="submit" disabled={uploading}
+              style={{ padding: '10px 24px', background: uploading ? '#6ee7b7' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>
+              {uploading ? 'Lagrer...' : 'Registrer avvik'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function AvvikDetaljer({ deviation, projects, onBack, user }) {
+  const [dev, setDev] = useState(deviation)
+  const [showClose, setShowClose] = useState(false)
+  const [closeComment, setCloseComment] = useState('')
+  const [showEdit, setShowEdit] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [imageUrls, setImageUrls] = useState([])
+  const [lightbox, setLightbox] = useState(null)
+
+  const proj = projects.find(p => p.id === dev.project_id)
+
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+
+  useEffect(() => {
+    const loadImages = async () => {
+      if (!dev.images?.length) return
+      const urls = await Promise.all(dev.images.map(async path => {
+        const { data } = await supabase.storage.from('plattform-files').createSignedUrl(path, 3600)
+        return data?.signedUrl
+      }))
+      setImageUrls(urls.filter(Boolean))
+    }
+    loadImages()
+  }, [dev.images])
+
+  const updateStatus = async (newStatus) => {
+    setSaving(true)
+    try {
+      const updates = { status: newStatus, updated_at: new Date().toISOString() }
+      if (newStatus === 'Lukket') { updates.closed_at = new Date().toISOString(); updates.close_comment = closeComment }
+      const { data, error } = await supabase.from('deviations').update(updates).eq('id', dev.id).select().single()
+      if (error) throw error
+      setDev(data)
+      setShowClose(false)
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett dette avviket?')) return
+    await supabase.from('deviations').delete().eq('id', dev.id)
+    onBack()
+  }
+
+  const statusFlow = ['Åpen', 'Under behandling', 'Lukket']
+  const currentIdx = statusFlow.indexOf(dev.status)
+
+  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+
+  return (
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+      {/* Header */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, fontFamily: 'system-ui, sans-serif' }}>
+          ← Tilbake til avvik
+        </button>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+            <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
+              {dev.severity === 'Kritisk' ? '🚨' : '⚠️'}
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
+                <SeverityBadge severity={dev.severity} />
+                <AvvikStatusBadge status={dev.status} />
+              </div>
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                {proj && <span style={{ fontSize: '13px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
+                {dev.location && <span style={{ fontSize: '13px', color: '#64748b' }}>📍 {dev.location}</span>}
+                <span style={{ fontSize: '13px', color: '#94a3b8' }}>Registrert {new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <button onClick={() => setShowEdit(true)} style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>✏️ Rediger</button>
+            <button onClick={handleDelete} style={{ padding: '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: '13px' }}>🗑️</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* Beskrivelse */}
+          {dev.description && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>📋 Beskrivelse</h3>
+              <p style={{ margin: 0, color: '#475569', fontSize: '14px', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{dev.description}</p>
+            </div>
+          )}
+
+          {/* Bilder */}
+          {imageUrls.length > 0 && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>📷 Bilder ({imageUrls.length})</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+                {imageUrls.map((url, i) => (
+                  <img key={i} src={url} alt={`Avviksbilde ${i+1}`} onClick={() => setLightbox(url)}
+                    style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', cursor: 'pointer', border: '1px solid #f1f5f9', transition: 'opacity 0.15s' }}
+                    onMouseEnter={e => e.target.style.opacity = '0.85'}
+                    onMouseLeave={e => e.target.style.opacity = '1'} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Lukkingskommentar */}
+          {dev.status === 'Lukket' && dev.close_comment && (
+            <div style={{ ...card, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#16a34a' }}>✅ Lukket avvik</h3>
+              <p style={{ margin: '0 0 6px', color: '#166534', fontSize: '14px', lineHeight: 1.6 }}>{dev.close_comment}</p>
+              {dev.closed_at && <p style={{ margin: 0, fontSize: '12px', color: '#4ade80' }}>Lukket: {new Date(dev.closed_at).toLocaleDateString('nb-NO')}</p>}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Detaljer */}
+          <div style={card}>
+            <h3 style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>ℹ️ Detaljer</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[
+                { label: 'Alvorlighet', value: <SeverityBadge severity={dev.severity} /> },
+                { label: 'Status', value: <AvvikStatusBadge status={dev.status} /> },
+                { label: 'Prosjekt', value: proj?.name },
+                { label: 'Sted', value: dev.location },
+                { label: 'Ansvarlig', value: dev.assigned_to },
+                { label: 'Registrert', value: new Date(dev.created_at).toLocaleDateString('nb-NO') },
+              ].filter(r => r.value).map((row, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: '500', textAlign: 'right', maxWidth: '55%' }}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Status workflow */}
+          {dev.status !== 'Lukket' && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>🔄 Oppdater status</h3>
+
+              {/* Progress bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}>
+                {statusFlow.map((s, i) => (
+                  <React.Fragment key={s}>
+                    <div style={{ flex: 1, textAlign: 'center' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', margin: '0 auto 4px', background: i <= currentIdx ? '#059669' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: i <= currentIdx ? 'white' : '#94a3b8', fontWeight: '700' }}>
+                        {i < currentIdx ? '✓' : i + 1}
+                      </div>
+                      <div style={{ fontSize: '10px', color: i <= currentIdx ? '#059669' : '#94a3b8', fontWeight: i === currentIdx ? '700' : '400', lineHeight: 1.2 }}>{s}</div>
+                    </div>
+                    {i < statusFlow.length - 1 && <div style={{ height: '2px', width: '20px', background: i < currentIdx ? '#059669' : '#e2e8f0', flexShrink: 0 }} />}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {dev.status === 'Åpen' && (
+                  <button onClick={() => updateStatus('Under behandling')} disabled={saving}
+                    style={{ padding: '10px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}>
+                    🔄 Sett til «Under behandling»
+                  </button>
+                )}
+                <button onClick={() => setShowClose(true)}
+                  style={{ padding: '10px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}>
+                  ✅ Lukk avvik
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Lukk avvik modal */}
+      {showClose && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setShowClose(false)} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth: '460px', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>✅ Lukk avvik</h3>
+            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: '14px' }}>Legg til en kommentar om hva som ble gjort for å lukke avviket.</p>
+            <textarea value={closeComment} onChange={e => setCloseComment(e.target.value)} placeholder="Beskriv tiltak som ble gjennomført..." rows={4}
+              style={{ ...inp, resize: 'none', marginBottom: '18px' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowClose(false)} style={{ padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+              <button onClick={() => updateStatus('Lukket')} disabled={saving}
+                style={{ padding: '10px 20px', background: saving ? '#6ee7b7' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>
+                {saving ? 'Lagrer...' : 'Lukk avvik'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: '20px' }}>
+          <img src={lightbox} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '12px' }} />
+        </div>
+      )}
+
+      {/* Rediger modal */}
+      {showEdit && (
+        <AvvikEditModal
+          dev={dev}
+          projects={projects}
+          user={user}
+          onClose={() => setShowEdit(false)}
+          onSaved={async () => {
+            setShowEdit(false)
+            const { data } = await supabase.from('deviations').select('*').eq('id', dev.id).single()
+            if (data) setDev(data)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    title: dev.title || '',
+    description: dev.description || '',
+    location: dev.location || '',
+    severity: dev.severity || 'Medium',
+    project_id: dev.project_id || '',
+    assigned_to: dev.assigned_to || '',
+    status: dev.status || 'Åpen',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('deviations').update({ ...form, updated_at: new Date().toISOString() }).eq('id', dev.id)
+      if (error) throw error
+      onSaved()
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth: '520px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>✏️ Rediger avvik</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+        </div>
+        <form onSubmit={handleSave} style={{ overflowY: 'auto', flex: 1, padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
+            <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
+              <option value="">Velg prosjekt...</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Tittel *</label>
+            <input value={form.title} onChange={e => set('title', e.target.value)} required style={inp} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>Alvorlighetsgrad</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+              {['Lav', 'Medium', 'Høy', 'Kritisk'].map(s => {
+                const cfg = SEVERITY_CONFIG[s]
+                const active = form.severity === s
+                return (
+                  <button key={s} type="button" onClick={() => set('severity', s)}
+                    style={{ padding: '9px 4px', borderRadius: '10px', border: `2px solid ${active ? cfg.dot : '#e2e8f0'}`, background: active ? cfg.bg : 'white', color: active ? cfg.color : '#64748b', fontWeight: active ? '700' : '400', fontSize: '13px', cursor: 'pointer' }}>
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Status</label>
+            <select value={form.status} onChange={e => set('status', e.target.value)} style={inp}>
+              <option value="Åpen">Åpen</option>
+              <option value="Under behandling">Under behandling</option>
+              <option value="Lukket">Lukket</option>
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Sted</label>
+              <input value={form.location} onChange={e => set('location', e.target.value)} style={inp} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Ansvarlig</label>
+              <input value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} style={inp} />
+            </div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Beskrivelse</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4} style={{ ...inp, resize: 'none' }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '4px' }}>
+            <button type="button" onClick={onClose} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+            <button type="submit" disabled={saving} style={{ padding: '10px 24px', background: saving ? '#6ee7b7' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>
+              {saving ? 'Lagrer...' : 'Lagre endringer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── END AVVIK MODULE ─────────────────────────────────────────────────────────
+
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -1750,7 +2432,7 @@ function AppContent() {
   if (!user) return <Login />
 
   const sidebarWidth = collapsed ? 60 : 240
-  const activePage = page === 'prosjekt_detaljer' ? 'prosjekter' : page
+  const activePage = page === 'prosjekt_detaljer' ? 'prosjekter' : page === 'avvik_detaljer' ? 'avvik' : page
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
@@ -1796,7 +2478,8 @@ function AppContent() {
         {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
         {page === 'sjekkliste_detaljer' && <SjekklisteDetaljerPage checklistId={checklistId} onBack={() => setPage('sjekklister')} />}
         {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && (
+        {page === 'avvik' && <AvvikPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
