@@ -768,6 +768,318 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
   )
 }
 
+// ─── PROSJEKTFILER PAGE ───────────────────────────────────────────────────
+const FILE_CATEGORIES = [
+  { id: 'tegninger', name: 'Tegninger / Planer', emoji: '📐', color: '#3b82f6' },
+  { id: 'beskrivelser', name: 'Beskrivelser / Spesifikasjoner', emoji: '📄', color: '#10b981' },
+  { id: 'kontrakt', name: 'Kontrakt / Avtaler', emoji: '📋', color: '#f59e0b' },
+  { id: 'okonomi', name: 'Økonomi', emoji: '💰', color: '#ef4444' },
+  { id: 'motereferater', name: 'Møtereferater', emoji: '📝', color: '#8b5cf6' },
+  { id: 'tillatelser', name: 'Tillatelser / Sertifikater', emoji: '🏅', color: '#06b6d4' },
+  { id: 'bilder', name: 'Bilder', emoji: '🖼️', color: '#ec4899' },
+  { id: 'annet', name: 'Annet', emoji: '📎', color: '#6b7280' },
+]
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes/1024).toFixed(1)} KB`
+  return `${(bytes/(1024*1024)).toFixed(1)} MB`
+}
+
+const getFileEmoji = (name, type) => {
+  const ext = name?.split('.').pop()?.toLowerCase() || type?.toLowerCase() || ''
+  if (['jpg','jpeg','png','gif','webp','svg'].includes(ext)) return '🖼️'
+  if (['pdf'].includes(ext)) return '📕'
+  if (['doc','docx'].includes(ext)) return '📘'
+  if (['xls','xlsx'].includes(ext)) return '📗'
+  if (['dwg','dxf'].includes(ext)) return '📐'
+  return '📄'
+}
+
+function ProsjektfilerPage() {
+  const [files, setFiles] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [projectFilter, setProjectFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', description: '', access_level: 'alle' })
+  const [uploadFiles, setUploadFiles] = useState([])
+  const [dragOver, setDragOver] = useState(false)
+  const { user } = useAuth()
+  const fileInputRef = React.useRef()
+  const f = { fontFamily: 'system-ui, sans-serif' }
+  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+
+  const loadData = async () => {
+    try {
+      const [filesData, projectsData] = await Promise.all([
+        supabase.from('project_files').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+      ])
+      setFiles(filesData)
+      setProjects(projectsData)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const filtered = files.filter(f => {
+    const ms = !search || f.name?.toLowerCase().includes(search.toLowerCase()) || f.description?.toLowerCase().includes(search.toLowerCase())
+    const mp = projectFilter === 'all' || f.project_id === projectFilter
+    const mc = categoryFilter === 'all' || f.category === categoryFilter
+    return ms && mp && mc
+  })
+
+  const grouped = FILE_CATEGORIES.map(cat => ({
+    ...cat,
+    files: filtered.filter(f => f.category === cat.id)
+  })).filter(cat => cat.files.length > 0)
+
+  const handleUpload = async (e) => {
+    e.preventDefault()
+    if (uploadFiles.length === 0) return alert('Velg minst én fil')
+    if (!uploadForm.project_id) return alert('Velg et prosjekt')
+    setUploading(true)
+    try {
+      for (const file of uploadFiles) {
+        const ext = file.name.split('.').pop()
+        const path = `projects/${uploadForm.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+        if (upErr) throw upErr
+        await supabase.from('project_files').insert({
+          name: file.name,
+          project_id: uploadForm.project_id,
+          file_url: path,
+          file_type: ext,
+          file_size: file.size,
+          category: uploadForm.category,
+          description: uploadForm.description,
+          access_level: uploadForm.access_level,
+          uploaded_by: user?.id,
+        })
+      }
+      setShowUpload(false)
+      setUploadFiles([])
+      setUploadForm({ project_id: '', category: 'annet', description: '', access_level: 'alle' })
+      loadData()
+    } catch(e) { alert('Feil ved opplasting: ' + e.message) }
+    finally { setUploading(false) }
+  }
+
+  const handleDownload = async (file) => {
+    try {
+      const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
+      if (error) throw error
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.name
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch(e) { alert('Feil ved nedlasting: ' + e.message) }
+  }
+
+  const handleDelete = async (file) => {
+    if (!confirm(`Slett ${file.name}?`)) return
+    try {
+      await supabase.storage.from('plattform-files').remove([file.file_url])
+      await supabase.from('project_files').delete().eq('id', file.id)
+      loadData()
+    } catch(e) { alert('Feil ved sletting: ' + e.message) }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setDragOver(false)
+    const dropped = Array.from(e.dataTransfer.files)
+    setUploadFiles(prev => [...prev, ...dropped])
+    setShowUpload(true)
+  }
+
+  const getProjectName = (id) => projects.find(p => p.id === id)?.name || '–'
+
+  return (
+    <div style={f}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+            <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748b' }}>{files.length} filer totalt</p>
+          </div>
+          <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>⬆️ Last opp fil</button>
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 32px' }}>
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter fil..." style={{ ...inp, paddingLeft: '36px' }} />
+          </div>
+          <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '200px', background: 'white' }}>
+            <option value="all">Alle prosjekter</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ ...inp, width: '200px', background: 'white' }}>
+            <option value="all">Alle kategorier</option>
+            {FILE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+          </select>
+        </div>
+
+        {/* Drop zone */}
+        <div
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          style={{ border: `2px dashed ${dragOver ? '#059669' : '#e2e8f0'}`, borderRadius: '16px', padding: '24px', textAlign: 'center', marginBottom: '24px', background: dragOver ? '#f0fdf4' : 'transparent', transition: 'all 0.2s', cursor: 'pointer' }}
+          onClick={() => { setShowUpload(true) }}
+        >
+          <p style={{ margin: 0, color: dragOver ? '#059669' : '#94a3b8', fontSize: '14px' }}>
+            {dragOver ? '📂 Slipp filene her!' : '📂 Dra og slipp filer her, eller klikk for å laste opp'}
+          </p>
+        </div>
+
+        {/* File list */}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
+            <h3 style={{ color: '#0f172a', margin: '0 0 8px' }}>Ingen filer</h3>
+            <p style={{ color: '#64748b', margin: '0 0 20px' }}>{search ? 'Ingen filer matcher søket' : 'Last opp din første fil'}</p>
+          </div>
+        ) : grouped.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {grouped.map(cat => (
+              <div key={cat.id}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '18px' }}>{cat.emoji}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{cat.name}</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>({cat.files.length})</span>
+                  <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {cat.files.map(file => (
+                    <div key={file.id} style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                        {getFileEmoji(file.name, file.file_type)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: '0 0 3px', fontWeight: '600', color: '#0f172a', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b' }}>
+                          <span>📁 {getProjectName(file.project_id)}</span>
+                          {file.file_size && <span>{formatFileSize(file.file_size)}</span>}
+                          {file.description && <span>{file.description}</span>}
+                          <span>{new Date(file.created_at).toLocaleDateString('nb-NO')}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => handleDownload(file)} title="Last ned" style={{ background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
+                        <button onClick={() => handleDelete(file)} title="Slett" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {filtered.map(file => (
+              <div key={file.id} style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                  {getFileEmoji(file.name, file.file_type)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: '0 0 3px', fontWeight: '600', color: '#0f172a', fontSize: '14px' }}>{file.name}</p>
+                  <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b' }}>
+                    <span>📁 {getProjectName(file.project_id)}</span>
+                    {file.file_size && <span>{formatFileSize(file.file_size)}</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button onClick={() => handleDownload(file)} style={{ background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
+                  <button onClick={() => handleDelete(file)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upload Modal */}
+      {showUpload && (
+        <>
+          <div onClick={() => setShowUpload(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(560px, calc(100vw - 32px))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Last opp filer</h2>
+              <button onClick={() => setShowUpload(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
+            </div>
+            <form onSubmit={handleUpload} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+              {/* File picker */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc' }}
+              >
+                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>📂 Klikk for å velge filer</p>
+                {uploadFiles.length > 0 && (
+                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {uploadFiles.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '8px', padding: '8px 12px', border: '1px solid #f1f5f9' }}>
+                        <span style={{ fontSize: '13px', color: '#0f172a' }}>{getFileEmoji(f.name)} {f.name}</span>
+                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatFileSize(f.size)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={e => setUploadFiles(Array.from(e.target.files))} />
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
+                <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
+                  <option value="">Velg prosjekt</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Kategori</label>
+                <select value={uploadForm.category} onChange={e => setUploadForm(f => ({...f, category: e.target.value}))} style={{ ...inp, background: 'white' }}>
+                  {FILE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Tilgangsnivå</label>
+                <select value={uploadForm.access_level} onChange={e => setUploadForm(f => ({...f, access_level: e.target.value}))} style={{ ...inp, background: 'white' }}>
+                  <option value="alle">👥 Alle brukere</option>
+                  <option value="prosjektleder">🔒 Prosjektleder</option>
+                  <option value="admin">🛡️ Admin</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Beskrivelse</label>
+                <textarea value={uploadForm.description} onChange={e => setUploadForm(f => ({...f, description: e.target.value}))} placeholder="Valgfri beskrivelse..." rows={2} style={{ ...inp, resize: 'vertical', fontFamily: 'system-ui, sans-serif' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '8px' }}>
+                <button type="button" onClick={() => setShowUpload(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
+                <button type="submit" disabled={uploading} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600', opacity: uploading ? 0.7 : 1 }}>{uploading ? 'Laster opp...' : 'Last opp'}</button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function AppContent() {
   const { user, loading, supabase } = useAuth()
   const [page, setPage] = useState('dashboard')
@@ -834,6 +1146,7 @@ function AppContent() {
       <main style={{ marginLeft: sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh' }}>
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
+        {page === 'prosjektfiler' && <ProsjektfilerPage />}
         {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
         {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjekt_detaljer' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
