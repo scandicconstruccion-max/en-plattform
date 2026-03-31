@@ -121,6 +121,43 @@ const moduleCards = [
   { id: 'varsler', name: 'Varsler', desc: 'Notifikasjoner', emoji: '🔔', color: '#fffbeb' },
 ]
 
+const moduleSections = [
+  {
+    title: '🔹 GRUNNPAKKE',
+    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner'],
+    singleRow: true,
+  },
+  {
+    title: '💰 ØKONOMI & KONTRAKT',
+    modules: ['tilbud', 'anbudsmodul', 'ordre', 'faktura'],
+  },
+  {
+    title: '👷 PERSONELL & RESSURSER',
+    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat'],
+  },
+  {
+    title: '⚙️ SALG & ADMIN',
+    modules: ['crm', 'brukeradmin', 'varsler'],
+  },
+]
+
+function ModuleCard({ module, onNavigate }) {
+  const m = moduleCards.find(x => x.id === module)
+  if (!m) return null
+  return (
+    <button onClick={() => onNavigate(m.id)}
+      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '20px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.2s' }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+      <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', marginBottom: '12px' }}>
+        {m.emoji}
+      </div>
+      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', marginBottom: '4px' }}>{m.name}</div>
+      <div style={{ color: '#94a3b8', fontSize: '12px' }}>{m.desc}</div>
+    </button>
+  )
+}
+
 function Dashboard({ onNavigate, user }) {
   const days = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag']
   const months = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']
@@ -135,16 +172,23 @@ function Dashboard({ onNavigate, user }) {
       </div>
       <div style={{ padding: '32px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#0f172a', marginBottom: '24px', marginTop: 0 }}>Moduler</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
-          {moduleCards.map(m => (
-            <button key={m.id} onClick={() => onNavigate(m.id)}
-              style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '20px', cursor: 'pointer', textAlign: 'left' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', marginBottom: '12px' }}>
-                {m.emoji}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          {moduleSections.map((section, i) => (
+            <div key={i}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{section.title}</span>
+                <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
               </div>
-              <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', marginBottom: '4px' }}>{m.name}</div>
-              <div style={{ color: '#94a3b8', fontSize: '12px' }}>{m.desc}</div>
-            </button>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: section.singleRow
+                  ? `repeat(${section.modules.length}, minmax(140px, 1fr))`
+                  : 'repeat(auto-fill, minmax(160px, 1fr))',
+                gap: '16px'
+              }}>
+                {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} />)}
+              </div>
+            </div>
           ))}
         </div>
       </div>
