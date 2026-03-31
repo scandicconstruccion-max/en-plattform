@@ -2,8 +2,8 @@ import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { hasModuleAccess } from '@/lib/permissions'
-import { format } from 'date-fns'
-import { nb } from 'date-fns/locale'
+const formatDate = () => { const days = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag']; const months = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']; const d = new Date(); return `${days[d.getDay()]} ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}` }
+
 import { cn } from '@/lib/utils'
 import {
   AlertTriangle, FileText, Clock, Camera, CheckSquare,
@@ -91,7 +91,7 @@ export default function Dashboard() {
             Velkommen tilbake, {firstName}
           </h1>
           <p className="text-slate-500 mt-1">
-            {format(new Date(), "EEEE d. MMMM yyyy", { locale: nb })}
+            {formatDate()}
           </p>
         </div>
       </div>
