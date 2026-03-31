@@ -1149,14 +1149,22 @@ const DEFAULT_TEMPLATES = [
 ]
 
 const CATEGORY_LABELS = {
-  kvalitet: { label: 'Kvalitet', emoji: '🔍' },
-  hms: { label: 'HMS', emoji: '⚠️' },
-  overtakelse: { label: 'Overtakelse', emoji: '🎯' },
-  tømrer: { label: 'Tømrer', emoji: '🪵' },
-  betong: { label: 'Betong', emoji: '🏗️' },
-  tak: { label: 'Tak', emoji: '🏠' },
-  internkontroll: { label: 'Internkontroll', emoji: '✅' },
-  annet: { label: 'Annet', emoji: '📋' },
+  tømrer:        { label: 'Tømrer',        emoji: '🪵' },
+  betong:        { label: 'Betong',         emoji: '🏗️' },
+  tak:           { label: 'Tak',            emoji: '🏠' },
+  elektrikker:   { label: 'Elektrikker',    emoji: '⚡' },
+  rorlegger:     { label: 'Rørlegger',      emoji: '🔧' },
+  maler:         { label: 'Maler',          emoji: '🎨' },
+  murerer:       { label: 'Murerer',        emoji: '🧱' },
+  blikkenslager: { label: 'Blikkenslager',  emoji: '🛠️' },
+  taktekker:     { label: 'Taktekker',      emoji: '🏠' },
+  membranlegger: { label: 'Membranlegger',  emoji: '🔒' },
+  sveiser:       { label: 'Sveiser',        emoji: '🔥' },
+  kvalitet:      { label: 'Kvalitet',       emoji: '🔍' },
+  hms:           { label: 'HMS',            emoji: '⚠️' },
+  overtakelse:   { label: 'Overtakelse',    emoji: '🎯' },
+  internkontroll:{ label: 'Internkontroll', emoji: '✅' },
+  annet:         { label: 'Annet',          emoji: '📋' },
 }
 
 // ─── SJEKKLISTER PAGE ─────────────────────────────────────────────────────
