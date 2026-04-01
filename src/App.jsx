@@ -3803,6 +3803,706 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 
 // ─── END MASKIN MODULE ────────────────────────────────────────────────────────
 
+// ─── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
+
+const NotifContext = React.createContext({})
+
+function NotifProvider({ children }) {
+  const { user } = useAuth()
+  const [notifs, setNotifs] = useState([])
+
+  const load = async () => {
+    if (!user) return
+    const { data } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30)
+    setNotifs(data || [])
+  }
+
+  useEffect(() => {
+    load()
+    if (!user) return
+    const channel = supabase.channel('notifs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => load()).subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [user])
+
+  const markRead = async (id) => {
+    await supabase.from('notifications').update({ read: true }).eq('id', id)
+    setNotifs(n => n.map(x => x.id === id ? { ...x, read: true } : x))
+  }
+  const markAllRead = async () => {
+    if (!user) return
+    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false)
+    setNotifs(n => n.map(x => ({ ...x, read: true })))
+  }
+
+  const unread = notifs.filter(n => !n.read).length
+  return <NotifContext.Provider value={{ notifs, unread, load, markRead, markAllRead }}>{children}</NotifContext.Provider>
+}
+
+const useNotif = () => React.useContext(NotifContext)
+
+function NotifBell({ onNavigate }) {
+  const { notifs, unread, markRead, markAllRead } = useNotif()
+  const [open, setOpen] = useState(false)
+
+  const typeIcon = (type) => ({ info: 'ℹ️', success: '✅', warning: '⚠️', quote: '📋' }[type] || 'ℹ️')
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '4px 8px', borderRadius: '8px', color: '#64748b' }}>
+        🔔
+        {unread > 0 && (
+          <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#dc2626', color: 'white', borderRadius: '999px', fontSize: '10px', fontWeight: '800', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unread > 9 ? '9+' : unread}</span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 90 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'absolute', top: '110%', right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', zIndex: 100, width: '340px', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: '700', fontSize: '15px', color: '#0f172a' }}>🔔 Varsler {unread > 0 && <span style={{ background: '#dc2626', color: 'white', borderRadius: '999px', fontSize: '11px', padding: '1px 7px', marginLeft: '6px' }}>{unread}</span>}</span>
+              {unread > 0 && <button onClick={markAllRead} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#059669', fontWeight: '600' }}>Merk alle lest</button>}
+            </div>
+            <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
+              {notifs.length === 0 ? (
+                <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>Ingen varsler ennå</div>
+              ) : notifs.map(n => (
+                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page) }}
+                  style={{ padding: '12px 18px', borderBottom: '1px solid #f8fafc', background: n.read ? 'white' : '#f0fdf4', cursor: 'pointer', display: 'flex', gap: '10px', alignItems: 'flex-start' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = n.read ? 'white' : '#f0fdf4'}>
+                  <span style={{ fontSize: '18px', flexShrink: 0 }}>{typeIcon(n.type)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: n.read ? '500' : '700', fontSize: '13px', color: '#0f172a', marginBottom: '2px' }}>{n.title}</div>
+                    {n.message && <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.4 }}>{n.message}</div>}
+                    <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>{new Date(n.created_at).toLocaleString('nb-NO')}</div>
+                  </div>
+                  {!n.read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669', flexShrink: 0, marginTop: '4px' }} />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── END NOTIFICATION SYSTEM ──────────────────────────────────────────────────
+// ─── TILBUD MODULE ────────────────────────────────────────────────────────────
+
+const QUOTE_STATUS = {
+  'Utkast':   { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+  'Sendt':    { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '📤' },
+  'Akseptert':{ bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+  'Avslått':  { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+}
+
+const qInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+const qCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+
+function QuoteStatusBadge({ status }) {
+  const cfg = QUOTE_STATUS[status] || QUOTE_STATUS['Utkast']
+  return <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600' }}>{cfg.emoji} {status}</span>
+}
+
+function calcChapter(ch) {
+  const sum = (ch.posts || []).reduce((acc, p) => acc + (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0)), 0)
+  const markup = parseFloat(ch.markup) || 0
+  return { sum, total: sum * (1 + markup / 100) }
+}
+
+function calcQuote(chapters, globalMarkup) {
+  const subtotal = chapters.reduce((acc, ch) => acc + calcChapter(ch).sum, 0)
+  const gm = parseFloat(globalMarkup) || 0
+  const chapterTotals = chapters.reduce((acc, ch) => acc + calcChapter(ch).total, 0)
+  return { subtotal, chapterTotals, grandTotal: chapterTotals * (1 + gm / 100) }
+}
+
+function fmt(n) { return (Math.round((parseFloat(n)||0)*100)/100).toLocaleString('nb-NO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kr' }
+
+function TilbudPage() {
+  const { user } = useAuth()
+  const [quotes, setQuotes] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [selected, setSelected] = useState(null)
+
+  const load = async () => {
+    try {
+      const [q, p] = await Promise.all([
+        supabase.from('quotes').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        supabase.from('projects').select('id,name').order('name').then(r => r.data || [])
+      ])
+      setQuotes(q); setProjects(p)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = quotes.filter(q => {
+    if (filterStatus !== 'alle' && q.status !== filterStatus) return false
+    if (search && ![q.title, q.quote_number, q.customer_name].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const counts = Object.keys(QUOTE_STATUS).reduce((acc, s) => { acc[s] = quotes.filter(q => q.status === s).length; return acc }, {})
+  const totalAkseptert = quotes.filter(q => q.status === 'Akseptert').reduce((acc, q) => acc + calcQuote(q.chapters || [], q.global_markup).grandTotal, 0)
+
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster tilbud...</p></div></div>
+
+  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Tilbud</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Opprett, send og følg opp tilbud til kunder</p>
+          </div>
+          <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt tilbud</button>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr) 1.4fr', gap:'12px' }}>
+          {Object.entries(QUOTE_STATUS).map(([s, cfg]) => (
+            <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
+              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+              <div style={{ fontSize:'20px', marginBottom:'8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{counts[s]||0}</div>
+              <div style={{ fontSize:'11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+            </button>
+          ))}
+          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+            <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
+            <div style={{ fontSize:'18px', fontWeight:'800' }}>{fmt(totalAkseptert)}</div>
+            <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total akseptert</div>
+          </div>
+        </div>
+
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk tilbud, kunde, nummer..." style={{ ...qInp, maxWidth:'260px', flex:1 }} />
+          {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} tilbud</span>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📋</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen tilbud funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{quotes.length===0 ? 'Opprett ditt første tilbud.' : 'Prøv å endre søk eller filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(q => {
+              const cfg = QUOTE_STATUS[q.status]
+              const proj = projects.find(p => p.id === q.project_id)
+              const { grandTotal } = calcQuote(q.chapters || [], q.global_markup)
+              const isExpired = q.valid_until && new Date(q.valid_until) < new Date() && q.status === 'Sendt'
+              return (
+                <div key={q.id} onClick={() => setSelected(q)}
+                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${isExpired ? '#fecaca' : '#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{q.title}</span>
+                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+                      <QuoteStatusBadge status={q.status} />
+                      {isExpired && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'12px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>⏰ Utløpt</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {q.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {q.customer_name}</span>}
+                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {q.valid_until && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Gyldig til {q.valid_until}</span>}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(grandTotal)}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>inkl. påslag</div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNew && <TilbudEditorModal projects={projects} user={user} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
+    </div>
+  )
+}
+
+function TilbudDetaljer({ quote: init, projects, user, onBack }) {
+  const [q, setQ] = useState(init)
+  const [editing, setEditing] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [showSendModal, setShowSendModal] = useState(false)
+  const cfg = QUOTE_STATUS[q.status]
+  const proj = projects.find(p => p.id === q.project_id)
+  const { grandTotal, chapterTotals } = calcQuote(q.chapters || [], q.global_markup)
+
+  const refresh = async () => {
+    const { data } = await supabase.from('quotes').select('*').eq('id', q.id).single()
+    if (data) setQ(data)
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett dette tilbudet?')) return
+    await supabase.from('quotes').delete().eq('id', q.id)
+    onBack()
+  }
+
+  const updateStatus = async (status) => {
+    const updates = { status, updated_at: new Date().toISOString() }
+    if (status === 'Akseptert') updates.accepted_at = new Date().toISOString()
+    await supabase.from('quotes').update(updates).eq('id', q.id)
+    setQ(v => ({ ...v, ...updates }))
+  }
+
+  const handlePrint = () => window.print()
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <style>{`@media print { .no-print { display:none !important } body { background:white } }`}</style>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til tilbud</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{q.title}</h1>
+                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+                <QuoteStatusBadge status={q.status} />
+              </div>
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                {q.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {q.customer_name}</span>}
+                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
+            {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>}
+            <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut / PDF</button>
+            {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>}
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        {/* Left - print area */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Header info */}
+          <div style={qCard}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
+                {[['Navn', q.customer_name], ['Adresse', q.customer_address], ['Org.nr', q.customer_orgnr], ['E-post', q.customer_email]].filter(r=>r[1]).map(([k,v]) => (
+                  <div key={k} style={{ marginBottom:'5px', fontSize:'13px' }}><span style={{ color:'#94a3b8' }}>{k}: </span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Tilbudsinfo</div>
+                {[['Nr.', q.quote_number], ['Dato', q.created_at?.split('T')[0]], ['Gyldig til', q.valid_until], ['Betalingsbetingelser', q.payment_terms], ['Leveringstid', q.delivery_time]].filter(r=>r[1]).map(([k,v]) => (
+                  <div key={k} style={{ marginBottom:'5px', fontSize:'13px' }}><span style={{ color:'#94a3b8' }}>{k}: </span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
+                ))}
+              </div>
+            </div>
+            {q.intro_text && <p style={{ margin:'14px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>{q.intro_text}</p>}
+          </div>
+
+          {/* Chapters */}
+          {(q.chapters || []).map((ch, ci) => {
+            const { sum, total } = calcChapter(ch)
+            return (
+              <div key={ci} style={qCard}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                  <div style={{ textAlign:'right' }}>
+                    {ch.markup > 0 && <div style={{ fontSize:'11px', color:'#94a3b8' }}>Påslag {ch.markup}%</div>}
+                    <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(total)}</div>
+                  </div>
+                </div>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                  <thead>
+                    <tr style={{ background:'#f8fafc' }}>
+                      {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h => (
+                        <th key={h} style={{ padding:'8px 10px', textAlign: h==='Sum'||h==='Arbeid/enh'||h==='Material/enh' ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ch.posts || []).map((p, pi) => {
+                      const lineSum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <tr key={pi} style={{ borderBottom:'1px solid #f8fafc' }}>
+                          <td style={{ padding:'9px 10px', color:'#0f172a', fontWeight:'500' }}>{p.description || '—'}</td>
+                          <td style={{ padding:'9px 10px', textAlign:'right', color:'#475569' }}>{p.qty}</td>
+                          <td style={{ padding:'9px 10px', color:'#475569' }}>{p.unit}</td>
+                          <td style={{ padding:'9px 10px', textAlign:'right', color:'#475569' }}>{p.unitPriceWork ? fmt(p.unitPriceWork) : '—'}</td>
+                          <td style={{ padding:'9px 10px', textAlign:'right', color:'#475569' }}>{p.unitPriceMaterial ? fmt(p.unitPriceMaterial) : '—'}</td>
+                          <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmt(lineSum)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {ch.description && <p style={{ margin:'10px 0 0', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{ch.description}</p>}
+              </div>
+            )
+          })}
+
+          {/* Totals */}
+          <div style={{ ...qCard, background:'#f8fafc' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'320px', marginLeft:'auto' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}>
+                <span>Kapittelsum</span><span style={{ fontWeight:'600' }}>{fmt(chapterTotals)}</span>
+              </div>
+              {parseFloat(q.global_markup) > 0 && (
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}>
+                  <span>Generelt påslag ({q.global_markup}%)</span>
+                  <span style={{ fontWeight:'600' }}>{fmt(grandTotal - chapterTotals)}</span>
+                </div>
+              )}
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px', marginTop:'4px' }}>
+                <span>Total eks. mva</span><span style={{ color:'#059669' }}>{fmt(grandTotal)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#94a3b8' }}>
+                <span>Mva 25%</span><span>{fmt(grandTotal * 0.25)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
+                <span>Total inkl. mva</span><span>{fmt(grandTotal * 1.25)}</span>
+              </div>
+            </div>
+          </div>
+
+          {q.outro_text && <div style={qCard}><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{q.outro_text}</p></div>}
+        </div>
+
+        {/* Right sidebar */}
+        <div className="no-print" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Status */}
+          <div style={qCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.keys(QUOTE_STATUS).map(s => (
+                <button key={s} onClick={() => updateStatus(s)} disabled={q.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${q.status===s ? QUOTE_STATUS[s].border : '#e2e8f0'}`, background: q.status===s ? QUOTE_STATUS[s].bg : 'white', color: q.status===s ? QUOTE_STATUS[s].color : '#475569', fontWeight: q.status===s ? '700':'400', fontSize:'13px', cursor: q.status===s ? 'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {q.status===s ? '✓ ':''}{QUOTE_STATUS[s].emoji} {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div style={qCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>💰 Oppsummering</h3>
+            <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', border:'1px solid #bbf7d0' }}>
+              <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Total eks. mva</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{fmt(grandTotal)}</div>
+            </div>
+            <div style={{ marginTop:'10px', display:'flex', flexDirection:'column', gap:'5px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#94a3b8' }}><span>Mva 25%</span><span>{fmt(grandTotal*0.25)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}><span>Inkl. mva</span><span>{fmt(grandTotal*1.25)}</span></div>
+            </div>
+          </div>
+
+          {/* Info */}
+          <div style={qCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Detaljer</h3>
+            {[['Prosjekt', proj?.name], ['Gyldig til', q.valid_until], ['Betalingsbetingelser', q.payment_terms], ['Leveringstid', q.delivery_time], ['Sendt', q.sent_at ? new Date(q.sent_at).toLocaleDateString('nb-NO') : null], ['Akseptert', q.accepted_at ? new Date(q.accepted_at).toLocaleDateString('nb-NO') : null]].filter(r=>r[1]).map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a', textAlign:'right', maxWidth:'55%' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {editing && <TilbudEditorModal projects={projects} user={user} initial={q} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh() }} />}
+      {showSendModal && <SendTilbudModal quote={q} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); refresh() }} />}
+    </div>
+  )
+}
+
+function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [step, setStep] = useState(1) // 1=info, 2=kapitler
+  const [form, setForm] = useState({
+    title: initial?.title || '',
+    quote_number: initial?.quote_number || `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    project_id: initial?.project_id || '',
+    customer_name: initial?.customer_name || '',
+    customer_email: initial?.customer_email || '',
+    customer_address: initial?.customer_address || '',
+    customer_orgnr: initial?.customer_orgnr || '',
+    valid_until: initial?.valid_until || '',
+    payment_terms: initial?.payment_terms || '30 dager netto',
+    delivery_time: initial?.delivery_time || '',
+    intro_text: initial?.intro_text || '',
+    outro_text: initial?.outro_text || 'Vi håper tilbudet er av interesse og ser frem til et godt samarbeid.',
+    global_markup: initial?.global_markup || 0,
+  })
+  const [chapters, setChapters] = useState(initial?.chapters || [
+    { id: Date.now(), title: 'Generelt', description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }
+  ])
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Chapter helpers
+  const addChapter = () => setChapters(c => [...c, { id: Date.now(), title: `Kapittel ${c.length+1}`, description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }])
+  const removeChapter = (id) => setChapters(c => c.filter(x => x.id !== id))
+  const updateChapter = (id, f, v) => setChapters(c => c.map(x => x.id === id ? { ...x, [f]: v } : x))
+  const addPost = (chId) => setChapters(c => c.map(x => x.id === chId ? { ...x, posts: [...x.posts, { id: Date.now(), description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] } : x))
+  const removePost = (chId, pId) => setChapters(c => c.map(x => x.id === chId ? { ...x, posts: x.posts.filter(p => p.id !== pId) } : x))
+  const updatePost = (chId, pId, f, v) => setChapters(c => c.map(x => x.id === chId ? { ...x, posts: x.posts.map(p => p.id === pId ? { ...p, [f]: v } : p) } : x))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { ...form, chapters, updated_at: new Date().toISOString() }
+      if (isEdit) {
+        const { error } = await supabase.from('quotes').update(payload).eq('id', initial.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('quotes').insert({ ...payload, status: 'Utkast', created_by: user?.id })
+        if (error) throw error
+      }
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+  const { grandTotal } = calcQuote(chapters, form.global_markup)
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        {/* Modal header */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 {isEdit ? 'Rediger' : 'Nytt'} tilbud</h2>
+            <div style={{ display:'flex', gap:'4px' }}>
+              {[['1','Informasjon'],['2','Kapitler & Poster']].map(([n, lbl]) => (
+                <button key={n} onClick={() => setStep(+n)}
+                  style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize:'13px', cursor:'pointer' }}>
+                  {n}. {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmt(grandTotal)}</strong></span>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+          {/* STEP 1 - Info */}
+          {step === 1 && (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Tilbudstittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbud betongarbeider Blokk B" style={qInp} /></div>
+              <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
+              <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
+              <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={qInp} /></div>
+              <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Gateadresse, postnummer sted" style={qInp} /></div>
+              <div>{lbl('Org.nr / Fødselsnr')}<input value={form.customer_orgnr} onChange={e=>set('customer_orgnr',e.target.value)} placeholder="123 456 789" style={qInp} /></div>
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Betingelser</div></div>
+              <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={qInp} /></div>
+              <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={qInp} /></div>
+              <div>{lbl('Leveringstid')}<input value={form.delivery_time} onChange={e=>set('delivery_time',e.target.value)} placeholder="F.eks. 3–4 uker" style={qInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={qInp} /></div>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...qInp, resize:'none' }} /></div>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Avsluttende tekst')}<textarea value={form.outro_text} onChange={e=>set('outro_text',e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} /></div>
+            </div>
+          )}
+
+          {/* STEP 2 - Chapters */}
+          {step === 2 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+              {chapters.map((ch, ci) => {
+                const { sum, total } = calcChapter(ch)
+                return (
+                  <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+                    {/* Chapter header */}
+                    <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
+                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
+                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                    </div>
+                    {/* Posts table */}
+                    <div style={{ padding:'14px 18px' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead>
+                          <tr>
+                            {['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i) => (
+                              <th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ch.posts.map(p => {
+                            const lineSum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
+                            return (
+                              <tr key={p.id}>
+                                <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv arbeid/materiale" style={{ ...qInp, minWidth:'180px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...qInp, width:'60px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(lineSum)}</td>
+                                <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'10px' }}>
+                        <button onClick={()=>addPost(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
+                        <div style={{ fontSize:'13px', color:'#64748b' }}>Kapittelsum: <strong style={{ color:'#0f172a' }}>{fmt(sum)}</strong>{ch.markup>0?` + påslag = ${fmt(total)}`:''}</div>
+                      </div>
+                      {ch.description !== undefined && <textarea value={ch.description} onChange={e=>updateChapter(ch.id,'description',e.target.value)} rows={1} placeholder="Kapittelnotat (valgfritt)" style={{ ...qInp, marginTop:'8px', resize:'none', fontSize:'12px', color:'#94a3b8' }} />}
+                    </div>
+                  </div>
+                )
+              })}
+              <button onClick={addChapter} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
+
+              {/* Grand total */}
+              <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'18px 24px', border:'1px solid #bbf7d0' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div>
+                    <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Total eks. mva</div>
+                    {parseFloat(form.global_markup)>0 && <div style={{ fontSize:'12px', color:'#94a3b8' }}>Inkl. generelt påslag {form.global_markup}%</div>}
+                  </div>
+                  <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmt(grandTotal)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div style={{ display:'flex', gap:'8px' }}>
+            {step === 2 && <button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>← Tilbake</button>}
+          </div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            {step === 1 && <button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Kapitler →</button>}
+            {step === 2 && <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett tilbud'}</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SendTilbudModal({ quote, user, onClose, onSent }) {
+  const [email, setEmail] = useState(quote.customer_email || '')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const { grandTotal } = calcQuote(quote.chapters || [], quote.global_markup)
+
+  const handleSend = async () => {
+    if (!email) return alert('E-postadresse er påkrevd')
+    setSending(true)
+    try {
+      const approvalUrl = `${window.location.origin}/godkjenn?token=${quote.token}`
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: import.meta.env.VITE_FROM_EMAIL || 'tilbud@enplattform.no',
+          to: [email],
+          subject: `Tilbud ${quote.quote_number} – ${quote.title}`,
+          html: `
+            <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+              <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">${quote.title}</h1>
+              <p style="color:#64748b;font-size:14px">Tilbudsnummer: <strong>${quote.quote_number}</strong></p>
+              ${quote.intro_text ? `<p style="color:#475569;line-height:1.6">${quote.intro_text}</p>` : ''}
+              <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0">
+                <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM EKS. MVA</div>
+                <div style="font-size:28px;font-weight:800;color:#0f172a">${fmt(grandTotal)}</div>
+                <div style="font-size:13px;color:#64748b;margin-top:4px">Inkl. mva: ${fmt(grandTotal*1.25)}</div>
+              </div>
+              ${quote.valid_until ? `<p style="color:#64748b;font-size:13px">Tilbudet er gyldig til: <strong>${quote.valid_until}</strong></p>` : ''}
+              ${quote.payment_terms ? `<p style="color:#64748b;font-size:13px">Betalingsbetingelser: <strong>${quote.payment_terms}</strong></p>` : ''}
+              <div style="text-align:center;margin:32px 0">
+                <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
+              </div>
+              ${quote.outro_text ? `<p style="color:#64748b;font-size:13px;line-height:1.6">${quote.outro_text}</p>` : ''}
+              <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+              <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+            </div>
+          `
+        })
+      })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.message || 'Sending feilet') }
+
+      await supabase.from('quotes').update({ status: 'Sendt', sent_at: new Date().toISOString(), customer_email: email }).eq('id', quote.id)
+      setSent(true)
+      setTimeout(() => onSent(), 1500)
+    } catch(e) { alert('Kunne ikke sende: ' + e.message + '\n\nSjekk at VITE_RESEND_API_KEY er satt i Vercel.') }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send tilbud til kunde</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Tilbud sendt!</h3>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar en e-post med godkjenningsknapp</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0' }}>
+                <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Tilbud: {quote.title}</div>
+                <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a', marginTop:'4px' }}>{fmt(grandTotal)}</div>
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="kunde@epost.no" style={qInp} />
+              </div>
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e' }}>
+                ⚠️ Kunden mottar en e-post med en <strong>godkjenningsknapp</strong>. Når de klikker, oppdateres tilbudet automatisk til «Akseptert» og du får et varsel i systemet.
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send nå'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END TILBUD MODULE ────────────────────────────────────────────────────────
+
 
 
 
@@ -3846,8 +4546,9 @@ function AppContent() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ position: 'fixed', top: 0, left: 0, height: '100vh', width: sidebarWidth, background: 'white', borderRight: '1px solid #e2e8f0', transition: 'width 0.3s', zIndex: 40, display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-        <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0' : '0 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', padding: collapsed ? '0' : '0 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
           {collapsed ? <span style={{ fontWeight: 'bold', color: '#059669', fontSize: '18px' }}>EP</span> : <span style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '15px' }}>En Plattform</span>}
+          {!collapsed && <NotifBell onNavigate={navigate} />}
         </div>
         <button onClick={() => setCollapsed(!collapsed)} style={{ position: 'absolute', top: '72px', right: '-12px', width: '24px', height: '24px', borderRadius: '50%', background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
           {collapsed ? '›' : '‹'}
@@ -3890,7 +4591,8 @@ function AppContent() {
         {page === 'avvik' && <AvvikPage />}
         {page === 'hms' && <HmsPage />}
         {page === 'maskiner' && <MaskinPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && (
+        {page === 'tilbud' && <TilbudPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
@@ -3899,5 +4601,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AuthProvider><AppContent /></AuthProvider>
+  return <AuthProvider><NotifProvider><AppContent /></NotifProvider></AuthProvider>
 }
