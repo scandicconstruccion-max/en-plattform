@@ -8637,6 +8637,431 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
 
 // ─── END TIMELISTE MODULE ─────────────────────────────────────────────────────
 
+// ─── RESSURSPLANLEGGER MODULE ─────────────────────────────────────────────────
+
+const PROJECT_COLORS = [
+  '#2563eb','#059669','#dc2626','#d97706','#7c3aed',
+  '#0891b2','#be185d','#65a30d','#ea580c','#0284c7',
+  '#9333ea','#16a34a','#ca8a04','#e11d48','#0d9488',
+]
+
+function getProjectColor(projectId, projects) {
+  const idx = projects.findIndex(p=>p.id===projectId)
+  return PROJECT_COLORS[idx % PROJECT_COLORS.length] || '#64748b'
+}
+
+function getDatesInRange(start, days) {
+  return Array.from({length:days},(_,i)=>{
+    const d = new Date(start)
+    d.setDate(d.getDate()+i)
+    return d.toISOString().split('T')[0]
+  })
+}
+
+function startOfWeek(date) {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = day===0?-6:1-day
+  d.setDate(d.getDate()+diff)
+  return d.toISOString().split('T')[0]
+}
+
+function startOfMonth(date) {
+  return date.slice(0,8)+'01'
+}
+
+function daysInMonth(dateStr) {
+  const d = new Date(dateStr)
+  return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()
+}
+
+const DAY_SHORT = ['Ma','Ti','On','To','Fr','Lø','Sø']
+const MONTH_NAMES = ['Januar','Februar','Mars','April','Mai','Juni','Juli','August','September','Oktober','November','Desember']
+
+function rInp(extra={}) { return { ...extra, width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' } }
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function RessursPage() {
+  const { user } = useAuth()
+  const [employees, setEmployees] = useState([])
+  const [machines, setMachines] = useState([])
+  const [projects, setProjects] = useState([])
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState('uke') // 'uke'|'14'|'maned'
+  const [resourceType, setResourceType] = useState('ansatte') // 'ansatte'|'maskiner'
+  const [currentDate, setCurrentDate] = useState(startOfWeek(new Date().toISOString().split('T')[0]))
+  const [editCell, setEditCell] = useState(null) // {resourceId, date}
+  const [showBookingModal, setShowBookingModal] = useState(null)
+  const [dragOver, setDragOver] = useState(null)
+  const [dragging, setDragging] = useState(null)
+
+  const load = async () => {
+    try {
+      const [emp, mac, proj, pl] = await Promise.all([
+        supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
+        supabase.from('machines').select('id,name,category,status').whereIn ? supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]) : supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('resource_plans').select('*').then(r=>r.data||[])
+      ])
+      setEmployees(emp); setMachines(mac); setProjects(proj); setPlans(pl)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Date range based on viewMode
+  const days = viewMode==='uke'?7:viewMode==='14'?14:daysInMonth(currentDate)
+  const dates = getDatesInRange(viewMode==='maned'?startOfMonth(currentDate):currentDate, days)
+
+  const navigate = (dir) => {
+    const d = new Date(currentDate)
+    if (viewMode==='uke') d.setDate(d.getDate()+dir*7)
+    else if (viewMode==='14') d.setDate(d.getDate()+dir*14)
+    else d.setMonth(d.getMonth()+dir)
+    const newDate = d.toISOString().split('T')[0]
+    setCurrentDate(viewMode==='maned'?startOfMonth(newDate):startOfWeek(newDate))
+  }
+
+  const goToToday = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setCurrentDate(viewMode==='maned'?startOfMonth(today):startOfWeek(today))
+  }
+
+  const resources = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
+
+  const getPlansForCell = (resourceId, date) =>
+    plans.filter(p=>p.resource_id===resourceId&&p.date===date)
+
+  const getTotalHoursForResource = (resourceId, date) =>
+    plans.filter(p=>p.resource_id===resourceId&&p.date===date).reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
+
+  const isDoubleBooked = (resourceId, date) => getTotalHoursForResource(resourceId, date) > 8
+
+  const isWeekend = (date) => { const d=new Date(date+'T12:00:00'); return d.getDay()===0||d.getDay()===6 }
+  const isToday = (date) => date===new Date().toISOString().split('T')[0]
+
+  // Drag and drop
+  const handleDragStart = (plan) => setDragging(plan)
+  const handleDrop = async (resourceId, date) => {
+    if (!dragging||!dragOver) return
+    if (dragging.date===date&&dragging.resource_id===resourceId) { setDragging(null); setDragOver(null); return }
+    try {
+      await supabase.from('resource_plans').update({ date, resource_id:resourceId, updated_at:new Date().toISOString() }).eq('id',dragging.id)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+    setDragging(null); setDragOver(null)
+  }
+
+  // Capacity per resource per week
+  const getWeekCapacity = (resourceId) => {
+    const weekDates = getDatesInRange(currentDate, 7).filter(d=>!isWeekend(d))
+    const booked = weekDates.reduce((acc,d)=>acc+getTotalHoursForResource(resourceId,d),0)
+    const total = weekDates.length * 8
+    return { booked, total, pct:total>0?Math.round(booked/total*100):0 }
+  }
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ressursplan...</p></div></div>
+
+  const today = new Date().toISOString().split('T')[0]
+  const doubleBookings = plans.filter(p=>dates.includes(p.date)).reduce((acc,p)=>{
+    const key=`${p.resource_id}_${p.date}`
+    acc[key]=(acc[key]||0)+(parseFloat(p.hours)||0)
+    return acc
+  },{})
+  const doubleBookCount = Object.values(doubleBookings).filter(h=>h>8).length
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Planlegg ansatte og maskiner på tvers av prosjekter</p>
+          </div>
+          {doubleBookCount>0&&(
+            <div style={{ background:'#fef2f2', borderRadius:'10px', padding:'8px 14px', border:'1px solid #fecaca', fontSize:'13px', color:'#dc2626', fontWeight:'700' }}>
+              ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
+            </div>
+          )}
+        </div>
+
+        {/* Controls */}
+        <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
+          {/* Resource type toggle */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[['ansatte','👷 Ansatte'],['maskiner','🚜 Maskiner']].map(([v,l])=>(
+              <button key={v} onClick={()=>setResourceType(v)}
+                style={{ padding:'8px 16px', border:'none', background:resourceType===v?'#059669':'white', color:resourceType===v?'white':'#64748b', fontWeight:resourceType===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+            ))}
+          </div>
+
+          {/* View mode */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[['uke','Uke'],['14','14 dager'],['maned','Måned']].map(([v,l])=>(
+              <button key={v} onClick={()=>setViewMode(v)}
+                style={{ padding:'8px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+            ))}
+          </div>
+
+          {/* Date navigation */}
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto' }}>
+            <button onClick={()=>navigate(-1)} style={{ width:'34px',height:'34px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px', whiteSpace:'nowrap', minWidth:'160px', textAlign:'center' }}>
+              {viewMode==='maned'
+                ? `${MONTH_NAMES[new Date(currentDate).getMonth()]} ${new Date(currentDate).getFullYear()}`
+                : `${new Date(dates[0]+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})} – ${new Date(dates[dates.length-1]+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short',year:'numeric'})}`
+              }
+            </span>
+            <button onClick={()=>navigate(1)} style={{ width:'34px',height:'34px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
+            <button onClick={goToToday} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{ padding:'10px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'16px', flexWrap:'wrap', alignItems:'center' }}>
+        <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
+        {projects.slice(0,8).map(p=>(
+          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(p.id,projects),flexShrink:0 }}/>
+            <span style={{ fontSize:'12px',color:'#475569' }}>{p.name}</span>
+          </div>
+        ))}
+        {projects.length>8&&<span style={{ fontSize:'12px',color:'#94a3b8' }}>+{projects.length-8} til</span>}
+      </div>
+
+      {/* Grid */}
+      <div style={{ overflowX:'auto' }}>
+        <div style={{ minWidth: `${240 + dates.length * (viewMode==='maned'?36:viewMode==='14'?60:90)}px` }}>
+          {/* Date header */}
+          <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
+            <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
+              {resourceType==='ansatte'?'👷 Ansatt':'🚜 Maskin'}
+            </div>
+            {dates.map(date=>{
+              const d=new Date(date+'T12:00:00')
+              const weekend=isWeekend(date)
+              const tod=isToday(date)
+              const colW = viewMode==='maned'?36:viewMode==='14'?60:90
+              return (
+                <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'8px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none' }}>
+                  <div style={{ fontSize:'10px',color:tod?'#059669':weekend?'#cbd5e1':'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{DAY_SHORT[d.getDay()===0?6:d.getDay()-1]}</div>
+                  <div style={{ fontSize:viewMode==='maned'?'11px':'13px',fontWeight:tod?'800':'600',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Resource rows */}
+          {resources.map(res=>{
+            const cap = getWeekCapacity(res.id)
+            const name = res.first_name ? `${res.first_name} ${res.last_name}` : res.name
+            return (
+              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9' }}
+                onMouseLeave={()=>setDragOver(null)}>
+                {/* Resource label */}
+                <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background:'white',display:'flex',alignItems:'center',gap:'10px' }}>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
+                    <div style={{ fontSize:'11px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
+                  </div>
+                  {/* Capacity bar */}
+                  <div style={{ flexShrink:0, width:'40px' }}>
+                    <div style={{ fontSize:'10px',color:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',fontWeight:'700',textAlign:'center',marginBottom:'2px' }}>{cap.pct}%</div>
+                    <div style={{ height:'4px',borderRadius:'2px',background:'#f1f5f9',overflow:'hidden' }}>
+                      <div style={{ height:'100%',borderRadius:'2px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%`,transition:'width 0.3s' }}/>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Day cells */}
+                {dates.map(date=>{
+                  const cellPlans = getPlansForCell(res.id, date)
+                  const totalH = cellPlans.reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
+                  const dblBook = totalH > 8
+                  const weekend = isWeekend(date)
+                  const tod = isToday(date)
+                  const isDragTarget = dragOver?.resourceId===res.id&&dragOver?.date===date
+                  const colW = viewMode==='maned'?36:viewMode==='14'?60:90
+
+                  return (
+                    <div key={date}
+                      style={{ width:`${colW}px`,flexShrink:0,minHeight:'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s' }}
+                      onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
+                      onDragOver={e=>{ e.preventDefault(); setDragOver({resourceId:res.id,date}) }}
+                      onDrop={()=>handleDrop(res.id,date)}>
+                      {dblBook&&<div style={{ position:'absolute',top:1,right:2,fontSize:'10px',color:'#dc2626',fontWeight:'800' }}>!</div>}
+                      {cellPlans.map(plan=>{
+                        const proj = projects.find(p=>p.id===plan.project_id)
+                        const col = getProjectColor(plan.project_id, projects)
+                        return (
+                          <div key={plan.id}
+                            draggable
+                            onDragStart={e=>{ e.stopPropagation(); handleDragStart(plan) }}
+                            onClick={e=>{ e.stopPropagation(); setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan}) }}
+                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'1px 3px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden' }}>
+                            {viewMode==='maned' ? (
+                              <div style={{ width:'100%',height:'6px',borderRadius:'3px',background:col }}/>
+                            ) : (
+                              <>
+                                <div style={{ fontSize:'10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{proj?.name||'—'}</div>
+                                {viewMode==='uke'&&<div style={{ fontSize:'10px',color:'rgba(255,255,255,0.85)' }}>{plan.hours}t</div>}
+                              </>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {cellPlans.length===0&&!weekend&&(
+                        <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.15 }}>
+                          <span style={{ fontSize:'16px',color:'#059669' }}>+</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {showBookingModal&&(
+        <BookingModal
+          resourceId={showBookingModal.resourceId}
+          resourceName={showBookingModal.resourceName}
+          date={showBookingModal.date}
+          existingPlans={showBookingModal.existingPlans||[]}
+          editPlan={showBookingModal.editPlan}
+          projects={projects}
+          user={user}
+          onClose={()=>setShowBookingModal(null)}
+          onSaved={()=>{ setShowBookingModal(null); load() }}
+          resourceType={resourceType}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── BOOKING MODAL ─────────────────────────────────────────────────────────────
+function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType }) {
+  const [projectId, setProjectId] = useState(editPlan?.project_id||'')
+  const [hours, setHours] = useState(editPlan?.hours||8)
+  const [notes, setNotes] = useState(editPlan?.notes||'')
+  const [saving, setSaving] = useState(false)
+
+  const totalBooked = existingPlans.reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
+  const remaining = Math.max(0, 8 - totalBooked + (editPlan ? parseFloat(editPlan.hours)||0 : 0))
+  const wouldDouble = (parseFloat(hours)||0) + totalBooked - (editPlan?parseFloat(editPlan.hours)||0:0) > 8
+
+  const dateFormatted = new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+
+  const handleSave = async () => {
+    if (!projectId) return alert('Velg et prosjekt')
+    setSaving(true)
+    try {
+      const payload = { resource_id:resourceId, resource_type:resourceType==='ansatte'?'employee':'machine', project_id:projectId, date, hours:parseFloat(hours)||8, notes:notes||null, updated_at:new Date().toISOString() }
+      if (editPlan) {
+        const {error}=await supabase.from('resource_plans').update(payload).eq('id',editPlan.id)
+        if(error) throw error
+      } else {
+        const {error}=await supabase.from('resource_plans').insert({...payload,created_by:user?.id})
+        if(error) throw error
+      }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!editPlan) return
+    if (!confirm('Slett denne bookingen?')) return
+    await supabase.from('resource_plans').delete().eq('id',editPlan.id)
+    onSaved()
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'420px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
+          <div>
+            <h2 style={{ margin:'0 0 4px',fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>{editPlan?'Rediger booking':'Ny booking'}</h2>
+            <div style={{ fontSize:'13px',color:'#64748b' }}>
+              <span style={{ fontWeight:'600',color:'#0f172a' }}>{resourceName}</span> · {dateFormatted}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+
+        <div style={{ padding:'20px 22px',display:'flex',flexDirection:'column',gap:'14px' }}>
+          {/* Existing bookings on this day */}
+          {existingPlans.filter(p=>p.id!==editPlan?.id).length>0&&(
+            <div style={{ background:'#fffbeb',borderRadius:'10px',padding:'10px 14px',border:'1px solid #fde68a' }}>
+              <div style={{ fontSize:'12px',fontWeight:'700',color:'#92400e',marginBottom:'6px' }}>Allerede booket denne dagen:</div>
+              {existingPlans.filter(p=>p.id!==editPlan?.id).map(p=>{
+                const proj=projects.find(x=>x.id===p.project_id)
+                return <div key={p.id} style={{ fontSize:'12px',color:'#92400e',display:'flex',justifyContent:'space-between' }}><span>{proj?.name}</span><span>{p.hours}t</span></div>
+              })}
+              <div style={{ borderTop:'1px solid #fde68a',marginTop:'6px',paddingTop:'6px',fontSize:'12px',fontWeight:'700',color:wouldDouble?'#dc2626':'#92400e',display:'flex',justifyContent:'space-between' }}>
+                <span>{wouldDouble?'⚠️ Dobbeltbooking!':'Ledig kapasitet:'}</span>
+                <span>{remaining}t av 8t</span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
+            <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
+              <option value="">Velg prosjekt...</option>
+              {projects.map(p=>(
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            {projectId&&(
+              <div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}>
+                <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/>
+                <span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Timer denne dagen</label>
+            <div style={{ display:'flex',gap:'8px',alignItems:'center' }}>
+              {[4,6,7.5,8,10].map(h=>(
+                <button key={h} type="button" onClick={()=>setHours(h)}
+                  style={{ padding:'8px 12px',borderRadius:'8px',border:`2px solid ${hours==h?'#059669':'#e2e8f0'}`,background:hours==h?'#f0fdf4':'white',color:hours==h?'#059669':'#475569',fontWeight:hours==h?'700':'400',fontSize:'13px',cursor:'pointer' }}>
+                  {h}t
+                </button>
+              ))}
+              <input type="number" value={hours} onChange={e=>setHours(e.target.value)} min="0.5" max="24" step="0.5" style={{ ...rInp(),width:'70px',textAlign:'center',fontWeight:'700' }} />
+            </div>
+            {wouldDouble&&<div style={{ fontSize:'12px',color:'#dc2626',fontWeight:'600',marginTop:'6px' }}>⚠️ Overskrider 8 timer – dobbeltbooking!</div>}
+          </div>
+
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Merknad (valgfritt)</label>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} placeholder="F.eks. halv dag, møte om ettermiddagen..." style={{ ...rInp(),resize:'none' }} />
+          </div>
+
+          <div style={{ display:'flex',gap:'8px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+            {editPlan&&<button onClick={handleDelete} style={{ padding:'10px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️ Slett</button>}
+            <button onClick={onClose} style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving||!projectId} style={{ flex:2,padding:'10px',background:saving||!projectId?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving||!projectId?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+              {saving?'Lagrer...':editPlan?'Lagre endring':'Book'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END RESSURSPLANLEGGER MODULE ─────────────────────────────────────────────
+
 
 
 
@@ -8735,7 +9160,8 @@ function AppContent() {
         {page === 'faktura' && <FakturaPage />}
         {page === 'ansatte' && <AnsattePage />}
         {page === 'timelister' && <TimelistePage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && (
+        {page === 'ressursplanlegger' && <RessursPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplanlegger' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
