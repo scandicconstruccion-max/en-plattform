@@ -7116,6 +7116,768 @@ function SendFakturaModal({ invoice, user, onClose, onSent }) {
 
 // ─── END FAKTURA MODULE ───────────────────────────────────────────────────────
 
+// ─── ANSATTE MODULE ───────────────────────────────────────────────────────────
+
+const EMP_STATUS = {
+  'Aktiv':      { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'✅' },
+  'Permisjon':  { bg:'#fffbeb', color:'#d97706', border:'#fde68a', emoji:'⏸️' },
+  'Sluttet':    { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'🚪' },
+  'Reaktivert': { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'🔄' },
+}
+
+const CONTRACT_TYPES = ['Fast','Deltid','Vikar','Læring','Konsulent']
+
+const DEPARTMENTS = ['Ledelse','Prosjekt','Anlegg','Betong','Elektro','Rør','Tømrer','Administrasjon','Økonomi','Annet']
+
+const CERT_TYPES = ['HMS-kort','Kranførerbevis','Truck-sertifikat','Stillaskurs','Fallsikring','Sveisesertifikat','Elektrosertifikat','Førstehjelp','Maskinførerbevis','Annet']
+
+const eInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+const eCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+function EmpStatusBadge({ status }) {
+  const cfg = EMP_STATUS[status]||EMP_STATUS['Aktiv']
+  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {status}</span>
+}
+
+function certDaysLeft(expiry) {
+  if (!expiry) return null
+  return Math.ceil((new Date(expiry)-new Date())/(1000*60*60*24))
+}
+
+function CertBadge({ expiry }) {
+  if (!expiry) return null
+  const days = certDaysLeft(expiry)
+  if (days > 60) return null
+  let bg='#fef2f2', color='#dc2626', label=days<0?`Utløpt ${Math.abs(days)}d siden`:`Utløper om ${days}d`
+  if (days > 30) { bg='#fffbeb'; color='#d97706' }
+  return <span style={{ background:bg, color, fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>⚠️ {label}</span>
+}
+
+function fmtE(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') }
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function AnsattePage() {
+  const { user } = useAuth()
+  const [employees, setEmployees] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('Aktiv')
+  const [filterDept, setFilterDept] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [visning, setVisning] = useState('liste')
+
+  const load = async () => {
+    try {
+      const [e, p] = await Promise.all([
+        supabase.from('employees').select('*, employee_certifications(*)').order('last_name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+      ])
+      setEmployees(e); setProjects(p)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Check cert expiry and create notifications
+  useEffect(()=>{
+    if (!user||employees.length===0) return
+    employees.forEach(emp=>{
+      (emp.employee_certifications||[]).forEach(async cert=>{
+        const days = certDaysLeft(cert.expiry_date)
+        if (days!==null && days<=30 && days>=-7) {
+          // Check if notification already exists today
+          const today = new Date().toISOString().split('T')[0]
+          const { data } = await supabase.from('notifications').select('id').eq('user_id',user.id).ilike('title',`%${cert.name}%${emp.first_name}%`).gte('created_at',today+'T00:00:00').limit(1)
+          if (!data||data.length===0) {
+            await supabase.from('notifications').insert({
+              user_id:user.id,
+              title:`${cert.name} utløper snart: ${emp.first_name} ${emp.last_name}`,
+              message:days<0?`Sertifikatet utløp for ${Math.abs(days)} dager siden`:`Utløper om ${days} dager (${cert.expiry_date})`,
+              type: days<0?'warning':'info',
+              link_page:'ansatte'
+            })
+          }
+        }
+      })
+    })
+  },[employees])
+
+  const filtered = employees.filter(e=>{
+    if (filterStatus!=='alle'&&e.status!==filterStatus) return false
+    if (filterDept!=='alle'&&e.department!==filterDept) return false
+    if (search&&![e.first_name,e.last_name,e.position,e.email,e.phone].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const counts = Object.keys(EMP_STATUS).reduce((acc,s)=>{ acc[s]=employees.filter(e=>e.status===s).length; return acc },{})
+  const expiringCerts = employees.flatMap(e=>(e.employee_certifications||[]).filter(c=>{ const d=certDaysLeft(c.expiry_date); return d!==null&&d<=30 }))
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ansatte...</p></div></div>
+  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>
+          </div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Importer CSV</button>
+            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny ansatt</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+          {Object.entries(EMP_STATUS).map(([s,cfg])=>(
+            <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
+              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+              <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Cert expiry warning */}
+        {expiringCerts.length>0 && (
+          <div style={{ background:'#fffbeb', borderRadius:'12px', padding:'14px 18px', border:'1px solid #fde68a' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+              <span style={{ fontSize:'18px' }}>⚠️</span>
+              <span style={{ fontSize:'14px', fontWeight:'700', color:'#92400e' }}>{expiringCerts.length} sertifikat{expiringCerts.length>1?'er':''} utløper innen 30 dager</span>
+            </div>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {expiringCerts.slice(0,4).map((c,i)=>{
+                const emp = employees.find(e=>(e.employee_certifications||[]).some(x=>x.id===c.id))
+                const days = certDaysLeft(c.expiry_date)
+                return <span key={i} style={{ background:'white', border:'1px solid #fde68a', borderRadius:'8px', padding:'4px 10px', fontSize:'12px', color:'#92400e' }}>{emp?.first_name} {emp?.last_name} – {c.name} ({days<0?'Utløpt':days+'d'})</span>
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Filters */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk navn, stilling, telefon..." style={{ ...eInp, maxWidth:'240px', flex:1 }} />
+          <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ ...eInp, maxWidth:'180px' }}>
+            <option value="alle">Alle avdelinger</option>
+            {DEPARTMENTS.map(d=><option key={d} value={d}>{d}</option>)}
+          </select>
+          {(search||filterStatus!=='alle'||filterDept!=='alle') && <button onClick={()=>{setSearch('');setFilterDept('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} ansatte</span>
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            <button onClick={()=>setVisning('liste')} style={{ padding:'8px 14px', border:'none', background:visning==='liste'?'#f1f5f9':'white', cursor:'pointer', fontSize:'16px', color:visning==='liste'?'#059669':'#94a3b8' }}>☰</button>
+            <button onClick={()=>setVisning('kort')} style={{ padding:'8px 14px', border:'none', borderLeft:'1px solid #e2e8f0', background:visning==='kort'?'#f1f5f9':'white', cursor:'pointer', fontSize:'16px', color:visning==='kort'?'#059669':'#94a3b8' }}>⊞</button>
+          </div>
+        </div>
+
+        {/* Empty */}
+        {filtered.length===0 && (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>👷</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen ansatte funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{employees.length===0?'Legg til din første ansatt.':'Prøv å endre søk eller filter.'}</p>
+          </div>
+        )}
+
+        {/* LIST VIEW */}
+        {visning==='liste' && filtered.length>0 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(emp=>{
+              const expiring = (emp.employee_certifications||[]).filter(c=>{ const d=certDaysLeft(c.expiry_date); return d!==null&&d<=30 })
+              const cfg = EMP_STATUS[emp.status]
+              return (
+                <div key={emp.id} onClick={()=>setSelected(emp)}
+                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${expiring.length>0?'#fde68a':'#f1f5f9'}`, padding:'14px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
+                    {emp.first_name?.[0]}{emp.last_name?.[0]}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{emp.first_name} {emp.last_name}</span>
+                      <EmpStatusBadge status={emp.status} />
+                      {expiring.length>0 && <span style={{ background:'#fffbeb', color:'#d97706', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>⚠️ {expiring.length} sertifikat</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {emp.position && <span style={{ fontSize:'12px', color:'#64748b' }}>💼 {emp.position}</span>}
+                      {emp.department && <span style={{ fontSize:'12px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                      {emp.phone && <span style={{ fontSize:'12px', color:'#64748b' }}>📞 {emp.phone}</span>}
+                      {emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
+                      {emp.employee_number && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>#{emp.employee_number}</span>}
+                    </div>
+                  </div>
+                  {emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* KORT VIEW */}
+        {visning==='kort' && filtered.length>0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:'12px' }}>
+            {filtered.map(emp=>{
+              const expiring=(emp.employee_certifications||[]).filter(c=>{ const d=certDaysLeft(c.expiry_date); return d!==null&&d<=30 })
+              const cfg=EMP_STATUS[emp.status]
+              return (
+                <div key={emp.id} onClick={()=>setSelected(emp)}
+                  style={{ background:'white', borderRadius:'16px', border:`1px solid ${expiring.length>0?'#fde68a':'#f1f5f9'}`, padding:'20px', cursor:'pointer', display:'flex', flexDirection:'column', gap:'12px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 20px rgba(0,0,0,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                    <div style={{ width:'48px', height:'48px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+                    <div>
+                      <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{emp.first_name} {emp.last_name}</div>
+                      {emp.position&&<div style={{ fontSize:'12px', color:'#64748b' }}>{emp.position}</div>}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                    <EmpStatusBadge status={emp.status} />
+                    {emp.department&&<span style={{ fontSize:'12px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                    {emp.phone&&<span style={{ fontSize:'12px', color:'#64748b' }}>📞 {emp.phone}</span>}
+                  </div>
+                  {expiring.length>0&&<span style={{ background:'#fffbeb', color:'#d97706', fontSize:'11px', fontWeight:'700', padding:'4px 10px', borderRadius:'8px', border:'1px solid #fde68a' }}>⚠️ {expiring.length} sertifikat utløper</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNew && <AnsattEditorModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+      {showImport && <ImportCSVModal user={user} onClose={()=>setShowImport(false)} onSaved={()=>{setShowImport(false);load()}} />}
+    </div>
+  )
+}
+
+function AnsattDetaljer({ employee: init, projects, user, onBack }) {
+  const [emp, setEmp] = useState(init)
+  const [certs, setCerts] = useState([])
+  const [empProjects, setEmpProjects] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [showAddCert, setShowAddCert] = useState(false)
+  const [showAddProject, setShowAddProject] = useState(false)
+  const [activeTab, setActiveTab] = useState('info')
+  const cfg = EMP_STATUS[emp.status]
+
+  const loadDetails = async () => {
+    const [c, ep] = await Promise.all([
+      supabase.from('employee_certifications').select('*').eq('employee_id',emp.id).order('expiry_date').then(r=>r.data||[]),
+      supabase.from('employee_projects').select('*, projects(name)').eq('employee_id',emp.id).order('from_date',{ascending:false}).then(r=>r.data||[])
+    ])
+    setCerts(c); setEmpProjects(ep)
+  }
+  const refresh = async () => {
+    const {data}=await supabase.from('employees').select('*').eq('id',emp.id).single()
+    if (data) setEmp(data)
+  }
+  useEffect(()=>{ loadDetails() },[])
+
+  const updateStatus = async (status) => {
+    const updates = { status, updated_at:new Date().toISOString() }
+    if (status==='Reaktivert') updates.end_date = null
+    await supabase.from('employees').update(updates).eq('id',emp.id)
+    setEmp(v=>({...v,...updates}))
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne ansatte? All historikk slettes.')) return
+    await supabase.from('employees').delete().eq('id',emp.id)
+    onBack()
+  }
+
+  const deleteCert = async (id) => {
+    if (!confirm('Slett sertifikat?')) return
+    await supabase.from('employee_certifications').delete().eq('id',id)
+    loadDetails()
+  }
+
+  const removeProject = async (id) => {
+    await supabase.from('employee_projects').delete().eq('id',id)
+    loadDetails()
+  }
+
+  const tabs = [
+    { id:'info', label:'Informasjon', emoji:'👤' },
+    { id:'certs', label:`Sertifikater (${certs.length})`, emoji:'📜' },
+    { id:'projects', label:`Prosjekter (${empProjects.length})`, emoji:'🏗️' },
+    { id:'salary', label:'Lønn', emoji:'💰' },
+  ]
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ansatte</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'16px' }}>
+            <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>{emp.first_name} {emp.last_name}</h1>
+                {emp.employee_number&&<span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>#{emp.employee_number}</span>}
+                <EmpStatusBadge status={emp.status} />
+              </div>
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                {emp.position&&<span style={{ fontSize:'13px', color:'#64748b' }}>💼 {emp.position}</span>}
+                {emp.department&&<span style={{ fontSize:'13px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                {emp.contract_type&&<span style={{ fontSize:'13px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
+                {emp.phone&&<span style={{ fontSize:'13px', color:'#64748b' }}>📞 {emp.phone}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:'4px', marginTop:'20px' }}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setActiveTab(t.id)}
+              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:activeTab===t.id?'#059669':'#f8fafc', color:activeTab===t.id?'white':'#64748b', fontWeight:activeTab===t.id?'700':'500', fontSize:'13px', cursor:'pointer' }}>
+              {t.emoji} {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+
+          {/* INFO TAB */}
+          {activeTab==='info' && (
+            <>
+              <div style={eCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👤 Personopplysninger</h3>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  {[['Fullt navn',`${emp.first_name} ${emp.last_name}`],['Stilling',emp.position],['Avdeling',emp.department],['Kontraktstype',emp.contract_type],['E-post',emp.email],['Telefon',emp.phone],['Adresse',emp.address],['Fødselsdato',emp.birth_date],['Ansattdato',emp.hired_date],['Sluttdato',emp.end_date]].filter(r=>r[1]).map(([k,v])=>(
+                    <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {(emp.emergency_contact_name||emp.emergency_contact_phone) && (
+                <div style={{ ...eCard, background:'#fff7ed', border:'1px solid #fed7aa' }}>
+                  <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#ea580c' }}>🚨 Nødkontakt</h3>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                    {[['Navn',emp.emergency_contact_name],['Telefon',emp.emergency_contact_phone],['Relasjon',emp.emergency_contact_relation]].filter(r=>r[1]).map(([k,v])=>(
+                      <div key={k}><div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{k}</div><div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{v}</div></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {emp.notes && <div style={eCard}><h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📝 Notater</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{emp.notes}</p></div>}
+            </>
+          )}
+
+          {/* CERTS TAB */}
+          {activeTab==='certs' && (
+            <div style={eCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📜 Sertifikater og kompetanse</h3>
+                <button onClick={()=>setShowAddCert(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+              </div>
+              {certs.length===0 ? <p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen sertifikater registrert</p> : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                  {certs.map(c=>{
+                    const days=certDaysLeft(c.expiry_date)
+                    const expired=days!==null&&days<0
+                    const expiring=days!==null&&days>=0&&days<=30
+                    return (
+                      <div key={c.id} style={{ background:expired?'#fef2f2':expiring?'#fffbeb':'#f8fafc', borderRadius:'12px', padding:'14px 16px', border:`1px solid ${expired?'#fecaca':expiring?'#fde68a':'#f1f5f9'}` }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                              <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{c.name}</span>
+                              <CertBadge expiry={c.expiry_date} />
+                            </div>
+                            <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                              {c.issuer&&<span>Utstedt av: {c.issuer}</span>}
+                              {c.certificate_number&&<span>Nr: {c.certificate_number}</span>}
+                              {c.issued_date&&<span>Utstedt: {c.issued_date}</span>}
+                              {c.expiry_date&&<span style={{ color:expired?'#dc2626':expiring?'#d97706':'#64748b', fontWeight:expired||expiring?'700':'400' }}>Utløper: {c.expiry_date}</span>}
+                            </div>
+                            {c.notes&&<p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8' }}>{c.notes}</p>}
+                          </div>
+                          <button onClick={()=>deleteCert(c.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px', marginLeft:'8px' }}>×</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PROJECTS TAB */}
+          {activeTab==='projects' && (
+            <div style={eCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Prosjekttilknytning</h3>
+                <button onClick={()=>setShowAddProject(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Tilordne prosjekt</button>
+              </div>
+              {empProjects.length===0 ? <p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ikke tilordnet noen prosjekter</p> : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {empProjects.map(ep=>(
+                    <div key={ep.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ep.projects?.name||'—'}</div>
+                        <div style={{ display:'flex', gap:'10px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
+                          {ep.role&&<span>Rolle: {ep.role}</span>}
+                          {ep.from_date&&<span>Fra: {ep.from_date}</span>}
+                          {ep.to_date&&<span>Til: {ep.to_date}</span>}
+                        </div>
+                      </div>
+                      <button onClick={()=>removeProject(ep.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SALARY TAB */}
+          {activeTab==='salary' && (
+            <div style={eCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>💰 Lønn og satser (intern)</h3>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                {emp.hourly_rate && (
+                  <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'16px', border:'1px solid #bbf7d0', textAlign:'center' }}>
+                    <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Timesats</div>
+                    <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr</div>
+                  </div>
+                )}
+                {emp.monthly_salary && (
+                  <div style={{ background:'#eff6ff', borderRadius:'12px', padding:'16px', border:'1px solid #bfdbfe', textAlign:'center' }}>
+                    <div style={{ fontSize:'11px', color:'#2563eb', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Månedslønn</div>
+                    <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmtE(emp.monthly_salary)} kr</div>
+                  </div>
+                )}
+              </div>
+              {!emp.hourly_rate&&!emp.monthly_salary&&<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen lønnsinfo registrert. Rediger ansatt for å legge til.</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={eCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.keys(EMP_STATUS).map(s=>(
+                <button key={s} onClick={()=>updateStatus(s)} disabled={emp.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${emp.status===s?EMP_STATUS[s].border:'#e2e8f0'}`, background:emp.status===s?EMP_STATUS[s].bg:'white', color:emp.status===s?EMP_STATUS[s].color:'#475569', fontWeight:emp.status===s?'700':'400', fontSize:'13px', cursor:emp.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {emp.status===s?'✓ ':''}{EMP_STATUS[s].emoji} {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={eCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Oversikt</h3>
+            {[['Ansatt',emp.hired_date],['Avdeling',emp.department],['Kontrakt',emp.contract_type],['Sertifikater',certs.length+' stk'],['Prosjekter',empProjects.length+' stk']].filter(r=>r[1]).map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {editing&&<AnsattEditorModal projects={projects} user={user} initial={emp} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh();loadDetails()}} />}
+      {showAddCert&&<LeggTilSertifikatModal employeeId={emp.id} onClose={()=>setShowAddCert(false)} onSaved={()=>{setShowAddCert(false);loadDetails()}} />}
+      {showAddProject&&<LeggTilProsjektModal employeeId={emp.id} projects={projects} existingIds={empProjects.map(ep=>ep.project_id)} onClose={()=>setShowAddProject(false)} onSaved={()=>{setShowAddProject(false);loadDetails()}} />}
+    </div>
+  )
+}
+
+function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [form, setForm] = useState({
+    first_name:initial?.first_name||'', last_name:initial?.last_name||'',
+    employee_number:initial?.employee_number||'', position:initial?.position||'',
+    department:initial?.department||'', contract_type:initial?.contract_type||'Fast',
+    email:initial?.email||'', phone:initial?.phone||'', address:initial?.address||'',
+    birth_date:initial?.birth_date||'', hired_date:initial?.hired_date||new Date().toISOString().split('T')[0],
+    end_date:initial?.end_date||'',
+    hourly_rate:initial?.hourly_rate||'', monthly_salary:initial?.monthly_salary||'',
+    emergency_contact_name:initial?.emergency_contact_name||'',
+    emergency_contact_phone:initial?.emergency_contact_phone||'',
+    emergency_contact_relation:initial?.emergency_contact_relation||'',
+    notes:initial?.notes||'',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.first_name.trim()||!form.last_name.trim()) return alert('For- og etternavn er påkrevd')
+    setSaving(true)
+    try {
+      const payload = {
+        ...form,
+        hourly_rate: form.hourly_rate?parseFloat(form.hourly_rate):null,
+        monthly_salary: form.monthly_salary?parseFloat(form.monthly_salary):null,
+        birth_date:form.birth_date||null, end_date:form.end_date||null,
+        updated_at:new Date().toISOString()
+      }
+      if (isEdit) { const {error}=await supabase.from('employees').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('employees').insert({...payload,status:'Aktiv',created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+  const sec = t => <div style={{ gridColumn:'1/-1', fontSize:'13px', fontWeight:'700', color:'#0f172a', borderTop:'1px solid #f1f5f9', paddingTop:'14px', marginTop:'4px' }}>{t}</div>
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>👷 {isEdit?'Rediger':'Ny'} ansatt</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          {sec('👤 Personopplysninger')}
+          <div>{lbl('Fornavn *')}<input value={form.first_name} onChange={e=>set('first_name',e.target.value)} placeholder="Fornavn" style={eInp} /></div>
+          <div>{lbl('Etternavn *')}<input value={form.last_name} onChange={e=>set('last_name',e.target.value)} placeholder="Etternavn" style={eInp} /></div>
+          <div>{lbl('Ansattnummer')}<input value={form.employee_number} onChange={e=>set('employee_number',e.target.value)} placeholder="001" style={eInp} /></div>
+          <div>{lbl('Fødselsdato')}<input type="date" value={form.birth_date} onChange={e=>set('birth_date',e.target.value)} style={eInp} /></div>
+          <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="epost@firma.no" style={eInp} /></div>
+          <div>{lbl('Telefon')}<input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={eInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Adresse')}<input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Gateadresse, postnr sted" style={eInp} /></div>
+
+          {sec('💼 Ansettelsesinfo')}
+          <div>{lbl('Stilling')}<input value={form.position} onChange={e=>set('position',e.target.value)} placeholder="F.eks. Anleggsleder" style={eInp} /></div>
+          <div>{lbl('Avdeling')}<select value={form.department} onChange={e=>set('department',e.target.value)} style={eInp}><option value="">Velg...</option>{DEPARTMENTS.map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+          <div>{lbl('Kontraktstype')}<select value={form.contract_type} onChange={e=>set('contract_type',e.target.value)} style={eInp}>{CONTRACT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+          <div>{lbl('Ansettelsesdato')}<input type="date" value={form.hired_date} onChange={e=>set('hired_date',e.target.value)} style={eInp} /></div>
+          <div>{lbl('Sluttdato (ved avgang)')}<input type="date" value={form.end_date} onChange={e=>set('end_date',e.target.value)} style={eInp} /></div>
+
+          {sec('💰 Lønn (intern)')}
+          <div>{lbl('Timesats (kr)')}<input type="number" value={form.hourly_rate} onChange={e=>set('hourly_rate',e.target.value)} placeholder="0" style={eInp} /></div>
+          <div>{lbl('Månedslønn (kr)')}<input type="number" value={form.monthly_salary} onChange={e=>set('monthly_salary',e.target.value)} placeholder="0" style={eInp} /></div>
+
+          {sec('🚨 Nødkontakt')}
+          <div>{lbl('Navn')}<input value={form.emergency_contact_name} onChange={e=>set('emergency_contact_name',e.target.value)} placeholder="Fullt navn" style={eInp} /></div>
+          <div>{lbl('Telefon')}<input value={form.emergency_contact_phone} onChange={e=>set('emergency_contact_phone',e.target.value)} placeholder="+47 xxx xx xxx" style={eInp} /></div>
+          <div>{lbl('Relasjon')}<input value={form.emergency_contact_relation} onChange={e=>set('emergency_contact_relation',e.target.value)} placeholder="F.eks. Ektefelle, forelder" style={eInp} /></div>
+
+          <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>{lbl('Notater / Interne merknader')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...eInp, resize:'none' }} placeholder="Interne notater om den ansatte..." /></div>
+        </div>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'12px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Registrer ansatt'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LeggTilSertifikatModal({ employeeId, onClose, onSaved }) {
+  const [form, setForm] = useState({ name:'', issuer:'', issued_date:'', expiry_date:'', certificate_number:'', notes:'' })
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return alert('Navn er påkrevd')
+    setSaving(true)
+    try {
+      const {error}=await supabase.from('employee_certifications').insert({ employee_id:employeeId, ...form, issued_date:form.issued_date||null, expiry_date:form.expiry_date||null })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📜 Legg til sertifikat</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sertifikattype *</label>
+            <select value={form.name} onChange={e=>set('name',e.target.value)} style={eInp}>
+              <option value="">Velg type...</option>
+              {CERT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+            {form.name==='Annet'&&<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Beskriv sertifikat" style={{ ...eInp, marginTop:'8px' }} />}
+          </div>
+          {[['issuer','Utstedende organ','F.eks. Arbeidstilsynet'],['certificate_number','Sertifikatnummer','Nr.'],].map(([k,l,ph])=>(
+            <div key={k}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{l}</label><input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={eInp} /></div>
+          ))}
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Utstedelsesdato</label><input type="date" value={form.issued_date} onChange={e=>set('issued_date',e.target.value)} style={eInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Utløpsdato</label><input type="date" value={form.expiry_date} onChange={e=>set('expiry_date',e.target.value)} style={eInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Merknad</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} style={{ ...eInp, resize:'none' }} /></div>
+          <div style={{ gridColumn:'1/-1', display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Legg til'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LeggTilProsjektModal({ employeeId, projects, existingIds, onClose, onSaved }) {
+  const [form, setForm] = useState({ project_id:'', role:'', from_date:'', to_date:'' })
+  const [saving, setSaving] = useState(false)
+  const available = projects.filter(p=>!existingIds.includes(p.id))
+
+  const handleSave = async () => {
+    if (!form.project_id) return alert('Velg et prosjekt')
+    setSaving(true)
+    try {
+      const {error}=await supabase.from('employee_projects').insert({ employee_id:employeeId, ...form, from_date:form.from_date||null, to_date:form.to_date||null })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏗️ Tilordne prosjekt</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'12px' }}>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label>
+            <select value={form.project_id} onChange={e=>setForm(f=>({...f,project_id:e.target.value}))} style={eInp}>
+              <option value="">Velg prosjekt...</option>
+              {available.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Rolle på prosjektet</label><input value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} placeholder="F.eks. Anleggsleder, Fagarbeider" style={eInp} /></div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Fra dato</label><input type="date" value={form.from_date} onChange={e=>setForm(f=>({...f,from_date:e.target.value}))} style={eInp} /></div>
+            <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Til dato</label><input type="date" value={form.to_date} onChange={e=>setForm(f=>({...f,to_date:e.target.value}))} style={eInp} /></div>
+          </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Tilordne'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ImportCSVModal({ user, onClose, onSaved }) {
+  const [csvText, setCsvText] = useState('')
+  const [preview, setPreview] = useState([])
+  const [importing, setImporting] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const parseCSV = (text) => {
+    const lines = text.trim().split('\n').filter(l=>l.trim())
+    if (lines.length<2) return []
+    const headers = lines[0].split(';').map(h=>h.trim().toLowerCase())
+    return lines.slice(1).map(line=>{
+      const vals = line.split(';').map(v=>v.trim())
+      const obj = {}
+      headers.forEach((h,i)=>{ obj[h]=vals[i]||'' })
+      return obj
+    })
+  }
+
+  const handlePreview = () => {
+    const rows = parseCSV(csvText)
+    setPreview(rows.slice(0,5))
+  }
+
+  const handleImport = async () => {
+    const rows = parseCSV(csvText)
+    if (rows.length===0) return alert('Ingen gyldige rader funnet')
+    setImporting(true)
+    try {
+      const employees = rows.map(r=>({
+        first_name: r.fornavn||r.first_name||r['first name']||'',
+        last_name: r.etternavn||r.last_name||r['last name']||'',
+        position: r.stilling||r.position||'',
+        department: r.avdeling||r.department||'',
+        email: r.epost||r.email||'',
+        phone: r.telefon||r.phone||'',
+        contract_type: r.kontrakt||r.contract_type||'Fast',
+        hired_date: r.ansattdato||r.hired_date||new Date().toISOString().split('T')[0],
+        hourly_rate: r.timesats||r.hourly_rate?parseFloat(r.timesats||r.hourly_rate)||null:null,
+        status: 'Aktiv', created_by: user?.id
+      })).filter(e=>e.first_name&&e.last_name)
+      const { error } = await supabase.from('employees').insert(employees)
+      if (error) throw error
+      setDone(true)
+      setTimeout(()=>onSaved(), 1500)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setImporting(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📥 Importer ansatte fra CSV</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {done ? (
+            <div style={{ textAlign:'center', padding:'20px' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ansatte importert!</h3>
+            </div>
+          ) : (
+            <>
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', border:'1px solid #f1f5f9', fontSize:'13px', color:'#475569', lineHeight:1.6 }}>
+                <strong>Format (semikolon-separert):</strong><br/>
+                <code style={{ fontSize:'12px', color:'#059669' }}>fornavn;etternavn;stilling;avdeling;epost;telefon;kontrakt;ansattdato;timesats</code><br/>
+                <code style={{ fontSize:'12px', color:'#64748b' }}>Ola;Nordmann;Anleggsleder;Anlegg;ola@firma.no;+47 123 45 678;Fast;2024-01-01;450</code>
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Lim inn CSV-data</label>
+                <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} rows={8} placeholder="fornavn;etternavn;stilling;avdeling;epost;telefon..." style={{ ...eInp, resize:'vertical', fontFamily:'monospace', fontSize:'12px' }} />
+              </div>
+              {preview.length>0 && (
+                <div>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Forhåndsvisning ({preview.length} av {parseCSV(csvText).length} rader):</div>
+                  <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', overflow:'auto' }}>
+                    {preview.map((r,i)=><div key={i} style={{ fontSize:'12px', color:'#475569', padding:'4px 0', borderBottom:'1px solid #f1f5f9' }}>{r.fornavn||r.first_name} {r.etternavn||r.last_name} – {r.stilling||r.position||'—'} – {r.avdeling||r.department||'—'}</div>)}
+                  </div>
+                </div>
+              )}
+              <div style={{ display:'flex', justifyContent:'space-between', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={handlePreview} disabled={!csvText.trim()} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>👁️ Forhåndsvis</button>
+                <div style={{ display:'flex', gap:'10px' }}>
+                  <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                  <button onClick={handleImport} disabled={importing||!csvText.trim()} style={{ padding:'10px 24px', background:importing||!csvText.trim()?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>{importing?'Importerer...':'📥 Importer'}</button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END ANSATTE MODULE ───────────────────────────────────────────────────────
+
 
 
 
@@ -7212,7 +7974,8 @@ function AppContent() {
         {page === 'anbudsmodul' && <AnbudsPage />}
         {page === 'ordre' && <OrdrePage />}
         {page === 'faktura' && <FakturaPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && (
+        {page === 'ansatte' && <AnsattePage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
