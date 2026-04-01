@@ -10739,6 +10739,816 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
 
 // ─── END INTERN CHAT MODULE ───────────────────────────────────────────────────
 
+// ─── CRM MODULE ───────────────────────────────────────────────────────────────
+
+const CRM_STATUS = {
+  lead:          { label:'Lead',          emoji:'🎯', color:'#64748b', bg:'#f8fafc', border:'#e2e8f0' },
+  kontaktet:     { label:'Kontaktet',     emoji:'📞', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+  tilbud_sendt:  { label:'Tilbud sendt',  emoji:'📋', color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
+  vunnet:        { label:'Vunnet',        emoji:'🏆', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
+  tapt:          { label:'Tapt',          emoji:'❌', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+  inaktiv:       { label:'Inaktiv',       emoji:'💤', color:'#94a3b8', bg:'#f8fafc', border:'#e2e8f0' },
+}
+
+const CRM_TYPE = {
+  firma:   { label:'Firma',   emoji:'🏢' },
+  privat:  { label:'Privat',  emoji:'👤' },
+  lead:    { label:'Lead',    emoji:'🎯' },
+}
+
+const ACTIVITY_TYPES = {
+  call:    { label:'Samtale',  emoji:'📞', color:'#2563eb' },
+  meeting: { label:'Møte',     emoji:'🤝', color:'#7c3aed' },
+  email:   { label:'E-post',   emoji:'📧', color:'#0891b2' },
+  note:    { label:'Notat',    emoji:'📝', color:'#64748b' },
+  task:    { label:'Oppgave',  emoji:'✅', color:'#d97706' },
+}
+
+const INDUSTRIES = ['Bygg & Anlegg','Eiendom','Industri','Handel','Transport','Offentlig','Helse','IT','Finans','Annet']
+
+const crmInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+const crmCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+function CrmStatusBadge({ status }) {
+  const cfg = CRM_STATUS[status]||CRM_STATUS.lead
+  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
+}
+
+function fmtVal(n) { return n ? (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO')+' kr' : '—' }
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function CRMPage() {
+  const { user } = useAuth()
+  const [customers, setCustomers] = useState([])
+  const [contacts, setContacts] = useState([])
+  const [activities, setActivities] = useState([])
+  const [projects, setProjects] = useState([])
+  const [quotes, setQuotes] = useState([])
+  const [invoices, setInvoices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState('liste') // 'liste'|'pipeline'
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [filterType, setFilterType] = useState('alle')
+  const [filterIndustry, setFilterIndustry] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(null)
+  const [showNew, setShowNew] = useState(false)
+
+  const load = async () => {
+    try {
+      const [c, ct, act, proj, q, inv] = await Promise.all([
+        supabase.from('crm_customers').select('*').order('updated_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('crm_contacts').select('*').then(r=>r.data||[]),
+        supabase.from('crm_activities').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,status').order('name').then(r=>r.data||[]),
+        supabase.from('quotes').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+      ])
+      setCustomers(c); setContacts(ct); setActivities(act)
+      setProjects(proj); setQuotes(q); setInvoices(inv)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Check overdue tasks and create notifications
+  useEffect(()=>{
+    if (!user||activities.length===0) return
+    const today = new Date().toISOString().split('T')[0]
+    activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<today).forEach(async a=>{
+      const cust = customers.find(c=>c.id===a.customer_id)
+      const { data } = await supabase.from('notifications').select('id').eq('user_id',user.id).ilike('title',`%${a.title}%`).gte('created_at',today+'T00:00:00').limit(1)
+      if (!data||data.length===0) {
+        await supabase.from('notifications').insert({ user_id:user.id, title:`Forfalt oppgave: ${a.title}`, message:cust?`Kunde: ${cust.name}`:'', type:'warning', link_page:'crm' })
+      }
+    })
+  },[activities])
+
+  const filtered = customers.filter(c=>{
+    if (filterStatus!=='alle'&&c.status!==filterStatus) return false
+    if (filterType!=='alle'&&c.type!==filterType) return false
+    if (filterIndustry!=='alle'&&c.industry!==filterIndustry) return false
+    if (search&&![c.name,c.email,c.phone,c.city,c.orgnr].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const stats = {
+    total: customers.length,
+    leads: customers.filter(c=>c.status==='lead').length,
+    active: customers.filter(c=>['kontaktet','tilbud_sendt'].includes(c.status)).length,
+    vunnet: customers.filter(c=>c.status==='vunnet').length,
+    pipeline: customers.filter(c=>!['vunnet','tapt','inaktiv'].includes(c.status)).reduce((a,c)=>a+(parseFloat(c.estimated_value)||0),0),
+  }
+
+  const overdueTasks = activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<new Date().toISOString().split('T')[0])
+
+  const exportCSV = () => {
+    const rows = [
+      ['Navn','Type','Status','Bransje','E-post','Telefon','By','Org.nr','Estimert verdi','Opprettet'],
+      ...filtered.map(c=>[c.name,CRM_TYPE[c.type]?.label||'',CRM_STATUS[c.status]?.label||'',c.industry||'',c.email||'',c.phone||'',c.city||'',c.orgnr||'',c.estimated_value||'',c.created_at?.split('T')[0]||''])
+    ]
+    const csv = rows.map(r=>r.join(';')).join('\n')
+    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href=url; a.download=`crm-kunder-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+  }
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
+  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{setSelected(null);load()}} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🤝 CRM</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Kunder, leads og salgspipeline</p>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={exportCSV} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>📥 Eksporter CSV</button>
+            <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde / lead</button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'10px' }}>
+          {[
+            { label:'Totalt', value:stats.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
+            { label:'Leads', value:stats.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
+            { label:'Aktive', value:stats.active, emoji:'📋', color:'#d97706', bg:'#fffbeb' },
+            { label:'Vunnet', value:stats.vunnet, emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
+            { label:'Pipeline', value:fmtVal(stats.pipeline), emoji:'💰', color:'#2563eb', bg:'#eff6ff' },
+          ].map(s=>(
+            <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px 16px', border:'1px solid #f1f5f9' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                <span style={{ fontSize:'16px' }}>{s.emoji}</span>
+                <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{s.label}</span>
+              </div>
+              <div style={{ fontSize:typeof s.value==='number'?'22px':'16px', fontWeight:'800', color:s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        {/* Overdue tasks warning */}
+        {overdueTasks.length>0&&(
+          <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'18px' }}>🚨</span>
+            <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626' }}>{overdueTasks.length} forfalt oppgave{overdueTasks.length>1?'r':''} krever oppfølging</span>
+          </div>
+        )}
+
+        {/* Controls */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth:'240px', flex:1 }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth:'160px' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+          </select>
+          <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...crmInp, maxWidth:'140px' }}>
+            <option value="alle">Alle typer</option>
+            {Object.entries(CRM_TYPE).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+          </select>
+          <select value={filterIndustry} onChange={e=>setFilterIndustry(e.target.value)} style={{ ...crmInp, maxWidth:'160px' }}>
+            <option value="alle">Alle bransjer</option>
+            {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
+          </select>
+          {(search||filterStatus!=='alle'||filterType!=='alle'||filterIndustry!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          <div style={{ marginLeft:'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
+              <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#0f172a':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+            ))}
+          </div>
+          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kunder</span>
+        </div>
+
+        {/* LISTE VIEW */}
+        {view==='liste' && (
+          filtered.length===0 ? (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:'40px', marginBottom:'12px' }}>🤝</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen kunder funnet</h3>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{customers.length===0?'Legg til din første kunde eller lead.':'Prøv å endre søk eller filter.'}</p>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {filtered.map(c=>{
+                const custContacts=contacts.filter(ct=>ct.customer_id===c.id)
+                const custActivities=activities.filter(a=>a.customer_id===c.id)
+                const openTasks=custActivities.filter(a=>a.type==='task'&&!a.completed)
+                const cfg=CRM_STATUS[c.status]
+                const typCfg=CRM_TYPE[c.type]
+                return (
+                  <div key={c.id} onClick={()=>setSelected(c)}
+                    style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                    <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{typCfg?.emoji}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                        <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
+                        <CrmStatusBadge status={c.status} />
+                        {c.industry&&<span style={{ fontSize:'12px', color:'#94a3b8', background:'#f8fafc', padding:'2px 8px', borderRadius:'999px', border:'1px solid #f1f5f9' }}>{c.industry}</span>}
+                        {openTasks.length>0&&<span style={{ background:'#fffbeb', color:'#d97706', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>⏰ {openTasks.length} oppgave{openTasks.length>1?'r':''}</span>}
+                      </div>
+                      <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                        {c.email&&<span style={{ fontSize:'12px', color:'#64748b' }}>📧 {c.email}</span>}
+                        {c.phone&&<span style={{ fontSize:'12px', color:'#64748b' }}>📞 {c.phone}</span>}
+                        {c.city&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {c.city}</span>}
+                        {custContacts.length>0&&<span style={{ fontSize:'12px', color:'#2563eb' }}>👤 {custContacts.length} kontakt{custContacts.length>1?'er':''}</span>}
+                        <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {custActivities.length} aktiviteter</span>
+                      </div>
+                    </div>
+                    {c.estimated_value&&<div style={{ textAlign:'right', flexShrink:0 }}>
+                      <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtVal(c.estimated_value)}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>est. verdi</div>
+                    </div>}
+                    <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {/* PIPELINE VIEW */}
+        {view==='pipeline' && (
+          <div style={{ overflowX:'auto' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(5,280px)', gap:'14px', minWidth:'max-content' }}>
+              {['lead','kontaktet','tilbud_sendt','vunnet','tapt'].map(status=>{
+                const cfg=CRM_STATUS[status]
+                const cols=filtered.filter(c=>c.status===status)
+                const colVal=cols.reduce((a,c)=>a+(parseFloat(c.estimated_value)||0),0)
+                return (
+                  <div key={status}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px', padding:'0 4px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                        <span>{cfg.emoji}</span>
+                        <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{cfg.label}</span>
+                        <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'1px 7px' }}>{cols.length}</span>
+                      </div>
+                      {colVal>0&&<span style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600' }}>{fmtVal(colVal)}</span>}
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                      {cols.map(c=>{
+                        const custAct=activities.filter(a=>a.customer_id===c.id)
+                        const openTasks=custAct.filter(a=>a.type==='task'&&!a.completed)
+                        const lastAct=custAct.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
+                        return (
+                          <div key={c.id} onClick={()=>setSelected(c)}
+                            style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px', cursor:'pointer', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', transition:'box-shadow 0.15s' }}
+                            onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'8px' }}>
+                              <div>
+                                <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'2px' }}>{c.name}</div>
+                                {c.industry&&<div style={{ fontSize:'11px', color:'#94a3b8' }}>{c.industry}</div>}
+                              </div>
+                              <span style={{ fontSize:'16px' }}>{CRM_TYPE[c.type]?.emoji}</span>
+                            </div>
+                            {c.estimated_value&&<div style={{ fontWeight:'800', fontSize:'14px', color:'#059669', marginBottom:'6px' }}>{fmtVal(c.estimated_value)}</div>}
+                            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                              {c.email&&<span style={{ fontSize:'10px', color:'#64748b' }}>📧</span>}
+                              {c.phone&&<span style={{ fontSize:'10px', color:'#64748b' }}>📞</span>}
+                              {openTasks.length>0&&<span style={{ background:'#fffbeb', color:'#d97706', fontSize:'10px', fontWeight:'700', padding:'1px 6px', borderRadius:'999px', border:'1px solid #fde68a' }}>⏰ {openTasks.length}</span>}
+                            </div>
+                            {lastAct&&<div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px', borderTop:'1px solid #f8fafc', paddingTop:'6px' }}>{ACTIVITY_TYPES[lastAct.type]?.emoji} {lastAct.title}</div>}
+                          </div>
+                        )
+                      })}
+                      {cols.length===0&&<div style={{ background:'#f8fafc', borderRadius:'10px', border:'2px dashed #f1f5f9', padding:'20px', textAlign:'center', fontSize:'12px', color:'#cbd5e1' }}>Ingen her</div>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showNew&&<CRMEditorModal user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+    </div>
+  )
+}
+
+function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
+  const [c, setC] = useState(init)
+  const [cts, setCts] = useState(contacts)
+  const [acts, setActs] = useState(activities)
+  const [docs, setDocs] = useState([])
+  const [tab, setTab] = useState('oversikt')
+  const [editing, setEditing] = useState(false)
+  const [showNewContact, setShowNewContact] = useState(false)
+  const [showNewActivity, setShowNewActivity] = useState(false)
+  const [showQuotePicker, setShowQuotePicker] = useState(false)
+  const fileInputRef = React.useRef(null)
+  const cfg = CRM_STATUS[c.status]
+
+  const loadDetails = async () => {
+    const [ct, act, doc] = await Promise.all([
+      supabase.from('crm_contacts').select('*').eq('customer_id',c.id).then(r=>r.data||[]),
+      supabase.from('crm_activities').select('*').eq('customer_id',c.id).order('created_at',{ascending:false}).then(r=>r.data||[]),
+      supabase.from('crm_documents').select('*').eq('customer_id',c.id).order('created_at',{ascending:false}).then(r=>r.data||[]),
+    ])
+    setCts(ct); setActs(act); setDocs(doc)
+  }
+  useEffect(()=>{ loadDetails() },[c.id])
+
+  const refresh = async () => { const {data}=await supabase.from('crm_customers').select('*').eq('id',c.id).single(); if(data) setC(data) }
+
+  const updateStatus = async (status) => {
+    await supabase.from('crm_customers').update({status,updated_at:new Date().toISOString()}).eq('id',c.id)
+    setC(v=>({...v,status}))
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne kunden? All historikk slettes.')) return
+    await supabase.from('crm_customers').delete().eq('id',c.id)
+    onBack()
+  }
+
+  const uploadDoc = async (e) => {
+    const file=e.target.files?.[0]; if(!file) return
+    try {
+      const path=`crm/${c.id}/${Date.now()}_${file.name}`
+      const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
+      if(upErr) throw upErr
+      const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
+      await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id })
+      loadDetails()
+    } catch(e) { alert('Opplasting feilet: '+e.message) }
+    e.target.value=''
+  }
+
+  const deleteDoc = async (id) => {
+    if (!confirm('Slett dokument?')) return
+    await supabase.from('crm_documents').delete().eq('id',id)
+    loadDetails()
+  }
+
+  const toggleTask = async (act) => {
+    await supabase.from('crm_activities').update({completed:!act.completed}).eq('id',act.id)
+    loadDetails()
+  }
+
+  // Link quote to this customer as activity
+  const linkQuote = async (quote) => {
+    await supabase.from('crm_activities').insert({
+      customer_id:c.id, type:'note',
+      title:`Tilbud hentet inn: ${quote.title}`,
+      description:`Tilbudsnr: ${quote.quote_number} · Total: ${(quote.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0).toLocaleString('nb-NO')} kr`,
+      date:new Date().toISOString().split('T')[0], created_by:user?.id
+    })
+    loadDetails(); setShowQuotePicker(false)
+  }
+
+  // Linked data
+  const linkedQuotes = quotes.filter(q=>q.customer_name&&q.customer_name.toLowerCase()===c.name.toLowerCase())
+  const linkedInvoices = invoices.filter(i=>i.customer_name&&i.customer_name.toLowerCase()===c.name.toLowerCase())
+  const openTasks = acts.filter(a=>a.type==='task'&&!a.completed)
+  const today = new Date().toISOString().split('T')[0]
+
+  const tabs = [
+    { id:'oversikt', label:'Oversikt', emoji:'📊' },
+    { id:'aktiviteter', label:`Aktiviteter (${acts.length})`, emoji:'📋' },
+    { id:'kontakter', label:`Kontakter (${cts.length})`, emoji:'👤' },
+    { id:'tilbud', label:`Tilbud (${linkedQuotes.length})`, emoji:'📋' },
+    { id:'dokumenter', label:`Dokumenter (${docs.length})`, emoji:'📁' },
+  ]
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til CRM</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'16px' }}>
+            <div style={{ width:'56px', height:'56px', borderRadius:'16px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{CRM_TYPE[c.type]?.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{c.name}</h1>
+                <CrmStatusBadge status={c.status} />
+                {c.industry&&<span style={{ fontSize:'13px', color:'#94a3b8', background:'#f8fafc', padding:'3px 10px', borderRadius:'999px', border:'1px solid #f1f5f9' }}>{c.industry}</span>}
+              </div>
+              <div style={{ display:'flex', gap:'14px', flexWrap:'wrap' }}>
+                {c.email&&<span style={{ fontSize:'13px', color:'#64748b' }}>📧 {c.email}</span>}
+                {c.phone&&<span style={{ fontSize:'13px', color:'#64748b' }}>📞 {c.phone}</span>}
+                {c.city&&<span style={{ fontSize:'13px', color:'#64748b' }}>📍 {c.city}</span>}
+                {c.estimated_value&&<span style={{ fontSize:'13px', color:'#059669', fontWeight:'700' }}>💰 {fmtVal(c.estimated_value)}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+            <button onClick={()=>setShowQuotePicker(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Hent tilbud</button>
+            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:'4px', marginTop:'16px', flexWrap:'wrap' }}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:tab===t.id?'#059669':'#f8fafc', color:tab===t.id?'white':'#64748b', fontWeight:tab===t.id?'700':'500', fontSize:'13px', cursor:'pointer' }}>
+              {t.emoji} {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+
+          {/* OVERSIKT */}
+          {tab==='oversikt'&&(
+            <>
+              <div style={crmCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal&&c.city?`${c.postal} ${c.city}`:c.city||c.postal],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null]].filter(r=>r[1]).map(([k,v])=>(
+                    <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {c.notes&&<div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Notater</div><p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{c.notes}</p></div>}
+              </div>
+              {openTasks.length>0&&(
+                <div style={{ ...crmCard, background:'#fffbeb', border:'1px solid #fde68a' }}>
+                  <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#92400e' }}>⏰ Åpne oppgaver ({openTasks.length})</h3>
+                  {openTasks.map(a=>(
+                    <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #fde68a' }}>
+                      <input type="checkbox" checked={a.completed} onChange={()=>toggleTask(a)} style={{ width:'16px', height:'16px', accentColor:'#059669', cursor:'pointer' }} />
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{a.title}</div>
+                        {a.due_date&&<div style={{ fontSize:'11px', color:a.due_date<today?'#dc2626':'#64748b', fontWeight:a.due_date<today?'700':'400' }}>Frist: {a.due_date}{a.due_date<today?' ⚠️ FORFALT':''}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* AKTIVITETER */}
+          {tab==='aktiviteter'&&(
+            <div style={crmCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
+                <button onClick={()=>setShowNewActivity(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+              </div>
+              {acts.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen aktiviteter ennå</p>:(
+                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                  {acts.map(a=>{
+                    const atCfg=ACTIVITY_TYPES[a.type]
+                    const isTask=a.type==='task'
+                    return (
+                      <div key={a.id} style={{ display:'flex', gap:'12px', padding:'12px 14px', background:'#f8fafc', borderRadius:'12px', border:`1px solid ${isTask&&a.due_date<today&&!a.completed?'#fecaca':'#f1f5f9'}` }}>
+                        <div style={{ width:'32px', height:'32px', borderRadius:'8px', background:atCfg?.color+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>{atCfg?.emoji}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
+                            {isTask&&<input type="checkbox" checked={a.completed} onChange={()=>toggleTask(a)} style={{ width:'14px', height:'14px', accentColor:'#059669', cursor:'pointer' }} />}
+                            <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', textDecoration:isTask&&a.completed?'line-through':'none' }}>{a.title}</span>
+                            <span style={{ background:atCfg?.color+'18', color:atCfg?.color, fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px' }}>{atCfg?.label}</span>
+                          </div>
+                          {a.description&&<p style={{ margin:'0 0 4px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>{a.description}</p>}
+                          <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#94a3b8' }}>
+                            <span>📅 {a.date}</span>
+                            {a.due_date&&<span style={{ color:a.due_date<today&&!a.completed?'#dc2626':'#64748b', fontWeight:a.due_date<today&&!a.completed?'700':'400' }}>Frist: {a.due_date}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* KONTAKTER */}
+          {tab==='kontakter'&&(
+            <div style={crmCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👤 Kontaktpersoner</h3>
+                <button onClick={()=>setShowNewContact(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+              </div>
+              {cts.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen kontakter ennå</p>:(
+                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                  {cts.map(ct=>(
+                    <div key={ct.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'12px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
+                      <div style={{ width:'40px', height:'40px', borderRadius:'50%', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:'800', color:'#2563eb', flexShrink:0 }}>{ct.name?.[0]}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ct.name}</span>
+                          {ct.is_primary&&<span style={{ background:'#f0fdf4', color:'#16a34a', fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px', border:'1px solid #bbf7d0' }}>Primær</span>}
+                        </div>
+                        <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                          {ct.title&&<span>💼 {ct.title}</span>}
+                          {ct.email&&<span>📧 {ct.email}</span>}
+                          {ct.phone&&<span>📞 {ct.phone}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TILBUD */}
+          {tab==='tilbud'&&(
+            <div style={crmCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Koblede tilbud og fakturaer</h3>
+                <button onClick={()=>setShowQuotePicker(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Hent tilbud</button>
+              </div>
+              {linkedQuotes.length===0&&linkedInvoices.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen koblede tilbud eller fakturaer. Bruk "Hent tilbud" for å koble til eksisterende tilbud.</p>:(
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {linkedQuotes.map(q=>{
+                    const total=(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0)
+                    return (
+                      <div key={q.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div>
+                          <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{q.title}</div>
+                          <div style={{ fontSize:'12px', color:'#64748b' }}>{q.quote_number} · Status: {q.status}</div>
+                        </div>
+                        <div style={{ fontWeight:'800', color:'#059669', fontSize:'14px' }}>{fmtVal(total)}</div>
+                      </div>
+                    )
+                  })}
+                  {linkedInvoices.map(inv=>(
+                    <div key={inv.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div>
+                        <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>🧾 {inv.title}</div>
+                        <div style={{ fontSize:'12px', color:'#64748b' }}>{inv.invoice_number} · Status: {inv.status}</div>
+                      </div>
+                      <div style={{ fontWeight:'800', color:'#2563eb', fontSize:'14px' }}>{fmtVal((inv.lines||[]).reduce((a,l)=>(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)+a,0))}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* DOKUMENTER */}
+          {tab==='dokumenter'&&(
+            <div style={crmCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📁 Dokumenter</h3>
+                <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📎 Last opp</button>
+                <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadDoc} />
+              </div>
+              {docs.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen dokumenter lastet opp</p>:(
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {docs.map(d=>{
+                    const isImage=d.file_type?.startsWith('image/')
+                    return (
+                      <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9' }}>
+                        <span style={{ fontSize:'20px' }}>{isImage?'🖼️':'📄'}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
+                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
+                        </div>
+                        <button onClick={()=>deleteDoc(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={crmCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.entries(CRM_STATUS).map(([k,v])=>(
+                <button key={k} onClick={()=>updateStatus(k)} disabled={c.status===k}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${c.status===k?v.border:'#e2e8f0'}`, background:c.status===k?v.bg:'white', color:c.status===k?v.color:'#475569', fontWeight:c.status===k?'700':'400', fontSize:'13px', cursor:c.status===k?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {c.status===k?'✓ ':''}{v.emoji} {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={crmCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Sammendrag</h3>
+            {[['Aktiviteter',acts.length],['Kontakter',cts.length],['Dokumenter',docs.length],['Åpne oppgaver',openTasks.length],['Tilbud',linkedQuotes.length],['Fakturaer',linkedInvoices.length]].map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={crmCard}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+              <h3 style={{ margin:0, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>⚡ Rask handling</h3>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {[['📞 Logg samtale','call'],['🤝 Logg møte','meeting'],['📧 Logg e-post','email'],['✅ Legg til oppgave','task'],['📝 Skriv notat','note']].map(([l,type])=>(
+                <button key={type} onClick={()=>setShowNewActivity({defaultType:type})}
+                  style={{ padding:'9px 14px', border:'1px solid #f1f5f9', borderRadius:'10px', background:'#f8fafc', cursor:'pointer', fontSize:'13px', textAlign:'left', fontWeight:'500', color:'#475569' }}
+                  onMouseEnter={e=>{e.currentTarget.style.background='#f0fdf4';e.currentTarget.style.color='#059669'}} onMouseLeave={e=>{e.currentTarget.style.background='#f8fafc';e.currentTarget.style.color='#475569'}}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {editing&&<CRMEditorModal user={user} initial={c} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {showNewContact&&<ContactModal customerId={c.id} onClose={()=>setShowNewContact(false)} onSaved={()=>{setShowNewContact(false);loadDetails()}} />}
+      {showNewActivity&&<ActivityModal customerId={c.id} defaultType={typeof showNewActivity==='object'?showNewActivity.defaultType:'note'} user={user} onClose={()=>setShowNewActivity(false)} onSaved={()=>{setShowNewActivity(false);loadDetails()}} />}
+      {showQuotePicker&&<QuotePickerModal quotes={quotes} customer={c} onClose={()=>setShowQuotePicker(false)} onLink={linkQuote} />}
+    </div>
+  )
+}
+
+function CRMEditorModal({ user, initial, onClose, onSaved }) {
+  const isEdit=!!initial
+  const [form, setForm] = useState({ name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal:initial?.postal||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'' })
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const lbl=t=><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>{t}</label>
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return alert('Navn er påkrevd')
+    setSaving(true)
+    try {
+      const payload={...form,estimated_value:form.estimated_value?parseFloat(form.estimated_value):null,updated_at:new Date().toISOString()}
+      if (isEdit) { const {error}=await supabase.from('crm_customers').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('crm_customers').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'640px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🤝 {isEdit?'Rediger':'Ny'} kunde / lead</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type</label>
+            <div style={{ display:'flex',gap:'8px' }}>
+              {Object.entries(CRM_TYPE).map(([k,v])=>(
+                <button key={k} onClick={()=>set('type',k)} style={{ flex:1,padding:'8px',borderRadius:'10px',border:`2px solid ${form.type===k?'#059669':'#e2e8f0'}`,background:form.type===k?'#f0fdf4':'white',cursor:'pointer',fontWeight:form.type===k?'700':'500',fontSize:'13px',color:form.type===k?'#059669':'#64748b' }}>
+                  {v.emoji} {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Firma- eller personnavn" style={crmInp} /></div>
+          <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={crmInp}>{Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
+          <div>{lbl('Bransje')}<select value={form.industry} onChange={e=>set('industry',e.target.value)} style={crmInp}><option value="">Velg...</option>{INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}</select></div>
+          <div>{lbl('Org.nr')}<input value={form.orgnr} onChange={e=>set('orgnr',e.target.value)} placeholder="123 456 789" style={crmInp} /></div>
+          <div>{lbl('Estimert verdi (kr)')}<input type="number" value={form.estimated_value} onChange={e=>set('estimated_value',e.target.value)} placeholder="0" style={crmInp} /></div>
+          <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="kontakt@firma.no" style={crmInp} /></div>
+          <div>{lbl('Telefon')}<input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={crmInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Nettside')}<input value={form.website} onChange={e=>set('website',e.target.value)} placeholder="https://www.firma.no" style={crmInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Adresse')}<input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Gateadresse" style={crmInp} /></div>
+          <div>{lbl('Postnr')}<input value={form.postal} onChange={e=>set('postal',e.target.value)} placeholder="0000" style={crmInp} /></div>
+          <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ContactModal({ customerId, onClose, onSaved }) {
+  const [form, setForm] = useState({ name:'', title:'', email:'', phone:'', notes:'', is_primary:false })
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const handleSave = async () => {
+    if (!form.name.trim()) return alert('Navn er påkrevd')
+    setSaving(true)
+    try { const {error}=await supabase.from('crm_contacts').insert({...form,customer_id:customerId}); if(error) throw error; onSaved() }
+    catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'440px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>👤 Ny kontaktperson</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'20px 22px',display:'flex',flexDirection:'column',gap:'12px' }}>
+          {[['Navn *','name','text','Fullt navn'],['Stilling','title','text','Daglig leder, Innkjøper...'],['E-post','email','email','kontakt@firma.no'],['Telefon','phone','text','+47 xxx xx xxx']].map(([l,k,t,ph])=>(
+            <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={crmInp} /></div>
+          ))}
+          <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>
+            <input type="checkbox" checked={form.is_primary} onChange={e=>set('is_primary',e.target.checked)} style={{ width:'16px',height:'16px',accentColor:'#059669' }} />
+            Primær kontaktperson
+          </label>
+          <div style={{ display:'flex',justifyContent:'flex-end',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 22px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':'Legg til'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ActivityModal({ customerId, defaultType, user, onClose, onSaved }) {
+  const [form, setForm] = useState({ type:defaultType||'note', title:'', description:'', date:new Date().toISOString().split('T')[0], due_date:'' })
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try { const {error}=await supabase.from('crm_activities').insert({...form,customer_id:customerId,created_by:user?.id,due_date:form.due_date||null}); if(error) throw error; onSaved() }
+    catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Ny aktivitet</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'20px 22px',display:'flex',flexDirection:'column',gap:'12px' }}>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type</label>
+            <div style={{ display:'flex',gap:'6px',flexWrap:'wrap' }}>
+              {Object.entries(ACTIVITY_TYPES).map(([k,v])=>(
+                <button key={k} onClick={()=>set('type',k)} style={{ padding:'6px 12px',borderRadius:'8px',border:`2px solid ${form.type===k?v.color:'#e2e8f0'}`,background:form.type===k?v.color+'18':'white',color:form.type===k?v.color:'#64748b',fontWeight:form.type===k?'700':'500',fontSize:'12px',cursor:'pointer' }}>
+                  {v.emoji} {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Beskriv aktiviteten" style={crmInp} /></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Beskrivelse</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...crmInp,resize:'none' }} /></div>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Dato</label><input type="date" value={form.date} onChange={e=>set('date',e.target.value)} style={crmInp} /></div>
+            {form.type==='task'&&<div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Frist</label><input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={crmInp} /></div>}
+          </div>
+          <div style={{ display:'flex',justifyContent:'flex-end',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 22px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':'Lagre'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function QuotePickerModal({ quotes, customer, onClose, onLink }) {
+  const [selected, setSelected] = useState('')
+  const relevant = quotes.filter(q=>q.status!=='Avslått')
+  const q = relevant.find(x=>x.id===selected)
+  const total = q?(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0):0
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'500px',maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Hent tilbud til {customer.name}</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'16px 22px',display:'flex',flexDirection:'column',gap:'8px' }}>
+          <p style={{ margin:'0 0 8px',fontSize:'13px',color:'#64748b' }}>Velg et tilbud fra tilbudsmodulen for å koble det til denne kunden og logge det som aktivitet.</p>
+          {relevant.map(q=>{
+            const t=(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0)
+            return (
+              <div key={q.id} onClick={()=>setSelected(q.id)}
+                style={{ padding:'12px 16px',borderRadius:'12px',border:`2px solid ${selected===q.id?'#059669':'#e2e8f0'}`,background:selected===q.id?'#f0fdf4':'white',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                <div>
+                  <div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{q.title}</div>
+                  <div style={{ fontSize:'12px',color:'#64748b' }}>{q.quote_number} · {q.status}{q.customer_name?` · ${q.customer_name}`:''}</div>
+                </div>
+                <div style={{ fontWeight:'800',color:selected===q.id?'#059669':'#0f172a',fontSize:'14px' }}>{fmtVal(t)}</div>
+              </div>
+            )
+          })}
+          {relevant.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen aktive tilbud funnet</p>}
+        </div>
+        <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'10px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={()=>selected&&onLink(relevant.find(x=>x.id===selected))} disabled={!selected}
+            style={{ padding:'10px 22px',background:selected?'#059669':'#94a3b8',color:'white',border:'none',borderRadius:'10px',cursor:selected?'pointer':'not-allowed',fontSize:'14px',fontWeight:'700' }}>
+            Koble til og logg aktivitet
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END CRM MODULE ───────────────────────────────────────────────────────────
+
 
 
 
@@ -10840,7 +11650,8 @@ function AppContent() {
         {page === 'ressursplan' && <RessursPage />}
         {page === 'kalender' && <KalenderPage />}
         {page === 'chat' && <InterChatPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && (
+        {page === 'crm' && <CRMPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
