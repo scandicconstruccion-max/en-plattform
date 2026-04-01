@@ -4268,7 +4268,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, chapters, updated_at: new Date().toISOString() }
+      const payload = { ...form, chapters, updated_at: new Date().toISOString(), project_id: form.project_id || null }
       if (isEdit) {
         const { error } = await supabase.from('quotes').update(payload).eq('id', initial.id)
         if (error) throw error
