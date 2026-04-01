@@ -8688,30 +8688,35 @@ function RessursPage() {
   const [machines, setMachines] = useState([])
   const [projects, setProjects] = useState([])
   const [plans, setPlans] = useState([])
+  const [milestones, setMilestones] = useState([])
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState('uke') // 'uke'|'14'|'maned'
-  const [resourceType, setResourceType] = useState('ansatte') // 'ansatte'|'maskiner'
+  const [viewMode, setViewMode] = useState('uke')
+  const [resourceType, setResourceType] = useState('ansatte')
   const [currentDate, setCurrentDate] = useState(startOfWeek(new Date().toISOString().split('T')[0]))
-  const [editCell, setEditCell] = useState(null) // {resourceId, date}
   const [showBookingModal, setShowBookingModal] = useState(null)
-  const [dragOver, setDragOver] = useState(null)
   const [dragging, setDragging] = useState(null)
+  const [dragOver, setDragOver] = useState(null)
+  const [filterProject, setFilterProject] = useState('alle')
+  const [filterEmployee, setFilterEmployee] = useState('alle')
+  const [showMilestones, setShowMilestones] = useState(false)
+  const [showNewMilestone, setShowNewMilestone] = useState(null)
+  const [milestoneRange, setMilestoneRange] = useState(90)
 
   const load = async () => {
     try {
-      const [emp, mac, proj, pl] = await Promise.all([
+      const [emp, mac, proj, pl, ms] = await Promise.all([
         supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('machines').select('id,name,category,status').whereIn ? supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]) : supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
+        supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
         supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
-        supabase.from('resource_plans').select('*').then(r=>r.data||[])
+        supabase.from('resource_plans').select('*').then(r=>r.data||[]),
+        supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date').then(r=>r.data||[])
       ])
-      setEmployees(emp); setMachines(mac); setProjects(proj); setPlans(pl)
+      setEmployees(emp); setMachines(mac); setProjects(proj); setPlans(pl); setMilestones(ms)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
 
-  // Date range based on viewMode
   const days = viewMode==='uke'?7:viewMode==='14'?14:daysInMonth(currentDate)
   const dates = getDatesInRange(viewMode==='maned'?startOfMonth(currentDate):currentDate, days)
 
@@ -8729,20 +8734,36 @@ function RessursPage() {
     setCurrentDate(viewMode==='maned'?startOfMonth(today):startOfWeek(today))
   }
 
-  const resources = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
+  // Filter resources
+  let resources = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
+  if (filterEmployee!=='alle' && resourceType==='ansatte') {
+    resources = resources.filter(r=>r.id===filterEmployee)
+  }
+
+  // Filter plans by project
+  const filteredPlans = filterProject==='alle' ? plans : plans.filter(p=>p.project_id===filterProject)
 
   const getPlansForCell = (resourceId, date) =>
-    plans.filter(p=>p.resource_id===resourceId&&p.date===date)
+    filteredPlans.filter(p=>p.resource_id===resourceId&&p.date===date)
 
-  const getTotalHoursForResource = (resourceId, date) =>
+  const getTotalHours = (resourceId, date) =>
     plans.filter(p=>p.resource_id===resourceId&&p.date===date).reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
 
-  const isDoubleBooked = (resourceId, date) => getTotalHoursForResource(resourceId, date) > 8
-
+  const isDoubleBooked = (resourceId, date) => getTotalHours(resourceId, date) > 8
   const isWeekend = (date) => { const d=new Date(date+'T12:00:00'); return d.getDay()===0||d.getDay()===6 }
   const isToday = (date) => date===new Date().toISOString().split('T')[0]
 
-  // Drag and drop
+  // Milestones in current view
+  const milestonesInView = milestones.filter(m=>dates.includes(m.start_date))
+
+  // Milestones in range for panel
+  const milestonesInRange = milestones.filter(m=>{
+    const today = new Date()
+    const mDate = new Date(m.start_date)
+    const diffDays = Math.ceil((mDate-today)/(1000*60*60*24))
+    return diffDays>=-7 && diffDays<=milestoneRange
+  }).sort((a,b)=>a.start_date.localeCompare(b.start_date))
+
   const handleDragStart = (plan) => setDragging(plan)
   const handleDrop = async (resourceId, date) => {
     if (!dragging||!dragOver) return
@@ -8754,23 +8775,20 @@ function RessursPage() {
     setDragging(null); setDragOver(null)
   }
 
-  // Capacity per resource per week
   const getWeekCapacity = (resourceId) => {
     const weekDates = getDatesInRange(currentDate, 7).filter(d=>!isWeekend(d))
-    const booked = weekDates.reduce((acc,d)=>acc+getTotalHoursForResource(resourceId,d),0)
-    const total = weekDates.length * 8
+    const booked = weekDates.reduce((acc,d)=>acc+getTotalHours(resourceId,d),0)
+    const total = weekDates.length*8
     return { booked, total, pct:total>0?Math.round(booked/total*100):0 }
   }
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ressursplan...</p></div></div>
+  const doubleBookCount = Object.values(
+    plans.filter(p=>dates.includes(p.date)).reduce((acc,p)=>{
+      const k=`${p.resource_id}_${p.date}`; acc[k]=(acc[k]||0)+(parseFloat(p.hours)||0); return acc
+    },{})
+  ).filter(h=>h>8).length
 
-  const today = new Date().toISOString().split('T')[0]
-  const doubleBookings = plans.filter(p=>dates.includes(p.date)).reduce((acc,p)=>{
-    const key=`${p.resource_id}_${p.date}`
-    acc[key]=(acc[key]||0)+(parseFloat(p.hours)||0)
-    return acc
-  },{})
-  const doubleBookCount = Object.values(doubleBookings).filter(h=>h>8).length
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ressursplan...</p></div></div>
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -8781,20 +8799,30 @@ function RessursPage() {
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Planlegg ansatte og maskiner på tvers av prosjekter</p>
           </div>
-          {doubleBookCount>0&&(
-            <div style={{ background:'#fef2f2', borderRadius:'10px', padding:'8px 14px', border:'1px solid #fecaca', fontSize:'13px', color:'#dc2626', fontWeight:'700' }}>
-              ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
-            </div>
-          )}
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+            {doubleBookCount>0&&(
+              <div style={{ background:'#fef2f2',borderRadius:'10px',padding:'8px 14px',border:'1px solid #fecaca',fontSize:'13px',color:'#dc2626',fontWeight:'700' }}>
+                ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
+              </div>
+            )}
+            <button onClick={()=>setShowMilestones(v=>!v)}
+              style={{ padding:'9px 16px', background:showMilestones?'#7c3aed':'white', color:showMilestones?'white':'#7c3aed', border:'2px solid #7c3aed', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              🏁 Milepæler {milestonesInRange.length>0&&<span style={{ background:showMilestones?'rgba(255,255,255,0.3)':'#7c3aed', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{milestonesInRange.length}</span>}
+            </button>
+            <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
+              style={{ padding:'9px 16px', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+              + Ny milepæl
+            </button>
+          </div>
         </div>
 
-        {/* Controls */}
+        {/* Controls row */}
         <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          {/* Resource type toggle */}
+          {/* Resource type */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['ansatte','👷 Ansatte'],['maskiner','🚜 Maskiner']].map(([v,l])=>(
               <button key={v} onClick={()=>setResourceType(v)}
-                style={{ padding:'8px 16px', border:'none', background:resourceType===v?'#059669':'white', color:resourceType===v?'white':'#64748b', fontWeight:resourceType===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding:'8px 16px',border:'none',background:resourceType===v?'#059669':'white',color:resourceType===v?'white':'#64748b',fontWeight:resourceType===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
@@ -8802,14 +8830,30 @@ function RessursPage() {
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['uke','Uke'],['14','14 dager'],['maned','Måned']].map(([v,l])=>(
               <button key={v} onClick={()=>setViewMode(v)}
-                style={{ padding:'8px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding:'8px 14px',border:'none',background:viewMode===v?'#0f172a':'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
-          {/* Date navigation */}
+          {/* Project filter */}
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
+            style={{ padding:'8px 12px',border:`2px solid ${filterProject!=='alle'?'#059669':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterProject!=='alle'?'700':'400',color:filterProject!=='alle'?'#059669':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
+            <option value="alle">🏗️ Alle prosjekter</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+
+          {/* Employee filter (ansatte only) */}
+          {resourceType==='ansatte' && (
+            <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
+              style={{ padding:'8px 12px',border:`2px solid ${filterEmployee!=='alle'?'#2563eb':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterEmployee!=='alle'?'700':'400',color:filterEmployee!=='alle'?'#2563eb':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
+              <option value="alle">👷 Alle ansatte</option>
+              {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+            </select>
+          )}
+
+          {/* Date nav */}
           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto' }}>
             <button onClick={()=>navigate(-1)} style={{ width:'34px',height:'34px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
-            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px', whiteSpace:'nowrap', minWidth:'160px', textAlign:'center' }}>
+            <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'14px',whiteSpace:'nowrap',minWidth:'160px',textAlign:'center' }}>
               {viewMode==='maned'
                 ? `${MONTH_NAMES[new Date(currentDate).getMonth()]} ${new Date(currentDate).getFullYear()}`
                 : `${new Date(dates[0]+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})} – ${new Date(dates[dates.length-1]+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short',year:'numeric'})}`
@@ -8819,23 +8863,86 @@ function RessursPage() {
             <button onClick={goToToday} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
           </div>
         </div>
+
+        {/* Active filters display */}
+        {(filterProject!=='alle'||filterEmployee!=='alle') && (
+          <div style={{ display:'flex', gap:'8px', marginTop:'10px', flexWrap:'wrap', alignItems:'center' }}>
+            <span style={{ fontSize:'12px', color:'#64748b' }}>Filtrert:</span>
+            {filterProject!=='alle' && (
+              <span style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
+                🏗️ {projects.find(p=>p.id===filterProject)?.name}
+                <button onClick={()=>setFilterProject('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#059669',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
+              </span>
+            )}
+            {filterEmployee!=='alle' && (
+              <span style={{ background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
+                👷 {employees.find(e=>e.id===filterEmployee)?.first_name} {employees.find(e=>e.id===filterEmployee)?.last_name}
+                <button onClick={()=>setFilterEmployee('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2563eb',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Milestone panel */}
+      {showMilestones && (
+        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'16px 24px' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px', flexWrap:'wrap', gap:'10px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+              <span style={{ fontSize:'16px', fontWeight:'800', color:'#7c3aed' }}>🏁 Milepæler</span>
+              <select value={milestoneRange} onChange={e=>setMilestoneRange(+e.target.value)}
+                style={{ padding:'5px 10px',border:'1px solid #ddd6fe',borderRadius:'8px',fontSize:'12px',color:'#7c3aed',fontWeight:'600',background:'white',outline:'none' }}>
+                {[30,60,90,180,365].map(d=><option key={d} value={d}>Neste {d} dager</option>)}
+              </select>
+            </div>
+            <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
+              style={{ padding:'6px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'700' }}>+ Ny milepæl</button>
+          </div>
+          {milestonesInRange.length===0 ? (
+            <p style={{ margin:0,color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen milepæler de neste {milestoneRange} dagene</p>
+          ) : (
+            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+              {milestonesInRange.map(ms=>{
+                const proj = projects.find(p=>p.id===ms.project_id)
+                const daysLeft = Math.ceil((new Date(ms.start_date)-new Date())/(1000*60*60*24))
+                const isPast = daysLeft<0
+                const isUrgent = daysLeft>=0&&daysLeft<=7
+                return (
+                  <div key={ms.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast?'#fecaca':isUrgent?'#fde68a':'#ddd6fe'}`, minWidth:'200px', maxWidth:'260px', cursor:'pointer' }}
+                    onClick={()=>setShowNewMilestone({ edit:ms })}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                      <span style={{ fontSize:'16px' }}>🏁</span>
+                      <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ms.title}</span>
+                    </div>
+                    <div style={{ fontSize:'12px', color:isPast?'#dc2626':isUrgent?'#d97706':'#7c3aed', fontWeight:'700', marginBottom:'4px' }}>
+                      {isPast?`Passert for ${Math.abs(daysLeft)}d siden`:daysLeft===0?'I dag!':daysLeft===1?'I morgen':`Om ${daysLeft} dager`}
+                    </div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                      📅 {ms.start_date}{proj?` · 🏗️ ${proj.name}`:''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Legend */}
-      <div style={{ padding:'10px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'16px', flexWrap:'wrap', alignItems:'center' }}>
+      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center' }}>
         <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
-        {projects.slice(0,8).map(p=>(
-          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+        {(filterProject!=='alle' ? projects.filter(p=>p.id===filterProject) : projects).slice(0,8).map(p=>(
+          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'5px', cursor:'pointer' }} onClick={()=>setFilterProject(p.id===filterProject?'alle':p.id)}>
             <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(p.id,projects),flexShrink:0 }}/>
             <span style={{ fontSize:'12px',color:'#475569' }}>{p.name}</span>
           </div>
         ))}
-        {projects.length>8&&<span style={{ fontSize:'12px',color:'#94a3b8' }}>+{projects.length-8} til</span>}
+        {filterProject==='alle'&&projects.length>8&&<span style={{ fontSize:'12px',color:'#94a3b8' }}>+{projects.length-8} til</span>}
       </div>
 
       {/* Grid */}
       <div style={{ overflowX:'auto' }}>
-        <div style={{ minWidth: `${240 + dates.length * (viewMode==='maned'?36:viewMode==='14'?60:90)}px` }}>
+        <div style={{ minWidth:`${240+dates.length*(viewMode==='maned'?36:viewMode==='14'?60:90)}px` }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
             <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
@@ -8843,69 +8950,89 @@ function RessursPage() {
             </div>
             {dates.map(date=>{
               const d=new Date(date+'T12:00:00')
-              const weekend=isWeekend(date)
-              const tod=isToday(date)
-              const colW = viewMode==='maned'?36:viewMode==='14'?60:90
+              const weekend=isWeekend(date); const tod=isToday(date)
+              const colW=viewMode==='maned'?36:viewMode==='14'?60:90
+              const msOnDate=milestones.filter(m=>m.start_date===date)
               return (
-                <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'8px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none' }}>
+                <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
                   <div style={{ fontSize:'10px',color:tod?'#059669':weekend?'#cbd5e1':'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{DAY_SHORT[d.getDay()===0?6:d.getDay()-1]}</div>
                   <div style={{ fontSize:viewMode==='maned'?'11px':'13px',fontWeight:tod?'800':'600',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
+                  {msOnDate.length>0&&(
+                    <div style={{ display:'flex',justifyContent:'center',gap:'2px',marginTop:'2px' }}>
+                      {msOnDate.map(ms=>(
+                        <div key={ms.id} title={ms.title} style={{ width:'6px',height:'6px',borderRadius:'50%',background:'#7c3aed' }}/>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
 
+          {/* Milestone row */}
+          {milestones.some(m=>dates.includes(m.start_date)) && (
+            <div style={{ display:'flex', background:'#f5f3ff', borderBottom:'1px solid #ddd6fe' }}>
+              <div style={{ width:'240px',flexShrink:0,padding:'6px 20px',fontSize:'11px',fontWeight:'700',color:'#7c3aed',borderRight:'1px solid #ddd6fe',display:'flex',alignItems:'center',gap:'4px' }}>🏁 Milepæler</div>
+              {dates.map(date=>{
+                const colW=viewMode==='maned'?36:viewMode==='14'?60:90
+                const msOnDate=milestones.filter(m=>m.start_date===date)
+                return (
+                  <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
+                    onClick={()=>setShowNewMilestone(date)}>
+                    {msOnDate.map(ms=>(
+                      <div key={ms.id} title={ms.title}
+                        style={{ background:'#7c3aed',borderRadius:'4px',padding:'2px 5px',marginBottom:'1px',cursor:'pointer' }}
+                        onClick={e=>{e.stopPropagation();setShowNewMilestone({edit:ms})}}>
+                        <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{viewMode!=='maned'?ms.title:'🏁'}</div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Resource rows */}
           {resources.map(res=>{
-            const cap = getWeekCapacity(res.id)
-            const name = res.first_name ? `${res.first_name} ${res.last_name}` : res.name
+            const cap=getWeekCapacity(res.id)
+            const name=res.first_name?`${res.first_name} ${res.last_name}`:res.name
             return (
-              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9' }}
-                onMouseLeave={()=>setDragOver(null)}>
-                {/* Resource label */}
+              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9' }} onMouseLeave={()=>setDragOver(null)}>
                 <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background:'white',display:'flex',alignItems:'center',gap:'10px' }}>
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
                     <div style={{ fontSize:'11px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
                   </div>
-                  {/* Capacity bar */}
-                  <div style={{ flexShrink:0, width:'40px' }}>
+                  <div style={{ flexShrink:0,width:'40px' }}>
                     <div style={{ fontSize:'10px',color:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',fontWeight:'700',textAlign:'center',marginBottom:'2px' }}>{cap.pct}%</div>
                     <div style={{ height:'4px',borderRadius:'2px',background:'#f1f5f9',overflow:'hidden' }}>
-                      <div style={{ height:'100%',borderRadius:'2px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%`,transition:'width 0.3s' }}/>
+                      <div style={{ height:'100%',borderRadius:'2px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%` }}/>
                     </div>
                   </div>
                 </div>
-
-                {/* Day cells */}
                 {dates.map(date=>{
-                  const cellPlans = getPlansForCell(res.id, date)
-                  const totalH = cellPlans.reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
-                  const dblBook = totalH > 8
-                  const weekend = isWeekend(date)
-                  const tod = isToday(date)
-                  const isDragTarget = dragOver?.resourceId===res.id&&dragOver?.date===date
-                  const colW = viewMode==='maned'?36:viewMode==='14'?60:90
-
+                  const cellPlans=getPlansForCell(res.id,date)
+                  const totalH=getTotalHours(res.id,date)
+                  const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
+                  const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
+                  const colW=viewMode==='maned'?36:viewMode==='14'?60:90
                   return (
                     <div key={date}
                       style={{ width:`${colW}px`,flexShrink:0,minHeight:'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s' }}
                       onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
-                      onDragOver={e=>{ e.preventDefault(); setDragOver({resourceId:res.id,date}) }}
+                      onDragOver={e=>{e.preventDefault();setDragOver({resourceId:res.id,date})}}
                       onDrop={()=>handleDrop(res.id,date)}>
                       {dblBook&&<div style={{ position:'absolute',top:1,right:2,fontSize:'10px',color:'#dc2626',fontWeight:'800' }}>!</div>}
                       {cellPlans.map(plan=>{
-                        const proj = projects.find(p=>p.id===plan.project_id)
-                        const col = getProjectColor(plan.project_id, projects)
+                        const proj=projects.find(p=>p.id===plan.project_id)
+                        const col=getProjectColor(plan.project_id,projects)
                         return (
-                          <div key={plan.id}
-                            draggable
-                            onDragStart={e=>{ e.stopPropagation(); handleDragStart(plan) }}
-                            onClick={e=>{ e.stopPropagation(); setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan}) }}
+                          <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan)}}
+                            onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
                             style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'1px 3px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden' }}>
-                            {viewMode==='maned' ? (
+                            {viewMode==='maned'?(
                               <div style={{ width:'100%',height:'6px',borderRadius:'3px',background:col }}/>
-                            ) : (
+                            ):(
                               <>
                                 <div style={{ fontSize:'10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{proj?.name||'—'}</div>
                                 {viewMode==='uke'&&<div style={{ fontSize:'10px',color:'rgba(255,255,255,0.85)' }}>{plan.hours}t</div>}
@@ -8935,19 +9062,111 @@ function RessursPage() {
           date={showBookingModal.date}
           existingPlans={showBookingModal.existingPlans||[]}
           editPlan={showBookingModal.editPlan}
-          projects={projects}
+          projects={filterProject!=='alle'?projects.filter(p=>p.id===filterProject):projects}
           user={user}
           onClose={()=>setShowBookingModal(null)}
-          onSaved={()=>{ setShowBookingModal(null); load() }}
+          onSaved={()=>{setShowBookingModal(null);load()}}
           resourceType={resourceType}
           machines={machines}
+        />
+      )}
+
+      {showNewMilestone&&(
+        <MilestoneModal
+          initial={typeof showNewMilestone==='object'&&showNewMilestone.edit?showNewMilestone.edit:null}
+          date={typeof showNewMilestone==='string'?showNewMilestone:null}
+          projects={projects}
+          user={user}
+          onClose={()=>setShowNewMilestone(null)}
+          onSaved={()=>{setShowNewMilestone(null);load()}}
         />
       )}
     </div>
   )
 }
 
-// ── BOOKING MODAL ─────────────────────────────────────────────────────────────
+function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [form, setForm] = useState({
+    title: initial?.title||'',
+    start_date: initial?.start_date||date||new Date().toISOString().split('T')[0],
+    project_id: initial?.project_id||'',
+    description: initial?.description||'',
+    color: initial?.color||'#7c3aed',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { ...form, type:'milestone', project_id:form.project_id||null, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('calendar_events').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('calendar_events').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne milepælen?')) return
+    await supabase.from('calendar_events').delete().eq('id',initial.id)
+    onSaved()
+  }
+
+  const MILESTONE_COLORS = ['#7c3aed','#dc2626','#d97706','#059669','#2563eb','#0891b2']
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'440px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🏁 {isEdit?'Rediger':'Ny'} milepæl</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'22px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Tittel *</label>
+            <input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Ferdigstillelse råbygg, Søknadsfrist plan..." style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} />
+          </div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Dato *</label>
+            <input type="date" value={form.start_date} onChange={e=>set('start_date',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} />
+          </div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt</label>
+            <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
+              <option value="">Ingen / Generell</option>
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Farge</label>
+            <div style={{ display:'flex',gap:'8px' }}>
+              {MILESTONE_COLORS.map(col=>(
+                <button key={col} type="button" onClick={()=>set('color',col)}
+                  style={{ width:'32px',height:'32px',borderRadius:'50%',background:col,border:form.color===col?'3px solid #0f172a':'2px solid transparent',cursor:'pointer' }}/>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Beskrivelse</label>
+            <textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={2} placeholder="Valgfri beskrivelse..." style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',resize:'none',boxSizing:'border-box' }} />
+          </div>
+          <div style={{ display:'flex',gap:'8px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+            {isEdit&&<button onClick={handleDelete} style={{ padding:'10px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️</button>}
+            <button onClick={onClose} style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ flex:2,padding:'10px',background:saving?'#c4b5fd':'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+              {saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett milepæl'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines }) {
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
@@ -9191,6 +9410,8 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
     </div>
   )
 }
+
+// ─── END RESSURSPLANLEGGER MODULE ─────────────────────────────────────────────
 
 // ─── END RESSURSPLANLEGGER MODULE ─────────────────────────────────────────────
 
