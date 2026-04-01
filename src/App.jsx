@@ -4443,11 +4443,13 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
           <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
         </div>
       `
-      const { data: fnData, error: fnError } = await supabase.functions.invoke('send-quote', {
-        body: { to: email, subject: `Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml }
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: email, subject: `Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml })
       })
-      if (fnError) throw new Error(fnError.message)
-      if (fnData?.error) throw new Error(fnData.error)
+      const fnData = await fnRes.json()
+      if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
 
       await supabase.from('quotes').update({ status: 'Sendt', sent_at: new Date().toISOString(), customer_email: email }).eq('id', quote.id)
       setSent(true)
