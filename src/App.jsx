@@ -93,7 +93,7 @@ const navItems = [
   { id: 'timelister', label: 'Timelister', emoji: '⏱️' },
   { id: 'ressursplan', label: 'Ressursplan', emoji: '📅' },
   { id: 'kalender', label: 'Kalender', emoji: '📆' },
-  { id: 'chat', label: 'Chat', emoji: '💬' },
+  { id: 'chat', label: 'Intern Chat', emoji: '💬' },
   null,
   { id: 'crm', label: 'CRM', emoji: '📊' },
   { id: 'brukeradmin', label: 'Brukere', emoji: '👤' },
@@ -115,7 +115,7 @@ const moduleCards = [
   { id: 'timelister', name: 'Timelister', desc: 'Timeføring', emoji: '⏱️', color: '#eef2ff' },
   { id: 'ressursplan', name: 'Ressursplan', desc: 'Bemanning', emoji: '📅', color: '#faf5ff' },
   { id: 'kalender', name: 'Kalender', desc: 'Hendelser og møter', emoji: '📆', color: '#eff6ff' },
-  { id: 'chat', name: 'Chat', desc: 'Teamkommunikasjon', emoji: '💬', color: '#fdf4ff' },
+  { id: 'chat', name: 'Intern Chat', desc: 'Intern kommunikasjon', emoji: '💬', color: '#fdf4ff' },
   { id: 'crm', name: 'CRM', desc: 'Kundeadministrasjon', emoji: '📊', color: '#fff1f2' },
   { id: 'brukeradmin', name: 'Brukere', desc: 'Brukeradministrasjon', emoji: '👤', color: '#f8fafc' },
   { id: 'varsler', name: 'Varsler', desc: 'Notifikasjoner', emoji: '🔔', color: '#fffbeb' },
@@ -10134,6 +10134,614 @@ function SharingModal({ user, employees, sharing, onClose, onSaved }) {
 
 // ─── END KALENDER MODULE ──────────────────────────────────────────────────────
 
+// ─── INTER CHAT MODULE ────────────────────────────────────────────────────────
+
+const CHAT_COLORS = ['#2563eb','#059669','#dc2626','#d97706','#7c3aed','#0891b2','#be185d','#65a30d']
+function chatColor(str) { let h=0; for(let c of str||'') h=c.charCodeAt(0)+((h<<5)-h); return CHAT_COLORS[Math.abs(h)%CHAT_COLORS.length] }
+
+function Avatar({ name, size=32, color }) {
+  const initials = (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
+  const bg = color || chatColor(name)
+  return <div style={{ width:size,height:size,borderRadius:'50%',background:bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.35,fontWeight:'800',color:'white',flexShrink:0 }}>{initials}</div>
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts)
+  const now = new Date()
+  const diffDays = Math.floor((now-d)/(1000*60*60*24))
+  if (diffDays===0) return d.toLocaleTimeString('nb-NO',{hour:'2-digit',minute:'2-digit'})
+  if (diffDays===1) return 'I går'
+  if (diffDays<7) return d.toLocaleDateString('nb-NO',{weekday:'short'})
+  return d.toLocaleDateString('nb-NO',{day:'numeric',month:'short'})
+}
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function InterChatPage() {
+  const { user } = useAuth()
+  const [channels, setChannels] = useState([])
+  const [employees, setEmployees] = useState([])
+  const [projects, setProjects] = useState([])
+  const [members, setMembers] = useState([])
+  const [selectedChannel, setSelectedChannel] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [showNewChannel, setShowNewChannel] = useState(false)
+  const [search, setSearch] = useState('')
+  const [unreadCounts, setUnreadCounts] = useState({})
+
+  const load = async () => {
+    try {
+      const [ch, emp, proj, mem] = await Promise.all([
+        supabase.from('chat_channels').select('*, chat_messages(id,content,created_at,sender_id)').order('updated_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('employees').select('id,first_name,last_name').eq('status','Aktiv').order('first_name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('chat_members').select('*').then(r=>r.data||[])
+      ])
+      setChannels(ch); setEmployees(emp); setProjects(proj); setMembers(mem)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(()=>{ load() },[])
+
+  // Realtime subscription for new messages
+  useEffect(()=>{
+    const channel = supabase.channel('chat-global')
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_messages'},()=>{ load() })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'chat_channels'},()=>{ load() })
+      .subscribe()
+    return ()=>supabase.removeChannel(channel)
+  },[])
+
+  const filteredChannels = channels.filter(ch=>
+    ch.name?.toLowerCase().includes(search.toLowerCase()) ||
+    ch.description?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const groupedChannels = {
+    direct: filteredChannels.filter(c=>c.type==='direct'),
+    project: filteredChannels.filter(c=>c.type==='project'),
+    group: filteredChannels.filter(c=>c.type==='group'),
+  }
+
+  const getLastMessage = (ch) => {
+    const msgs = ch.chat_messages||[]
+    return msgs.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
+  }
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster Intern Chat...</p></div></div>
+
+  return (
+    <div style={{ display:'flex', height:'calc(100vh - 64px)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+      {/* LEFT SIDEBAR */}
+      <div style={{ width:'280px', flexShrink:0, background:'#1e1f22', display:'flex', flexDirection:'column', height:'100%' }}>
+        {/* Header */}
+        <div style={{ padding:'16px 16px 12px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <span style={{ fontWeight:'800', fontSize:'16px', color:'white' }}>💬 Intern Chat</span>
+            <button onClick={()=>setShowNewChannel(true)}
+              style={{ width:'28px',height:'28px',borderRadius:'50%',background:'rgba(255,255,255,0.1)',border:'none',cursor:'pointer',color:'white',fontSize:'18px',display:'flex',alignItems:'center',justifyContent:'center' }}>+</button>
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk kanaler..."
+            style={{ width:'100%',padding:'7px 12px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'8px',color:'white',fontSize:'13px',outline:'none',boxSizing:'border-box' }} />
+        </div>
+
+        {/* Channel list */}
+        <div style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
+          {[
+            { key:'project', label:'📁 Prosjektkanaler', items:groupedChannels.project },
+            { key:'group', label:'👥 Gruppekanaler', items:groupedChannels.group },
+            { key:'direct', label:'💬 Direkte meldinger', items:groupedChannels.direct },
+          ].map(section=>(
+            section.items.length > 0 && (
+              <div key={section.key}>
+                <div style={{ padding:'10px 16px 4px', fontSize:'11px', fontWeight:'700', color:'rgba(255,255,255,0.4)', textTransform:'uppercase', letterSpacing:'0.05em' }}>{section.label}</div>
+                {section.items.map(ch=>{
+                  const lastMsg = getLastMessage(ch)
+                  const isSelected = selectedChannel?.id===ch.id
+                  const proj = projects.find(p=>p.id===ch.project_id)
+                  const memberCount = members.filter(m=>m.channel_id===ch.id).length
+                  return (
+                    <div key={ch.id} onClick={()=>setSelectedChannel(ch)}
+                      style={{ padding:'8px 16px', cursor:'pointer', background:isSelected?'rgba(255,255,255,0.1)':'transparent', borderRadius:'6px', margin:'1px 8px', transition:'background 0.1s' }}
+                      onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background='rgba(255,255,255,0.06)'}}
+                      onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background='transparent'}}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                        <div style={{ width:'32px',height:'32px',borderRadius:'8px',background:chatColor(ch.name),display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',flexShrink:0 }}>
+                          {ch.type==='direct'?'👤':ch.type==='project'?'🏗️':'👥'}
+                        </div>
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                            <span style={{ fontWeight:'600',fontSize:'13px',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{ch.name}</span>
+                            {lastMsg&&<span style={{ fontSize:'10px',color:'rgba(255,255,255,0.35)',flexShrink:0 }}>{fmtTime(lastMsg.created_at)}</span>}
+                          </div>
+                          {lastMsg&&<div style={{ fontSize:'11px',color:'rgba(255,255,255,0.4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:'1px' }}>{lastMsg.content||'📎 Fil'}</div>}
+                          {!lastMsg&&<div style={{ fontSize:'11px',color:'rgba(255,255,255,0.3)',marginTop:'1px' }}>{memberCount} medlemmer</div>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          ))}
+
+          {filteredChannels.length===0&&(
+            <div style={{ padding:'32px 16px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:'13px' }}>
+              {search?'Ingen kanaler funnet':'Ingen kanaler ennå'}
+            </div>
+          )}
+        </div>
+
+        {/* User footer */}
+        <div style={{ padding:'12px 16px',borderTop:'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',gap:'10px' }}>
+          <Avatar name={user?.email} size={32} />
+          <div style={{ flex:1,minWidth:0 }}>
+            <div style={{ fontSize:'12px',fontWeight:'600',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.email}</div>
+            <div style={{ fontSize:'10px',color:'#22c55e' }}>● Online</div>
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN CHAT AREA */}
+      {selectedChannel ? (
+        <ChatWindow
+          channel={selectedChannel}
+          user={user}
+          employees={employees}
+          members={members.filter(m=>m.channel_id===selectedChannel.id)}
+          projects={projects}
+          onRefresh={()=>{ load(); }}
+          onChannelUpdate={(updated)=>setSelectedChannel(updated)}
+        />
+      ) : (
+        <div style={{ flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'56px',marginBottom:'16px' }}>💬</div>
+            <h2 style={{ margin:'0 0 8px',color:'#0f172a',fontSize:'20px',fontWeight:'700' }}>Velkommen til Intern Chat</h2>
+            <p style={{ margin:'0 0 20px',color:'#64748b',fontSize:'14px' }}>Velg en kanal fra listen, eller opprett en ny</p>
+            <button onClick={()=>setShowNewChannel(true)}
+              style={{ padding:'10px 20px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>+ Ny kanal</button>
+          </div>
+        </div>
+      )}
+
+      {showNewChannel&&(
+        <NewChannelModal
+          user={user} employees={employees} projects={projects}
+          onClose={()=>setShowNewChannel(false)}
+          onSaved={(ch)=>{ setShowNewChannel(false); load(); setSelectedChannel(ch) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── CHAT WINDOW ───────────────────────────────────────────────────────────────
+function ChatWindow({ channel, user, employees, members, projects, onRefresh, onChannelUpdate }) {
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [search, setSearch] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const [showMembers, setShowMembers] = useState(false)
+  const [showPinned, setShowPinned] = useState(false)
+  const [mentionSuggestions, setMentionSuggestions] = useState([])
+  const [mentionQuery, setMentionQuery] = useState('')
+  const messagesEndRef = React.useRef(null)
+  const fileInputRef = React.useRef(null)
+  const proj = projects.find(p=>p.id===channel.project_id)
+
+  const loadMessages = async () => {
+    const { data } = await supabase.from('chat_messages').select('*')
+      .eq('channel_id',channel.id).is('deleted_at',null).order('created_at').then(r=>({data:r.data||[]}))
+    setMessages(data)
+    setLoading(false)
+    // Mark as read
+    if (user?.id) await supabase.from('chat_members').update({ last_read_at:new Date().toISOString() }).eq('channel_id',channel.id).eq('user_id',user.id)
+  }
+
+  useEffect(()=>{ setLoading(true); loadMessages() },[channel.id])
+
+  useEffect(()=>{
+    messagesEndRef.current?.scrollIntoView({ behavior:'smooth' })
+  },[messages])
+
+  // Realtime
+  useEffect(()=>{
+    const sub = supabase.channel(`chat-${channel.id}`)
+      .on('postgres_changes',{event:'*',schema:'public',table:'chat_messages',filter:`channel_id=eq.${channel.id}`},()=>loadMessages())
+      .subscribe()
+    return ()=>supabase.removeChannel(sub)
+  },[channel.id])
+
+  const getSenderName = (senderId) => {
+    const emp = employees.find(e=>e.id===senderId)
+    if (emp) return `${emp.first_name} ${emp.last_name}`
+    return senderId===user?.id ? 'Meg' : 'Ukjent'
+  }
+
+  const handleInputChange = (val) => {
+    setInput(val)
+    const atIndex = val.lastIndexOf('@')
+    if (atIndex>=0) {
+      const query = val.slice(atIndex+1).toLowerCase()
+      setMentionQuery(query)
+      const matches = employees.filter(e=>`${e.first_name} ${e.last_name}`.toLowerCase().includes(query)).slice(0,5)
+      setMentionSuggestions(matches)
+    } else {
+      setMentionSuggestions([])
+    }
+  }
+
+  const insertMention = (emp) => {
+    const atIndex = input.lastIndexOf('@')
+    const newInput = input.slice(0,atIndex)+`@${emp.first_name} ${emp.last_name} `
+    setInput(newInput); setMentionSuggestions([])
+  }
+
+  const send = async () => {
+    if (!input.trim()&&!sending) return
+    setSending(true)
+    try {
+      // Extract mentions
+      const mentionNames = [...input.matchAll(/@([A-ZÆØÅ][a-zæøå]+ [A-ZÆØÅ][a-zæøå]+)/g)].map(m=>m[1])
+      const mentionIds = employees.filter(e=>mentionNames.includes(`${e.first_name} ${e.last_name}`)).map(e=>e.id)
+
+      await supabase.from('chat_messages').insert({
+        channel_id:channel.id, sender_id:user?.id,
+        content:input.trim(), mentions:mentionIds
+      })
+      await supabase.from('chat_channels').update({ updated_at:new Date().toISOString() }).eq('id',channel.id)
+
+      // Notify mentioned users
+      for (const empId of mentionIds) {
+        const emp = employees.find(e=>e.id===empId)
+        if (emp) {
+          await supabase.from('notifications').insert({
+            user_id: empId, title:`Du ble nevnt i #${channel.name}`,
+            message: input.trim().slice(0,80), type:'info', link_page:'chat'
+          })
+        }
+      }
+      setInput('')
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSending(false) }
+  }
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSending(true)
+    try {
+      const path = `chat/${channel.id}/${Date.now()}_${file.name}`
+      const { error:upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+      if (upErr) throw upErr
+      const { data:{publicUrl} } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      await supabase.from('chat_messages').insert({
+        channel_id:channel.id, sender_id:user?.id,
+        content:'', file_url:publicUrl, file_name:file.name,
+        file_type:file.type
+      })
+      await supabase.from('chat_channels').update({ updated_at:new Date().toISOString() }).eq('id',channel.id)
+    } catch(e) { alert('Feil ved opplasting: '+e.message) }
+    finally { setSending(false); e.target.value='' }
+  }
+
+  const togglePin = async (msg) => {
+    await supabase.from('chat_messages').update({ is_pinned:!msg.is_pinned }).eq('id',msg.id)
+    loadMessages()
+  }
+
+  const deleteMessage = async (msgId) => {
+    await supabase.from('chat_messages').update({ deleted_at:new Date().toISOString() }).eq('id',msgId)
+    loadMessages()
+  }
+
+  const pinnedMessages = messages.filter(m=>m.is_pinned)
+  const displayMessages = search
+    ? messages.filter(m=>m.content?.toLowerCase().includes(search.toLowerCase()))
+    : messages
+  const today = new Date().toISOString().split('T')[0]
+
+  // Group messages by sender/time for visual grouping
+  const groupedMessages = displayMessages.map((msg,i)=>{
+    const prev = displayMessages[i-1]
+    const isSameSender = prev&&prev.sender_id===msg.sender_id&&(new Date(msg.created_at)-new Date(prev.created_at))<300000
+    const isNewDay = !prev||msg.created_at.split('T')[0]!==prev.created_at.split('T')[0]
+    return { ...msg, isSameSender:isSameSender&&!isNewDay, isNewDay }
+  })
+
+  return (
+    <div style={{ flex:1,display:'flex',flexDirection:'column',background:'white',height:'100%',overflow:'hidden' }}>
+      {/* Channel header */}
+      <div style={{ padding:'12px 20px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',justifyContent:'space-between',background:'white',flexShrink:0 }}>
+        <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
+          <div style={{ width:'36px',height:'36px',borderRadius:'8px',background:chatColor(channel.name),display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px' }}>
+            {channel.type==='direct'?'👤':channel.type==='project'?'🏗️':'👥'}
+          </div>
+          <div>
+            <div style={{ fontWeight:'700',fontSize:'15px',color:'#0f172a' }}>{channel.name}</div>
+            <div style={{ fontSize:'12px',color:'#94a3b8' }}>
+              {members.length} medlemmer{proj?` · 🏗️ ${proj.name}`:''}
+              {channel.description&&` · ${channel.description}`}
+            </div>
+          </div>
+        </div>
+        <div style={{ display:'flex',gap:'6px' }}>
+          {pinnedMessages.length>0&&<button onClick={()=>setShowPinned(v=>!v)} style={{ padding:'6px 12px',borderRadius:'8px',border:`1px solid ${showPinned?'#7c3aed':'#e2e8f0'}`,background:showPinned?'#f5f3ff':'white',color:showPinned?'#7c3aed':'#64748b',cursor:'pointer',fontSize:'12px',fontWeight:'600' }}>📌 {pinnedMessages.length}</button>}
+          <button onClick={()=>setShowSearch(v=>!v)} style={{ padding:'6px 12px',borderRadius:'8px',border:`1px solid ${showSearch?'#2563eb':'#e2e8f0'}`,background:showSearch?'#eff6ff':'white',color:showSearch?'#2563eb':'#64748b',cursor:'pointer',fontSize:'12px',fontWeight:'600' }}>🔍</button>
+          <button onClick={()=>setShowMembers(v=>!v)} style={{ padding:'6px 12px',borderRadius:'8px',border:`1px solid ${showMembers?'#059669':'#e2e8f0'}`,background:showMembers?'#f0fdf4':'white',color:showMembers?'#059669':'#64748b',cursor:'pointer',fontSize:'12px',fontWeight:'600' }}>👥 {members.length}</button>
+        </div>
+      </div>
+
+      {/* Pinned messages bar */}
+      {showPinned&&pinnedMessages.length>0&&(
+        <div style={{ background:'#faf5ff',borderBottom:'1px solid #ddd6fe',padding:'10px 20px' }}>
+          <div style={{ fontSize:'12px',fontWeight:'700',color:'#7c3aed',marginBottom:'6px' }}>📌 Pinnede meldinger</div>
+          {pinnedMessages.map(m=>(
+            <div key={m.id} style={{ fontSize:'13px',color:'#475569',padding:'4px 0',borderBottom:'1px solid #f3e8ff',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+              <span><strong style={{ color:'#7c3aed' }}>{getSenderName(m.sender_id)}:</strong> {m.content?.slice(0,80)}</span>
+              <button onClick={()=>togglePin(m)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'12px' }}>Løsne</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Search bar */}
+      {showSearch&&(
+        <div style={{ padding:'8px 20px',background:'#f8fafc',borderBottom:'1px solid #f1f5f9' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Søk i meldinger..." autoFocus
+            style={{ width:'100%',padding:'8px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} />
+          {search&&<div style={{ fontSize:'12px',color:'#94a3b8',marginTop:'4px' }}>{displayMessages.length} treff</div>}
+        </div>
+      )}
+
+      <div style={{ display:'flex',flex:1,overflow:'hidden' }}>
+        {/* Messages */}
+        <div style={{ flex:1,overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:'2px' }}>
+          {loading&&<div style={{ textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'20px' }}>Laster meldinger...</div>}
+          {groupedMessages.map(msg=>{
+            const isOwn = msg.sender_id===user?.id
+            const senderName = getSenderName(msg.sender_id)
+            const isImage = msg.file_type?.startsWith('image/')
+            const msgDate = msg.created_at.split('T')[0]
+
+            return (
+              <React.Fragment key={msg.id}>
+                {msg.isNewDay&&(
+                  <div style={{ display:'flex',alignItems:'center',gap:'10px',margin:'12px 0' }}>
+                    <div style={{ flex:1,height:'1px',background:'#f1f5f9' }}/>
+                    <span style={{ fontSize:'11px',fontWeight:'600',color:'#94a3b8',whiteSpace:'nowrap' }}>
+                      {msgDate===today?'I dag':new Date(msgDate+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long'})}
+                    </span>
+                    <div style={{ flex:1,height:'1px',background:'#f1f5f9' }}/>
+                  </div>
+                )}
+                <div style={{ display:'flex',gap:'10px',alignItems:'flex-start',padding:'2px 0' }}
+                  onMouseEnter={e=>e.currentTarget.querySelector('.msg-actions')?.style&&(e.currentTarget.querySelector('.msg-actions').style.opacity='1')}
+                  onMouseLeave={e=>e.currentTarget.querySelector('.msg-actions')?.style&&(e.currentTarget.querySelector('.msg-actions').style.opacity='0')}>
+                  {!msg.isSameSender
+                    ? <Avatar name={senderName} size={32} />
+                    : <div style={{ width:32 }}/>
+                  }
+                  <div style={{ flex:1,minWidth:0 }}>
+                    {!msg.isSameSender&&(
+                      <div style={{ display:'flex',alignItems:'baseline',gap:'8px',marginBottom:'3px' }}>
+                        <span style={{ fontWeight:'700',fontSize:'13px',color:isOwn?'#059669':'#0f172a' }}>{senderName}</span>
+                        <span style={{ fontSize:'11px',color:'#94a3b8' }}>{fmtTime(msg.created_at)}</span>
+                        {msg.is_pinned&&<span style={{ fontSize:'10px',color:'#7c3aed' }}>📌</span>}
+                      </div>
+                    )}
+                    {msg.content&&(
+                      <div style={{ fontSize:'14px',color:'#0f172a',lineHeight:1.5,background:'transparent',borderRadius:'8px',wordBreak:'break-word' }}>
+                        {msg.content.split(/(@[A-ZÆØÅ][a-zæøå]+ [A-ZÆØÅ][a-zæøå]+)/g).map((part,i)=>
+                          part.startsWith('@')
+                            ? <span key={i} style={{ background:'#eff6ff',color:'#2563eb',borderRadius:'4px',padding:'0 3px',fontWeight:'600' }}>{part}</span>
+                            : <span key={i}>{part}</span>
+                        )}
+                      </div>
+                    )}
+                    {msg.file_url&&(
+                      <div style={{ marginTop:'4px' }}>
+                        {isImage
+                          ? <img src={msg.file_url} alt={msg.file_name} style={{ maxWidth:'300px',maxHeight:'200px',borderRadius:'8px',border:'1px solid #f1f5f9',cursor:'pointer' }} onClick={()=>window.open(msg.file_url,'_blank')} />
+                          : <a href={msg.file_url} target="_blank" rel="noreferrer" style={{ display:'inline-flex',alignItems:'center',gap:'8px',background:'#f8fafc',border:'1px solid #f1f5f9',borderRadius:'8px',padding:'8px 12px',color:'#2563eb',textDecoration:'none',fontSize:'13px',fontWeight:'600' }}>
+                              📎 {msg.file_name}
+                            </a>
+                        }
+                      </div>
+                    )}
+                  </div>
+                  {/* Message actions */}
+                  <div className="msg-actions" style={{ display:'flex',gap:'4px',opacity:0,transition:'opacity 0.15s',flexShrink:0 }}>
+                    <button onClick={()=>togglePin(msg)} title={msg.is_pinned?'Løsne':'Pin'} style={{ padding:'4px 8px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'12px' }}>{msg.is_pinned?'📌':'📍'}</button>
+                    {isOwn&&<button onClick={()=>deleteMessage(msg.id)} title="Slett" style={{ padding:'4px 8px',borderRadius:'6px',border:'1px solid #fecaca',background:'white',cursor:'pointer',fontSize:'12px',color:'#dc2626' }}>🗑️</button>}
+                  </div>
+                </div>
+              </React.Fragment>
+            )
+          })}
+          <div ref={messagesEndRef}/>
+        </div>
+
+        {/* Members panel */}
+        {showMembers&&(
+          <div style={{ width:'220px',flexShrink:0,borderLeft:'1px solid #f1f5f9',background:'#f8fafc',padding:'16px',overflowY:'auto' }}>
+            <div style={{ fontSize:'13px',fontWeight:'700',color:'#0f172a',marginBottom:'12px' }}>👥 Medlemmer ({members.length})</div>
+            {members.map(m=>{
+              const emp = employees.find(e=>e.id===m.employee_id)
+              const name = emp?`${emp.first_name} ${emp.last_name}`:'Ukjent'
+              return (
+                <div key={m.id} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'6px 0',borderBottom:'1px solid #f1f5f9' }}>
+                  <Avatar name={name} size={28} />
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
+                    {m.role==='admin'&&<div style={{ fontSize:'10px',color:'#7c3aed',fontWeight:'600' }}>Admin</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Input area */}
+      <div style={{ padding:'12px 20px',borderTop:'1px solid #f1f5f9',background:'white',flexShrink:0,position:'relative' }}>
+        {/* Mention suggestions */}
+        {mentionSuggestions.length>0&&(
+          <div style={{ position:'absolute',bottom:'100%',left:'20px',background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 4px 16px rgba(0,0,0,0.12)',padding:'6px',zIndex:50,minWidth:'200px' }}>
+            {mentionSuggestions.map(emp=>(
+              <div key={emp.id} onClick={()=>insertMention(emp)}
+                style={{ display:'flex',alignItems:'center',gap:'8px',padding:'7px 10px',borderRadius:'6px',cursor:'pointer' }}
+                onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <Avatar name={`${emp.first_name} ${emp.last_name}`} size={24} />
+                <span style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display:'flex',gap:'8px',alignItems:'flex-end' }}>
+          <button onClick={()=>fileInputRef.current?.click()} style={{ padding:'9px',borderRadius:'10px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',color:'#64748b',fontSize:'16px',flexShrink:0 }}>📎</button>
+          <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={handleFile} accept="image/*,.pdf,.doc,.docx,.xlsx" />
+          <textarea
+            value={input}
+            onChange={e=>handleInputChange(e.target.value)}
+            onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey&&mentionSuggestions.length===0){e.preventDefault();send()} }}
+            placeholder={`Skriv til #${channel.name}... (@ for å nevne noen)`}
+            rows={1}
+            style={{ flex:1,padding:'10px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',resize:'none',fontFamily:'system-ui,sans-serif',lineHeight:1.5,maxHeight:'120px',overflowY:'auto' }}
+          />
+          <button onClick={send} disabled={sending||!input.trim()}
+            style={{ padding:'9px 16px',borderRadius:'10px',background:sending||!input.trim()?'#94a3b8':'#059669',color:'white',border:'none',cursor:sending||!input.trim()?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700',flexShrink:0 }}>
+            {sending?'⏳':'📨'}
+          </button>
+        </div>
+        <div style={{ fontSize:'11px',color:'#94a3b8',marginTop:'6px' }}>Enter for å sende · Shift+Enter for ny linje · @ for å nevne noen</div>
+      </div>
+    </div>
+  )
+}
+
+// ── NEW CHANNEL MODAL ─────────────────────────────────────────────────────────
+function NewChannelModal({ user, employees, projects, onClose, onSaved }) {
+  const [form, setForm] = useState({ name:'', description:'', type:'group', project_id:'', is_private:false })
+  const [selectedMembers, setSelectedMembers] = useState([])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return alert('Kanalnavn er påkrevd')
+    setSaving(true)
+    try {
+      const { data:ch, error } = await supabase.from('chat_channels').insert({
+        name: form.name.trim(),
+        description: form.description||null,
+        type: form.type,
+        project_id: form.project_id||null,
+        is_private: form.is_private,
+        created_by: user?.id
+      }).select().single()
+      if (error) throw error
+
+      // Add creator as admin member
+      const memberInserts = [{ channel_id:ch.id, user_id:user?.id, role:'admin' }]
+
+      // Add selected members
+      for (const empId of selectedMembers) {
+        memberInserts.push({ channel_id:ch.id, user_id:empId, employee_id:empId, role:'member' })
+        // Notify
+        await supabase.from('notifications').insert({
+          user_id:empId, title:`Du ble lagt til i #${ch.name}`,
+          message:`Ny kanal: ${form.description||form.name}`, type:'info', link_page:'chat'
+        })
+      }
+      await supabase.from('chat_members').insert(memberInserts)
+      onSaved(ch)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>💬 Ny kanal</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+          {/* Type */}
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type kanal</label>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px' }}>
+              {[['group','👥','Gruppe','Åpen gruppekanal'],['project','🏗️','Prosjekt','Knyttet til prosjekt'],['direct','👤','Direkte','1-til-1 melding']].map(([v,e,l,d])=>(
+                <button key={v} onClick={()=>set('type',v)}
+                  style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${form.type===v?'#059669':'#e2e8f0'}`,background:form.type===v?'#f0fdf4':'white',cursor:'pointer',textAlign:'center' }}>
+                  <div style={{ fontSize:'20px',marginBottom:'4px' }}>{e}</div>
+                  <div style={{ fontSize:'12px',fontWeight:'700',color:form.type===v?'#059669':'#0f172a' }}>{l}</div>
+                  <div style={{ fontSize:'10px',color:'#94a3b8' }}>{d}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Kanalnavn *</label>
+            <input value={form.name} onChange={e=>set('name',e.target.value.replace(/\s/g,'-').toLowerCase())} placeholder="f.eks. prosjekt-a-ledelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} />
+          </div>
+
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Beskrivelse</label>
+            <input value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Hva er denne kanalen til?" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} />
+          </div>
+
+          {form.type==='project'&&(
+            <div>
+              <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt</label>
+              <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
+                <option value="">Velg prosjekt...</option>
+                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>
+            <input type="checkbox" checked={form.is_private} onChange={e=>set('is_private',e.target.checked)} style={{ width:'16px',height:'16px',accentColor:'#059669' }} />
+            🔒 Privat kanal (kun inviterte medlemmer kan se)
+          </label>
+
+          {/* Member selection */}
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Legg til medlemmer</label>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:'6px',maxHeight:'160px',overflowY:'auto' }}>
+              {employees.map(emp=>{
+                const isSelected=selectedMembers.includes(emp.id)
+                return (
+                  <button key={emp.id} onClick={()=>setSelectedMembers(s=>isSelected?s.filter(x=>x!==emp.id):[...s,emp.id])}
+                    style={{ display:'flex',alignItems:'center',gap:'6px',padding:'5px 10px',borderRadius:'999px',border:`2px solid ${isSelected?'#059669':'#e2e8f0'}`,background:isSelected?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:isSelected?'#059669':'#64748b' }}>
+                    <Avatar name={`${emp.first_name} ${emp.last_name}`} size={18} />
+                    {emp.first_name} {emp.last_name}
+                  </button>
+                )
+              })}
+            </div>
+            {selectedMembers.length>0&&<div style={{ fontSize:'12px',color:'#059669',marginTop:'6px',fontWeight:'600' }}>✓ {selectedMembers.length} valgt</div>}
+          </div>
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving||!form.name.trim()} style={{ padding:'10px 24px',background:saving||!form.name.trim()?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving||!form.name.trim()?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+            {saving?'Oppretter...':'Opprett kanal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END INTER CHAT MODULE ────────────────────────────────────────────────────
+
 
 
 
@@ -10234,7 +10842,8 @@ function AppContent() {
         {page === 'timelister' && <TimelistePage />}
         {page === 'ressursplan' && <RessursPage />}
         {page === 'kalender' && <KalenderPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && (
+        {page === 'chat' && <InterChatPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
