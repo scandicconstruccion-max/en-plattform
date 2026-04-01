@@ -5749,7 +5749,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   }
 
   const createInvoice = async () => {
-    alert('Fakturamodulen er under utvikling. Kommer snart!')
+    alert('Gå til Faktura-modulen og velg "Fra ordre" for å opprette faktura.')
   }
 
   return (
@@ -6228,6 +6228,894 @@ function EndringsmeldingModal({ order, user, existingCount, onClose, onSaved }) 
 
 // ─── END ORDRE MODULE ─────────────────────────────────────────────────────────
 
+// ─── FAKTURA MODULE ───────────────────────────────────────────────────────────
+
+const INV_STATUS = {
+  'Utkast':    { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
+  'Sendt':     { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📤' },
+  'Betalt':    { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'✅' },
+  'Purret':    { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'⚠️' },
+  'Kreditert': { bg:'#f1f5f9', color:'#475569', border:'#cbd5e1', emoji:'↩️' },
+}
+
+const MVA_RATES = [{ label:'25% (standard)', rate:0.25 },{ label:'15% (næringsmidler)', rate:0.15 },{ label:'12% (transport/kino)', rate:0.12 },{ label:'0% (fritatt)', rate:0 }]
+
+const iInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+const iCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+function InvStatusBadge({ status }) {
+  const cfg = INV_STATUS[status]||INV_STATUS['Utkast']
+  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {status}</span>
+}
+
+function calcLines(lines) {
+  return (lines||[]).reduce((acc,l) => {
+    const net = (parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
+    const mva = net*(parseFloat(l.mvaRate)||0)
+    return { net:acc.net+net, mva:acc.mva+mva, gross:acc.gross+net+mva }
+  }, { net:0, mva:0, gross:0 })
+}
+
+function fmtI(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO')+' kr' }
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr||new Date())
+  d.setDate(d.getDate()+days)
+  return d.toISOString().split('T')[0]
+}
+
+function paymentDays(terms) {
+  const m = terms?.match(/(\d+)/)
+  return m ? parseInt(m[1]) : 30
+}
+
+function isOverdue(inv) {
+  return inv.due_date && new Date(inv.due_date) < new Date() && inv.status === 'Sendt'
+}
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function FakturaPage() {
+  const { user } = useAuth()
+  const [invoices, setInvoices] = useState([])
+  const [orders, setOrders] = useState([])
+  const [quotes, setQuotes] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [showNew, setShowNew] = useState(null) // null|'manual'|'order'|'quote'|'partial'|'changes'
+  const [selected, setSelected] = useState(null)
+
+  const load = async () => {
+    try {
+      const [inv, ord, q, p] = await Promise.all([
+        supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+      ])
+      setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  const filtered = invoices.filter(i => {
+    if (filterStatus!=='alle'&&i.status!==filterStatus) return false
+    if (search&&![i.title,i.invoice_number,i.customer_name].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const counts = Object.keys(INV_STATUS).reduce((acc,s)=>{ acc[s]=invoices.filter(i=>i.status===s).length; return acc },{})
+  const totalSendt = invoices.filter(i=>i.status==='Sendt').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
+  const totalBetalt = invoices.filter(i=>i.status==='Betalt').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
+  const totalPurret = invoices.filter(i=>i.status==='Purret').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
+  const overdueCount = invoices.filter(i=>isOverdue(i)).length
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
+  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧾 Faktura</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>
+          </div>
+          <div style={{ position:'relative' }}>
+            <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny faktura ▾</button>
+            {showNew==='menu' && (
+              <>
+                <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowNew(null)} />
+                <div style={{ position:'absolute', top:'110%', right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'14px', boxShadow:'0 8px 32px rgba(0,0,0,0.12)', zIndex:60, minWidth:'240px', padding:'8px' }}>
+                  {[
+                    { key:'order', emoji:'📦', label:'Fra ordre', desc:'Kopier linjer fra ordre' },
+                    { key:'quote', emoji:'📋', label:'Fra tilbud', desc:'Fra akseptert tilbud' },
+                    { key:'partial', emoji:'✂️', label:'Delfakturering', desc:'Fakturere % av en ordre' },
+                    { key:'changes', emoji:'🔄', label:'Endringsmeldinger', desc:'Fakturere endringsmeldinger' },
+                    { key:'manual', emoji:'✏️', label:'Manuell faktura', desc:'Lag fra bunnen av' },
+                  ].map(opt=>(
+                    <button key={opt.key} onClick={()=>setShowNew(opt.key)}
+                      style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'11px 14px', border:'none', borderRadius:'10px', background:'transparent', cursor:'pointer', textAlign:'left' }}
+                      onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <span style={{ fontSize:'20px', width:'32px', textAlign:'center' }}>{opt.emoji}</span>
+                      <div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{opt.label}</div><div style={{ fontSize:'11px', color:'#94a3b8' }}>{opt.desc}</div></div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr) 1fr 1fr', gap:'12px' }}>
+          {[
+            { label:'Utestående', value:fmtI(totalSendt+totalPurret), sub:`${counts['Sendt']||0} sendt, ${counts['Purret']||0} purret`, bg:'#eff6ff', color:'#2563eb', emoji:'📊' },
+            { label:'Betalt', value:fmtI(totalBetalt), sub:`${counts['Betalt']||0} fakturaer`, bg:'#f0fdf4', color:'#16a34a', emoji:'✅' },
+            { label:'Forfalt', value:overdueCount > 0 ? `${overdueCount} faktura${overdueCount>1?'er':''}` : 'Ingen', sub:overdueCount>0?'Krever oppfølging':'Alle à jour', bg:overdueCount>0?'#fef2f2':'#f8fafc', color:overdueCount>0?'#dc2626':'#64748b', emoji:overdueCount>0?'🚨':'👍' },
+          ].map(s=>(
+            <div key={s.label} style={{ background:s.bg, borderRadius:'14px', padding:'16px 20px', border:`1px solid ${s.bg}` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}><span style={{ fontSize:'18px' }}>{s.emoji}</span><span style={{ fontSize:'12px', fontWeight:'700', color:s.color, textTransform:'uppercase' }}>{s.label}</span></div>
+              <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>{s.sub}</div>
+            </div>
+          ))}
+          {['Utkast','Betalt'].map(s=>{
+            const cfg=INV_STATUS[s]
+            return (
+              <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
+                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+                <div style={{ fontSize:'20px', marginBottom:'6px' }}>{cfg.emoji}</div>
+                <div style={{ fontSize:'20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+                <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Overdue warning */}
+        {overdueCount > 0 && (
+          <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'14px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'20px' }}>🚨</span>
+            <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626' }}>{overdueCount} faktura{overdueCount>1?'er er':'er'} forfalt — vurder purring</span>
+            <button onClick={()=>setFilterStatus('Sendt')} style={{ marginLeft:'auto', background:'#dc2626', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>Vis forfalt</button>
+          </div>
+        )}
+
+        {/* Filters */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk faktura, kunde, nummer..." style={{ ...iInp, maxWidth:'260px', flex:1 }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...iInp, maxWidth:'160px' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.keys(INV_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          {(search||filterStatus!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} fakturaer</span>
+        </div>
+
+        {/* List */}
+        {filtered.length===0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🧾</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen fakturaer funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{invoices.length===0?'Opprett din første faktura.':'Prøv å endre søk eller filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(inv => {
+              const cfg=INV_STATUS[inv.status]
+              const { net, gross } = calcLines(inv.lines)
+              const overdue = isOverdue(inv)
+              const proj = projects.find(p=>p.id===inv.project_id)
+              return (
+                <div key={inv.id} onClick={()=>setSelected(inv)}
+                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${overdue?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{inv.title}</span>
+                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
+                      <InvStatusBadge status={inv.status} />
+                      {overdue && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>FORFALT</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {inv.customer_name&&<span style={{ fontSize:'12px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
+                      {proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {inv.due_date&&<span style={{ fontSize:'12px', color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 Forfall {inv.due_date}</span>}
+                      {inv.paid_at&&<span style={{ fontSize:'12px', color:'#16a34a' }}>✓ Betalt {new Date(inv.paid_at).toLocaleDateString('nb-NO')}</span>}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtI(net)}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>+mva {fmtI(gross)}</div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNew==='manual'   && <FakturaEditorModal projects={projects} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+      {showNew==='order'    && <FakturaFraOrdreModal orders={orders} projects={projects} user={user} mode="full" onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+      {showNew==='quote'    && <FakturaFraTilbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+      {showNew==='partial'  && <FakturaFraOrdreModal orders={orders} projects={projects} user={user} mode="partial" onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+      {showNew==='changes'  && <FakturaEndringsModal orders={orders} projects={projects} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+    </div>
+  )
+}
+
+function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
+  const [inv, setInv] = useState(init)
+  const [editing, setEditing] = useState(false)
+  const [showSend, setShowSend] = useState(false)
+  const cfg = INV_STATUS[inv.status]
+  const proj = projects.find(p=>p.id===inv.project_id)
+  const ord = orders.find(o=>o.id===inv.order_id)
+  const { net, mva, gross } = calcLines(inv.lines)
+  const overdue = isOverdue(inv)
+
+  const refresh = async () => { const {data}=await supabase.from('invoices').select('*').eq('id',inv.id).single(); if(data) setInv(data) }
+
+  const updateStatus = async (status) => {
+    const updates = { status, updated_at:new Date().toISOString() }
+    if (status==='Betalt') updates.paid_at = new Date().toISOString()
+    await supabase.from('invoices').update(updates).eq('id',inv.id)
+    setInv(v=>({...v,...updates}))
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne fakturaen?')) return
+    await supabase.from('invoices').delete().eq('id',inv.id)
+    onBack()
+  }
+
+  const sendPurring = async () => {
+    if (!inv.customer_email) return alert('Ingen e-postadresse på fakturaen')
+    if (!confirm(`Send purring til ${inv.customer_email}?`)) return
+    try {
+      const html = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <div style="background:#fef2f2;border-radius:12px;padding:16px;border:1px solid #fecaca;margin-bottom:20px">
+            <h2 style="margin:0 0 4px;color:#dc2626;font-size:18px">⚠️ Purring – Ubetalt faktura</h2>
+            <p style="margin:0;color:#dc2626;font-size:13px">Forfallsdato: <strong>${inv.due_date}</strong></p>
+          </div>
+          <h1 style="color:#0f172a;font-size:20px">${inv.title}</h1>
+          <p style="color:#64748b">Fakturanummer: <strong>${inv.invoice_number}</strong></p>
+          <div style="background:#f8fafc;border-radius:12px;padding:20px;margin:16px 0">
+            <div style="font-size:13px;color:#64748b;margin-bottom:4px">UTESTÅENDE BELØP INKL. MVA</div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a">${fmtI(gross)}</div>
+          </div>
+          ${inv.bank_account?`<p style="color:#374151;font-size:14px">Bankkontonummer: <strong>${inv.bank_account}</strong></p>`:''}
+          ${inv.kid?`<p style="color:#374151;font-size:14px">KID: <strong>${inv.kid}</strong></p>`:''}
+          <p style="color:#64748b;font-size:13px">Vennligst betal snarest for å unngå ytterligere purregebyr.</p>
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+        </div>`
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`,{
+        method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
+        body:JSON.stringify({to:inv.customer_email,subject:`PURRING – Faktura ${inv.invoice_number} – ${inv.title}`,html})
+      })
+      if (!fnRes.ok) throw new Error('Sending feilet')
+      await supabase.from('invoices').update({status:'Purret',updated_at:new Date().toISOString()}).eq('id',inv.id)
+      setInv(v=>({...v,status:'Purret'}))
+      alert('Purring sendt!')
+    } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  // Group lines by mva rate for summary
+  const mvaGroups = (inv.lines||[]).reduce((acc,l)=>{
+    const r=parseFloat(l.mvaRate)||0
+    const net=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
+    acc[r]=(acc[r]||0)+net
+    return acc
+  },{})
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <style>{`@media print{.no-print{display:none!important} body{background:white} .print-area{padding:40px!important}}`}</style>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til fakturaer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{inv.title}</h1>
+                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
+                <InvStatusBadge status={inv.status} />
+                {overdue&&<span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px', border:'1px solid #fecaca' }}>FORFALT</span>}
+              </div>
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                {inv.customer_name&&<span style={{ fontSize:'13px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
+                {proj&&<span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                {ord&&<span style={{ fontSize:'13px', color:'#64748b' }}>📦 {ord.order_number}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
+            {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send faktura</button>}
+            {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding:'9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⚠️ Send purring</button>}
+            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
+            {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div className="print-area" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Faktura header */}
+          <div style={iCard}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px' }}>
+              <div>
+                <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a', marginBottom:'4px' }}>FAKTURA</div>
+                <div style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                {inv.our_name&&<div style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{inv.our_name}</div>}
+                {inv.our_address&&<div style={{ fontSize:'13px', color:'#64748b' }}>{inv.our_address}</div>}
+                {inv.our_orgnr&&<div style={{ fontSize:'13px', color:'#64748b' }}>Org.nr: {inv.our_orgnr}</div>}
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'16px' }}>
+              <div>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'8px' }}>Fakturert til</div>
+                {[inv.customer_name,inv.customer_address,inv.customer_orgnr?`Org.nr: ${inv.customer_orgnr}`:null,inv.customer_email].filter(Boolean).map((v,i)=><div key={i} style={{ fontSize:'14px', color:'#0f172a', marginBottom:'2px' }}>{v}</div>)}
+              </div>
+              <div>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'8px' }}>Fakturadetaljer</div>
+                {[['Fakturadato',inv.invoice_date],['Forfallsdato',inv.due_date],['Betalingsbetingelser',inv.payment_terms],['KID',inv.kid],['Konto',inv.bank_account]].filter(r=>r[1]).map(([k,v])=>(
+                  <div key={k} style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', marginBottom:'3px' }}><span style={{ color:'#94a3b8' }}>{k}:</span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Lines */}
+          <div style={iCard}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+              <thead><tr style={{ background:'#f8fafc' }}>
+                {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA%','Netto','MVA','Brutto'].map(h=>(
+                  <th key={h} style={{ padding:'9px 10px', textAlign:['Mengde','Enhetspris','MVA%','Netto','MVA','Brutto'].includes(h)?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #f1f5f9' }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {(inv.lines||[]).map((l,i)=>{
+                  const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
+                  const lineMva=lineNet*(parseFloat(l.mvaRate)||0)
+                  return <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                    <td style={{ padding:'10px', color:'#0f172a', fontWeight:'500' }}>{l.description||'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#475569' }}>{l.qty}</td>
+                    <td style={{ padding:'10px', color:'#475569' }}>{l.unit}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#475569' }}>{fmtI(l.unitPrice)}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#475569' }}>{Math.round((parseFloat(l.mvaRate)||0)*100)}%</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#0f172a' }}>{fmtI(lineNet)}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#64748b' }}>{fmtI(lineMva)}</td>
+                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtI(lineNet+lineMva)}</td>
+                  </tr>
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals */}
+          <div style={{ ...iCard, background:'#f8fafc' }}>
+            <div style={{ maxWidth:'320px', marginLeft:'auto', display:'flex', flexDirection:'column', gap:'6px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}><span>Netto</span><span style={{ fontWeight:'600' }}>{fmtI(net)}</span></div>
+              {Object.entries(mvaGroups).map(([rate,base])=>(
+                <div key={rate} style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#64748b' }}>
+                  <span>MVA {Math.round(parseFloat(rate)*100)}% av {fmtI(base)}</span>
+                  <span>{fmtI(base*parseFloat(rate))}</span>
+                </div>
+              ))}
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'18px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px', marginTop:'4px' }}><span>Å betale</span><span style={{ color:'#059669' }}>{fmtI(gross)}</span></div>
+              {inv.bank_account&&<div style={{ fontSize:'13px', color:'#64748b', marginTop:'6px' }}>Bankkontonummer: <strong style={{ color:'#0f172a' }}>{inv.bank_account}</strong></div>}
+              {inv.kid&&<div style={{ fontSize:'13px', color:'#64748b' }}>KID-nummer: <strong style={{ color:'#0f172a' }}>{inv.kid}</strong></div>}
+            </div>
+          </div>
+
+          {inv.notes&&<div style={iCard}><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{inv.notes}</p></div>}
+        </div>
+
+        {/* Sidebar */}
+        <div className="no-print" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={iCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.keys(INV_STATUS).map(s=>(
+                <button key={s} onClick={()=>updateStatus(s)} disabled={inv.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${inv.status===s?INV_STATUS[s].border:'#e2e8f0'}`, background:inv.status===s?INV_STATUS[s].bg:'white', color:inv.status===s?INV_STATUS[s].color:'#475569', fontWeight:inv.status===s?'700':'400', fontSize:'13px', cursor:inv.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {inv.status===s?'✓ ':''}{INV_STATUS[s].emoji} {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={iCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>💰 Beløp</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {[['Netto',fmtI(net)],['MVA',fmtI(mva)],['Å betale',fmtI(gross),true]].map(([k,v,bold])=>(
+                <div key={k} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:bold?'15px':'13px', fontWeight:bold?'800':'400' }}>
+                  <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ color:bold?'#059669':'#0f172a', fontWeight:bold?'800':'500' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={iCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Detaljer</h3>
+            {[['Fakturadato',inv.invoice_date],['Forfallsdato',inv.due_date],['Betalt',inv.paid_at?new Date(inv.paid_at).toLocaleDateString('nb-NO'):null],['Sendt',inv.sent_at?new Date(inv.sent_at).toLocaleDateString('nb-NO'):null]].filter(r=>r[1]).map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {editing&&<FakturaEditorModal projects={projects} user={user} initial={inv} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {showSend&&<SendFakturaModal invoice={inv} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
+    </div>
+  )
+}
+
+function nextInvoiceNumber(invoices) {
+  const year = new Date().getFullYear()
+  const nums = invoices.filter(i=>i.invoice_number?.startsWith(`F-${year}`)).map(i=>parseInt(i.invoice_number.split('-')[2]||0))
+  const next = nums.length>0 ? Math.max(...nums)+1 : 1
+  return `F-${year}-${String(next).padStart(4,'0')}`
+}
+
+function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onSaved }) {
+  const isEdit = !!initial
+  const [form, setForm] = useState({
+    title: initial?.title||'',
+    invoice_number: initial?.invoice_number||nextInvoiceNumber(invoices||[]),
+    project_id: initial?.project_id||'',
+    customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
+    customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
+    our_name: initial?.our_name||'', our_address: initial?.our_address||'', our_orgnr: initial?.our_orgnr||'',
+    invoice_date: initial?.invoice_date||new Date().toISOString().split('T')[0],
+    payment_terms: initial?.payment_terms||'30 dager netto',
+    due_date: initial?.due_date||addDays(new Date().toISOString().split('T')[0],30),
+    kid: initial?.kid||'', bank_account: initial?.bank_account||'', notes: initial?.notes||'',
+  })
+  const [lines, setLines] = useState(initial?.lines||[{ id:Date.now(), description:'', qty:1, unit:'stk', unitPrice:0, mvaRate:0.25 }])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  // Auto-calc due date when payment terms change
+  const setPaymentTerms = (v) => { set('payment_terms',v); set('due_date', addDays(form.invoice_date, paymentDays(v))) }
+
+  const addLine = () => setLines(l=>[...l,{id:Date.now(),description:'',qty:1,unit:'stk',unitPrice:0,mvaRate:0.25}])
+  const removeLine = (id) => setLines(l=>l.filter(x=>x.id!==id))
+  const updateLine = (id,f,v) => setLines(l=>l.map(x=>x.id===id?{...x,[f]:v}:x))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { ...form, lines, project_id:form.project_id||null, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('invoices').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('invoices').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+  const { net, mva, gross } = calcLines(lines)
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'960px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+          {/* Info */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px' }}>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Faktura betongarbeider Blokk B" style={iInp} /></div>
+            <div>{lbl('Fakturanummer')}<input value={form.invoice_number} onChange={e=>set('invoice_number',e.target.value)} style={iInp} /></div>
+            <div>{lbl('Fakturadato')}<input type="date" value={form.invoice_date} onChange={e=>set('invoice_date',e.target.value)} style={iInp} /></div>
+            <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>setPaymentTerms(e.target.value)} placeholder="30 dager netto" style={iInp} /></div>
+            <div>{lbl('Forfallsdato')}<input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={iInp} /></div>
+            <div>{lbl('KID-nummer')}<input value={form.kid} onChange={e=>set('kid',e.target.value)} placeholder="KID / betalingsreferanse" style={iInp} /></div>
+            <div>{lbl('Bankkonto')}<input value={form.bank_account} onChange={e=>set('bank_account',e.target.value)} placeholder="1234.56.78901" style={iInp} /></div>
+            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' }}>
+            <div>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>👤 Fakturert til (kunde)</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {[['customer_name','Kundenavn','Firma / personnavn'],['customer_email','E-post','kunde@epost.no'],['customer_address','Adresse','Gateadresse, postnr sted'],['customer_orgnr','Org.nr','123 456 789']].map(([k,l,ph])=>(
+                  <div key={k}>{lbl(l)}<input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={iInp} /></div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>🏢 Fakturert fra (oss)</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {[['our_name','Firmanavn','Ditt firma AS'],['our_address','Adresse','Gateadresse, postnr sted'],['our_orgnr','Org.nr MVA','123 456 789 MVA']].map(([k,l,ph])=>(
+                  <div key={k}>{lbl(l)}<input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={iInp} /></div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Lines */}
+          <div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📋 Fakturalinjer</div>
+              <button onClick={addLine} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til linje</button>
+            </div>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead><tr style={{ background:'#f8fafc' }}>
+                  {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA','Netto',''].map((h,i)=><th key={i} style={{ padding:'9px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {lines.map(l => {
+                    const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
+                    return <tr key={l.id} style={{ borderBottom:'1px solid #f8fafc' }}>
+                      <td style={{ padding:'6px 4px' }}><input value={l.description} onChange={e=>updateLine(l.id,'description',e.target.value)} placeholder="Beskrivelse" style={{ ...iInp, minWidth:'180px' }} /></td>
+                      <td style={{ padding:'6px 4px' }}><input type="number" value={l.qty} onChange={e=>updateLine(l.id,'qty',e.target.value)} style={{ ...iInp, width:'70px', textAlign:'right' }} /></td>
+                      <td style={{ padding:'6px 4px' }}><input value={l.unit} onChange={e=>updateLine(l.id,'unit',e.target.value)} placeholder="stk" style={{ ...iInp, width:'60px' }} /></td>
+                      <td style={{ padding:'6px 4px' }}><input type="number" value={l.unitPrice} onChange={e=>updateLine(l.id,'unitPrice',e.target.value)} style={{ ...iInp, width:'110px', textAlign:'right' }} /></td>
+                      <td style={{ padding:'6px 4px' }}>
+                        <select value={l.mvaRate} onChange={e=>updateLine(l.id,'mvaRate',e.target.value)} style={{ ...iInp, width:'80px' }}>
+                          {MVA_RATES.map(r=><option key={r.rate} value={r.rate}>{Math.round(r.rate*100)}%</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtI(lineNet)}</td>
+                      <td style={{ padding:'6px 4px' }}>{lines.length>1&&<button onClick={()=>removeLine(l.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                    </tr>
+                  })}
+                </tbody>
+              </table>
+              <div style={{ padding:'12px 16px', background:'#f8fafc', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'20px' }}>
+                {[['Netto',fmtI(net)],['MVA',fmtI(mva)],['Å betale',fmtI(gross)]].map(([k,v],i)=>(
+                  <div key={k} style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+                    <div style={{ fontSize:i===2?'16px':'14px', fontWeight:i===2?'800':'600', color:i===2?'#059669':'#0f172a' }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>{lbl('Merknader / Betalingsinformasjon')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Eventuelle merknader til fakturaen..." style={{ ...iInp, resize:'none' }} /></div>
+        </div>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'12px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett faktura'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }) {
+  const [selectedOrder, setSelectedOrder] = useState('')
+  const [partialPct, setPartialPct] = useState(50)
+  const [saving, setSaving] = useState(false)
+
+  const ord = orders.find(o=>o.id===selectedOrder)
+  const { grandTotal } = ord ? calcOrder(ord.chapters||[], ord.global_markup) : { grandTotal:0 }
+  const invoiceAmount = mode==='partial' ? grandTotal * (partialPct/100) : grandTotal
+
+  const handleCreate = async () => {
+    if (!ord) return alert('Velg en ordre')
+    setSaving(true)
+    try {
+      const lines = mode==='partial'
+        ? [{ id:Date.now(), description:`${ord.title} – ${partialPct}% delfakturering`, qty:1, unit:'stk', unitPrice:Math.round(invoiceAmount), mvaRate:0.25 }]
+        : (ord.chapters||[]).flatMap(ch=>(ch.posts||[]).map(p=>({
+            id:Date.now()+Math.random(), description:p.description,
+            qty:parseFloat(p.qty)||1, unit:p.unit||'stk',
+            unitPrice:((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))*(1+(parseFloat(ch.markup)||0)/100),
+            mvaRate:0.25
+          })))
+      const { error } = await supabase.from('invoices').insert({
+        title:`${ord.title}${mode==='partial'?` – ${partialPct}% delfaktura`:''}`,
+        invoice_number:`F-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`,
+        order_id:ord.id, project_id:ord.project_id||null,
+        customer_name:ord.customer_name, customer_email:ord.customer_email,
+        customer_address:ord.customer_address, customer_orgnr:ord.customer_orgnr,
+        payment_terms:ord.payment_terms||'30 dager netto',
+        invoice_date:new Date().toISOString().split('T')[0],
+        due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(ord.payment_terms)),
+        partial_percent:mode==='partial'?partialPct:null,
+        lines, status:'Utkast', created_by:user?.id,
+      })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{mode==='partial'?'✂️ Delfakturering':'📦 Faktura fra ordre'}</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg ordre</label>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {orders.filter(o=>o.status!=='Avslått').map(o=>{
+                const proj = projects.find(p=>p.id===o.project_id)
+                const {grandTotal:gt} = calcOrder(o.chapters||[],o.global_markup)
+                return (
+                  <button key={o.id} onClick={()=>setSelectedOrder(o.id)}
+                    style={{ padding:'12px 16px', borderRadius:'12px', border:`2px solid ${selectedOrder===o.id?'#059669':'#e2e8f0'}`, background:selectedOrder===o.id?'#f0fdf4':'white', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' }}>
+                    <div>
+                      <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{o.title}</div>
+                      <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{o.order_number}{proj?` · ${proj.name}`:''}</div>
+                    </div>
+                    <div style={{ fontWeight:'800', color:selectedOrder===o.id?'#059669':'#0f172a', fontSize:'15px' }}>{fmtI(gt)}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {mode==='partial' && ord && (
+            <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'16px', border:'1px solid #f1f5f9' }}>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Fakturér <strong style={{ color:'#059669' }}>{partialPct}%</strong> av {fmtI(grandTotal)}</label>
+              <input type="range" min="1" max="100" value={partialPct} onChange={e=>setPartialPct(+e.target.value)} style={{ width:'100%', accentColor:'#059669', marginBottom:'8px' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#64748b' }}>
+                <span>1%</span><span style={{ fontWeight:'700', color:'#059669', fontSize:'16px' }}>{fmtI(invoiceAmount)}</span><span>100%</span>
+              </div>
+            </div>
+          )}
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleCreate} disabled={saving||!selectedOrder} style={{ padding:'10px 24px', background:saving||!selectedOrder?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedOrder?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
+  const [selectedQuote, setSelectedQuote] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleCreate = async () => {
+    const q = quotes.find(x=>x.id===selectedQuote)
+    if (!q) return alert('Velg et tilbud')
+    setSaving(true)
+    try {
+      const lines = (q.chapters||[]).flatMap(ch=>(ch.posts||[]).map(p=>({
+        id:Date.now()+Math.random(), description:p.description,
+        qty:parseFloat(p.qty)||1, unit:p.unit||'stk',
+        unitPrice:((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))*(1+(parseFloat(ch.markup)||0)/100),
+        mvaRate:0.25
+      })))
+      const { error } = await supabase.from('invoices').insert({
+        title:q.title, invoice_number:`F-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`,
+        quote_id:q.id, project_id:q.project_id||null,
+        customer_name:q.customer_name, customer_email:q.customer_email,
+        customer_address:q.customer_address, customer_orgnr:q.customer_orgnr,
+        payment_terms:q.payment_terms||'30 dager netto',
+        invoice_date:new Date().toISOString().split('T')[0],
+        due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(q.payment_terms)),
+        lines, status:'Utkast', created_by:user?.id,
+      })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Faktura fra tilbud</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {quotes.map(q=>{
+              const proj=projects.find(p=>p.id===q.project_id)
+              const {grandTotal:gt}=calcOrder(q.chapters||[],q.global_markup)
+              return (
+                <button key={q.id} onClick={()=>setSelectedQuote(q.id)}
+                  style={{ padding:'12px 16px', borderRadius:'12px', border:`2px solid ${selectedQuote===q.id?'#059669':'#e2e8f0'}`, background:selectedQuote===q.id?'#f0fdf4':'white', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' }}>
+                  <div>
+                    <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{q.title}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{q.quote_number}{proj?` · ${proj.name}`:''}</div>
+                  </div>
+                  <div style={{ fontWeight:'800', color:selectedQuote===q.id?'#059669':'#0f172a', fontSize:'15px' }}>{fmtI(gt)}</div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
+  const [selectedOrder, setSelectedOrder] = useState('')
+  const [changes, setChanges] = useState([])
+  const [selectedChanges, setSelectedChanges] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  const loadChanges = async (orderId) => {
+    const { data } = await supabase.from('order_changes').select('*').eq('order_id',orderId).eq('status','Godkjent')
+    setChanges(data||[])
+    setSelectedChanges((data||[]).map(c=>c.id))
+  }
+
+  const toggleChange = (id) => setSelectedChanges(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
+
+  const handleCreate = async () => {
+    const ord = orders.find(o=>o.id===selectedOrder)
+    if (!ord||selectedChanges.length===0) return alert('Velg ordre og minst én endringsmelding')
+    setSaving(true)
+    try {
+      const selChanges = changes.filter(c=>selectedChanges.includes(c.id))
+      const lines = selChanges.map(c=>({ id:Date.now()+Math.random(), description:`${c.change_number} – ${c.title}`, qty:1, unit:'stk', unitPrice:c.amount||0, mvaRate:0.25 }))
+      const { error } = await supabase.from('invoices').insert({
+        title:`Endringsmeldinger – ${ord.title}`, invoice_number:`F-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`,
+        order_id:ord.id, project_id:ord.project_id||null,
+        customer_name:ord.customer_name, customer_email:ord.customer_email,
+        payment_terms:ord.payment_terms||'30 dager netto',
+        invoice_date:new Date().toISOString().split('T')[0],
+        due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(ord.payment_terms)),
+        lines, status:'Utkast', created_by:user?.id,
+      })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Faktura fra endringsmeldinger</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg ordre</label>
+            <select value={selectedOrder} onChange={e=>{ setSelectedOrder(e.target.value); if(e.target.value) loadChanges(e.target.value) }} style={iInp}>
+              <option value="">Velg ordre...</option>
+              {orders.map(o=><option key={o.id} value={o.id}>{o.order_number} – {o.title}</option>)}
+            </select>
+          </div>
+          {changes.length>0 && (
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Godkjente endringsmeldinger</label>
+              {changes.map(c=>(
+                <div key={c.id} onClick={()=>toggleChange(c.id)}
+                  style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:selectedChanges.includes(c.id)?'#f0fdf4':'#f8fafc', borderRadius:'10px', border:`1px solid ${selectedChanges.includes(c.id)?'#bbf7d0':'#f1f5f9'}`, cursor:'pointer', marginBottom:'6px' }}>
+                  <input type="checkbox" checked={selectedChanges.includes(c.id)} readOnly style={{ width:'16px', height:'16px', accentColor:'#059669' }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{c.change_number} – {c.title}</div>
+                    {c.description&&<div style={{ fontSize:'12px', color:'#64748b' }}>{c.description}</div>}
+                  </div>
+                  <div style={{ fontWeight:'800', color:'#059669', fontSize:'14px' }}>{fmtI(c.amount)}</div>
+                </div>
+              ))}
+              {selectedChanges.length>0&&<div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'10px 14px', border:'1px solid #bbf7d0', textAlign:'right', fontSize:'14px', fontWeight:'700', color:'#059669' }}>Total: {fmtI(changes.filter(c=>selectedChanges.includes(c.id)).reduce((a,c)=>a+(c.amount||0),0))}</div>}
+            </div>
+          )}
+          {selectedOrder&&changes.length===0&&<p style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center' }}>Ingen godkjente endringsmeldinger på denne ordren.</p>}
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleCreate} disabled={saving||!selectedOrder||selectedChanges.length===0} style={{ padding:'10px 24px', background:saving||!selectedOrder||selectedChanges.length===0?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SendFakturaModal({ invoice, user, onClose, onSent }) {
+  const [email, setEmail] = useState(invoice.customer_email||'')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const { net, gross } = calcLines(invoice.lines)
+
+  const handleSend = async () => {
+    if (!email) return alert('E-postadresse er påkrevd')
+    setSending(true)
+    try {
+      const html = `
+        <div style="font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:32px 20px">
+          <h1 style="color:#0f172a;font-size:22px;margin-bottom:4px">Faktura: ${invoice.title}</h1>
+          <p style="color:#64748b;font-size:13px;margin-bottom:20px">Fakturanummer: <strong>${invoice.invoice_number}</strong></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:20px">
+            <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:600;margin-bottom:4px">Fakturadato</div><div style="font-weight:600;color:#0f172a">${invoice.invoice_date||'—'}</div></div>
+            <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:600;margin-bottom:4px">Forfallsdato</div><div style="font-weight:700;color:#dc2626">${invoice.due_date||'—'}</div></div>
+          </div>
+          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #bbf7d0;text-align:center">
+            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">Å BETALE (INKL. MVA)</div>
+            <div style="font-size:32px;font-weight:800;color:#0f172a">${fmtI(gross)}</div>
+            <div style="font-size:13px;color:#64748b;margin-top:4px">Netto: ${fmtI(net)}</div>
+          </div>
+          ${invoice.bank_account?`<div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin-bottom:12px"><span style="color:#64748b;font-size:13px">Kontonummer: </span><strong style="color:#0f172a;font-size:14px">${invoice.bank_account}</strong></div>`:''}
+          ${invoice.kid?`<div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin-bottom:20px"><span style="color:#64748b;font-size:13px">KID-nummer: </span><strong style="color:#0f172a;font-size:14px">${invoice.kid}</strong></div>`:''}
+          ${invoice.notes?`<p style="color:#475569;font-size:13px;line-height:1.6">${invoice.notes}</p>`:''}
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system · enplattform.no</p>
+        </div>`
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`,{
+        method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
+        body:JSON.stringify({to:email,subject:`Faktura ${invoice.invoice_number} – ${invoice.title}`,html})
+      })
+      const d = await fnRes.json()
+      if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
+      await supabase.from('invoices').update({status:'Sendt',sent_at:new Date().toISOString(),customer_email:email,updated_at:new Date().toISOString()}).eq('id',invoice.id)
+      if (user?.id) await supabase.from('notifications').insert({user_id:user.id,title:`Faktura sendt: ${invoice.title}`,message:`Sendt til ${email}`,type:'info',link_page:'faktura'})
+      setSent(true); setTimeout(()=>onSent(),1500)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send faktura</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Faktura sendt!</h3>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar faktura på e-post</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0' }}>
+                <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>{invoice.title} · {invoice.invoice_number}</div>
+                <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a', marginTop:'4px' }}>{fmtI(gross)} inkl. mva</div>
+                {invoice.due_date&&<div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>Forfallsdato: {invoice.due_date}</div>}
+              </div>
+              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="kunde@epost.no" style={iInp} /></div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send faktura'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END FAKTURA MODULE ───────────────────────────────────────────────────────
+
 
 
 
@@ -6323,7 +7211,8 @@ function AppContent() {
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
         {page === 'ordre' && <OrdrePage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && (
+        {page === 'faktura' && <FakturaPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
