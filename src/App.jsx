@@ -2397,6 +2397,874 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
 
 // ─── END AVVIK MODULE ─────────────────────────────────────────────────────────
 
+// ─── HMS & RISIKO MODULE ──────────────────────────────────────────────────────
+
+const HMS_TYPES = {
+  sja:            { label: 'SJA',             fullLabel: 'Sikker Jobb Analyse',         emoji: '🦺', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  ruh:            { label: 'RUH',             fullLabel: 'Rapport om Uønsket Hendelse', emoji: '🚨', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  risiko:         { label: 'Risikoanalyse',   fullLabel: 'Risikoanalyse',               emoji: '📊', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
+  mottakskontroll:{ label: 'Mottakskontroll', fullLabel: 'Mottakskontroll',             emoji: '📦', color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc' },
+  handbok:        { label: 'HMS-håndbok',     fullLabel: 'HMS-håndbok / Dokumenter',    emoji: '📗', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+}
+
+const HMS_STATUS = {
+  'Utkast':   { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' },
+  'Aktiv':    { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+  'Godkjent': { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+  'Arkivert': { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+}
+
+function HmsStatusBadge({ status }) {
+  const cfg = HMS_STATUS[status] || HMS_STATUS['Utkast']
+  return <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600' }}>{status}</span>
+}
+
+function HmsTypeBadge({ type }) {
+  const cfg = HMS_TYPES[type]
+  if (!cfg) return null
+  return <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600' }}>{cfg.emoji} {cfg.label}</span>
+}
+
+const RISK_LABELS_S = ['1 – Ubetydelig', '2 – Liten', '3 – Moderat', '4 – Alvorlig', '5 – Katastrofal']
+const RISK_LABELS_P = ['1 – Svært liten', '2 – Liten', '3 – Mulig', '4 – Sannsynlig', '5 – Svært sannsynlig']
+const riskColor = (score) => {
+  if (score <= 4)  return { bg: '#f0fdf4', color: '#16a34a', label: 'Lav' }
+  if (score <= 9)  return { bg: '#fffbeb', color: '#d97706', label: 'Middels' }
+  if (score <= 15) return { bg: '#fff7ed', color: '#ea580c', label: 'Høy' }
+  return { bg: '#fef2f2', color: '#dc2626', label: 'Kritisk' }
+}
+
+const hmsInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+const hmsCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+
+function HmsModalShell({ title, onClose, size, children }) {
+  const maxWidth = size === 'xl' ? '860px' : size === 'lg' ? '680px' : '520px'
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function HmsPage() {
+  const { user } = useAuth()
+  const [records, setRecords] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('alle')
+  const [filterProject, setFilterProject] = useState('alle')
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [newType, setNewType] = useState(null)
+  const [selected, setSelected] = useState(null)
+
+  const loadData = async () => {
+    try {
+      const [recs, projs] = await Promise.all([
+        supabase.from('hms_records').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+      ])
+      setRecords(recs); setProjects(projs)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { loadData() }, [])
+
+  const filtered = records.filter(r => {
+    if (activeTab !== 'alle' && r.type !== activeTab) return false
+    if (filterProject !== 'alle' && r.project_id !== filterProject) return false
+    if (filterStatus !== 'alle' && r.status !== filterStatus) return false
+    if (search && !r.title?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+  const counts = Object.keys(HMS_TYPES).reduce((acc, t) => { acc[t] = records.filter(r => r.type === t).length; return acc }, {})
+
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui, sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster HMS & Risiko...</p></div></div>
+  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { setSelected(null); loadData() }} />
+
+  return (
+    <div style={{ fontFamily:'system-ui, sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🛡️ HMS & Risiko</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>SJA, RUH, Risikoanalyse, Mottakskontroll og HMS-håndbok</p>
+          </div>
+          <div style={{ position:'relative' }}>
+            <button onClick={() => setShowNew(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt HMS-skjema ▾</button>
+            {showNew && (
+              <>
+                <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setShowNew(false)} />
+                <div style={{ position:'absolute', top:'110%', right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'14px', boxShadow:'0 8px 32px rgba(0,0,0,0.12)', zIndex:60, minWidth:'240px', padding:'8px' }}>
+                  {Object.entries(HMS_TYPES).map(([key, cfg]) => (
+                    <button key={key} onClick={() => { setNewType(key); setShowNew(false) }}
+                      style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'11px 14px', border:'none', borderRadius:'10px', background:'transparent', cursor:'pointer', textAlign:'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background='#f8fafc'} onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                      <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>{cfg.emoji}</span>
+                      <div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{cfg.fullLabel}</div></div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:'12px' }}>
+          {Object.entries(HMS_TYPES).map(([key, cfg]) => (
+            <button key={key} onClick={() => setActiveTab(activeTab === key ? 'alle' : key)}
+              style={{ background: activeTab===key ? cfg.bg : 'white', border:`1px solid ${activeTab===key ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}>
+              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize:'20px', fontWeight:'800', color: activeTab===key ? cfg.color : '#0f172a' }}>{counts[key]}</div>
+              <div style={{ fontSize:'11px', color: activeTab===key ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{cfg.label}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth:'200px', flex:1 }} />
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth:'220px' }}>
+            <option value="alle">Alle prosjekter</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth:'160px' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.keys(HMS_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {(filterProject!=='alle'||filterStatus!=='alle'||search||activeTab!=='alle') && <button onClick={() => { setFilterProject('alle'); setFilterStatus('alle'); setSearch(''); setActiveTab('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} skjema</span>
+        </div>
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🛡️</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a', fontSize:'16px', fontWeight:'600' }}>Ingen skjemaer funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{records.length===0 ? 'Opprett ditt første HMS-skjema.' : 'Prøv å endre filtervalg.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            {filtered.map(rec => {
+              const cfg = HMS_TYPES[rec.type]
+              const proj = projects.find(p => p.id === rec.project_id)
+              return (
+                <div key={rec.id} onClick={() => setSelected(rec)}
+                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg?.emoji}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'5px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{rec.title}</span>
+                      <HmsTypeBadge type={rec.type} />
+                      <HmsStatusBadge status={rec.status} />
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap' }}>
+                      {proj && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {rec.data?.dato && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {rec.data.dato}</span>}
+                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(rec.created_at).toLocaleDateString('nb-NO')}</span>
+                    </div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px', flexShrink:0 }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {newType === 'sja'             && <SjaModal            projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
+      {newType === 'ruh'             && <RuhModal            projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
+      {newType === 'risiko'          && <RisikoModal         projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
+      {newType === 'mottakskontroll' && <MottakskontrollModal projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
+      {newType === 'handbok'         && <HandbokModal        projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
+    </div>
+  )
+}
+
+function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
+  const [rec, setRec] = useState(initialRecord)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const cfg = HMS_TYPES[rec.type]
+  const proj = projects.find(p => p.id === rec.project_id)
+
+  const updateStatus = async (newStatus) => {
+    setSaving(true)
+    try {
+      const { data, error } = await supabase.from('hms_records').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', rec.id).select().single()
+      if (error) throw error
+      setRec(data)
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett dette skjemaet?')) return
+    await supabase.from('hms_records').delete().eq('id', rec.id)
+    onBack()
+  }
+
+  const refreshRec = async () => { const { data } = await supabase.from('hms_records').select('*').eq('id', rec.id).single(); if (data) setRec(data) }
+
+  return (
+    <div style={{ fontFamily:'system-ui, sans-serif' }}>
+      <style>{`@media print { .no-print { display:none !important } }`}</style>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til HMS & Risiko</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg?.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{rec.title}</h1>
+                <HmsTypeBadge type={rec.type} />
+                <HmsStatusBadge status={rec.status} />
+              </div>
+              <div style={{ display:'flex', gap:'14px', flexWrap:'wrap' }}>
+                {proj && <span style={{ fontSize:'13px', color:'#059669', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                <span style={{ fontSize:'13px', color:'#94a3b8' }}>Opprettet {new Date(rec.created_at).toLocaleDateString('nb-NO')}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+            <button onClick={() => window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
+            <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+      </div>
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div>
+          {rec.type === 'sja'             && <SjaView rec={rec} proj={proj} />}
+          {rec.type === 'ruh'             && <RuhView rec={rec} proj={proj} />}
+          {rec.type === 'risiko'          && <RisikoView rec={rec} proj={proj} />}
+          {rec.type === 'mottakskontroll' && <MottakskontrollView rec={rec} proj={proj} />}
+          {rec.type === 'handbok'         && <HandbokView rec={rec} proj={proj} />}
+        </div>
+        <div className="no-print" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={hmsCard}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {Object.keys(HMS_STATUS).map(s => (
+                <button key={s} onClick={() => updateStatus(s)} disabled={saving || rec.status === s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${rec.status===s ? HMS_STATUS[s].border : '#e2e8f0'}`, background: rec.status===s ? HMS_STATUS[s].bg : 'white', color: rec.status===s ? HMS_STATUS[s].color : '#475569', fontWeight: rec.status===s ? '700':'400', fontSize:'13px', cursor: rec.status===s ? 'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {rec.status===s ? '✓ ':''}{s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={hmsCard}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Informasjon</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'9px' }}>
+              {[['Type',cfg?.fullLabel],['Prosjekt',proj?.name],['Dato',rec.data?.dato],['Ansvarlig',rec.data?.ansvarlig],['Opprettet',new Date(rec.created_at).toLocaleDateString('nb-NO')]].filter(r=>r[1]).map(([k,v],i) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc' }}>
+                  <span style={{ fontSize:'12px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'500' }}>{k}</span>
+                  <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500', textAlign:'right', maxWidth:'55%' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      {editing && rec.type==='sja'             && <SjaModal            projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
+      {editing && rec.type==='ruh'             && <RuhModal            projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
+      {editing && rec.type==='risiko'          && <RisikoModal         projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
+      {editing && rec.type==='mottakskontroll' && <MottakskontrollModal projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
+      {editing && rec.type==='handbok'         && <HandbokModal        projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
+    </div>
+  )
+}
+
+function SjaModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [title, setTitle] = useState(initial?.title || '')
+  const [projectId, setProjectId] = useState(initial?.project_id || '')
+  const [dato, setDato] = useState(initial?.data?.dato || new Date().toISOString().split('T')[0])
+  const [sted, setSted] = useState(initial?.data?.sted || '')
+  const [ansvarlig, setAnsvarlig] = useState(initial?.data?.ansvarlig || '')
+  const [arbeidsBeskrivelse, setArbeidsBeskrivelse] = useState(initial?.data?.arbeidsBeskrivelse || '')
+  const [utstyr, setUtstyr] = useState(initial?.data?.utstyr || '')
+  const [nodNummer, setNodNummer] = useState(initial?.data?.nodNummer || { brann:'110', politi:'112', ambulanse:'113', intern:'' })
+  const [operasjoner, setOperasjoner] = useState(initial?.data?.operasjoner || [{ id:Date.now(), operasjon:'', fare:'', konsekvens:'', tiltak:'', sannsynlighet:3, alvorlighet:3 }])
+  const [deltakere, setDeltakere] = useState(initial?.data?.deltakere || [{ navn:'', signert:false }])
+  const [saving, setSaving] = useState(false)
+
+  const addOp = () => setOperasjoner(o => [...o, { id:Date.now(), operasjon:'', fare:'', konsekvens:'', tiltak:'', sannsynlighet:3, alvorlighet:3 }])
+  const removeOp = (id) => setOperasjoner(o => o.filter(x => x.id !== id))
+  const updateOp = (id, f, v) => setOperasjoner(o => o.map(x => x.id===id ? { ...x, [f]:v } : x))
+  const addDelt = () => setDeltakere(d => [...d, { navn:'', signert:false }])
+  const removeDelt = (i) => setDeltakere(d => d.filter((_,idx) => idx!==i))
+  const updateDelt = (i, f, v) => setDeltakere(d => d.map((x,idx) => idx===i ? { ...x, [f]:v } : x))
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!title.trim()||!projectId) return alert('Tittel og prosjekt er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { title:title.trim(), project_id:projectId, type:'sja', status:initial?.status||'Utkast', data:{ dato,sted,ansvarlig,arbeidsBeskrivelse,utstyr,nodNummer,operasjoner,deltakere }, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error} = await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error} = await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <HmsModalShell title={`🦺 ${isEdit?'Rediger':'Ny'} SJA – Sikker Jobb Analyse`} onClose={onClose} size="xl">
+      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel / Jobbtype *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Arbeid i høyde – takarbeid" style={hmsInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><input value={ansvarlig} onChange={e=>setAnsvarlig(e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Arbeidsbeskrivelse</label><textarea value={arbeidsBeskrivelse} onChange={e=>setArbeidsBeskrivelse(e.target.value)} rows={3} style={{ ...hmsInp, resize:'none' }} placeholder="Beskriv arbeidet..." /></div>
+          <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Verneutstyr (PPE)</label><textarea value={utstyr} onChange={e=>setUtstyr(e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hjelm, sele, refleksvest..." /></div>
+        </div>
+        <div>
+          <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Nødnummer</h3>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+            {[['brann','🔥 Brann','110'],['politi','👮 Politi','112'],['ambulanse','🚑 Ambulanse','113'],['intern','☎️ Intern','Internnr']].map(([k,lbl,ph]) => (
+              <div key={k}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{lbl}</label><input value={nodNummer[k]} onChange={e=>setNodNummer(v=>({...v,[k]:e.target.value}))} placeholder={ph} style={hmsInp} /></div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⚙️ Arbeidsoperasjoner og risikovurdering</h3>
+            <button type="button" onClick={addOp} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+          </div>
+          {operasjoner.map((op,idx) => {
+            const score = op.sannsynlighet * op.alvorlighet
+            const rc = riskColor(score)
+            return (
+              <div key={op.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'10px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                  <span style={{ fontSize:'13px', fontWeight:'700', color:'#64748b' }}>Operasjon {idx+1}</span>
+                  <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                    <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>Risiko: {score} – {rc.label}</span>
+                    {operasjoner.length>1 && <button type="button" onClick={()=>removeOp(op.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
+                  </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                  <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Arbeidsoperasjon</label><input value={op.operasjon} onChange={e=>updateOp(op.id,'operasjon',e.target.value)} placeholder="Hva skal gjøres" style={hmsInp} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Identifisert fare</label><input value={op.fare} onChange={e=>updateOp(op.id,'fare',e.target.value)} placeholder="Hva kan gå galt?" style={hmsInp} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={op.konsekvens} onChange={e=>updateOp(op.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
+                  <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Tiltak</label><input value={op.tiltak} onChange={e=>updateOp(op.id,'tiltak',e.target.value)} placeholder="Hva gjøres for å redusere risikoen?" style={hmsInp} /></div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet: <strong>{op.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={op.sannsynlighet} onChange={e=>updateOp(op.id,'sannsynlighet',+e.target.value)} style={{ width:'100%', accentColor:'#2563eb' }} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Alvorlighet: <strong>{op.alvorlighet}</strong>/5</label><input type="range" min="1" max="5" value={op.alvorlighet} onChange={e=>updateOp(op.id,'alvorlighet',+e.target.value)} style={{ width:'100%', accentColor:'#2563eb' }} /></div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👷 Deltakere</h3>
+            <button type="button" onClick={addDelt} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+          </div>
+          {deltakere.map((d,i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', marginBottom:'8px' }}>
+              <input value={d.navn} onChange={e=>updateDelt(i,'navn',e.target.value)} placeholder={`Deltaker ${i+1} – fullt navn`} style={{ ...hmsInp, flex:1 }} />
+              <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'13px', color:'#475569', cursor:'pointer', whiteSpace:'nowrap' }}>
+                <input type="checkbox" checked={d.signert} onChange={e=>updateDelt(i,'signert',e.target.checked)} style={{ width:'16px', height:'16px', accentColor:'#059669' }} />Signert
+              </label>
+              {deltakere.length>1 && <button type="button" onClick={()=>removeDelt(i)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>×</button>}
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', paddingTop:'4px', borderTop:'1px solid #f1f5f9' }}>
+          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett SJA'}</button>
+        </div>
+      </form>
+    </HmsModalShell>
+  )
+}
+
+function SjaView({ rec, proj }) {
+  const d = rec.data || {}
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      <div style={hmsCard}>
+        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#2563eb' }}>🦺 Sikker Jobb Analyse</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+          {[['Prosjekt',proj?.name],['Dato',d.dato],['Sted',d.sted],['Ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
+            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
+          ))}
+        </div>
+        {d.arbeidsBeskrivelse && <p style={{ margin:'0 0 8px', fontSize:'14px', color:'#475569', lineHeight:1.6 }}><strong>Arbeidsbeskrivelse:</strong> {d.arbeidsBeskrivelse}</p>}
+        {d.utstyr && <p style={{ margin:0, fontSize:'14px', color:'#475569' }}><strong>Verneutstyr:</strong> {d.utstyr}</p>}
+      </div>
+      {d.nodNummer && (
+        <div style={{ ...hmsCard, background:'#fef2f2', border:'1px solid #fecaca' }}>
+          <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Nødnummer</h3>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+            {[['🔥 Brann',d.nodNummer.brann||'110'],['👮 Politi',d.nodNummer.politi||'112'],['🚑 Ambulanse',d.nodNummer.ambulanse||'113'],['☎️ Intern',d.nodNummer.intern]].filter(r=>r[1]).map(([k,v]) => (
+              <div key={k} style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center', border:'1px solid #fecaca' }}><div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'600', marginBottom:'4px' }}>{k}</div><div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{v}</div></div>
+            ))}
+          </div>
+        </div>
+      )}
+      {d.operasjoner?.length > 0 && (
+        <div style={hmsCard}>
+          <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⚙️ Arbeidsoperasjoner</h3>
+          {d.operasjoner.map((op,i) => {
+            const score = op.sannsynlighet * op.alvorlighet; const rc = riskColor(score)
+            return (
+              <div key={i} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', marginBottom:'8px', border:`1px solid ${rc.bg}` }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
+                  <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{op.operasjon||`Operasjon ${i+1}`}</span>
+                  <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
+                  {op.fare&&<div><strong>Fare:</strong> {op.fare}</div>}
+                  {op.konsekvens&&<div><strong>Konsekvens:</strong> {op.konsekvens}</div>}
+                  {op.tiltak&&<div><strong>Tiltak:</strong> {op.tiltak}</div>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {d.deltakere?.length > 0 && (
+        <div style={hmsCard}>
+          <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👷 Deltakere ({d.deltakere.length})</h3>
+          {d.deltakere.map((del,i) => (
+            <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8fafc', borderRadius:'8px', padding:'9px 14px', marginBottom:'6px' }}>
+              <span style={{ fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{del.navn||`Deltaker ${i+1}`}</span>
+              <span style={{ fontSize:'12px', fontWeight:'600', padding:'3px 10px', borderRadius:'999px', background:del.signert?'#f0fdf4':'#f8fafc', color:del.signert?'#16a34a':'#94a3b8', border:`1px solid ${del.signert?'#bbf7d0':'#e2e8f0'}` }}>{del.signert?'✓ Signert':'Ikke signert'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RuhModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [title, setTitle] = useState(initial?.title||'')
+  const [projectId, setProjectId] = useState(initial?.project_id||'')
+  const d0 = initial?.data||{}
+  const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], tidspunkt:d0.tidspunkt||'', sted:d0.sted||'', ansvarlig:d0.ansvarlig||'', hendelsestype:d0.hendelsestype||'Nestenulykke', involverte:d0.involverte||'', hendelsesBeskrivelse:d0.hendelsesBeskrivelse||'', arsak:d0.arsak||'', skadeomfang:d0.skadeomfang||'', tiltak:d0.tiltak||'', forebyggende:d0.forebyggende||'', vitner:d0.vitner||'', varsletLeder:d0.varsletLeder||false, varsletVerneombud:d0.varsletVerneombud||false, legekontakt:d0.legekontakt||false })
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const TYPER = ['Nestenulykke','Personskade','Materielskade','Farlig situasjon','Miljøhendelse','Annet']
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!title.trim()||!projectId) return alert('Tittel og prosjekt er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { title:title.trim(), project_id:projectId, type:'ruh', status:initial?.status||'Utkast', data:form, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = (t) => ({ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' })
+  return (
+    <HmsModalShell title={`🚨 ${isEdit?'Rediger':'Ny'} RUH – Uønsket Hendelse`} onClose={onClose} size="lg">
+      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="Kort beskrivelse av hendelsen" style={hmsInp} /></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Hendelsestype</label><select value={form.hendelsestype} onChange={e=>set('hendelsestype',e.target.value)} style={hmsInp}>{TYPER.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
+          <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
+          <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
+          <div><label style={lbl()}>Sted</label><input value={form.sted} onChange={e=>set('sted',e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
+          <div><label style={lbl()}>Rapportert av</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Involverte</label><input value={form.involverte} onChange={e=>set('involverte',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Vitner</label><input value={form.vitner} onChange={e=>set('vitner',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Beskrivelse av hendelsen *</label><textarea value={form.hendelsesBeskrivelse} onChange={e=>set('hendelsesBeskrivelse',e.target.value)} rows={4} required style={{ ...hmsInp, resize:'none' }} placeholder="Hva skjedde?" /></div>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Årsak</label><textarea value={form.arsak} onChange={e=>set('arsak',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hva var årsaken?" /></div>
+          <div><label style={lbl()}>Skadeomfang</label><textarea value={form.skadeomfang} onChange={e=>set('skadeomfang',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Eventuelle skader..." /></div>
+          <div><label style={lbl()}>Umiddelbare tiltak</label><textarea value={form.tiltak} onChange={e=>set('tiltak',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hva ble gjort?" /></div>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Forebyggende tiltak</label><textarea value={form.forebyggende} onChange={e=>set('forebyggende',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hindre gjentakelse..." /></div>
+        </div>
+        <div style={{ background:'#fffbeb', borderRadius:'12px', padding:'14px', border:'1px solid #fde68a' }}>
+          <h4 style={{ margin:'0 0 10px', fontSize:'13px', fontWeight:'700', color:'#92400e' }}>📢 Varsling</h4>
+          <div style={{ display:'flex', gap:'20px', flexWrap:'wrap' }}>
+            {[['varsletLeder','Leder varslet'],['varsletVerneombud','Verneombud varslet'],['legekontakt','Legekontakt tatt']].map(([k,lbl]) => (
+              <label key={k} style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'14px', color:'#374151' }}>
+                <input type="checkbox" checked={form[k]} onChange={e=>set(k,e.target.checked)} style={{ width:'16px', height:'16px', accentColor:'#d97706' }} />{lbl}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett RUH'}</button>
+        </div>
+      </form>
+    </HmsModalShell>
+  )
+}
+
+function RuhView({ rec, proj }) {
+  const d = rec.data||{}
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      <div style={hmsCard}>
+        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Rapport om Uønsket Hendelse</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+          {[['Prosjekt',proj?.name],['Hendelsestype',d.hendelsestype],['Dato',d.dato],['Tidspunkt',d.tidspunkt],['Sted',d.sted],['Rapportert av',d.ansvarlig],['Involverte',d.involverte],['Vitner',d.vitner]].filter(r=>r[1]).map(([k,v]) => (
+            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
+          ))}
+        </div>
+        {[['Beskrivelse',d.hendelsesBeskrivelse],['Årsak',d.arsak],['Skadeomfang',d.skadeomfang],['Umiddelbare tiltak',d.tiltak],['Forebyggende tiltak',d.forebyggende]].filter(r=>r[1]).map(([k,v]) => (
+          <div key={k} style={{ marginBottom:'10px' }}><div style={{ fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'4px', textTransform:'uppercase' }}>{k}</div><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6, background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>{v}</p></div>
+        ))}
+        <div style={{ display:'flex', gap:'8px', marginTop:'10px', flexWrap:'wrap' }}>
+          {[['Leder varslet',d.varsletLeder],['Verneombud varslet',d.varsletVerneombud],['Legekontakt tatt',d.legekontakt]].map(([lbl,val]) => (
+            <span key={lbl} style={{ fontSize:'12px', fontWeight:'600', padding:'4px 12px', borderRadius:'999px', background:val?'#f0fdf4':'#f8fafc', color:val?'#16a34a':'#94a3b8', border:`1px solid ${val?'#bbf7d0':'#e2e8f0'}` }}>{val?'✓':'○'} {lbl}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RisikoModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [title, setTitle] = useState(initial?.title||'')
+  const [projectId, setProjectId] = useState(initial?.project_id||'')
+  const d0 = initial?.data||{}
+  const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], ansvarlig:d0.ansvarlig||'', omrade:d0.omrade||'', formal:d0.formal||'' })
+  const [risikoer, setRisikoer] = useState(d0.risikoer||[{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', restRisiko:'' }])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const addR = () => setRisikoer(r=>[...r,{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', restRisiko:'' }])
+  const removeR = (id) => setRisikoer(r=>r.filter(x=>x.id!==id))
+  const updateR = (id,f,v) => setRisikoer(r=>r.map(x=>x.id===id?{...x,[f]:v}:x))
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!title.trim()||!projectId) return alert('Tittel og prosjekt er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { title:title.trim(), project_id:projectId, type:'risiko', status:initial?.status||'Utkast', data:{...form,risikoer}, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+  const lbl = () => ({ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' })
+  return (
+    <HmsModalShell title={`📊 ${isEdit?'Rediger':'Ny'} Risikoanalyse`} onClose={onClose} size="xl">
+      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={hmsInp} placeholder="Navn på risikoanalysen" /></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
+          <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
+          <div><label style={lbl()}>Ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Formål</label><textarea value={form.formal} onChange={e=>set('formal',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Formål med analysen..." /></div>
+        </div>
+        <div style={{ background:'#f5f3ff', borderRadius:'10px', padding:'12px', border:'1px solid #ddd6fe', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
+          <span style={{ fontSize:'13px', fontWeight:'700', color:'#7c3aed' }}>📊 Fargekode:</span>
+          {[{r:3,l:'Lav'},{r:6,l:'Middels'},{r:12,l:'Høy'},{r:20,l:'Kritisk'}].map(({r,l}) => { const rc=riskColor(r); return <span key={l} style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>{l}</span> })}
+        </div>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⚠️ Risikoer ({risikoer.length})</h3>
+            <button type="button" onClick={addR} style={{ background:'#f5f3ff', color:'#7c3aed', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+          </div>
+          {risikoer.map((r,idx) => {
+            const score = r.sannsynlighet * r.konsekvensGrad; const rc = riskColor(score)
+            return (
+              <div key={r.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'10px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                  <span style={{ fontWeight:'700', fontSize:'13px', color:'#64748b' }}>Risiko {idx+1}</span>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
+                    {risikoer.length>1 && <button type="button" onClick={()=>removeR(r.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
+                  </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Fare / Risiko</label><input value={r.fare} onChange={e=>updateR(r.id,'fare',e.target.value)} placeholder="Hva er faren?" style={hmsInp} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Årsak</label><input value={r.arsak} onChange={e=>updateR(r.id,'arsak',e.target.value)} placeholder="Hva kan forårsake det?" style={hmsInp} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={r.konsekvens} onChange={e=>updateR(r.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Tiltak</label><input value={r.tiltak} onChange={e=>updateR(r.id,'tiltak',e.target.value)} placeholder="Hva gjøres?" style={hmsInp} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet: <strong>{r.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={r.sannsynlighet} onChange={e=>updateR(r.id,'sannsynlighet',+e.target.value)} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Konsekvensgrad: <strong>{r.konsekvensGrad}</strong>/5</label><input type="range" min="1" max="5" value={r.konsekvensGrad} onChange={e=>updateR(r.id,'konsekvensGrad',+e.target.value)} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
+                  <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Restrisiko etter tiltak</label><input value={r.restRisiko} onChange={e=>updateR(r.id,'restRisiko',e.target.value)} placeholder="Hva er restrisikoen?" style={hmsInp} /></div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett risikoanalyse'}</button>
+        </div>
+      </form>
+    </HmsModalShell>
+  )
+}
+
+function RisikoView({ rec, proj }) {
+  const d = rec.data||{}
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      <div style={hmsCard}>
+        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#7c3aed' }}>📊 Risikoanalyse</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+          {[['Prosjekt',proj?.name],['Dato',d.dato],['Område',d.omrade],['Ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
+            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
+          ))}
+        </div>
+        {d.formal&&<p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}><strong>Formål:</strong> {d.formal}</p>}
+      </div>
+      {d.risikoer?.length>0 && (
+        <div style={hmsCard}>
+          <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⚠️ Risikoer ({d.risikoer.length})</h3>
+          {d.risikoer.map((r,i) => { const score=r.sannsynlighet*r.konsekvensGrad; const rc=riskColor(score); return (
+            <div key={i} style={{ borderRadius:'10px', padding:'12px', background:rc.bg, border:`1px solid ${rc.bg}`, marginBottom:'8px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
+                <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{r.fare||`Risiko ${i+1}`}</span>
+                <span style={{ background:'white', color:rc.color, fontSize:'13px', fontWeight:'800', padding:'4px 12px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
+                {r.arsak&&<div><strong>Årsak:</strong> {r.arsak}</div>}
+                {r.konsekvens&&<div><strong>Konsekvens:</strong> {r.konsekvens}</div>}
+                {r.tiltak&&<div><strong>Tiltak:</strong> {r.tiltak}</div>}
+              </div>
+              <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>S: {r.sannsynlighet}/5 · K: {r.konsekvensGrad}/5 {r.restRisiko&&`· Restrisiko: ${r.restRisiko}`}</div>
+            </div>
+          )})}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [title, setTitle] = useState(initial?.title||'')
+  const [projectId, setProjectId] = useState(initial?.project_id||'')
+  const d0 = initial?.data||{}
+  const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], leverandor:d0.leverandor||'', ordrenummer:d0.ordrenummer||'', mottattAv:d0.mottattAv||'', sted:d0.sted||'', transportor:d0.transportor||'', fraktseddel:d0.fraktseddel||'', kommentar:d0.kommentar||'' })
+  const [varer, setVarer] = useState(d0.varer||[{ id:Date.now(), beskrivelse:'', antall:'', enhet:'stk', bestiltAntall:'', tilstand:'OK', avvik:'' }])
+  const [kp, setKp] = useState(d0.kontrollpunkter||[
+    {id:1,punkt:'Riktig mengde levert?',svar:null,kommentar:''},
+    {id:2,punkt:'Riktig produkt / spesifikasjon?',svar:null,kommentar:''},
+    {id:3,punkt:'Fri for synlige skader?',svar:null,kommentar:''},
+    {id:4,punkt:'Emballasje i orden?',svar:null,kommentar:''},
+    {id:5,punkt:'Samsvarserklæring / dokumentasjon medfølger?',svar:null,kommentar:''},
+    {id:6,punkt:'Merking i henhold til krav?',svar:null,kommentar:''},
+  ])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const addVare = () => setVarer(v=>[...v,{id:Date.now(),beskrivelse:'',antall:'',enhet:'stk',bestiltAntall:'',tilstand:'OK',avvik:''}])
+  const removeVare = (id) => setVarer(v=>v.filter(x=>x.id!==id))
+  const updateVare = (id,f,v) => setVarer(vv=>vv.map(x=>x.id===id?{...x,[f]:v}:x))
+  const updateKp = (id,f,v) => setKp(k=>k.map(x=>x.id===id?{...x,[f]:v}:x))
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!title.trim()||!projectId) return alert('Tittel og prosjekt er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { title:title.trim(), project_id:projectId, type:'mottakskontroll', status:initial?.status||'Utkast', data:{...form,varer,kontrollpunkter:kp}, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+  const lbl = () => ({ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' })
+  return (
+    <HmsModalShell title={`📦 ${isEdit?'Rediger':'Ny'} Mottakskontroll`} onClose={onClose} size="xl">
+      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Mottak stål – leveranse 14" style={hmsInp} /></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
+          <div><label style={lbl()}>Leverandør</label><input value={form.leverandor} onChange={e=>set('leverandor',e.target.value)} placeholder="Firmanavn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Ordrenummer</label><input value={form.ordrenummer} onChange={e=>set('ordrenummer',e.target.value)} placeholder="Bestillingsnr." style={hmsInp} /></div>
+          <div><label style={lbl()}>Mottatt av</label><input value={form.mottattAv} onChange={e=>set('mottattAv',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Sted</label><input value={form.sted} onChange={e=>set('sted',e.target.value)} placeholder="Mottakssted" style={hmsInp} /></div>
+          <div><label style={lbl()}>Transportør</label><input value={form.transportor} onChange={e=>set('transportor',e.target.value)} placeholder="Fraktselskap" style={hmsInp} /></div>
+          <div><label style={lbl()}>Fraktseddel nr.</label><input value={form.fraktseddel} onChange={e=>set('fraktseddel',e.target.value)} placeholder="Nummer" style={hmsInp} /></div>
+        </div>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+            <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Vareliste</h3>
+            <button type="button" onClick={addVare} style={{ background:'#ecfeff', color:'#0891b2', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+          </div>
+          {varer.map((vare,idx) => (
+            <div key={vare.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', border:'1px solid #f1f5f9', marginBottom:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', gap:'8px', marginBottom:'8px' }}>
+                <div><label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'3px' }}>Beskrivelse</label><input value={vare.beskrivelse} onChange={e=>updateVare(vare.id,'beskrivelse',e.target.value)} placeholder="Varenavn" style={hmsInp} /></div>
+                <div><label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'3px' }}>Bestilt</label><input value={vare.bestiltAntall} onChange={e=>updateVare(vare.id,'bestiltAntall',e.target.value)} placeholder="0" style={hmsInp} /></div>
+                <div><label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'3px' }}>Mottatt</label><input value={vare.antall} onChange={e=>updateVare(vare.id,'antall',e.target.value)} placeholder="0" style={hmsInp} /></div>
+                <div><label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'3px' }}>Enhet</label><input value={vare.enhet} onChange={e=>updateVare(vare.id,'enhet',e.target.value)} placeholder="stk" style={hmsInp} /></div>
+                <div><label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'3px' }}>Tilstand</label><select value={vare.tilstand} onChange={e=>updateVare(vare.id,'tilstand',e.target.value)} style={hmsInp}><option value="OK">✅ OK</option><option value="Avvik">⚠️ Avvik</option><option value="Avvist">❌ Avvist</option></select></div>
+              </div>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <input value={vare.avvik} onChange={e=>updateVare(vare.id,'avvik',e.target.value)} placeholder="Avvik / kommentar" style={{ ...hmsInp, flex:1 }} />
+                {varer.length>1&&<button type="button" onClick={()=>removeVare(vare.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'9px 12px', cursor:'pointer', fontSize:'12px' }}>Fjern</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>✅ Kontrollpunkter</h3>
+          {kp.map(k => (
+            <div key={k.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', display:'flex', alignItems:'center', gap:'12px', marginBottom:'6px' }}>
+              <span style={{ flex:1, fontSize:'13px', color:'#374151', fontWeight:'500' }}>{k.punkt}</span>
+              <div style={{ display:'flex', gap:'6px' }}>
+                {[['Ja',true,'#16a34a','#f0fdf4'],['Nei',false,'#dc2626','#fef2f2']].map(([l,val,col,bg]) => (
+                  <button key={l} type="button" onClick={()=>updateKp(k.id,'svar',k.svar===val?null:val)}
+                    style={{ padding:'5px 14px', borderRadius:'8px', border:`1px solid ${k.svar===val?col:'#e2e8f0'}`, background:k.svar===val?bg:'white', color:k.svar===val?col:'#64748b', fontWeight:k.svar===val?'700':'400', fontSize:'13px', cursor:'pointer' }}>{l}
+                  </button>
+                ))}
+              </div>
+              <input value={k.kommentar} onChange={e=>updateKp(k.id,'kommentar',e.target.value)} placeholder="Merknad..." style={{ ...hmsInp, width:'160px' }} />
+            </div>
+          ))}
+        </div>
+        <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Generell kommentar</label><textarea value={form.kommentar} onChange={e=>set('kommentar',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Andre merknader..." /></div>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett mottakskontroll'}</button>
+        </div>
+      </form>
+    </HmsModalShell>
+  )
+}
+
+function MottakskontrollView({ rec, proj }) {
+  const d = rec.data||{}
+  const avvikCount = d.varer?.filter(v=>v.tilstand!=='OK').length||0
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      <div style={hmsCard}>
+        <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0891b2' }}>📦 Mottakskontroll</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+          {[['Prosjekt',proj?.name],['Dato',d.dato],['Leverandør',d.leverandor],['Ordrenr.',d.ordrenummer],['Mottatt av',d.mottattAv],['Sted',d.sted],['Transportør',d.transportor],['Fraktseddel',d.fraktseddel]].filter(r=>r[1]).map(([k,v]) => (
+            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
+          ))}
+        </div>
+        {avvikCount>0&&<div style={{ background:'#fffbeb', borderRadius:'8px', padding:'9px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>⚠️ {avvikCount} vare{avvikCount>1?'r':''} med avvik</div>}
+      </div>
+      {d.varer?.length>0&&<div style={hmsCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Vareliste</h3>{d.varer.map((v,i)=><div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', background:v.tilstand!=='OK'?'#fffbeb':'#f8fafc', borderRadius:'8px', padding:'9px 14px', marginBottom:'6px', border:`1px solid ${v.tilstand!=='OK'?'#fde68a':'#f1f5f9'}` }}><span style={{ flex:1, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{v.beskrivelse||`Vare ${i+1}`}</span><span style={{ fontSize:'12px', color:'#64748b' }}>{v.antall}/{v.bestiltAntall||'?'} {v.enhet}</span><span style={{ fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px', background:v.tilstand==='OK'?'#f0fdf4':v.tilstand==='Avvik'?'#fffbeb':'#fef2f2', color:v.tilstand==='OK'?'#16a34a':v.tilstand==='Avvik'?'#d97706':'#dc2626' }}>{v.tilstand}</span>{v.avvik&&<span style={{ fontSize:'12px', color:'#64748b' }}>{v.avvik}</span>}</div>)}</div>}
+      {d.kontrollpunkter?.length>0&&<div style={hmsCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>✅ Kontrollpunkter</h3>{d.kontrollpunkter.map((kp,i)=><div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px', marginBottom:'4px' }}><span style={{ fontSize:'16px' }}>{kp.svar===true?'✅':kp.svar===false?'❌':'⬜'}</span><span style={{ flex:1, fontSize:'13px', color:'#374151' }}>{kp.punkt}</span>{kp.kommentar&&<span style={{ fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>{kp.kommentar}</span>}</div>)}</div>}
+      {d.kommentar&&<div style={hmsCard}><h4 style={{ margin:'0 0 6px', fontSize:'13px', fontWeight:'700', color:'#374151' }}>Kommentar</h4><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{d.kommentar}</p></div>}
+    </div>
+  )
+}
+
+function HandbokModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [title, setTitle] = useState(initial?.title||'')
+  const [projectId, setProjectId] = useState(initial?.project_id||'')
+  const d0 = initial?.data||{}
+  const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], versjon:d0.versjon||'1.0', ansvarlig:d0.ansvarlig||'', formal:d0.formal||'', omfang:d0.omfang||'', malsetning:d0.malsetning||'' })
+  const [seksjoner, setSeksjoner] = useState(d0.seksjoner||[
+    {id:1,tittel:'HMS-policy',innhold:''},
+    {id:2,tittel:'Organisasjon og ansvar',innhold:''},
+    {id:3,tittel:'Risikovurdering',innhold:''},
+    {id:4,tittel:'Verneutstyr (PPE)',innhold:''},
+    {id:5,tittel:'Beredskapsplan',innhold:''},
+  ])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const addSeksjon = () => setSeksjoner(s=>[...s,{id:Date.now(),tittel:'',innhold:''}])
+  const removeSeksjon = (id) => setSeksjoner(s=>s.filter(x=>x.id!==id))
+  const updateSeksjon = (id,f,v) => setSeksjoner(s=>s.map(x=>x.id===id?{...x,[f]:v}:x))
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!title.trim()||!projectId) return alert('Tittel og prosjekt er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { title:title.trim(), project_id:projectId, type:'handbok', status:initial?.status||'Utkast', data:{...form,seksjoner}, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+  const lbl = () => ({ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' })
+  return (
+    <HmsModalShell title={`📗 ${isEdit?'Rediger':'Ny'} HMS-håndbok`} onClose={onClose} size="xl">
+      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. HMS-håndbok – Prosjekt X 2025" style={hmsInp} /></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
+          <div><label style={lbl()}>Versjon</label><input value={form.versjon} onChange={e=>set('versjon',e.target.value)} placeholder="1.0" style={hmsInp} /></div>
+          <div><label style={lbl()}>HMS-ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Formål</label><textarea value={form.formal} onChange={e=>set('formal',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Formålet med HMS-håndboken..." /></div>
+          <div><label style={lbl()}>Omfang</label><textarea value={form.omfang} onChange={e=>set('omfang',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hvem gjelder håndboken for?" /></div>
+          <div><label style={lbl()}>HMS-målsetning</label><textarea value={form.malsetning} onChange={e=>set('malsetning',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Bedriftens HMS-målsetninger..." /></div>
+        </div>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Seksjoner ({seksjoner.length})</h3>
+            <button type="button" onClick={addSeksjon} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til seksjon</button>
+          </div>
+          {seksjoner.map((s,idx) => (
+            <div key={s.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'10px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#ecfdf5', color:'#059669', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{idx+1}</span>
+                <input value={s.tittel} onChange={e=>updateSeksjon(s.id,'tittel',e.target.value)} placeholder="Seksjonstittel" style={{ ...hmsInp, flex:1 }} />
+                {seksjoner.length>1&&<button type="button" onClick={()=>removeSeksjon(s.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px' }}>Fjern</button>}
+              </div>
+              <textarea value={s.innhold} onChange={e=>updateSeksjon(s.id,'innhold',e.target.value)} placeholder="Skriv innhold for denne seksjonen..." rows={4} style={{ ...hmsInp, resize:'vertical' }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett HMS-håndbok'}</button>
+        </div>
+      </form>
+    </HmsModalShell>
+  )
+}
+
+function HandbokView({ rec, proj }) {
+  const d = rec.data||{}
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      <div style={hmsCard}>
+        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#059669' }}>📗 HMS-håndbok</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+          {[['Prosjekt',proj?.name],['Dato',d.dato],['Versjon',d.versjon],['HMS-ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
+            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
+          ))}
+        </div>
+        {[['Formål',d.formal],['Omfang',d.omfang],['HMS-målsetning',d.malsetning]].filter(r=>r[1]).map(([k,v]) => (
+          <div key={k} style={{ marginBottom:'10px' }}><div style={{ fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'4px', textTransform:'uppercase' }}>{k}</div><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{v}</p></div>
+        ))}
+      </div>
+      {d.seksjoner?.length>0&&d.seksjoner.map((s,i) => (
+        <div key={i} style={hmsCard}>
+          <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{i+1}. {s.tittel}</h3>
+          <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{s.innhold||<span style={{ color:'#94a3b8', fontStyle:'italic' }}>Ingen innhold</span>}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── END HMS MODULE ───────────────────────────────────────────────────────────
+
+
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -2479,7 +3347,8 @@ function AppContent() {
         {page === 'sjekkliste_detaljer' && <SjekklisteDetaljerPage checklistId={checklistId} onBack={() => setPage('sjekklister')} />}
         {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
         {page === 'avvik' && <AvvikPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && (
+        {page === 'hms' && <HmsPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
