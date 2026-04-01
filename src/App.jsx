@@ -4423,41 +4423,36 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
     setSending(true)
     try {
       const approvalUrl = `${window.location.origin}/godkjenn?token=${quote.token}`
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: import.meta.env.VITE_FROM_EMAIL || 'tilbud@enplattform.no',
-          to: [email],
-          subject: `Tilbud ${quote.quote_number} – ${quote.title}`,
-          html: `
-            <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-              <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">${quote.title}</h1>
-              <p style="color:#64748b;font-size:14px">Tilbudsnummer: <strong>${quote.quote_number}</strong></p>
-              ${quote.intro_text ? `<p style="color:#475569;line-height:1.6">${quote.intro_text}</p>` : ''}
-              <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0">
-                <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM EKS. MVA</div>
-                <div style="font-size:28px;font-weight:800;color:#0f172a">${fmt(grandTotal)}</div>
-                <div style="font-size:13px;color:#64748b;margin-top:4px">Inkl. mva: ${fmt(grandTotal*1.25)}</div>
-              </div>
-              ${quote.valid_until ? `<p style="color:#64748b;font-size:13px">Tilbudet er gyldig til: <strong>${quote.valid_until}</strong></p>` : ''}
-              ${quote.payment_terms ? `<p style="color:#64748b;font-size:13px">Betalingsbetingelser: <strong>${quote.payment_terms}</strong></p>` : ''}
-              <div style="text-align:center;margin:32px 0">
-                <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
-              </div>
-              ${quote.outro_text ? `<p style="color:#64748b;font-size:13px;line-height:1.6">${quote.outro_text}</p>` : ''}
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-              <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
-            </div>
-          `
-        })
+      const emailHtml = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">${quote.title}</h1>
+          <p style="color:#64748b;font-size:14px">Tilbudsnummer: <strong>${quote.quote_number}</strong></p>
+          ${quote.intro_text ? `<p style="color:#475569;line-height:1.6">${quote.intro_text}</p>` : ''}
+          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0">
+            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM EKS. MVA</div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a">${fmt(grandTotal)}</div>
+            <div style="font-size:13px;color:#64748b;margin-top:4px">Inkl. mva: ${fmt(grandTotal*1.25)}</div>
+          </div>
+          ${quote.valid_until ? `<p style="color:#64748b;font-size:13px">Tilbudet er gyldig til: <strong>${quote.valid_until}</strong></p>` : ''}
+          ${quote.payment_terms ? `<p style="color:#64748b;font-size:13px">Betalingsbetingelser: <strong>${quote.payment_terms}</strong></p>` : ''}
+          <div style="text-align:center;margin:32px 0">
+            <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
+          </div>
+          ${quote.outro_text ? `<p style="color:#64748b;font-size:13px;line-height:1.6">${quote.outro_text}</p>` : ''}
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+        </div>
+      `
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('send-quote', {
+        body: { to: email, subject: `Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml }
       })
-      if (!res.ok) { const err = await res.json(); throw new Error(err.message || 'Sending feilet') }
+      if (fnError) throw new Error(fnError.message)
+      if (fnData?.error) throw new Error(fnData.error)
 
       await supabase.from('quotes').update({ status: 'Sendt', sent_at: new Date().toISOString(), customer_email: email }).eq('id', quote.id)
       setSent(true)
       setTimeout(() => onSent(), 1500)
-    } catch(e) { alert('Kunne ikke sende: ' + e.message + '\n\nSjekk at VITE_RESEND_API_KEY er satt i Vercel.') }
+    } catch(e) { alert('Kunne ikke sende: ' + e.message) }
     finally { setSending(false) }
   }
 
