@@ -5552,6 +5552,682 @@ function UEPrisingsPage() {
 
 // ─── END ANBUDSMODUL ──────────────────────────────────────────────────────────
 
+// ─── ORDRE MODULE ─────────────────────────────────────────────────────────────
+
+const ORDER_STATUS = {
+  'Utkast':   { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
+  'Sendt':    { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📤' },
+  'Bekreftet':{ bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', emoji:'✅' },
+  'Pågår':    { bg:'#fffbeb', color:'#d97706', border:'#fde68a', emoji:'⚙️' },
+  'Fullført': { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'🏁' },
+  'Avslått':  { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'❌' },
+}
+
+const oInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+const oCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+function OrderStatusBadge({ status }) {
+  const cfg = ORDER_STATUS[status] || ORDER_STATUS['Utkast']
+  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {status}</span>
+}
+
+function calcOrderChapter(ch) {
+  const sum = (ch.posts||[]).reduce((acc,p) => acc + (parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0)), 0)
+  return { sum, total: sum * (1 + (parseFloat(ch.markup)||0)/100) }
+}
+
+function calcOrder(chapters, globalMarkup) {
+  const chapterTotals = chapters.reduce((acc,ch) => acc + calcOrderChapter(ch).total, 0)
+  return { chapterTotals, grandTotal: chapterTotals * (1 + (parseFloat(globalMarkup)||0)/100) }
+}
+
+function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function OrdrePage() {
+  const { user } = useAuth()
+  const [orders, setOrders] = useState([])
+  const [quotes, setQuotes] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [showFromQuote, setShowFromQuote] = useState(false)
+  const [selected, setSelected] = useState(null)
+
+  const load = async () => {
+    try {
+      const [o, q, p] = await Promise.all([
+        supabase.from('orders').select('*').order('created_at', { ascending:false }).then(r=>r.data||[]),
+        supabase.from('quotes').select('*').eq('status','Akseptert').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+      ])
+      setOrders(o); setQuotes(q); setProjects(p)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = orders.filter(o => {
+    if (filterStatus !== 'alle' && o.status !== filterStatus) return false
+    if (search && ![o.title,o.order_number,o.customer_name].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const counts = Object.keys(ORDER_STATUS).reduce((acc,s) => { acc[s]=orders.filter(o=>o.status===s).length; return acc }, {})
+  const totalFullfort = orders.filter(o=>o.status==='Fullført').reduce((acc,o)=>acc+calcOrder(o.chapters||[],o.global_markup).grandTotal,0)
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ordrer...</p></div></div>
+  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📦 Ordre</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>
+          </div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Fra akseptert tilbud</button>}
+            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny ordre</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr) 1.3fr', gap:'12px' }}>
+          {['Utkast','Sendt','Bekreftet','Pågår','Fullført'].map(s => {
+            const cfg = ORDER_STATUS[s]
+            return (
+              <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
+                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'14px', cursor:'pointer', textAlign:'left' }}>
+                <div style={{ fontSize:'20px', marginBottom:'6px' }}>{cfg.emoji}</div>
+                <div style={{ fontSize:'20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+                <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              </button>
+            )
+          })}
+          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'14px', color:'white' }}>
+            <div style={{ fontSize:'20px', marginBottom:'6px' }}>💰</div>
+            <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtO(totalFullfort)}</div>
+            <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Fullført totalt</div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk ordre, kunde, nummer..." style={{ ...oInp, maxWidth:'260px', flex:1 }} />
+          {(search||filterStatus!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} ordrer</span>
+        </div>
+
+        {/* List */}
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📦</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen ordrer funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{orders.length===0?'Opprett din første ordre.':'Prøv å endre søk eller filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(o => {
+              const cfg = ORDER_STATUS[o.status]
+              const proj = projects.find(p=>p.id===o.project_id)
+              const { grandTotal } = calcOrder(o.chapters||[], o.global_markup)
+              return (
+                <div key={o.id} onClick={()=>setSelected(o)}
+                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{o.title}</span>
+                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>
+                      <OrderStatusBadge status={o.status} />
+                      {o.quote_id && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #ddd6fe' }}>Fra tilbud</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {o.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {o.customer_name}</span>}
+                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {o.delivery_date && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Levering {o.delivery_date}</span>}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtO(grandTotal)}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNew && <OrdreEditorModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+      {showFromQuote && <FraIlbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowFromQuote(false)} onSaved={()=>{setShowFromQuote(false);load()}} />}
+    </div>
+  )
+}
+
+function OrdreDetaljer({ order: init, projects, user, onBack }) {
+  const [o, setO] = useState(init)
+  const [changes, setChanges] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [showSend, setShowSend] = useState(false)
+  const [showNewChange, setShowNewChange] = useState(false)
+  const cfg = ORDER_STATUS[o.status]
+  const proj = projects.find(p=>p.id===o.project_id)
+  const { grandTotal, chapterTotals } = calcOrder(o.chapters||[], o.global_markup)
+  const changesTotal = changes.filter(c=>c.status==='Godkjent').reduce((acc,c)=>acc+(c.amount||0),0)
+
+  const loadChanges = async () => {
+    const { data } = await supabase.from('order_changes').select('*').eq('order_id',o.id).order('created_at')
+    setChanges(data||[])
+  }
+  const refresh = async () => {
+    const { data } = await supabase.from('orders').select('*').eq('id',o.id).single()
+    if (data) setO(data)
+  }
+  useEffect(() => { loadChanges() }, [])
+
+  const updateStatus = async (status) => {
+    const updates = { status, updated_at: new Date().toISOString() }
+    if (status==='Bekreftet') updates.confirmed_at = new Date().toISOString()
+    if (status==='Fullført') updates.completed_at = new Date().toISOString()
+    await supabase.from('orders').update(updates).eq('id',o.id)
+    setO(v=>({...v,...updates}))
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne ordren?')) return
+    await supabase.from('orders').delete().eq('id',o.id)
+    onBack()
+  }
+
+  const createInvoice = async () => {
+    alert('Fakturamodulen er under utvikling. Kommer snart!')
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <style>{`@media print { .no-print{display:none!important} }`}</style>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ordrer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{o.title}</h1>
+                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>
+                <OrderStatusBadge status={o.status} />
+              </div>
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                {o.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {o.customer_name}</span>}
+                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
+            {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send bekreftelse</button>}
+            {o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Opprett faktura</button>}
+            <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄 Endringsmelding</button>
+            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
+            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Header info */}
+          <div style={oCard}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
+                {[['Navn',o.customer_name],['Adresse',o.customer_address],['Org.nr',o.customer_orgnr],['E-post',o.customer_email]].filter(r=>r[1]).map(([k,v])=>(
+                  <div key={k} style={{ marginBottom:'5px', fontSize:'13px' }}><span style={{ color:'#94a3b8' }}>{k}: </span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Ordreinfo</div>
+                {[['Ordrenr.',o.order_number],['Dato',o.created_at?.split('T')[0]],['Levering',o.delivery_date],['Betalingsbetingelser',o.payment_terms]].filter(r=>r[1]).map(([k,v])=>(
+                  <div key={k} style={{ marginBottom:'5px', fontSize:'13px' }}><span style={{ color:'#94a3b8' }}>{k}: </span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
+                ))}
+              </div>
+            </div>
+            {o.intro_text && <p style={{ margin:'14px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>{o.intro_text}</p>}
+          </div>
+
+          {/* Chapters */}
+          {(o.chapters||[]).map((ch,ci) => {
+            const { sum, total } = calcOrderChapter(ch)
+            return (
+              <div key={ci} style={oCard}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                  <div style={{ textAlign:'right' }}>
+                    {ch.markup>0 && <div style={{ fontSize:'11px', color:'#94a3b8' }}>Påslag {ch.markup}%</div>}
+                    <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmtO(total)}</div>
+                  </div>
+                </div>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                  <thead><tr style={{ background:'#f8fafc' }}>
+                    {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:['Arbeid/enh','Material/enh','Sum'].includes(h)?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {(ch.posts||[]).map((p,pi) => {
+                      const ls=(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
+                      return <tr key={pi} style={{ borderBottom:'1px solid #f8fafc' }}>
+                        <td style={{ padding:'9px 10px', color:'#0f172a', fontWeight:'500' }}>{p.description||'—'}</td>
+                        <td style={{ padding:'9px 10px', textAlign:'right', color:'#475569' }}>{p.qty}</td>
+                        <td style={{ padding:'9px 10px', color:'#475569' }}>{p.unit}</td>
+                        <td style={{ padding:'9px 10px', textAlign:'right', color:'#475569' }}>{p.unitPriceWork?fmtO(p.unitPriceWork):'—'}</td>
+                        <td style={{ padding:'9px 10px', textAlign:'right', color:'#475569' }}>{p.unitPriceMaterial?fmtO(p.unitPriceMaterial):'—'}</td>
+                        <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtO(ls)}</td>
+                      </tr>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+
+          {/* Totals */}
+          <div style={{ ...oCard, background:'#f8fafc' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'320px', marginLeft:'auto' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}><span>Ordresum</span><span style={{ fontWeight:'600' }}>{fmtO(chapterTotals)}</span></div>
+              {changes.filter(c=>c.status==='Godkjent').length>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#d97706' }}><span>Endringsmeldinger</span><span style={{ fontWeight:'600' }}>+{fmtO(changesTotal)}</span></div>}
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px' }}><span>Total eks. mva</span><span style={{ color:'#059669' }}>{fmtO(grandTotal+changesTotal)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#94a3b8' }}><span>Mva 25%</span><span>{fmtO((grandTotal+changesTotal)*0.25)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}><span>Total inkl. mva</span><span>{fmtO((grandTotal+changesTotal)*1.25)}</span></div>
+            </div>
+          </div>
+
+          {/* Endringsmeldinger */}
+          {changes.length > 0 && (
+            <div style={oCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🔄 Endringsmeldinger ({changes.length})</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {changes.map(c => {
+                  const sCfg = c.status==='Godkjent'?{bg:'#f0fdf4',color:'#16a34a',border:'#bbf7d0'}:c.status==='Sendt'?{bg:'#eff6ff',color:'#2563eb',border:'#bfdbfe'}:c.status==='Avslått'?{bg:'#fef2f2',color:'#dc2626',border:'#fecaca'}:{bg:'#f8fafc',color:'#64748b',border:'#e2e8f0'}
+                  return (
+                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{c.change_number} – {c.title}</div>
+                        {c.description && <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{c.description}</div>}
+                      </div>
+                      <span style={{ background:sCfg.bg, color:sCfg.color, border:`1px solid ${sCfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{c.status}</span>
+                      <span style={{ fontWeight:'800', color:'#0f172a', fontSize:'14px', minWidth:'80px', textAlign:'right' }}>+{fmtO(c.amount)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="no-print" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={oCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.keys(ORDER_STATUS).map(s=>(
+                <button key={s} onClick={()=>updateStatus(s)} disabled={o.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${o.status===s?ORDER_STATUS[s].border:'#e2e8f0'}`, background:o.status===s?ORDER_STATUS[s].bg:'white', color:o.status===s?ORDER_STATUS[s].color:'#475569', fontWeight:o.status===s?'700':'400', fontSize:'13px', cursor:o.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {o.status===s?'✓ ':''}{ORDER_STATUS[s].emoji} {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={oCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>💰 Oppsummering</h3>
+            <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', border:'1px solid #bbf7d0' }}>
+              <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Total eks. mva</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{fmtO(grandTotal+changesTotal)}</div>
+            </div>
+            <div style={{ marginTop:'10px', display:'flex', flexDirection:'column', gap:'4px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#94a3b8' }}><span>Mva 25%</span><span>{fmtO((grandTotal+changesTotal)*0.25)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}><span>Inkl. mva</span><span>{fmtO((grandTotal+changesTotal)*1.25)}</span></div>
+            </div>
+          </div>
+          <div style={oCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Detaljer</h3>
+            {[['Prosjekt',proj?.name],['Levering',o.delivery_date],['Betaling',o.payment_terms],['Bekreftet',o.confirmed_at?new Date(o.confirmed_at).toLocaleDateString('nb-NO'):null],['Fullført',o.completed_at?new Date(o.completed_at).toLocaleDateString('nb-NO'):null]].filter(r=>r[1]).map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a', textAlign:'right', maxWidth:'55%' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {editing && <OrdreEditorModal projects={projects} user={user} initial={o} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {showSend && <SendOrdreModal order={o} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
+      {showNewChange && <EndringsmeldingModal order={o} user={user} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
+    </div>
+  )
+}
+
+function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [step, setStep] = useState(1)
+  const [form, setForm] = useState({
+    title: initial?.title||'', order_number: initial?.order_number||`ORD-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
+    customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
+    delivery_date: initial?.delivery_date||'', payment_terms: initial?.payment_terms||'30 dager netto',
+    intro_text: initial?.intro_text||'', outro_text: initial?.outro_text||'',
+    global_markup: initial?.global_markup||0,
+  })
+  const [chapters, setChapters] = useState(initial?.chapters||[
+    { id:Date.now(), title:'Generelt', markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}] }
+  ])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const addChapter = () => setChapters(c=>[...c,{id:Date.now(),title:`Kapittel ${c.length+1}`,markup:0,posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}])
+  const removeChapter = (id) => setChapters(c=>c.filter(x=>x.id!==id))
+  const updateChapter = (id,f,v) => setChapters(c=>c.map(x=>x.id===id?{...x,[f]:v}:x))
+  const addPost = (chId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:[...x.posts,{id:Date.now(),description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}:x))
+  const removePost = (chId,pId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.filter(p=>p.id!==pId)}:x))
+  const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { ...form, chapters, project_id:form.project_id||null, updated_at:new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('orders').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('orders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+  const { grandTotal } = calcOrder(chapters, form.global_markup)
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📦 {isEdit?'Rediger':'Ny'} ordre</h2>
+            <div style={{ display:'flex', gap:'4px' }}>
+              {[['1','Informasjon'],['2','Linjer & Poster']].map(([n,l])=>(
+                <button key={n} onClick={()=>setStep(+n)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize:'13px', cursor:'pointer' }}>{n}. {l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtO(grandTotal)}</strong></span>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+          {step===1 && (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
+              <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
+              <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={oInp} /></div>
+              <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
+              <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Gateadresse" style={oInp} /></div>
+              <div>{lbl('Org.nr')}<input value={form.customer_orgnr} onChange={e=>set('customer_orgnr',e.target.value)} placeholder="123 456 789" style={oInp} /></div>
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Betingelser</div></div>
+              <div>{lbl('Leveringsdato')}<input type="date" value={form.delivery_date} onChange={e=>set('delivery_date',e.target.value)} style={oInp} /></div>
+              <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={oInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" style={oInp} /></div>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Ordrebekreftelse for..." style={{ ...oInp, resize:'none' }} /></div>
+            </div>
+          )}
+          {step===2 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+              {chapters.map((ch,ci) => {
+                const { sum, total } = calcOrderChapter(ch)
+                return (
+                  <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+                    <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
+                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
+                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
+                    </div>
+                    <div style={{ padding:'14px 18px' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead><tr>{['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
+                        <tbody>
+                          {ch.posts.map(p => {
+                            const ls=(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
+                            return <tr key={p.id}>
+                              <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...oInp, width:'55px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
+                              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtO(ls)}</td>
+                              <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                            </tr>
+                          })}
+                        </tbody>
+                      </table>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginTop:'10px' }}>
+                        <button onClick={()=>addPost(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
+                        <div style={{ fontSize:'13px', color:'#64748b' }}>Sum: <strong>{fmtO(sum)}</strong>{ch.markup>0?` + påslag = ${fmtO(total)}`:''}</div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+              <button onClick={addChapter} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
+              <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'18px 24px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div><div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Total eks. mva</div></div>
+                <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmtO(grandTotal)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>← Tilbake</button>}</div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            {step===1&&<button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Linjer →</button>}
+            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett ordre'}</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
+  const [selectedQuote, setSelectedQuote] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleCreate = async () => {
+    const q = quotes.find(x=>x.id===selectedQuote)
+    if (!q) return alert('Velg et tilbud')
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('orders').insert({
+        title: q.title, order_number: `ORD-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+        project_id: q.project_id||null, quote_id: q.id,
+        customer_name: q.customer_name, customer_email: q.customer_email,
+        customer_address: q.customer_address, customer_orgnr: q.customer_orgnr,
+        payment_terms: q.payment_terms||'30 dager netto',
+        intro_text: q.intro_text, outro_text: q.outro_text,
+        chapters: q.chapters, global_markup: q.global_markup||0,
+        status: 'Utkast', created_by: user?.id,
+      })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Opprett ordre fra tilbud</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          <p style={{ margin:0, fontSize:'14px', color:'#64748b' }}>Velg et akseptert tilbud. Alle kapitler og poster kopieres automatisk til ordren.</p>
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {quotes.map(q => {
+              const { grandTotal } = calcOrder(q.chapters||[], q.global_markup)
+              const proj = projects.find(p=>p.id===q.project_id)
+              return (
+                <button key={q.id} onClick={()=>setSelectedQuote(q.id)}
+                  style={{ padding:'14px 16px', borderRadius:'12px', border:`2px solid ${selectedQuote===q.id?'#059669':'#e2e8f0'}`, background:selectedQuote===q.id?'#f0fdf4':'white', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <div>
+                    <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{q.title}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{q.quote_number}{proj?` · ${proj.name}`:''}{q.customer_name?` · ${q.customer_name}`:''}</div>
+                  </div>
+                  <div style={{ fontWeight:'800', color:selectedQuote===q.id?'#059669':'#0f172a', fontSize:'15px' }}>{fmtO(grandTotal)}</div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett ordre'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SendOrdreModal({ order, user, onClose, onSent }) {
+  const [email, setEmail] = useState(order.customer_email||'')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const { grandTotal } = calcOrder(order.chapters||[], order.global_markup)
+
+  const handleSend = async () => {
+    if (!email) return alert('E-postadresse er påkrevd')
+    setSending(true)
+    try {
+      const approvalUrl = await createApprovalToken({ module:'order', recordId:order.id, recipientEmail:email, createdBy:user?.id })
+      const html = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Ordrebekreftelse: ${order.title}</h1>
+          <p style="color:#64748b;font-size:14px">Ordrenummer: <strong>${order.order_number}</strong></p>
+          ${order.intro_text?`<p style="color:#475569;line-height:1.6">${order.intro_text}</p>`:''}
+          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0">
+            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM EKS. MVA</div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a">${fmtO(grandTotal)}</div>
+            <div style="font-size:13px;color:#64748b;margin-top:4px">Inkl. mva: ${fmtO(grandTotal*1.25)}</div>
+          </div>
+          ${order.delivery_date?`<p style="color:#64748b;font-size:13px">Leveringsdato: <strong>${order.delivery_date}</strong></p>`:''}
+          ${order.payment_terms?`<p style="color:#64748b;font-size:13px">Betalingsbetingelser: <strong>${order.payment_terms}</strong></p>`:''}
+          <div style="text-align:center;margin:32px 0">
+            <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Bekreft ordre</a>
+          </div>
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+        </div>`
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method:'POST', headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
+        body: JSON.stringify({ to:email, subject:`Ordrebekreftelse ${order.order_number} – ${order.title}`, html })
+      })
+      const d = await fnRes.json()
+      if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
+      await supabase.from('orders').update({ status:'Sendt', updated_at:new Date().toISOString(), customer_email:email }).eq('id',order.id)
+      setSent(true); setTimeout(()=>onSent(),1500)
+    } catch(e) { alert('Kunne ikke sende: '+e.message) }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send ordrebekreftelse</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ordrebekreftelse sendt!</h3>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar e-post med bekreftelsesknapp</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0' }}>
+                <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Ordre: {order.title}</div>
+                <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a', marginTop:'4px' }}>{fmtO(grandTotal)}</div>
+              </div>
+              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e' }}>⚠️ Kunden mottar en e-post med en <strong>bekreftelsesknapp</strong>. Ordren settes til «Bekreftet» og du får varsel.</div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send nå'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EndringsmeldingModal({ order, user, existingCount, onClose, onSaved }) {
+  const [form, setForm] = useState({ title:'', description:'', amount:0 })
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const change_number = `EM-${String(existingCount+1).padStart(3,'0')}`
+      const { error } = await supabase.from('order_changes').insert({ order_id:order.id, change_number, title:form.title.trim(), description:form.description||null, amount:parseFloat(form.amount)||0, status:'Utkast', created_by:user?.id })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny endringsmelding</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid drensgrøft" style={oInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beskrivelse</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} placeholder="Beskriv endringen..." style={{ ...oInp, resize:'none' }} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beløp eks. mva (kr)</label><input type="number" value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder="0" style={oInp} /></div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Opprett endringsmelding'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END ORDRE MODULE ─────────────────────────────────────────────────────────
+
 
 
 
@@ -5646,7 +6322,8 @@ function AppContent() {
         {page === 'maskiner' && <MaskinPage />}
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && (
+        {page === 'ordre' && <OrdrePage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
