@@ -3264,6 +3264,7 @@ function HandbokView({ rec, proj }) {
 
 // ─── END HMS MODULE ───────────────────────────────────────────────────────────
 
+
 // ─── MASKIN MODULE ────────────────────────────────────────────────────────────
 
 const MASKIN_STATUS = {
@@ -3273,7 +3274,31 @@ const MASKIN_STATUS = {
   'Utrangert':   { emoji: '🚫', bg: '#f8fafc', color: '#94a3b8', border: '#e2e8f0' },
 }
 
-const MASKIN_TYPER = ['Gravemaskin','Hjullaster','Dumper','Kran','Kompressor','Stillasmateriell','Truck','Lift','Betongblandemaskin','Generator','Pumpe','Annet']
+const MASKIN_KATEGORIER = {
+  'Maskin / Kjøretøy': [
+    'Gravemaskin','Hjullaster','Dumper','Minidumper','Truck','Teleskoptruck',
+    'Kompaktlaster','Vals','Asfaltlegger','Traktor','Kran','Mobilkran','Annet kjøretøy'
+  ],
+  'Håndverktøy / Elektroverktøy': [
+    'Slagborrmaskin','Kjedeborrmaskin','Piggemaskin','Vinkelsliper','Rundsag',
+    'Stikksag','Boremaskin','Spikerpistol','Sliperimaskin','Høvlemaskin',
+    'Fresmaskin','Betongsag','Kjernebormaskin','Nivelleringslaser',
+    'Rotasjonslaser','Multimeter','Varmepistol','Annet håndverktøy'
+  ],
+  'Stillas / Løfteutstyr': [
+    'Rullestillas','Fasadestillas','Hengestillas','Klaffestillas',
+    'Sakselift','Teleskoplift','Personheis','Materialheismaskin',
+    'Stativkran','Talje','Annet løfteutstyr'
+  ],
+  'Maling / Overflatebehandling': [
+    'Malingspumpe','Airless-sprøyte','Kompressor','Sandblåser',
+    'Høytrykksspyler','Dampvasker','Gulvsliper','Annet maleutstyr'
+  ],
+  'Annet utstyr': [
+    'Generator','Lysmast','Varmekanon','Tørkeaggregat','Pumpe',
+    'Vannpumpe','Betongblandemaskin','Betongvibrator','Annet'
+  ],
+}
 
 const mInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
 const mCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
@@ -3285,28 +3310,29 @@ function MaskinStatusBadge({ status }) {
 
 function daysUntil(dateStr) {
   if (!dateStr) return null
-  const diff = Math.ceil((new Date(dateStr) - new Date()) / (1000*60*60*24))
-  return diff
+  return Math.ceil((new Date(dateStr) - new Date()) / (1000*60*60*24))
 }
 
 function ServiceBadge({ date }) {
   if (!date) return null
   const days = daysUntil(date)
   let bg='#f0fdf4', color='#16a34a', label=`Service om ${days}d`
-  if (days < 0)  { bg='#fef2f2'; color='#dc2626'; label=`Forfalt ${Math.abs(days)}d siden` }
-  else if (days <= 14) { bg='#fef2f2'; color='#dc2626'; label=`Service om ${days}d` }
-  else if (days <= 30) { bg='#fffbeb'; color='#d97706'; label=`Service om ${days}d` }
-  return <span style={{ background:bg, color, border:`1px solid ${bg}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>🔧 {label}</span>
+  if (days < 0)       { bg='#fef2f2'; color='#dc2626'; label=`Forfalt ${Math.abs(days)}d siden` }
+  else if (days <= 14){ bg='#fef2f2'; color='#dc2626'; label=`Service om ${days}d` }
+  else if (days <= 30){ bg='#fffbeb'; color='#d97706'; label=`Service om ${days}d` }
+  return <span style={{ background:bg, color, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600', border:`1px solid ${bg}` }}>🔧 {label}</span>
 }
 
+// ── MAIN PAGE ────────────────────────────────────────────────────────────────
 function MaskinPage() {
   const { user } = useAuth()
   const [maskiner, setMaskiner] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('alle')
-  const [filterType, setFilterType] = useState('alle')
+  const [filterKat, setFilterKat] = useState('alle')
   const [search, setSearch] = useState('')
+  const [visning, setVisning] = useState('liste') // 'liste' | 'rutenett'
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
 
@@ -3324,20 +3350,28 @@ function MaskinPage() {
 
   const filtered = maskiner.filter(m => {
     if (filterStatus !== 'alle' && m.status !== filterStatus) return false
-    if (filterType !== 'alle' && m.type !== filterType) return false
-    if (search && !m.name?.toLowerCase().includes(search.toLowerCase()) && !m.brand?.toLowerCase().includes(search.toLowerCase()) && !m.serial_number?.toLowerCase().includes(search.toLowerCase())) return false
+    if (filterKat !== 'alle' && m.category !== filterKat) return false
+    if (search && ![m.name,m.brand,m.model,m.serial_number].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
     return true
   })
 
   const counts = Object.keys(MASKIN_STATUS).reduce((acc,s) => { acc[s]=maskiner.filter(m=>m.status===s).length; return acc }, {})
   const serviceAlert = maskiner.filter(m => m.next_service && daysUntil(m.next_service) <= 30).length
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster maskiner...</p></div></div>
+  if (loading) return (
+    <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/>
+        <p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster maskiner...</p>
+      </div>
+    </div>
+  )
 
   if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
@@ -3353,7 +3387,7 @@ function MaskinPage() {
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(MASKIN_STATUS).map(([s,cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus===s?'alle':s)}
-              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}>
               <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
               <div style={{ fontSize:'22px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
               <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
@@ -3368,48 +3402,90 @@ function MaskinPage() {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Filters + visningsvalg */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk navn, merke, serienr..." style={{ ...mInp, maxWidth:'240px', flex:1 }} />
-          <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...mInp, maxWidth:'180px' }}>
-            <option value="alle">Alle typer</option>
-            {MASKIN_TYPER.map(t=><option key={t} value={t}>{t}</option>)}
+          <select value={filterKat} onChange={e=>setFilterKat(e.target.value)} style={{ ...mInp, maxWidth:'220px' }}>
+            <option value="alle">Alle kategorier</option>
+            {Object.keys(MASKIN_KATEGORIER).map(k=><option key={k} value={k}>{k}</option>)}
           </select>
-          {(filterStatus!=='alle'||filterType!=='alle'||search) && <button onClick={()=>{setFilterStatus('alle');setFilterType('alle');setSearch('')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          {(filterStatus!=='alle'||filterKat!=='alle'||search) && (
+            <button onClick={()=>{setFilterStatus('alle');setFilterKat('alle');setSearch('')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>
+          )}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} maskiner</span>
+          {/* Visningsknapper */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            <button onClick={()=>setVisning('liste')} style={{ padding:'8px 14px', border:'none', background:visning==='liste'?'#f1f5f9':'white', cursor:'pointer', fontSize:'16px', color:visning==='liste'?'#059669':'#94a3b8' }} title="Listevisning">☰</button>
+            <button onClick={()=>setVisning('rutenett')} style={{ padding:'8px 14px', border:'none', borderLeft:'1px solid #e2e8f0', background:visning==='rutenett'?'#f1f5f9':'white', cursor:'pointer', fontSize:'16px', color:visning==='rutenett'?'#059669':'#94a3b8' }} title="Rutenettvisning">⊞</button>
+          </div>
         </div>
 
-        {/* List */}
-        {filtered.length === 0 ? (
+        {/* Empty state */}
+        {filtered.length === 0 && (
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
             <div style={{ fontSize:'40px', marginBottom:'12px' }}>🚜</div>
             <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen maskiner funnet</h3>
             <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{maskiner.length===0?'Legg til din første maskin.':'Prøv å endre filtervalg.'}</p>
           </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+        )}
+
+        {/* LISTEVISNING */}
+        {visning === 'liste' && filtered.length > 0 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {filtered.map(m => {
               const cfg = MASKIN_STATUS[m.status]
               const proj = projects.find(p=>p.id===m.current_project_id)
               return (
                 <div key={m.id} onClick={()=>setSelected(m)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'48px', height:'48px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px', flexShrink:0 }}>{cfg?.emoji}</div>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0 }}>{cfg?.emoji}</div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{m.name}</span>
                       <MaskinStatusBadge status={m.status} />
                       {m.next_service && <ServiceBadge date={m.next_service} />}
                     </div>
-                    <div style={{ display:'flex', gap:'14px', flexWrap:'wrap' }}>
-                      {m.type && <span style={{ fontSize:'12px', color:'#64748b' }}>📋 {m.type}</span>}
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {m.category && <span style={{ fontSize:'12px', color:'#64748b' }}>📋 {m.category}</span>}
+                      {m.type && <span style={{ fontSize:'12px', color:'#64748b' }}>🔩 {m.type}</span>}
                       {m.brand && <span style={{ fontSize:'12px', color:'#64748b' }}>🏷️ {m.brand}{m.model?` ${m.model}`:''}</span>}
                       {m.serial_number && <span style={{ fontSize:'12px', color:'#64748b' }}>🔢 {m.serial_number}</span>}
                       {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
                     </div>
                   </div>
                   <span style={{ color:'#94a3b8', fontSize:'18px', flexShrink:0 }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* RUTENETTVISNING */}
+        {visning === 'rutenett' && filtered.length > 0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:'12px' }}>
+            {filtered.map(m => {
+              const cfg = MASKIN_STATUS[m.status]
+              const proj = projects.find(p=>p.id===m.current_project_id)
+              const days = m.next_service ? daysUntil(m.next_service) : null
+              return (
+                <div key={m.id} onClick={()=>setSelected(m)}
+                  style={{ background:'white', borderRadius:'16px', border:`1px solid ${days!==null&&days<=14?'#fecaca':days!==null&&days<=30?'#fde68a':'#f1f5f9'}`, padding:'18px', cursor:'pointer', display:'flex', flexDirection:'column', gap:'12px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 20px rgba(0,0,0,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                    <div style={{ width:'48px', height:'48px', borderRadius:'12px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{cfg?.emoji}</div>
+                    <MaskinStatusBadge status={m.status} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', marginBottom:'4px' }}>{m.name}</div>
+                    {m.category && <div style={{ fontSize:'12px', color:'#94a3b8', marginBottom:'2px' }}>{m.category}</div>}
+                    {m.type && <div style={{ fontSize:'12px', color:'#64748b' }}>{m.type}</div>}
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                    {m.brand && <div style={{ fontSize:'12px', color:'#64748b' }}>🏷️ {m.brand}{m.model?` ${m.model}`:''}</div>}
+                    {proj && <div style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</div>}
+                    {m.next_service && <ServiceBadge date={m.next_service} />}
+                  </div>
                 </div>
               )
             })}
@@ -3459,8 +3535,9 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
                 <MaskinStatusBadge status={m.status} />
                 {m.next_service && <ServiceBadge date={m.next_service} />}
               </div>
-              <div style={{ display:'flex', gap:'14px', flexWrap:'wrap' }}>
-                {m.type && <span style={{ fontSize:'13px', color:'#64748b' }}>📋 {m.type}</span>}
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                {m.category && <span style={{ fontSize:'13px', color:'#64748b' }}>📋 {m.category}</span>}
+                {m.type && <span style={{ fontSize:'13px', color:'#64748b' }}>🔩 {m.type}</span>}
                 {m.brand && <span style={{ fontSize:'13px', color:'#64748b' }}>🏷️ {m.brand} {m.model}</span>}
                 {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
               </div>
@@ -3475,45 +3552,41 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
       </div>
 
       <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
-        {/* Left - info + log */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={mCard}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Maskininformasjon</h3>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-              {[['Type',m.type],['Merke',m.brand],['Modell',m.model],['Serienummer',m.serial_number],['Årsmodell',m.year],['Siste service',m.last_service],['Neste service',m.next_service],['Prosjekt',proj?.name||'—']].map(([k,v])=>v?(
+              {[['Kategori',m.category],['Type',m.type],['Merke',m.brand],['Modell',m.model],['Serienummer',m.serial_number],['Årsmodell',m.year],['Siste service',m.last_service],['Neste service',m.next_service],['Prosjekt',proj?.name]].filter(r=>r[1]).map(([k,v])=>(
                 <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                   <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
                   <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
                 </div>
-              ):null)}
+              ))}
             </div>
             {m.notes && <p style={{ margin:'12px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>{m.notes}</p>}
           </div>
 
-          {/* Log */}
           <div style={mCard}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📜 Hendelseslogg ({logs.length})</h3>
             {logs.length===0 ? (
               <p style={{ margin:0, color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen loggede hendelser ennå</p>
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+              <div style={{ display:'flex', flexDirection:'column' }}>
                 {logs.map((log,i) => {
-                  const fromCfg = MASKIN_STATUS[log.from_status]
                   const toCfg = MASKIN_STATUS[log.to_status]
-                  const proj = null
                   return (
-                    <div key={log.id} style={{ display:'flex', gap:'12px', paddingBottom:'14px', paddingTop: i>0?'14px':'0', borderTop: i>0?'1px solid #f8fafc':'none' }}>
+                    <div key={log.id} style={{ display:'flex', gap:'12px', paddingBottom:'14px', paddingTop:i>0?'14px':'0', borderTop:i>0?'1px solid #f8fafc':'none' }}>
                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
-                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: toCfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px' }}>{toCfg?.emoji||'📌'}</div>
+                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:toCfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px' }}>{toCfg?.emoji||'📌'}</div>
                         {i < logs.length-1 && <div style={{ width:'2px', flex:1, background:'#f1f5f9', marginTop:'4px' }} />}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px' }}>{log.action}</div>
-                        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
-                          {log.from_status && log.to_status && <span style={{ fontSize:'12px', color:'#64748b' }}>{log.from_status} → <strong style={{ color: toCfg?.color }}>{log.to_status}</strong></span>}
+                        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'2px' }}>
+                          {log.from_status && log.to_status && <span style={{ fontSize:'12px', color:'#64748b' }}>{log.from_status} → <strong style={{ color:toCfg?.color }}>{log.to_status}</strong></span>}
                           {log.employee_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {log.employee_name}</span>}
                         </div>
-                        {log.notes && <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>{log.notes}</p>}
+                        {log.notes && <p style={{ margin:'2px 0 0', fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>{log.notes}</p>}
                         <div style={{ fontSize:'11px', color:'#cbd5e1', marginTop:'4px' }}>{new Date(log.created_at).toLocaleString('nb-NO')}</div>
                       </div>
                     </div>
@@ -3524,11 +3597,10 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
           </div>
         </div>
 
-        {/* Right sidebar */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={mCard}>
-            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📍 Lokasjon</h3>
-            <div style={{ background: cfg?.bg, borderRadius:'12px', padding:'16px', textAlign:'center', border:`1px solid ${cfg?.border}` }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📍 Lokasjon</h3>
+            <div style={{ background:cfg?.bg, borderRadius:'12px', padding:'16px', textAlign:'center', border:`1px solid ${cfg?.border}` }}>
               <div style={{ fontSize:'32px', marginBottom:'8px' }}>{cfg?.emoji}</div>
               <div style={{ fontWeight:'700', color:cfg?.color, fontSize:'16px' }}>{m.status}</div>
               {proj && <div style={{ fontSize:'13px', color:'#64748b', marginTop:'6px' }}>📍 {proj.name}</div>}
@@ -3536,10 +3608,10 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
           </div>
 
           {m.next_service && (
-            <div style={{ ...mCard, background: daysUntil(m.next_service)<=14?'#fef2f2':daysUntil(m.next_service)<=30?'#fffbeb':'white', border: daysUntil(m.next_service)<=30?`1px solid ${daysUntil(m.next_service)<=14?'#fecaca':'#fde68a'}`:'1px solid #f1f5f9' }}>
+            <div style={{ ...mCard, background:daysUntil(m.next_service)<=14?'#fef2f2':daysUntil(m.next_service)<=30?'#fffbeb':'white', border:`1px solid ${daysUntil(m.next_service)<=14?'#fecaca':daysUntil(m.next_service)<=30?'#fde68a':'#f1f5f9'}` }}>
               <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔧 Service</h3>
               <div style={{ fontSize:'13px', color:'#64748b' }}>Neste service:</div>
-              <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', marginTop:'3px' }}>{m.next_service}</div>
+              <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', margin:'3px 0 6px' }}>{m.next_service}</div>
               <ServiceBadge date={m.next_service} />
               {m.last_service && <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Siste: {m.last_service}</div>}
             </div>
@@ -3561,33 +3633,21 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
-    if (newStatus === maskin.status && !notes && !employeeName) return onClose()
     setSaving(true)
     try {
-      const updates = { status: newStatus, updated_at: new Date().toISOString() }
-      if (newStatus === 'På prosjekt') updates.current_project_id = projectId || null
-      else if (newStatus !== 'På prosjekt') updates.current_project_id = null
-
-      const { error: mErr } = await supabase.from('machines').update(updates).eq('id', maskin.id)
+      const updates = { status:newStatus, updated_at:new Date().toISOString() }
+      updates.current_project_id = newStatus==='På prosjekt' ? (projectId||null) : null
+      const { error:mErr } = await supabase.from('machines').update(updates).eq('id', maskin.id)
       if (mErr) throw mErr
 
       const proj = projects.find(p=>p.id===projectId)
       let action = `Status endret til ${newStatus}`
-      if (newStatus==='På prosjekt' && proj) action = `Sendt til ${proj.name}`
+      if (newStatus==='På prosjekt'&&proj) action = `Sendt til ${proj.name}`
       else if (newStatus==='På lager') action = 'Returnert til lager'
       else if (newStatus==='Service') action = 'Sendt til service'
       else if (newStatus==='Utrangert') action = 'Merket som utrangert'
 
-      await supabase.from('machine_logs').insert({
-        machine_id: maskin.id,
-        action,
-        from_status: maskin.status,
-        to_status: newStatus,
-        project_id: newStatus==='På prosjekt' ? (projectId||null) : null,
-        employee_name: employeeName||null,
-        notes: notes||null,
-        created_by: user?.id,
-      })
+      await supabase.from('machine_logs').insert({ machine_id:maskin.id, action, from_status:maskin.status, to_status:newStatus, project_id:newStatus==='På prosjekt'?(projectId||null):null, employee_name:employeeName||null, notes:notes||null, created_by:user?.id })
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -3607,14 +3667,13 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
               {Object.entries(MASKIN_STATUS).map(([s,cfg]) => (
                 <button key={s} type="button" onClick={()=>setNewStatus(s)}
-                  style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${newStatus===s?cfg.border:'#e2e8f0'}`, background:newStatus===s?cfg.bg:'white', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', transition:'all 0.15s' }}>
+                  style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${newStatus===s?cfg.border:'#e2e8f0'}`, background:newStatus===s?cfg.bg:'white', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
                   <span style={{ fontSize:'20px' }}>{cfg.emoji}</span>
-                  <span style={{ fontWeight: newStatus===s?'700':'500', color:newStatus===s?cfg.color:'#475569', fontSize:'13px' }}>{s}</span>
+                  <span style={{ fontWeight:newStatus===s?'700':'500', color:newStatus===s?cfg.color:'#475569', fontSize:'13px' }}>{s}</span>
                 </button>
               ))}
             </div>
           </div>
-
           {newStatus==='På prosjekt' && (
             <div>
               <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt</label>
@@ -3624,22 +3683,17 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
               </select>
             </div>
           )}
-
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>👤 Ansatt (henter/leverer)</label>
             <input value={employeeName} onChange={e=>setEmployeeName(e.target.value)} placeholder="Navn på ansatt" style={mInp} />
           </div>
-
           <div>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Merknad (valgfritt)</label>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Merknad</label>
             <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="Eventuelle merknader..." style={{ ...mInp, resize:'none' }} />
           </div>
-
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', paddingTop:'4px', borderTop:'1px solid #f1f5f9' }}>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
             <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>
-              {saving?'Lagrer...':'Bekreft endring'}
-            </button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Bekreft endring'}</button>
           </div>
         </div>
       </div>
@@ -3650,20 +3704,19 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
 function MaskinModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit = !!initial
   const [form, setForm] = useState({
-    name: initial?.name||'',
-    type: initial?.type||'',
-    brand: initial?.brand||'',
-    model: initial?.model||'',
-    serial_number: initial?.serial_number||'',
-    year: initial?.year||'',
-    current_project_id: initial?.current_project_id||'',
-    last_service: initial?.last_service||'',
-    next_service: initial?.next_service||'',
-    notes: initial?.notes||'',
-    status: initial?.status||'På lager',
+    name: initial?.name||'', category: initial?.category||'', type: initial?.type||'',
+    brand: initial?.brand||'', model: initial?.model||'', serial_number: initial?.serial_number||'',
+    year: initial?.year||'', current_project_id: initial?.current_project_id||'',
+    last_service: initial?.last_service||'', next_service: initial?.next_service||'',
+    notes: initial?.notes||'', status: initial?.status||'På lager',
   })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  // When category changes, reset type
+  const setCategory = (cat) => setForm(f=>({...f, category:cat, type:''}))
+
+  const availableTypes = form.category ? MASKIN_KATEGORIER[form.category]||[] : []
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -3671,18 +3724,12 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
     setSaving(true)
     try {
       const payload = {
-        name: form.name.trim(),
-        type: form.type||null,
-        brand: form.brand||null,
-        model: form.model||null,
-        serial_number: form.serial_number||null,
-        year: form.year ? parseInt(form.year) : null,
-        current_project_id: form.status==='På prosjekt' ? (form.current_project_id||null) : null,
-        last_service: form.last_service||null,
-        next_service: form.next_service||null,
-        notes: form.notes||null,
-        status: form.status,
-        updated_at: new Date().toISOString(),
+        name:form.name.trim(), category:form.category||null, type:form.type||null,
+        brand:form.brand||null, model:form.model||null, serial_number:form.serial_number||null,
+        year:form.year?parseInt(form.year):null,
+        current_project_id:form.status==='På prosjekt'?(form.current_project_id||null):null,
+        last_service:form.last_service||null, next_service:form.next_service||null,
+        notes:form.notes||null, status:form.status, updated_at:new Date().toISOString(),
       }
       if (isEdit) {
         const {error} = await supabase.from('machines').update(payload).eq('id', initial.id)
@@ -3710,18 +3757,36 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🚜 {isEdit?'Rediger':'Registrer ny'} maskin</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-            <div style={{ gridColumn:'1/-1' }}>{lbl('Navn / Beskrivelse *')}<input value={form.name} onChange={e=>set('name',e.target.value)} required placeholder="F.eks. Gravemaskin CAT 320" style={mInp} /></div>
-            <div>{lbl('Type')}<select value={form.type} onChange={e=>set('type',e.target.value)} style={mInp}><option value="">Velg type...</option>{MASKIN_TYPER.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Navn / Beskrivelse *')}<input value={form.name} onChange={e=>set('name',e.target.value)} required placeholder="F.eks. Slagborrmaskin Makita, Rullestillas 4m" style={mInp} /></div>
+
+            {/* Kategori */}
+            <div>
+              {lbl('Utstyrstype')}
+              <select value={form.category} onChange={e=>setCategory(e.target.value)} style={mInp}>
+                <option value="">— Alle kategorier —</option>
+                {Object.keys(MASKIN_KATEGORIER).map(k=><option key={k} value={k}>{k}</option>)}
+              </select>
+            </div>
+
+            {/* Maskintype — avhengig av kategori */}
+            <div>
+              {lbl('Maskintype')}
+              <select value={form.type} onChange={e=>set('type',e.target.value)} style={mInp} disabled={!form.category}>
+                <option value="">Velg type...</option>
+                {availableTypes.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+
             <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={mInp}>{Object.keys(MASKIN_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
-            <div>{lbl('Merke')}<input value={form.brand} onChange={e=>set('brand',e.target.value)} placeholder="F.eks. Caterpillar, Volvo..." style={mInp} /></div>
-            <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="F.eks. 320GC, EC220..." style={mInp} /></div>
+            {form.status==='På prosjekt' && (
+              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+            )}
+            <div>{lbl('Merke')}<input value={form.brand} onChange={e=>set('brand',e.target.value)} placeholder="F.eks. Makita, Hilti, Layher..." style={mInp} /></div>
+            <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={mInp} /></div>
             <div>{lbl('Serienummer')}<input value={form.serial_number} onChange={e=>set('serial_number',e.target.value)} placeholder="Serienummer" style={mInp} /></div>
             <div>{lbl('Årsmodell')}<input type="number" value={form.year} onChange={e=>set('year',e.target.value)} placeholder="2022" min="1980" max="2030" style={mInp} /></div>
-            {form.status==='På prosjekt' && (
-              <div style={{ gridColumn:'1/-1' }}>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-            )}
             <div>{lbl('Siste service')}<input type="date" value={form.last_service} onChange={e=>set('last_service',e.target.value)} style={mInp} /></div>
             <div>{lbl('Neste service')}<input type="date" value={form.next_service} onChange={e=>set('next_service',e.target.value)} style={mInp} /></div>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Merknad')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Eventuelle merknader om maskinen..." style={{ ...mInp, resize:'none' }} /></div>
@@ -3737,6 +3802,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 }
 
 // ─── END MASKIN MODULE ────────────────────────────────────────────────────────
+
 
 
 
