@@ -9194,6 +9194,725 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
 
 // ─── END RESSURSPLANLEGGER MODULE ─────────────────────────────────────────────
 
+// ─── KALENDER MODULE ──────────────────────────────────────────────────────────
+
+const EVENT_TYPES = {
+  meeting:   { label:'Møte/Avtale',    emoji:'📅', color:'#2563eb', bg:'#eff6ff' },
+  milestone: { label:'Milepæl/Frist',  emoji:'🏁', color:'#7c3aed', bg:'#f5f3ff' },
+  holiday:   { label:'Ferie/Fri',      emoji:'🏖️', color:'#059669', bg:'#ecfdf5' },
+  task:      { label:'Oppgave',        emoji:'✅', color:'#d97706', bg:'#fffbeb' },
+  other:     { label:'Annet',          emoji:'📌', color:'#64748b', bg:'#f8fafc' },
+}
+
+const NORSK_HOLIDAYS_2025 = [
+  { date:'2025-01-01', title:'Nyttårsdag' },
+  { date:'2025-04-17', title:'Skjærtorsdag' },
+  { date:'2025-04-18', title:'Langfredag' },
+  { date:'2025-04-20', title:'Første påskedag' },
+  { date:'2025-04-21', title:'Andre påskedag' },
+  { date:'2025-05-01', title:'Arbeidernes dag' },
+  { date:'2025-05-17', title:'Grunnlovsdagen' },
+  { date:'2025-05-29', title:'Kristi himmelfartsdag' },
+  { date:'2025-06-08', title:'Første pinsedag' },
+  { date:'2025-06-09', title:'Andre pinsedag' },
+  { date:'2025-12-25', title:'Første juledag' },
+  { date:'2025-12-26', title:'Andre juledag' },
+]
+
+const NORSK_HOLIDAYS_2026 = [
+  { date:'2026-01-01', title:'Nyttårsdag' },
+  { date:'2026-04-02', title:'Skjærtorsdag' },
+  { date:'2026-04-03', title:'Langfredag' },
+  { date:'2026-04-05', title:'Første påskedag' },
+  { date:'2026-04-06', title:'Andre påskedag' },
+  { date:'2026-05-01', title:'Arbeidernes dag' },
+  { date:'2026-05-14', title:'Kristi himmelfartsdag' },
+  { date:'2026-05-17', title:'Grunnlovsdagen' },
+  { date:'2026-05-24', title:'Første pinsedag' },
+  { date:'2026-05-25', title:'Andre pinsedag' },
+  { date:'2026-12-25', title:'Første juledag' },
+  { date:'2026-12-26', title:'Andre juledag' },
+]
+
+const ALL_HOLIDAYS = [...NORSK_HOLIDAYS_2025, ...NORSK_HOLIDAYS_2026]
+
+const cInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+
+const MONTH_NAMES_NO = ['Januar','Februar','Mars','April','Mai','Juni','Juli','August','September','Oktober','November','Desember']
+const DAY_NAMES_NO = ['Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag','Søndag']
+const DAY_SHORT_NO = ['Ma','Ti','On','To','Fr','Lø','Sø']
+
+function getMonthDays(year, month) {
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month+1, 0)
+  const days = []
+  // pad start
+  let startDow = firstDay.getDay()===0?6:firstDay.getDay()-1
+  for (let i=0;i<startDow;i++) {
+    const d = new Date(year, month, -startDow+i+1)
+    days.push({ date:d.toISOString().split('T')[0], currentMonth:false })
+  }
+  for (let i=1;i<=lastDay.getDate();i++) {
+    const d = new Date(year, month, i)
+    days.push({ date:d.toISOString().split('T')[0], currentMonth:true })
+  }
+  // pad end to complete grid
+  const remaining = 42-days.length
+  for (let i=1;i<=remaining;i++) {
+    const d = new Date(year, month+1, i)
+    days.push({ date:d.toISOString().split('T')[0], currentMonth:false })
+  }
+  return days
+}
+
+function getWeekDaysRange(startDate) {
+  const d = new Date(startDate)
+  const dow = d.getDay()===0?6:d.getDay()-1
+  d.setDate(d.getDate()-dow)
+  return Array.from({length:7},(_,i)=>{
+    const dd = new Date(d); dd.setDate(d.getDate()+i)
+    return dd.toISOString().split('T')[0]
+  })
+}
+
+function empColor(index) {
+  const colors = ['#2563eb','#059669','#dc2626','#d97706','#7c3aed','#0891b2','#be185d','#65a30d','#ea580c','#0284c7']
+  return colors[index % colors.length]
+}
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function KalenderPage() {
+  const { user } = useAuth()
+  const [viewMode, setViewMode] = useState('maned') // 'dag'|'uke'|'maned'
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0])
+  const [events, setEvents] = useState([])
+  const [employees, setEmployees] = useState([])
+  const [projects, setProjects] = useState([])
+  const [attendees, setAttendees] = useState([])
+  const [sharing, setSharing] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showNew, setShowNew] = useState(null) // date string to pre-fill
+  const [selectedEvent, setSelectedEvent] = useState(null)
+  const [editEvent, setEditEvent] = useState(null)
+  const [calView, setCalView] = useState('mine') // 'mine'|'bedrift'
+  const [visibleEmployees, setVisibleEmployees] = useState([])
+  const [showSharingModal, setShowSharingModal] = useState(false)
+
+  const load = async () => {
+    try {
+      const [ev, emp, proj, att, sh] = await Promise.all([
+        supabase.from('calendar_events').select('*').order('start_date').then(r=>r.data||[]),
+        supabase.from('employees').select('id,first_name,last_name').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('calendar_attendees').select('*').then(r=>r.data||[]),
+        supabase.from('calendar_sharing').select('*').then(r=>r.data||[])
+      ])
+      setEvents(ev); setEmployees(emp); setProjects(proj); setAttendees(att); setSharing(sh)
+      if (visibleEmployees.length===0) setVisibleEmployees(emp.slice(0,5).map(e=>e.id))
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  const today = new Date().toISOString().split('T')[0]
+  const curDate = new Date(currentDate)
+
+  const navigate = (dir) => {
+    const d = new Date(currentDate)
+    if (viewMode==='dag') d.setDate(d.getDate()+dir)
+    else if (viewMode==='uke') d.setDate(d.getDate()+dir*7)
+    else d.setMonth(d.getMonth()+dir)
+    setCurrentDate(d.toISOString().split('T')[0])
+  }
+
+  const getEventsForDate = (date, empId=null) => {
+    let evs = events.filter(e=> {
+      const start = e.start_date
+      const end = e.end_date||e.start_date
+      return date>=start && date<=end
+    })
+    if (empId) {
+      evs = evs.filter(e=> e.created_by===empId ||
+        attendees.some(a=>a.event_id===e.id && a.employee_id===empId))
+    }
+    return evs
+  }
+
+  const getHolidayForDate = (date) => ALL_HOLIDAYS.find(h=>h.date===date)
+  const isWeekend = (date) => { const d=new Date(date+'T12:00:00'); return d.getDay()===0||d.getDay()===6 }
+  const isToday = (date) => date===today
+
+  const headerLabel = () => {
+    if (viewMode==='dag') return new Date(currentDate+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+    if (viewMode==='uke') {
+      const days = getWeekDaysRange(currentDate)
+      const s = new Date(days[0]+'T12:00:00'); const e = new Date(days[6]+'T12:00:00')
+      return `${s.toLocaleDateString('nb-NO',{day:'numeric',month:'short'})} – ${e.toLocaleDateString('nb-NO',{day:'numeric',month:'short',year:'numeric'})}`
+    }
+    return `${MONTH_NAMES_NO[curDate.getMonth()]} ${curDate.getFullYear()}`
+  }
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster kalender...</p></div></div>
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', height:'100vh' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'14px' }}>
+          <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📆 Kalender</h1>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={()=>setShowSharingModal(true)} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#475569', fontWeight:'500' }}>👥 Del kalender</button>
+            <button onClick={()=>setShowNew(today)} style={{ padding:'9px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny hendelse</button>
+          </div>
+        </div>
+
+        <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          {/* Cal view toggle */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[['mine','👤 Min'],['bedrift','🏢 Bedrift']].map(([v,l])=>(
+              <button key={v} onClick={()=>setCalView(v)}
+                style={{ padding:'7px 14px', border:'none', background:calView===v?'#059669':'white', color:calView===v?'white':'#64748b', fontWeight:calView===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+            ))}
+          </div>
+
+          {/* View mode */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[['dag','Dag'],['uke','Uke'],['maned','Måned']].map(([v,l])=>(
+              <button key={v} onClick={()=>setViewMode(v)}
+                style={{ padding:'7px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+            ))}
+          </div>
+
+          {/* Nav */}
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto' }}>
+            <button onClick={()=>navigate(-1)} style={{ width:'32px',height:'32px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px', minWidth:'180px', textAlign:'center' }}>{headerLabel()}</span>
+            <button onClick={()=>navigate(1)} style={{ width:'32px',height:'32px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
+            <button onClick={()=>setCurrentDate(today)} style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
+          </div>
+        </div>
+
+        {/* Bedrift view – employee filter */}
+        {calView==='bedrift' && (
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'12px' }}>
+            {employees.map((emp,i)=>{
+              const isVisible = visibleEmployees.includes(emp.id)
+              const col = empColor(i)
+              return (
+                <button key={emp.id} onClick={()=>setVisibleEmployees(v=>isVisible?v.filter(x=>x!==emp.id):[...v,emp.id])}
+                  style={{ display:'flex', alignItems:'center', gap:'6px', padding:'5px 12px', borderRadius:'999px', border:`2px solid ${isVisible?col:'#e2e8f0'}`, background:isVisible?col+'18':'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:isVisible?col:'#94a3b8' }}>
+                  <div style={{ width:'8px',height:'8px',borderRadius:'50%',background:isVisible?col:'#e2e8f0',flexShrink:0 }}/>
+                  {emp.first_name} {emp.last_name}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Calendar body */}
+      <div style={{ flex:1, overflow:'auto', background:'#f8fafc' }}>
+        {viewMode==='maned' && (
+          <CalMonthView
+            year={curDate.getFullYear()} month={curDate.getMonth()}
+            events={events} attendees={attendees} projects={projects}
+            employees={employees} calView={calView} visibleEmployees={visibleEmployees}
+            getEventsForDate={getEventsForDate} getHolidayForDate={getHolidayForDate}
+            isWeekend={isWeekend} isToday={isToday} today={today}
+            onDayClick={(date)=>setShowNew(date)}
+            onEventClick={(ev)=>setSelectedEvent(ev)}
+            user={user}
+          />
+        )}
+        {viewMode==='uke' && (
+          <CalWeekView
+            currentDate={currentDate}
+            events={events} attendees={attendees} projects={projects}
+            employees={employees} calView={calView} visibleEmployees={visibleEmployees}
+            getEventsForDate={getEventsForDate} getHolidayForDate={getHolidayForDate}
+            isWeekend={isWeekend} isToday={isToday}
+            onDayClick={(date)=>setShowNew(date)}
+            onEventClick={(ev)=>setSelectedEvent(ev)}
+            user={user}
+          />
+        )}
+        {viewMode==='dag' && (
+          <CalDayView
+            date={currentDate}
+            events={getEventsForDate(currentDate)}
+            projects={projects} employees={employees} attendees={attendees}
+            getHolidayForDate={getHolidayForDate}
+            onNewEvent={()=>setShowNew(currentDate)}
+            onEventClick={(ev)=>setSelectedEvent(ev)}
+          />
+        )}
+      </div>
+
+      {showNew && <EventModal date={showNew} projects={projects} employees={employees} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+      {selectedEvent && <EventDetailModal event={selectedEvent} projects={projects} employees={employees} attendees={attendees.filter(a=>a.event_id===selectedEvent.id)} user={user} onClose={()=>setSelectedEvent(null)} onEdit={()=>{setEditEvent(selectedEvent);setSelectedEvent(null)}} onDeleted={()=>{setSelectedEvent(null);load()}} />}
+      {editEvent && <EventModal initial={editEvent} projects={projects} employees={employees} user={user} onClose={()=>setEditEvent(null)} onSaved={()=>{setEditEvent(null);load()}} />}
+      {showSharingModal && <SharingModal user={user} employees={employees} sharing={sharing} onClose={()=>setShowSharingModal(false)} onSaved={()=>{setShowSharingModal(false);load()}} />}
+    </div>
+  )
+}
+
+function EventChip({ event, projects, compact=false, onClick }) {
+  const cfg = EVENT_TYPES[event.type]||EVENT_TYPES.other
+  const proj = projects.find(p=>p.id===event.project_id)
+  const col = event.color||cfg.color
+  return (
+    <div onClick={e=>{e.stopPropagation();onClick&&onClick(event)}}
+      style={{ background:col, borderRadius:'5px', padding:compact?'1px 5px':'3px 7px', marginBottom:'2px', cursor:'pointer', overflow:'hidden', userSelect:'none' }}>
+      <div style={{ fontSize:'11px', fontWeight:'700', color:'white', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        {!compact&&<span style={{ marginRight:'3px' }}>{cfg.emoji}</span>}{event.title}
+      </div>
+      {!compact&&event.start_time&&<div style={{ fontSize:'10px',color:'rgba(255,255,255,0.85)' }}>{event.start_time.slice(0,5)}{event.end_time?`–${event.end_time.slice(0,5)}`:''}</div>}
+    </div>
+  )
+}
+
+// ── MONTH VIEW ────────────────────────────────────────────────────────────────
+function CalMonthView({ year, month, events, attendees, projects, employees, calView, visibleEmployees, getEventsForDate, getHolidayForDate, isWeekend, isToday, today, onDayClick, onEventClick, user }) {
+  const days = getMonthDays(year, month)
+
+  return (
+    <div style={{ padding:'16px 24px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius:'14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
+        {/* Day headers */}
+        {DAY_SHORT_NO.map(d=>(
+          <div key={d} style={{ background:'#f8fafc', padding:'10px', textAlign:'center', fontSize:'12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{d}</div>
+        ))}
+        {/* Day cells */}
+        {days.map(({date,currentMonth})=>{
+          const holiday = getHolidayForDate(date)
+          const weekend = isWeekend(date)
+          const today_ = isToday(date)
+          const dayEvs = calView==='bedrift'
+            ? events.filter(e=>{
+                const start=e.start_date; const end=e.end_date||e.start_date
+                if (!(date>=start&&date<=end)) return false
+                if (e.visibility==='public') return true
+                return visibleEmployees.some(empId=>
+                  e.created_by===empId || attendees.some(a=>a.event_id===e.id)
+                )
+              })
+            : getEventsForDate(date)
+          const maxShow = 3
+
+          return (
+            <div key={date} onClick={()=>currentMonth&&onDayClick(date)}
+              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight:'100px', padding:'6px', cursor:currentMonth?'pointer':'default', position:'relative' }}
+              onMouseEnter={e=>{if(currentMonth)e.currentTarget.style.background=today_?'#ecfdf5':'#f8fafc'}}
+              onMouseLeave={e=>{e.currentTarget.style.background=!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white'}}>
+              {/* Date number */}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                <span style={{ width:'24px',height:'24px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:today_?'800':'500',background:today_?'#059669':'transparent',color:today_?'white':!currentMonth?'#cbd5e1':weekend?'#94a3b8':'#0f172a' }}>
+                  {new Date(date+'T12:00:00').getDate()}
+                </span>
+                {holiday&&<span style={{ fontSize:'9px',color:'#d97706',fontWeight:'700',textAlign:'right',maxWidth:'60px',lineHeight:1.2 }}>{holiday.title}</span>}
+              </div>
+              {/* Events */}
+              {dayEvs.slice(0,maxShow).map(ev=>(
+                <EventChip key={ev.id} event={ev} projects={projects} compact={false} onClick={onEventClick} />
+              ))}
+              {dayEvs.length>maxShow&&<div style={{ fontSize:'10px',color:'#94a3b8',fontWeight:'600' }}>+{dayEvs.length-maxShow} til</div>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── WEEK VIEW ─────────────────────────────────────────────────────────────────
+function CalWeekView({ currentDate, events, attendees, projects, employees, calView, visibleEmployees, getEventsForDate, getHolidayForDate, isWeekend, isToday, onDayClick, onEventClick, user }) {
+  const days = getWeekDaysRange(currentDate)
+
+  if (calView==='bedrift') {
+    // Bedrift view: rows=employees, cols=days
+    const visEmp = employees.filter(e=>visibleEmployees.includes(e.id))
+    return (
+      <div style={{ padding:'0 24px 24px' }}>
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'white', borderRadius:'14px', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+            <thead>
+              <tr>
+                <th style={{ padding:'10px 16px', textAlign:'left', fontSize:'12px', fontWeight:'700', color:'#64748b', background:'#f8fafc', width:'150px', borderBottom:'1px solid #f1f5f9' }}>Ansatt</th>
+                {days.map((date,i)=>{
+                  const holiday=getHolidayForDate(date); const weekend=isWeekend(date); const tod=isToday(date)
+                  const d=new Date(date+'T12:00:00')
+                  return (
+                    <th key={date} style={{ padding:'8px 6px', textAlign:'center', background:tod?'#f0fdf4':weekend?'#fafafa':'#f8fafc', borderBottom:`2px solid ${tod?'#059669':'#f1f5f9'}`, minWidth:'120px' }}>
+                      <div style={{ fontSize:'11px',fontWeight:'600',color:tod?'#059669':'#94a3b8',textTransform:'uppercase' }}>{DAY_SHORT_NO[i]}</div>
+                      <div style={{ fontSize:'14px',fontWeight:tod?'800':'600',color:tod?'#059669':'#0f172a' }}>{d.getDate()}</div>
+                      {holiday&&<div style={{ fontSize:'9px',color:'#d97706',fontWeight:'600' }}>{holiday.title}</div>}
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {visEmp.map((emp,ei)=>(
+                <tr key={emp.id}>
+                  <td style={{ padding:'8px 16px', borderBottom:'1px solid #f8fafc', borderRight:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <div style={{ width:'30px',height:'30px',borderRadius:'50%',background:empColor(ei)+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:'800',color:empColor(ei),flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+                      <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',lineHeight:1.2 }}>{emp.first_name}<br/>{emp.last_name}</div>
+                    </div>
+                  </td>
+                  {days.map((date,di)=>{
+                    const dayEvs = events.filter(e=>{
+                      const start=e.start_date; const end=e.end_date||e.start_date
+                      if (!(date>=start&&date<=end)) return false
+                      return e.created_by===emp.id || attendees.some(a=>a.event_id===e.id&&a.employee_id===emp.id)
+                    })
+                    const weekend=isWeekend(date); const tod=isToday(date)
+                    return (
+                      <td key={date} style={{ padding:'4px 6px', verticalAlign:'top', background:tod?'#f9fffe':weekend?'#fafafa':'white', borderBottom:'1px solid #f8fafc', borderRight:'1px solid #f8fafc', minHeight:'60px', cursor:'pointer' }}
+                        onClick={()=>onDayClick(date)}>
+                        {dayEvs.map(ev=><EventChip key={ev.id} event={ev} projects={projects} compact={false} onClick={onEventClick} />)}
+                        {dayEvs.length===0&&!weekend&&<div style={{ height:'40px',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.1 }}><span style={{ fontSize:'18px',color:'#059669' }}>+</span></div>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  // Personal week view
+  return (
+    <div style={{ padding:'0 24px 24px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'8px' }}>
+        {days.map((date,i)=>{
+          const dayEvs = getEventsForDate(date)
+          const holiday=getHolidayForDate(date); const weekend=isWeekend(date); const tod=isToday(date)
+          const d=new Date(date+'T12:00:00')
+          return (
+            <div key={date} style={{ background:'white', borderRadius:'12px', border:`2px solid ${tod?'#059669':weekend?'#f1f5f9':'#f1f5f9'}`, overflow:'hidden', minHeight:'200px' }}>
+              <div onClick={()=>onDayClick(date)} style={{ padding:'10px 12px', background:tod?'#f0fdf4':weekend?'#fafafa':'#f8fafc', cursor:'pointer', borderBottom:'1px solid #f1f5f9' }}>
+                <div style={{ fontSize:'11px',fontWeight:'700',color:tod?'#059669':'#94a3b8',textTransform:'uppercase' }}>{DAY_NAMES_NO[i]}</div>
+                <div style={{ fontSize:'20px',fontWeight:'800',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
+                {holiday&&<div style={{ fontSize:'10px',color:'#d97706',fontWeight:'600' }}>{holiday.title}</div>}
+              </div>
+              <div style={{ padding:'6px' }}>
+                {dayEvs.map(ev=><EventChip key={ev.id} event={ev} projects={projects} onClick={onEventClick} />)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── DAY VIEW ──────────────────────────────────────────────────────────────────
+function CalDayView({ date, events, projects, employees, attendees, getHolidayForDate, onNewEvent, onEventClick }) {
+  const holiday=getHolidayForDate(date)
+  const hours = Array.from({length:24},(_,i)=>i)
+  const getEventsForHour = (h) => events.filter(e=>{ if(!e.start_time) return false; const eh=parseInt(e.start_time.split(':')[0]); return eh===h })
+  const allDayEvs = events.filter(e=>e.all_day||!e.start_time)
+
+  return (
+    <div style={{ padding:'16px 24px', display:'flex', flexDirection:'column', gap:'12px' }}>
+      {holiday&&<div style={{ background:'#fffbeb',borderRadius:'10px',padding:'10px 14px',border:'1px solid #fde68a',fontSize:'13px',color:'#92400e',fontWeight:'600' }}>🗓️ {holiday.title}</div>}
+      {allDayEvs.length>0&&(
+        <div style={{ background:'white',borderRadius:'12px',border:'1px solid #f1f5f9',padding:'12px 16px' }}>
+          <div style={{ fontSize:'12px',fontWeight:'700',color:'#64748b',marginBottom:'8px',textTransform:'uppercase' }}>Heldagshendelser</div>
+          {allDayEvs.map(ev=><EventChip key={ev.id} event={ev} projects={projects} onClick={onEventClick} />)}
+        </div>
+      )}
+      <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',overflow:'hidden' }}>
+        {hours.filter(h=>h>=6&&h<=22).map(h=>{
+          const hEvs = getEventsForHour(h)
+          return (
+            <div key={h} onClick={()=>hEvs.length===0&&onNewEvent()} style={{ display:'flex',minHeight:'56px',borderBottom:'1px solid #f8fafc',cursor:'pointer' }}
+              onMouseEnter={e=>{if(!hEvs.length)e.currentTarget.style.background='#f8fafc'}} onMouseLeave={e=>{e.currentTarget.style.background='white'}}>
+              <div style={{ width:'60px',flexShrink:0,padding:'8px 12px',fontSize:'12px',fontWeight:'600',color:'#94a3b8',borderRight:'1px solid #f1f5f9',textAlign:'right' }}>
+                {String(h).padStart(2,'0')}:00
+              </div>
+              <div style={{ flex:1,padding:'4px 8px' }}>
+                {hEvs.map(ev=><EventChip key={ev.id} event={ev} projects={projects} onClick={onEventClick} />)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── EVENT MODAL ───────────────────────────────────────────────────────────────
+function EventModal({ date, initial, projects, employees, user, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [form, setForm] = useState({
+    title: initial?.title||'',
+    type: initial?.type||'meeting',
+    start_date: initial?.start_date||date||new Date().toISOString().split('T')[0],
+    end_date: initial?.end_date||'',
+    start_time: initial?.start_time||'',
+    end_time: initial?.end_time||'',
+    all_day: initial?.all_day||false,
+    location: initial?.location||'',
+    description: initial?.description||'',
+    project_id: initial?.project_id||'',
+    color: initial?.color||'',
+    visibility: initial?.visibility||'private',
+  })
+  const [selectedAttendees, setSelectedAttendees] = useState([])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { ...form, project_id:form.project_id||null, end_date:form.end_date||form.start_date, updated_at:new Date().toISOString() }
+      let evId = initial?.id
+      if (isEdit) {
+        const {error}=await supabase.from('calendar_events').update(payload).eq('id',initial.id)
+        if (error) throw error
+        await supabase.from('calendar_attendees').delete().eq('event_id',initial.id)
+      } else {
+        const {data,error}=await supabase.from('calendar_events').insert({...payload,created_by:user?.id}).select().single()
+        if (error) throw error
+        evId = data.id
+      }
+      if (selectedAttendees.length>0) {
+        await supabase.from('calendar_attendees').insert(selectedAttendees.map(empId=>({ event_id:evId, employee_id:empId, status:'invited' })))
+      }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>{t}</label>
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'580px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>{isEdit?'Rediger':'Ny'} hendelse</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+
+          {/* Type selector */}
+          <div>
+            {lbl('Type hendelse')}
+            <div style={{ display:'flex',gap:'6px',flexWrap:'wrap' }}>
+              {Object.entries(EVENT_TYPES).map(([k,cfg])=>(
+                <button key={k} type="button" onClick={()=>{ set('type',k); set('color',cfg.color) }}
+                  style={{ padding:'6px 12px',borderRadius:'8px',border:`2px solid ${form.type===k?cfg.color:'#e2e8f0'}`,background:form.type===k?cfg.bg:'white',color:form.type===k?cfg.color:'#64748b',fontWeight:form.type===k?'700':'500',fontSize:'12px',cursor:'pointer' }}>
+                  {cfg.emoji} {cfg.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Beskriv hendelsen" style={cInp} /></div>
+
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+            <div>{lbl('Fra dato')}<input type="date" value={form.start_date} onChange={e=>set('start_date',e.target.value)} style={cInp} /></div>
+            <div>{lbl('Til dato (valgfritt)')}<input type="date" value={form.end_date} onChange={e=>set('end_date',e.target.value)} style={cInp} /></div>
+          </div>
+
+          <div>
+            <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>
+              <input type="checkbox" checked={form.all_day} onChange={e=>set('all_day',e.target.checked)} style={{ width:'16px',height:'16px',accentColor:'#059669' }} />
+              Heldagshendelse
+            </label>
+            {!form.all_day&&(
+              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+                <div>{lbl('Fra kl.')}<input type="time" value={form.start_time} onChange={e=>set('start_time',e.target.value)} style={cInp} /></div>
+                <div>{lbl('Til kl.')}<input type="time" value={form.end_time} onChange={e=>set('end_time',e.target.value)} style={cInp} /></div>
+              </div>
+            )}
+          </div>
+
+          <div>{lbl('Sted / Lokasjon')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Møterom A, Byggeplass..." style={cInp} /></div>
+          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div>{lbl('Beskrivelse')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...cInp,resize:'none' }} placeholder="Valgfri beskrivelse..." /></div>
+
+          {/* Visibility */}
+          <div>
+            {lbl('Synlighet')}
+            <div style={{ display:'flex',gap:'8px' }}>
+              {[['private','🔒 Privat'],['shared','👥 Delt med valgte'],['public','🏢 Alle ansatte']].map(([v,l])=>(
+                <button key={v} type="button" onClick={()=>set('visibility',v)}
+                  style={{ flex:1,padding:'8px',borderRadius:'8px',border:`2px solid ${form.visibility===v?'#059669':'#e2e8f0'}`,background:form.visibility===v?'#f0fdf4':'white',color:form.visibility===v?'#059669':'#64748b',fontWeight:form.visibility===v?'700':'500',fontSize:'12px',cursor:'pointer' }}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Attendees */}
+          {(form.visibility==='shared'||form.visibility==='public') && (
+            <div>
+              {lbl('Inviter ansatte')}
+              <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+                {employees.map((emp,i)=>{
+                  const isSelected = selectedAttendees.includes(emp.id)
+                  return (
+                    <button key={emp.id} type="button" onClick={()=>setSelectedAttendees(s=>isSelected?s.filter(x=>x!==emp.id):[...s,emp.id])}
+                      style={{ padding:'5px 12px',borderRadius:'999px',border:`2px solid ${isSelected?empColor(i):'#e2e8f0'}`,background:isSelected?empColor(i)+'18':'white',color:isSelected?empColor(i):'#64748b',fontWeight:isSelected?'700':'500',fontSize:'12px',cursor:'pointer' }}>
+                      {emp.first_name} {emp.last_name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+            {saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett hendelse'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── EVENT DETAIL MODAL ────────────────────────────────────────────────────────
+function EventDetailModal({ event, projects, employees, attendees, user, onClose, onEdit, onDeleted }) {
+  const cfg = EVENT_TYPES[event.type]||EVENT_TYPES.other
+  const proj = projects.find(p=>p.id===event.project_id)
+  const col = event.color||cfg.color
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne hendelsen?')) return
+    await supabase.from('calendar_events').delete().eq('id',event.id)
+    onDeleted()
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'460px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ background:col,padding:'20px 24px' }}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
+            <div>
+              <div style={{ fontSize:'12px',fontWeight:'700',color:'rgba(255,255,255,0.8)',marginBottom:'4px' }}>{cfg.emoji} {cfg.label}</div>
+              <h2 style={{ margin:0,fontSize:'20px',fontWeight:'800',color:'white' }}>{event.title}</h2>
+            </div>
+            <button onClick={onClose} style={{ background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'50%',width:'32px',height:'32px',cursor:'pointer',color:'white',fontSize:'18px',display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
+          </div>
+        </div>
+        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 14px',alignItems:'center' }}>
+            <span style={{ fontSize:'16px' }}>📅</span>
+            <span style={{ fontSize:'14px',color:'#0f172a',fontWeight:'500' }}>
+              {event.start_date}{event.end_date&&event.end_date!==event.start_date?` – ${event.end_date}`:''}
+              {event.start_time&&<span style={{ color:'#64748b' }}> · {event.start_time.slice(0,5)}{event.end_time?`–${event.end_time.slice(0,5)}`:''}</span>}
+            </span>
+            {event.location&&<><span style={{ fontSize:'16px' }}>📍</span><span style={{ fontSize:'14px',color:'#0f172a' }}>{event.location}</span></>}
+            {proj&&<><span style={{ fontSize:'16px' }}>🏗️</span><span style={{ fontSize:'14px',color:'#2563eb',fontWeight:'500' }}>{proj.name}</span></>}
+            {event.visibility&&<><span style={{ fontSize:'16px' }}>{event.visibility==='private'?'🔒':event.visibility==='shared'?'👥':'🏢'}</span><span style={{ fontSize:'13px',color:'#64748b' }}>{event.visibility==='private'?'Privat':event.visibility==='shared'?'Delt':'Alle ansatte'}</span></>}
+          </div>
+          {event.description&&<p style={{ margin:0,fontSize:'14px',color:'#475569',lineHeight:1.6,background:'#f8fafc',borderRadius:'10px',padding:'10px 14px' }}>{event.description}</p>}
+          {attendees.length>0&&(
+            <div>
+              <div style={{ fontSize:'12px',fontWeight:'700',color:'#64748b',textTransform:'uppercase',marginBottom:'6px' }}>Inviterte</div>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+                {attendees.map(a=>{
+                  const emp=employees.find(e=>e.id===a.employee_id)
+                  if (!emp) return null
+                  return <span key={a.id} style={{ background:'#f0fdf4',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600' }}>{emp.first_name} {emp.last_name}</span>
+                })}
+              </div>
+            </div>
+          )}
+          <div style={{ display:'flex',gap:'8px',borderTop:'1px solid #f1f5f9',paddingTop:'12px' }}>
+            <button onClick={handleDelete} style={{ padding:'9px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️ Slett</button>
+            <button onClick={onClose} style={{ flex:1,padding:'9px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>Lukk</button>
+            <button onClick={onEdit} style={{ flex:1,padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✏️ Rediger</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── SHARING MODAL ─────────────────────────────────────────────────────────────
+function SharingModal({ user, employees, sharing, onClose, onSaved }) {
+  const [selected, setSelected] = useState(sharing.filter(s=>s.owner_id===user?.id).map(s=>s.shared_with_id))
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      // Remove all existing shares by this user
+      await supabase.from('calendar_sharing').delete().eq('owner_id',user?.id)
+      // Insert new
+      if (selected.length>0) {
+        await supabase.from('calendar_sharing').insert(selected.map(id=>({ owner_id:user?.id, shared_with_id:id })))
+      }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const sharedWithMe = sharing.filter(s=>s.shared_with_id===user?.id).map(s=>{
+    return employees.find(e=>e.id===s.owner_id)
+  }).filter(Boolean)
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'460px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>👥 Del din kalender</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'16px' }}>
+          <div>
+            <div style={{ fontSize:'13px',fontWeight:'700',color:'#0f172a',marginBottom:'10px' }}>Del din kalender med:</div>
+            <div style={{ display:'flex',flexDirection:'column',gap:'8px' }}>
+              {employees.map((emp,i)=>{
+                const isSelected=selected.includes(emp.id)
+                return (
+                  <div key={emp.id} onClick={()=>setSelected(s=>isSelected?s.filter(x=>x!==emp.id):[...s,emp.id])}
+                    style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',borderRadius:'12px',border:`2px solid ${isSelected?empColor(i):'#e2e8f0'}`,background:isSelected?empColor(i)+'10':'white',cursor:'pointer' }}>
+                    <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:empColor(i)+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'800',color:empColor(i),flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+                    <span style={{ flex:1,fontSize:'14px',fontWeight:'600',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</span>
+                    {isSelected&&<span style={{ fontSize:'18px',color:empColor(i) }}>✓</span>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {sharedWithMe.length>0&&(
+            <div style={{ background:'#f0fdf4',borderRadius:'12px',padding:'14px',border:'1px solid #bbf7d0' }}>
+              <div style={{ fontSize:'12px',fontWeight:'700',color:'#16a34a',marginBottom:'8px' }}>Disse har delt sin kalender med deg:</div>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+                {sharedWithMe.map(emp=>(
+                  <span key={emp.id} style={{ background:'white',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',color:'#16a34a' }}>{emp.first_name} {emp.last_name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display:'flex',justifyContent:'flex-end',gap:'12px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+              {saving?'Lagrer...':'Lagre delingsinnstillinger'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END KALENDER MODULE ──────────────────────────────────────────────────────
+
 
 
 
@@ -9293,7 +10012,8 @@ function AppContent() {
         {page === 'ansatte' && <AnsattePage />}
         {page === 'timelister' && <TimelistePage />}
         {page === 'ressursplan' && <RessursPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && (
+        {page === 'kalender' && <KalenderPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
