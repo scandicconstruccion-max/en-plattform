@@ -7920,7 +7920,7 @@ const DAYS_FULL = ['Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag','Sø
 function fmtHours(h) { return (Math.round((parseFloat(h)||0)*10)/10).toString().replace('.',',') }
 function fmtDate(d) { const dt=new Date(d+'T12:00:00'); return dt.toLocaleDateString('nb-NO',{weekday:'short',day:'numeric',month:'short'}) }
 
-const tInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+const tsInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function TimelistePage() {
@@ -7997,7 +7997,7 @@ function TimelistePage() {
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
             {/* Employee selector + week nav */}
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center', flexWrap:'wrap' }}>
-              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tInp, maxWidth:'200px', flex:1 }}>
+              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tsInp, maxWidth:'200px', flex:1 }}>
                 {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
               <div style={{ display:'flex', alignItems:'center', gap:'10px', marginLeft:'auto' }}>
@@ -8031,7 +8031,7 @@ function TimelistePage() {
                   <button key={v} onClick={()=>setStatsView(v)} style={{ padding:'8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
                 ))}
               </div>
-              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tInp, maxWidth:'200px' }}>
+              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tsInp, maxWidth:'200px' }}>
                 <option value="">Alle ansatte</option>
                 {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
@@ -8327,14 +8327,14 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
-                      <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tInp, fontSize:'13px' }}>
+                      <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
                         <option value="">Velg...</option>
                         {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                     </div>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Aktivitet</label>
-                      <select value={entry?.activity||''} onChange={e=>updateEntry(date,'activity',e.target.value)} style={{ ...tInp, fontSize:'13px' }}>
+                      <select value={entry?.activity||''} onChange={e=>updateEntry(date,'activity',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
                         <option value="">Velg...</option>
                         {ACTIVITIES.map(a=><option key={a} value={a}>{a}</option>)}
                       </select>
@@ -8345,9 +8345,9 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>🕐 Arbeidstid</label>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr auto', gap:'8px', alignItems:'center' }}>
-                      <input type="time" value={entry?.start_time||'07:00'} onChange={e=>{ updateEntry(date,'start_time',e.target.value); calcHoursFromTime(date,e.target.value,entry?.end_time||'15:30') }} style={{ ...tInp, textAlign:'center', fontWeight:'700' }} />
+                      <input type="time" value={entry?.start_time||'07:00'} onChange={e=>{ updateEntry(date,'start_time',e.target.value); calcHoursFromTime(date,e.target.value,entry?.end_time||'15:30') }} style={{ ...tsInp, textAlign:'center', fontWeight:'700' }} />
                       <span style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center' }}>–</span>
-                      <input type="time" value={entry?.end_time||'15:30'} onChange={e=>{ updateEntry(date,'end_time',e.target.value); calcHoursFromTime(date,entry?.start_time||'07:00',e.target.value) }} style={{ ...tInp, textAlign:'center', fontWeight:'700' }} />
+                      <input type="time" value={entry?.end_time||'15:30'} onChange={e=>{ updateEntry(date,'end_time',e.target.value); calcHoursFromTime(date,entry?.start_time||'07:00',e.target.value) }} style={{ ...tsInp, textAlign:'center', fontWeight:'700' }} />
                       <span style={{ fontSize:'13px', color:'#059669', fontWeight:'700', whiteSpace:'nowrap' }}>{fmtHours(dayHours)}t</span>
                     </div>
                   </div>
@@ -8361,7 +8361,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                           <div style={{ fontSize:'11px', color:col, fontWeight:'700', marginBottom:'4px', textAlign:'center' }}>{l}</div>
                           <input type="number" value={entry?.[f]||0} min="0" max="24" step="0.5"
                             onChange={e=>updateEntry(date,f,e.target.value)}
-                            style={{ ...tInp, textAlign:'center', fontWeight:'700', fontSize:'16px', border:`2px solid ${col}20` }} />
+                            style={{ ...tsInp, textAlign:'center', fontWeight:'700', fontSize:'16px', border:`2px solid ${col}20` }} />
                         </div>
                       ))}
                     </div>
@@ -8372,18 +8372,18 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     {[['travel_km','🚗 Km','0'],['diet','🍽️ Diett kr','0'],['expenses','💳 Utlegg kr','0']].map(([f,l,ph])=>(
                       <div key={f}>
                         <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>{l}</label>
-                        <input type="number" value={entry?.[f]||''} onChange={e=>updateEntry(date,f,e.target.value)} placeholder={ph} style={{ ...tInp, textAlign:'center', fontSize:'13px' }} />
+                        <input type="number" value={entry?.[f]||''} onChange={e=>updateEntry(date,f,e.target.value)} placeholder={ph} style={{ ...tsInp, textAlign:'center', fontSize:'13px' }} />
                       </div>
                     ))}
                   </div>
 
                   {(entry?.expenses>0) && (
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Beskrivelse utlegg</label>
-                    <input value={entry?.expenses_description||''} onChange={e=>updateEntry(date,'expenses_description',e.target.value)} placeholder="Hva ble kjøpt?" style={tInp} /></div>
+                    <input value={entry?.expenses_description||''} onChange={e=>updateEntry(date,'expenses_description',e.target.value)} placeholder="Hva ble kjøpt?" style={tsInp} /></div>
                   )}
 
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Merknad</label>
-                  <textarea value={entry?.notes||''} onChange={e=>updateEntry(date,'notes',e.target.value)} rows={2} placeholder="Valgfri merknad..." style={{ ...tInp, resize:'none', fontSize:'13px' }} /></div>
+                  <textarea value={entry?.notes||''} onChange={e=>updateEntry(date,'notes',e.target.value)} rows={2} placeholder="Valgfri merknad..." style={{ ...tsInp, resize:'none', fontSize:'13px' }} /></div>
 
                   {/* Actions */}
                   <div style={{ display:'flex', gap:'8px' }}>
@@ -8590,7 +8590,7 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
 
           <div style={{ marginBottom:'12px' }}>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Kommentar ved avslag</label>
-            <textarea value={rejectComment} onChange={e=>setRejectComment(e.target.value)} rows={2} placeholder="Forklar hva som må korrigeres..." style={{ ...tInp, resize:'none' }} />
+            <textarea value={rejectComment} onChange={e=>setRejectComment(e.target.value)} rows={2} placeholder="Forklar hva som må korrigeres..." style={{ ...tsInp, resize:'none' }} />
           </div>
 
           <div style={{ display:'flex', gap:'10px' }}>
