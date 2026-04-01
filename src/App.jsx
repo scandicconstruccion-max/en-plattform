@@ -4422,7 +4422,7 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
     if (!email) return alert('E-postadresse er påkrevd')
     setSending(true)
     try {
-      const approvalUrl = `${window.location.origin}/godkjenn?token=${quote.token}`
+      const approvalUrl = await createApprovalToken({ module: 'quote', recordId: quote.id, recipientEmail: email, createdBy: user?.id })
       const emailHtml = `
         <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
           <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">${quote.title}</h1>
@@ -4500,6 +4500,274 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
 
 // ─── END TILBUD MODULE ────────────────────────────────────────────────────────
 
+// ─── GODKJENNING MODULE ───────────────────────────────────────────────────────
+
+const MODULE_CONFIG = {
+  quote:        { label: 'Tilbud',          emoji: '📋', table: 'quotes',           statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
+  order:        { label: 'Ordre',           emoji: '📦', table: 'orders',           statusField: 'status', approvedStatus: 'Bekreftet', rejectedStatus: 'Avslått',  notifTitle: (r) => `Ordre bekreftet: ${r.title}`, notifTitleReject: (r) => `Ordre avslått: ${r.title}` },
+  invoice:      { label: 'Faktura',         emoji: '🧾', table: 'invoices',         statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avvist',   notifTitle: (r) => `Faktura godkjent: ${r.title}`, notifTitleReject: (r) => `Faktura avvist: ${r.title}` },
+  change_order: { label: 'Endringsmelding', emoji: '🔄', table: 'change_orders',    statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avslått',  notifTitle: (r) => `Endringsmelding godkjent: ${r.title}`, notifTitleReject: (r) => `Endringsmelding avslått: ${r.title}` },
+  tender:       { label: 'Anbud',           emoji: '📑', table: 'tenders',          statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Anbud akseptert: ${r.title}`, notifTitleReject: (r) => `Anbud avslått: ${r.title}` },
+}
+
+function GodkjenningsPage() {
+  const [token, setToken] = useState(null)
+  const [tokenData, setTokenData] = useState(null)
+  const [record, setRecord] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [signedName, setSignedName] = useState('')
+  const [rejectComment, setRejectComment] = useState('')
+  const [showReject, setShowReject] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [done, setDone] = useState(null) // 'approved' | 'rejected'
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('token')
+    if (!t) { setError('Ugyldig lenke — token mangler.'); setLoading(false); return }
+    setToken(t)
+    loadToken(t)
+  }, [])
+
+  const loadToken = async (t) => {
+    try {
+      const { data: td, error: te } = await supabase.from('approval_tokens').select('*').eq('token', t).single()
+      if (te || !td) throw new Error('Lenken er ugyldig eller utløpt.')
+      if (td.status !== 'pending') { setDone(td.status === 'approved' ? 'approved' : 'rejected'); setTokenData(td); setLoading(false); return }
+
+      const cfg = MODULE_CONFIG[td.module]
+      if (!cfg) throw new Error('Ukjent dokumenttype.')
+
+      const { data: rec, error: re } = await supabase.from(cfg.table).select('*').eq('id', td.record_id).single()
+      if (re || !rec) throw new Error('Dokumentet ble ikke funnet.')
+
+      setTokenData(td)
+      setRecord(rec)
+    } catch(e) { setError(e.message) }
+    finally { setLoading(false) }
+  }
+
+  const handleApprove = async () => {
+    if (!signedName.trim()) return alert('Vennligst skriv inn ditt navn for å signere.')
+    setSubmitting(true)
+    try {
+      const cfg = MODULE_CONFIG[tokenData.module]
+      const now = new Date().toISOString()
+
+      await supabase.from('approval_tokens').update({ status: 'approved', signed_name: signedName.trim(), approved_at: now }).eq('id', tokenData.id)
+      await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.approvedStatus, accepted_at: now, updated_at: now }).eq('id', tokenData.record_id)
+
+      if (tokenData.created_by) {
+        await supabase.from('notifications').insert({
+          user_id: tokenData.created_by,
+          title: cfg.notifTitle(record),
+          message: `Signert av ${signedName.trim()}${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
+          type: 'success',
+          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
+          link_id: tokenData.record_id,
+        })
+      }
+      setDone('approved')
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSubmitting(false) }
+  }
+
+  const handleReject = async () => {
+    setSubmitting(true)
+    try {
+      const cfg = MODULE_CONFIG[tokenData.module]
+      const now = new Date().toISOString()
+
+      await supabase.from('approval_tokens').update({ status: 'rejected', signed_name: signedName.trim()||null, reject_comment: rejectComment.trim()||null, rejected_at: now }).eq('id', tokenData.id)
+      await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.rejectedStatus, updated_at: now }).eq('id', tokenData.record_id)
+
+      if (tokenData.created_by) {
+        await supabase.from('notifications').insert({
+          user_id: tokenData.created_by,
+          title: cfg.notifTitleReject(record),
+          message: rejectComment.trim() || `Avslått av mottaker${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
+          type: 'warning',
+          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
+          link_id: tokenData.record_id,
+        })
+      }
+      setDone('rejected')
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSubmitting(false) }
+  }
+
+  const cfg = tokenData ? MODULE_CONFIG[tokenData.module] : null
+
+  const pageStyle = { minHeight: '100vh', background: 'linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: 'system-ui, sans-serif' }
+  const cardStyle = { background: 'white', borderRadius: '24px', padding: '40px', maxWidth: '560px', width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.10)', border: '1px solid #f1f5f9' }
+
+  if (loading) return (
+    <div style={pageStyle}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ width: '40px', height: '40px', border: '3px solid #e2e8f0', borderTop: '3px solid #059669', borderRadius: '50%', margin: '0 auto 16px', animation: 'spin 1s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        <p style={{ color: '#64748b' }}>Laster dokument...</p>
+      </div>
+    </div>
+  )
+
+  if (error) return (
+    <div style={pageStyle}>
+      <div style={{ ...cardStyle, textAlign: 'center' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+        <h2 style={{ margin: '0 0 8px', color: '#0f172a' }}>Ugyldig lenke</h2>
+        <p style={{ margin: 0, color: '#64748b' }}>{error}</p>
+      </div>
+    </div>
+  )
+
+  if (done === 'approved') return (
+    <div style={pageStyle}>
+      <div style={{ ...cardStyle, textAlign: 'center' }}>
+        <div style={{ fontSize: '64px', marginBottom: '16px' }}>✅</div>
+        <h2 style={{ margin: '0 0 8px', color: '#0f172a', fontSize: '24px' }}>Godkjent!</h2>
+        <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '16px' }}>
+          {cfg?.label} er godkjent{tokenData?.signed_name ? ` og signert av ${tokenData.signed_name}` : ''}.
+        </p>
+        <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Avsender har mottatt bekreftelse. Du kan lukke denne siden.</p>
+      </div>
+    </div>
+  )
+
+  if (done === 'rejected') return (
+    <div style={pageStyle}>
+      <div style={{ ...cardStyle, textAlign: 'center' }}>
+        <div style={{ fontSize: '64px', marginBottom: '16px' }}>🙏</div>
+        <h2 style={{ margin: '0 0 8px', color: '#0f172a', fontSize: '24px' }}>Tilbakemelding mottatt</h2>
+        <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '16px' }}>Avsender er varslet om din beslutning.</p>
+        <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Du kan lukke denne siden.</p>
+      </div>
+    </div>
+  )
+
+  if (!record || !cfg) return null
+
+  const isQuote = tokenData.module === 'quote'
+  const chapters = record.chapters || []
+  const grandTotal = isQuote ? chapters.reduce((acc, ch) => {
+    const chSum = (ch.posts||[]).reduce((a,p) => a + (parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0)), 0)
+    return acc + chSum * (1 + (parseFloat(ch.markup)||0)/100)
+  }, 0) * (1 + (parseFloat(record.global_markup)||0)/100) : null
+
+  return (
+    <div style={pageStyle}>
+      <div style={cardStyle}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', margin: '0 auto 16px' }}>{cfg.emoji}</div>
+          <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: '800', color: '#0f172a' }}>{record.title}</h1>
+          <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>{cfg.label} • {record.quote_number || record.order_number || record.invoice_number || ''}</p>
+        </div>
+
+        {/* Document details */}
+        <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px', marginBottom: '20px', border: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isQuote ? '16px' : '0' }}>
+            {[
+              ['Til', record.customer_name],
+              ['Gyldig til', record.valid_until],
+              ['Betalingsbetingelser', record.payment_terms],
+              ['Leveringstid', record.delivery_time],
+            ].filter(r => r[1]).map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', marginBottom: '2px' }}>{k}</div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {isQuote && grandTotal !== null && (
+            <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '14px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Totalsum eks. mva</div>
+              <div style={{ fontSize: '28px', fontWeight: '800', color: '#0f172a' }}>{(Math.round(grandTotal)).toLocaleString('nb-NO')} kr</div>
+              <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Inkl. mva: {(Math.round(grandTotal * 1.25)).toLocaleString('nb-NO')} kr</div>
+            </div>
+          )}
+        </div>
+
+        {/* Intro text */}
+        {record.intro_text && <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#475569', lineHeight: 1.7 }}>{record.intro_text}</p>}
+
+        {/* Chapters summary for quote */}
+        {isQuote && chapters.length > 0 && (
+          <div style={{ marginBottom: '20px' }}>
+            {chapters.map((ch, i) => {
+              const chSum = (ch.posts||[]).reduce((a,p) => a + (parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0)), 0)
+              const chTotal = chSum * (1 + (parseFloat(ch.markup)||0)/100)
+              return (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: i%2===0?'#f8fafc':'white', borderRadius: '8px', fontSize: '14px' }}>
+                  <span style={{ color: '#374151', fontWeight: '500' }}>{String(i+1).padStart(2,'0')}. {ch.title}</span>
+                  <span style={{ fontWeight: '700', color: '#0f172a' }}>{Math.round(chTotal).toLocaleString('nb-NO')} kr</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Signature */}
+        {!showReject && (
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#374151', marginBottom: '8px' }}>✍️ Ditt fulle navn (signatur)</label>
+            <input value={signedName} onChange={e => setSignedName(e.target.value)} placeholder="Skriv inn ditt fulle navn..." style={{ width: '100%', padding: '12px 14px', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif', transition: 'border 0.15s' }}
+              onFocus={e => e.target.style.borderColor='#059669'} onBlur={e => e.target.style.borderColor='#e2e8f0'} />
+          </div>
+        )}
+
+        {/* Reject form */}
+        {showReject && (
+          <div style={{ marginBottom: '16px', background: '#fef2f2', borderRadius: '12px', padding: '16px', border: '1px solid #fecaca' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>❌ Årsak til avslag (valgfritt)</label>
+            <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={3} placeholder="Beskriv hvorfor du avslår..." style={{ width: '100%', padding: '10px 12px', border: '1px solid #fecaca', borderRadius: '10px', fontSize: '14px', outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }} />
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {!showReject ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button onClick={handleApprove} disabled={submitting}
+              style={{ width: '100%', padding: '16px', background: submitting ? '#6ee7b7' : '#059669', color: 'white', border: 'none', borderRadius: '14px', fontSize: '16px', fontWeight: '700', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+              {submitting ? 'Behandler...' : `✅ Godkjenn ${cfg.label}`}
+            </button>
+            <button onClick={() => setShowReject(true)}
+              style={{ width: '100%', padding: '13px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '14px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
+              ❌ Avslå
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setShowReject(false)}
+              style={{ flex: 1, padding: '13px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
+              ← Tilbake
+            </button>
+            <button onClick={handleReject} disabled={submitting}
+              style={{ flex: 2, padding: '13px', background: submitting ? '#fca5a5' : '#dc2626', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              {submitting ? 'Sender...' : 'Bekreft avslag'}
+            </button>
+          </div>
+        )}
+
+        {record.outro_text && <p style={{ margin: '20px 0 0', fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, textAlign: 'center' }}>{record.outro_text}</p>}
+        <p style={{ margin: '16px 0 0', fontSize: '12px', color: '#cbd5e1', textAlign: 'center' }}>Sendt via En Plattform KS-system • enplattform.no</p>
+      </div>
+    </div>
+  )
+}
+
+// Helper: create approval token and return URL
+async function createApprovalToken({ module, recordId, recipientEmail, createdBy }) {
+  const { data, error } = await supabase.from('approval_tokens').insert({
+    module, record_id: recordId, recipient_email: recipientEmail, created_by: createdBy
+  }).select().single()
+  if (error) throw error
+  return `${window.location.origin}/godkjenn?token=${data.token}`
+}
+
+// ─── END GODKJENNING MODULE ───────────────────────────────────────────────────
+
 
 
 
@@ -4522,6 +4790,9 @@ function AppContent() {
 
   const navigate = (p) => { setPage(p); setProjectId(null) }
   const openProject = (id) => { setPage('prosjekt_detaljer'); setProjectId(id) }
+
+  // Show approval page without login if URL is /godkjenn
+  if (window.location.pathname === '/godkjenn') return <GodkjenningsPage />
 
   if (loading) {
     return (
