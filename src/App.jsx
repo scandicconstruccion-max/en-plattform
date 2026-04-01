@@ -7878,6 +7878,765 @@ function ImportCSVModal({ user, onClose, onSaved }) {
 
 // ─── END ANSATTE MODULE ───────────────────────────────────────────────────────
 
+// ─── TIMELISTE MODULE ─────────────────────────────────────────────────────────
+
+const TS_STATUS = {
+  'Utkast':    { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
+  'Innlevert': { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📤' },
+  'Godkjent':  { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'✅' },
+  'Avvist':    { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'❌' },
+}
+
+const ACTIVITIES = [
+  'Graving','Betong','Stål/Armering','Tømrerarbeid','Rørlegger','Elektro',
+  'Stillas','Asfalt','Rigg/Riving','Maskinkjøring','Transport','Møte/Admin',
+  'HMS/Sikkerhet','Kontroll/Inspeksjon','Annet'
+]
+
+const KM_RATE = 4.90 // kr per km
+
+function getWeekNumber(date) {
+  const d = new Date(date)
+  d.setHours(0,0,0,0)
+  d.setDate(d.getDate()+4-(d.getDay()||7))
+  const yearStart = new Date(d.getFullYear(),0,1)
+  return Math.ceil((((d-yearStart)/86400000)+1)/7)
+}
+
+function getWeekDates(week, year) {
+  const jan4 = new Date(year,0,4)
+  const startOfWeek = new Date(jan4)
+  startOfWeek.setDate(jan4.getDate()-((jan4.getDay()||7)-1)+(week-1)*7)
+  return Array.from({length:7},(_,i)=>{
+    const d = new Date(startOfWeek)
+    d.setDate(startOfWeek.getDate()+i)
+    return d.toISOString().split('T')[0]
+  })
+}
+
+const DAYS_NO = ['Man','Tir','Ons','Tor','Fre','Lør','Søn']
+const DAYS_FULL = ['Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag','Søndag']
+
+function fmtHours(h) { return (Math.round((parseFloat(h)||0)*10)/10).toString().replace('.',',') }
+function fmtDate(d) { const dt=new Date(d+'T12:00:00'); return dt.toLocaleDateString('nb-NO',{weekday:'short',day:'numeric',month:'short'}) }
+
+const tInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+
+// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+function TimelistePage() {
+  const { user } = useAuth()
+  const [view, setView] = useState('mine') // 'mine' | 'oversikt' | 'godkjenn'
+  const [employees, setEmployees] = useState([])
+  const [projects, setProjects] = useState([])
+  const [timesheets, setTimesheets] = useState([])
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedWeek, setSelectedWeek] = useState(getWeekNumber(new Date()))
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [editingSheet, setEditingSheet] = useState(null)
+  const [statsView, setStatsView] = useState('uke') // 'dag'|'uke'|'maned'
+
+  const load = async () => {
+    try {
+      const [emp, proj, ts] = await Promise.all([
+        supabase.from('employees').select('id,first_name,last_name,hourly_rate').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}).then(r=>r.data||[])
+      ])
+      setEmployees(emp); setProjects(proj); setTimesheets(ts)
+      setEntries(ts.flatMap(t=>t.timesheet_entries||[]))
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Find or init current week sheet for selected employee
+  const currentSheet = timesheets.find(t=>
+    t.week_number===selectedWeek && t.year===selectedYear &&
+    t.employee_id===(selectedEmployee||employees[0]?.id)
+  )
+
+  const pendingApproval = timesheets.filter(t=>t.status==='Innlevert')
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster timelister...</p></div></div>
+
+  if (editingSheet) return <TimesheetEditor sheet={editingSheet} projects={projects} employees={employees} user={user} onBack={()=>{setEditingSheet(null);load()}} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>
+          </div>
+          {pendingApproval.length>0 && (
+            <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'8px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
+              ⏳ {pendingApproval.length} timeliste{pendingApproval.length>1?'r':''} venter godkjenning
+            </div>
+          )}
+        </div>
+        {/* View tabs */}
+        <div style={{ display:'flex', gap:'6px', marginTop:'16px', flexWrap:'wrap' }}>
+          {[['mine','📋 Mine timelister'],['oversikt','📊 Oversikt'],['godkjenn','✅ Godkjenning']].map(([v,l])=>(
+            <button key={v} onClick={()=>setView(v)}
+              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize:'13px', cursor:'pointer', position:'relative' }}>
+              {l}
+              {v==='godkjenn'&&pendingApproval.length>0&&<span style={{ position:'absolute', top:'-4px', right:'-4px', background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'10px', fontWeight:'800', minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px' }}>{pendingApproval.length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 24px' }}>
+
+        {/* ── MINE TIMELISTER ── */}
+        {view==='mine' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+            {/* Employee selector + week nav */}
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center', flexWrap:'wrap' }}>
+              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tInp, maxWidth:'200px', flex:1 }}>
+                {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+              </select>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginLeft:'auto' }}>
+                <button onClick={()=>{ let w=selectedWeek-1,y=selectedYear; if(w<1){w=52;y--}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
+                <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', whiteSpace:'nowrap' }}>Uke {selectedWeek}, {selectedYear}</span>
+                <button onClick={()=>{ let w=selectedWeek+1,y=selectedYear; if(w>52){w=1;y++}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
+                <button onClick={()=>{ setSelectedWeek(getWeekNumber(new Date())); setSelectedYear(new Date().getFullYear()) }} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
+              </div>
+            </div>
+
+            {/* Week sheet */}
+            <WeekSheet
+              sheet={currentSheet}
+              week={selectedWeek} year={selectedYear}
+              employeeId={selectedEmployee||employees[0]?.id}
+              projects={projects} user={user}
+              onEdit={()=>{
+                setEditingSheet({ sheet:currentSheet, week:selectedWeek, year:selectedYear, employeeId:selectedEmployee||employees[0]?.id })
+              }}
+              onRefresh={load}
+            />
+          </div>
+        )}
+
+        {/* ── OVERSIKT ── */}
+        {view==='oversikt' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                {[['dag','Dag'],['uke','Uke'],['maned','Måned']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setStatsView(v)} style={{ padding:'8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                ))}
+              </div>
+              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tInp, maxWidth:'200px' }}>
+                <option value="">Alle ansatte</option>
+                {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+              </select>
+            </div>
+            <TimesheetStats entries={entries} timesheets={timesheets} employees={employees} projects={projects} selectedEmployee={selectedEmployee} statsView={statsView} />
+          </div>
+        )}
+
+        {/* ── GODKJENNING ── */}
+        {view==='godkjenn' && (
+          <GodkjenningView timesheets={timesheets} employees={employees} projects={projects} user={user} onRefresh={load} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── WEEK SHEET – mobile-first weekly overview ─────────────────────────────────
+function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRefresh }) {
+  const weekDates = getWeekDates(week, year)
+  const entries = sheet?.timesheet_entries || []
+  const [submitting, setSubmitting] = useState(false)
+
+  const totalHours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc, 0)
+  const totalKm = entries.reduce((acc,e)=>acc+(parseFloat(e.travel_km)||0), 0)
+  const totalDiet = entries.reduce((acc,e)=>acc+(parseFloat(e.diet)||0), 0)
+  const totalExpenses = entries.reduce((acc,e)=>acc+(parseFloat(e.expenses)||0), 0)
+
+  const handleSubmit = async () => {
+    if (!sheet) return alert('Ingen timeliste å levere inn. Registrer timer først.')
+    if (!confirm('Lever inn timelisten for uke '+week+'?')) return
+    setSubmitting(true)
+    try {
+      await supabase.from('timesheets').update({ status:'Innlevert', submitted_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id',sheet.id)
+      onRefresh()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSubmitting(false) }
+  }
+
+  const statusCfg = sheet ? TS_STATUS[sheet.status] : null
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+      {/* Status + actions */}
+      <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+          {sheet ? (
+            <span style={{ background:statusCfg.bg, color:statusCfg.color, border:`1px solid ${statusCfg.border}`, padding:'4px 12px', borderRadius:'999px', fontSize:'13px', fontWeight:'700' }}>{statusCfg.emoji} {sheet.status}</span>
+          ) : (
+            <span style={{ background:'#f8fafc', color:'#94a3b8', border:'1px solid #e2e8f0', padding:'4px 12px', borderRadius:'999px', fontSize:'13px', fontWeight:'600' }}>📝 Ikke startet</span>
+          )}
+          <span style={{ fontSize:'14px', color:'#0f172a', fontWeight:'700' }}>{fmtHours(totalHours)} timer</span>
+          {totalKm>0 && <span style={{ fontSize:'13px', color:'#64748b' }}>🚗 {totalKm} km</span>}
+        </div>
+        <div style={{ display:'flex', gap:'8px' }}>
+          {(!sheet||sheet.status==='Utkast'||sheet.status==='Avvist') && (
+            <button onClick={onEdit} style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+              {sheet ? '✏️ Rediger' : '+ Registrer timer'}
+            </button>
+          )}
+          {sheet?.status==='Utkast' && (
+            <button onClick={handleSubmit} disabled={submitting} style={{ padding:'10px 18px', background:submitting?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+              {submitting?'Sender...':'📤 Lever inn'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {sheet?.status==='Avvist' && sheet.reject_comment && (
+        <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'14px 18px', border:'1px solid #fecaca' }}>
+          <div style={{ fontSize:'13px', fontWeight:'700', color:'#dc2626', marginBottom:'4px' }}>❌ Avvist av leder</div>
+          <div style={{ fontSize:'13px', color:'#475569' }}>{sheet.reject_comment}</div>
+        </div>
+      )}
+
+      {/* Weekly grid – mobile friendly */}
+      <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+        {weekDates.map((date,i)=>{
+          const dayEntries = entries.filter(e=>e.date===date)
+          const dayHours = dayEntries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
+          const isWeekend = i>=5
+          const isToday = date===new Date().toISOString().split('T')[0]
+          return (
+            <div key={date} style={{ background:isToday?'#f0fdf4':isWeekend?'#f8fafc':'white', borderRadius:'14px', border:`1px solid ${isToday?'#bbf7d0':isWeekend?'#f1f5f9':'#f1f5f9'}`, padding:'14px 18px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:dayEntries.length>0?'10px':'0' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span style={{ fontWeight:'700', fontSize:'14px', color:isToday?'#059669':isWeekend?'#94a3b8':'#0f172a' }}>{DAYS_FULL[i]}</span>
+                  <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})}</span>
+                  {isToday&&<span style={{ background:'#059669', color:'white', fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px' }}>I dag</span>}
+                </div>
+                {dayHours>0 && <span style={{ fontWeight:'800', fontSize:'15px', color:isToday?'#059669':'#0f172a' }}>{fmtHours(dayHours)}t</span>}
+              </div>
+              {dayEntries.map(e=>{
+                const proj = e.project_id ? null : null
+                const hours = (parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)
+                return (
+                  <div key={e.id} style={{ background:'white', borderRadius:'10px', padding:'10px 14px', marginBottom:'6px', border:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{e.activity||'—'}</span>
+                      <span style={{ fontWeight:'700', fontSize:'14px', color:'#059669' }}>{fmtHours(hours)}t</span>
+                    </div>
+                    <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                      {e.start_time&&e.end_time&&<span>🕐 {e.start_time.slice(0,5)}–{e.end_time.slice(0,5)}</span>}
+                      {parseFloat(e.normal_hours)>0&&<span>Normal: {fmtHours(e.normal_hours)}t</span>}
+                      {parseFloat(e.overtime_50)>0&&<span style={{ color:'#d97706' }}>OT50%: {fmtHours(e.overtime_50)}t</span>}
+                      {parseFloat(e.overtime_100)>0&&<span style={{ color:'#dc2626' }}>OT100%: {fmtHours(e.overtime_100)}t</span>}
+                      {parseFloat(e.travel_km)>0&&<span>🚗 {e.travel_km}km</span>}
+                      {parseFloat(e.diet)>0&&<span>🍽️ {e.diet}kr</span>}
+                    </div>
+                  </div>
+                )
+              })}
+              {dayEntries.length===0&&!isWeekend&&<div style={{ fontSize:'12px', color:'#cbd5e1', fontStyle:'italic' }}>Ingen timer registrert</div>}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Week summary */}
+      {totalHours>0 && (
+        <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'16px 20px', border:'1px solid #bbf7d0' }}>
+          <div style={{ fontSize:'13px', fontWeight:'700', color:'#16a34a', marginBottom:'10px' }}>📊 Ukesum</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))', gap:'10px' }}>
+            {[
+              ['Normal',entries.reduce((acc,e)=>acc+(parseFloat(e.normal_hours)||0),0)+'t','#16a34a'],
+              entries.reduce((acc,e)=>acc+(parseFloat(e.overtime_50)||0),0)>0?['OT 50%',entries.reduce((acc,e)=>acc+(parseFloat(e.overtime_50)||0),0)+'t','#d97706']:null,
+              entries.reduce((acc,e)=>acc+(parseFloat(e.overtime_100)||0),0)>0?['OT 100%',entries.reduce((acc,e)=>acc+(parseFloat(e.overtime_100)||0),0)+'t','#dc2626']:null,
+              totalKm>0?['Km',totalKm+'km','#2563eb']:null,
+              totalDiet>0?['Diett',totalDiet+'kr','#7c3aed']:null,
+              totalExpenses>0?['Utlegg',totalExpenses+'kr','#0891b2']:null,
+            ].filter(Boolean).map(([k,v,col])=>(
+              <div key={k} style={{ textAlign:'center' }}>
+                <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'2px' }}>{k}</div>
+                <div style={{ fontSize:'18px', fontWeight:'800', color:col }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TIMESHEET EDITOR – register hours per day ─────────────────────────────────
+function TimesheetEditor({ sheet: initData, projects, employees, user, onBack }) {
+  const { sheet, week, year, employeeId } = initData
+  const weekDates = getWeekDates(week, year)
+  const [entries, setEntries] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [sheetId, setSheetId] = useState(sheet?.id||null)
+  const [activeDay, setActiveDay] = useState(null)
+  const emp = employees.find(e=>e.id===employeeId)
+
+  useEffect(()=>{
+    if (sheet?.timesheet_entries) {
+      setEntries(sheet.timesheet_entries.map(e=>({...e, _dirty:false})))
+    }
+  },[])
+
+  const ensureSheet = async () => {
+    if (sheetId) return sheetId
+    const { data, error } = await supabase.from('timesheets').insert({
+      employee_id:employeeId, week_number:week, year, status:'Utkast', created_by:user?.id
+    }).select().single()
+    if (error) throw error
+    setSheetId(data.id)
+    return data.id
+  }
+
+  const getEntry = (date) => entries.find(e=>e.date===date)
+
+  const initEntry = (date) => ({
+    _new:true, date, project_id:'', activity:'', start_time:'07:00', end_time:'15:30',
+    normal_hours:7.5, overtime_50:0, overtime_100:0, travel_km:0, diet:0, expenses:0,
+    expenses_description:'', notes:''
+  })
+
+  const updateEntry = (date, field, value) => {
+    setEntries(prev => {
+      const existing = prev.find(e=>e.date===date)
+      if (existing) return prev.map(e=>e.date===date?{...e,[field]:value,_dirty:true}:e)
+      return [...prev, {...initEntry(date), [field]:value, _dirty:true}]
+    })
+  }
+
+  const calcHoursFromTime = (date, start, end) => {
+    if (!start||!end) return
+    const [sh,sm]=start.split(':').map(Number)
+    const [eh,em]=end.split(':').map(Number)
+    const totalMins=(eh*60+em)-(sh*60+sm)
+    if (totalMins<=0) return
+    const totalHours=totalMins/60
+    const normal=Math.min(totalHours,7.5)
+    const ot50=Math.max(0,Math.min(totalHours-7.5,2))
+    const ot100=Math.max(0,totalHours-9.5)
+    setEntries(prev=>{
+      const existing=prev.find(e=>e.date===date)
+      const upd={normal_hours:Math.round(normal*10)/10,overtime_50:Math.round(ot50*10)/10,overtime_100:Math.round(ot100*10)/10,_dirty:true}
+      if (existing) return prev.map(e=>e.date===date?{...e,...upd}:e)
+      return [...prev,{...initEntry(date),[`start_time`]:start,[`end_time`]:end,...upd}]
+    })
+  }
+
+  const saveDay = async (date) => {
+    const entry = entries.find(e=>e.date===date)
+    if (!entry?._dirty&&!entry?._new) return
+    setSaving(true)
+    try {
+      const sid = await ensureSheet()
+      const payload = {
+        timesheet_id:sid, date:entry.date,
+        project_id:entry.project_id||null, activity:entry.activity||null,
+        start_time:entry.start_time||null, end_time:entry.end_time||null,
+        normal_hours:parseFloat(entry.normal_hours)||0,
+        overtime_50:parseFloat(entry.overtime_50)||0,
+        overtime_100:parseFloat(entry.overtime_100)||0,
+        travel_km:parseFloat(entry.travel_km)||0,
+        diet:parseFloat(entry.diet)||0,
+        expenses:parseFloat(entry.expenses)||0,
+        expenses_description:entry.expenses_description||null,
+        notes:entry.notes||null,
+      }
+      if (entry.id&&!entry._new) {
+        await supabase.from('timesheet_entries').update(payload).eq('id',entry.id)
+      } else {
+        const {data}=await supabase.from('timesheet_entries').insert(payload).select().single()
+        setEntries(prev=>prev.map(e=>e.date===date?{...data,_dirty:false}:e))
+      }
+      setEntries(prev=>prev.map(e=>e.date===date?{...e,_dirty:false,_new:false}:e))
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const deleteEntry = async (date) => {
+    const entry = entries.find(e=>e.date===date)
+    if (!entry||entry._new) { setEntries(prev=>prev.filter(e=>e.date!==date)); setActiveDay(null); return }
+    await supabase.from('timesheet_entries').delete().eq('id',entry.id)
+    setEntries(prev=>prev.filter(e=>e.date!==date))
+    setActiveDay(null)
+  }
+
+  const totalHours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 20px', position:'sticky', top:0, zIndex:10 }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <div style={{ fontWeight:'800', fontSize:'17px', color:'#0f172a' }}>Uke {week}, {year}</div>
+            <div style={{ fontSize:'13px', color:'#64748b' }}>{emp?.first_name} {emp?.last_name}</div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8' }}>denne uken</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'16px', display:'flex', flexDirection:'column', gap:'10px' }}>
+        {weekDates.map((date,i)=>{
+          const entry = getEntry(date)
+          const isWeekend = i>=5
+          const isToday = date===new Date().toISOString().split('T')[0]
+          const isActive = activeDay===date
+          const dayHours = entry?(parseFloat(entry.normal_hours)||0)+(parseFloat(entry.overtime_50)||0)+(parseFloat(entry.overtime_100)||0):0
+
+          return (
+            <div key={date} style={{ background:'white', borderRadius:'16px', border:`2px solid ${isActive?'#059669':isToday?'#bbf7d0':isWeekend?'#f1f5f9':'#f1f5f9'}`, overflow:'hidden' }}>
+              {/* Day header – always visible */}
+              <div onClick={()=>setActiveDay(isActive?null:date)}
+                style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', cursor:'pointer', background:isActive?'#f0fdf4':isToday?'#f0fdf4':'white' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                  <div style={{ width:'40px', height:'40px', borderRadius:'50%', background:dayHours>0?'#059669':isWeekend?'#f1f5f9':'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    {dayHours>0 ? <span style={{ fontSize:'12px', fontWeight:'800', color:'white' }}>{fmtHours(dayHours)}</span> : <span style={{ fontSize:'16px' }}>{isWeekend?'🏖️':'+'}</span>}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:'700', fontSize:'14px', color:isWeekend?'#94a3b8':'#0f172a' }}>{DAYS_FULL[i]}</div>
+                    <div style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'long'})}</div>
+                  </div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  {entry?._dirty&&<span style={{ width:'8px',height:'8px',borderRadius:'50%',background:'#d97706',display:'inline-block' }}/>}
+                  <span style={{ fontSize:'16px', color:'#94a3b8', transform:isActive?'rotate(90deg)':'none', transition:'transform 0.2s' }}>›</span>
+                </div>
+              </div>
+
+              {/* Day form – expanded */}
+              {isActive && (
+                <div style={{ padding:'16px 18px', borderTop:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'14px' }}>
+                  {/* Project + Activity */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                    <div>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
+                      <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tInp, fontSize:'13px' }}>
+                        <option value="">Velg...</option>
+                        {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Aktivitet</label>
+                      <select value={entry?.activity||''} onChange={e=>updateEntry(date,'activity',e.target.value)} style={{ ...tInp, fontSize:'13px' }}>
+                        <option value="">Velg...</option>
+                        {ACTIVITIES.map(a=><option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Start/end time */}
+                  <div>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>🕐 Arbeidstid</label>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr auto', gap:'8px', alignItems:'center' }}>
+                      <input type="time" value={entry?.start_time||'07:00'} onChange={e=>{ updateEntry(date,'start_time',e.target.value); calcHoursFromTime(date,e.target.value,entry?.end_time||'15:30') }} style={{ ...tInp, textAlign:'center', fontWeight:'700' }} />
+                      <span style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center' }}>–</span>
+                      <input type="time" value={entry?.end_time||'15:30'} onChange={e=>{ updateEntry(date,'end_time',e.target.value); calcHoursFromTime(date,entry?.start_time||'07:00',e.target.value) }} style={{ ...tInp, textAlign:'center', fontWeight:'700' }} />
+                      <span style={{ fontSize:'13px', color:'#059669', fontWeight:'700', whiteSpace:'nowrap' }}>{fmtHours(dayHours)}t</span>
+                    </div>
+                  </div>
+
+                  {/* Hours breakdown */}
+                  <div>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Timer (juster manuelt)</label>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                      {[['normal_hours','Normal','#16a34a'],['overtime_50','OT 50%','#d97706'],['overtime_100','OT 100%','#dc2626']].map(([f,l,col])=>(
+                        <div key={f}>
+                          <div style={{ fontSize:'11px', color:col, fontWeight:'700', marginBottom:'4px', textAlign:'center' }}>{l}</div>
+                          <input type="number" value={entry?.[f]||0} min="0" max="24" step="0.5"
+                            onChange={e=>updateEntry(date,f,e.target.value)}
+                            style={{ ...tInp, textAlign:'center', fontWeight:'700', fontSize:'16px', border:`2px solid ${col}20` }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Travel + diet */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                    {[['travel_km','🚗 Km','0'],['diet','🍽️ Diett kr','0'],['expenses','💳 Utlegg kr','0']].map(([f,l,ph])=>(
+                      <div key={f}>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>{l}</label>
+                        <input type="number" value={entry?.[f]||''} onChange={e=>updateEntry(date,f,e.target.value)} placeholder={ph} style={{ ...tInp, textAlign:'center', fontSize:'13px' }} />
+                      </div>
+                    ))}
+                  </div>
+
+                  {(entry?.expenses>0) && (
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Beskrivelse utlegg</label>
+                    <input value={entry?.expenses_description||''} onChange={e=>updateEntry(date,'expenses_description',e.target.value)} placeholder="Hva ble kjøpt?" style={tInp} /></div>
+                  )}
+
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Merknad</label>
+                  <textarea value={entry?.notes||''} onChange={e=>updateEntry(date,'notes',e.target.value)} rows={2} placeholder="Valgfri merknad..." style={{ ...tInp, resize:'none', fontSize:'13px' }} /></div>
+
+                  {/* Actions */}
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button onClick={()=>saveDay(date)} disabled={saving||!entry?._dirty} style={{ flex:1, padding:'12px', background:entry?._dirty?'#059669':'#f1f5f9', color:entry?._dirty?'white':'#94a3b8', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:entry?._dirty?'pointer':'default' }}>
+                      {saving?'Lagrer...':'💾 Lagre dag'}
+                    </button>
+                    {entry&&!entry._new&&<button onClick={()=>deleteEntry(date)} style={{ padding:'12px 16px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>🗑️</button>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── STATS VIEW ────────────────────────────────────────────────────────────────
+function TimesheetStats({ entries, timesheets, employees, projects, selectedEmployee, statsView }) {
+  const filteredEntries = selectedEmployee ? entries.filter(e=>{
+    const ts = timesheets.find(t=>t.id===e.timesheet_id)
+    return ts?.employee_id===selectedEmployee
+  }) : entries
+
+  const totalNormal = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.normal_hours)||0),0)
+  const totalOT50   = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.overtime_50)||0),0)
+  const totalOT100  = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.overtime_100)||0),0)
+  const totalKm     = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.travel_km)||0),0)
+  const totalDiet   = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.diet)||0),0)
+
+  // Group by project
+  const byProject = projects.map(proj=>{
+    const projEntries = filteredEntries.filter(e=>e.project_id===proj.id)
+    const hours = projEntries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
+    return { ...proj, hours }
+  }).filter(p=>p.hours>0).sort((a,b)=>b.hours-a.hours)
+
+  // Group by period
+  const now = new Date()
+  const getKey = (e) => {
+    if (statsView==='dag') return e.date
+    if (statsView==='uke') {
+      const ts = timesheets.find(t=>t.id===e.timesheet_id)
+      return ts ? `Uke ${ts.week_number}, ${ts.year}` : '—'
+    }
+    return e.date?.slice(0,7)||'—'
+  }
+
+  const byPeriod = {}
+  filteredEntries.forEach(e=>{
+    const k=getKey(e)
+    if (!byPeriod[k]) byPeriod[k]={key:k,normal:0,ot50:0,ot100:0,km:0}
+    byPeriod[k].normal+=(parseFloat(e.normal_hours)||0)
+    byPeriod[k].ot50+=(parseFloat(e.overtime_50)||0)
+    byPeriod[k].ot100+=(parseFloat(e.overtime_100)||0)
+    byPeriod[k].km+=(parseFloat(e.travel_km)||0)
+  })
+  const periods = Object.values(byPeriod).sort((a,b)=>b.key.localeCompare(a.key)).slice(0,20)
+
+  const exportCSV = () => {
+    const rows = [
+      ['Dato','Ansatt','Prosjekt','Aktivitet','Fra','Til','Normal','OT50%','OT100%','Km','Diett','Utlegg','Merknad'],
+      ...filteredEntries.map(e=>{
+        const ts = timesheets.find(t=>t.id===e.timesheet_id)
+        const emp = employees.find(x=>x.id===ts?.employee_id)
+        const proj = projects.find(p=>p.id===e.project_id)
+        return [e.date,`${emp?.first_name||''} ${emp?.last_name||''}`,proj?.name||'',e.activity||'',e.start_time||'',e.end_time||'',e.normal_hours||0,e.overtime_50||0,e.overtime_100||0,e.travel_km||0,e.diet||0,e.expenses||0,e.notes||'']
+      })
+    ]
+    const csv = rows.map(r=>r.join(';')).join('\n')
+    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href=url; a.download=`timelister-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      {/* Summary cards */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:'10px' }}>
+        {[['Normal',fmtHours(totalNormal)+'t','#16a34a','#f0fdf4'],['OT 50%',fmtHours(totalOT50)+'t','#d97706','#fffbeb'],['OT 100%',fmtHours(totalOT100)+'t','#dc2626','#fef2f2'],['Km',totalKm+'km','#2563eb','#eff6ff'],['Diett',totalDiet+' kr','#7c3aed','#f5f3ff']].map(([l,v,col,bg])=>(
+          <div key={l} style={{ background:bg, borderRadius:'12px', padding:'14px 16px', textAlign:'center', border:`1px solid ${bg}` }}>
+            <div style={{ fontSize:'11px', color:col, fontWeight:'700', textTransform:'uppercase', marginBottom:'4px' }}>{l}</div>
+            <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        {/* By project */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
+          <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Timer per prosjekt</h3>
+          {byProject.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:byProject.map(p=>(
+            <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+              <div style={{ flex:1, fontSize:'13px', fontWeight:'500', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+              <div style={{ background:'#f0fdf4', borderRadius:'8px', padding:'3px 10px', fontWeight:'700', color:'#059669', fontSize:'13px', whiteSpace:'nowrap' }}>{fmtHours(p.hours)}t</div>
+            </div>
+          ))}
+        </div>
+
+        {/* By period */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
+          <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📅 Per {statsView==='dag'?'dag':statsView==='uke'?'uke':'måned'}</h3>
+          {periods.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:periods.map(p=>(
+            <div key={p.key} style={{ marginBottom:'8px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.key}</span>
+                <span style={{ fontSize:'13px', fontWeight:'800', color:'#059669' }}>{fmtHours(p.normal+p.ot50+p.ot100)}t</span>
+              </div>
+              <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#94a3b8' }}>
+                {p.normal>0&&<span>Normal: {fmtHours(p.normal)}t</span>}
+                {p.ot50>0&&<span style={{ color:'#d97706' }}>OT50: {fmtHours(p.ot50)}t</span>}
+                {p.ot100>0&&<span style={{ color:'#dc2626' }}>OT100: {fmtHours(p.ot100)}t</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={exportCSV} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
+        📥 Eksporter til CSV (lønnssystem)
+      </button>
+    </div>
+  )
+}
+
+// ── GODKJENNING VIEW ──────────────────────────────────────────────────────────
+function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
+  const [selected, setSelected] = useState(null)
+  const [rejectComment, setRejectComment] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const pending = timesheets.filter(t=>t.status==='Innlevert').sort((a,b)=>new Date(a.submitted_at)-new Date(b.submitted_at))
+  const all = timesheets.filter(t=>t.status!=='Utkast').sort((a,b)=>new Date(b.submitted_at||b.created_at)-new Date(a.submitted_at||a.created_at))
+
+  const handleApprove = async (ts) => {
+    setProcessing(true)
+    try {
+      await supabase.from('timesheets').update({ status:'Godkjent', approved_at:new Date().toISOString(), approved_by:user?.id, updated_at:new Date().toISOString() }).eq('id',ts.id)
+      setSelected(null)
+      onRefresh()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setProcessing(false) }
+  }
+
+  const handleReject = async (ts) => {
+    if (!rejectComment.trim()) return alert('Skriv en kommentar til den ansatte')
+    setProcessing(true)
+    try {
+      await supabase.from('timesheets').update({ status:'Avvist', reject_comment:rejectComment.trim(), updated_at:new Date().toISOString() }).eq('id',ts.id)
+      setRejectComment(''); setSelected(null)
+      onRefresh()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setProcessing(false) }
+  }
+
+  if (selected) {
+    const emp = employees.find(e=>e.id===selected.employee_id)
+    const entries = selected.timesheet_entries||[]
+    const weekDates = getWeekDates(selected.week_number, selected.year)
+    const totalHours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
+    const totalKm = entries.reduce((acc,e)=>acc+(parseFloat(e.travel_km)||0),0)
+    const totalDiet = entries.reduce((acc,e)=>acc+(parseFloat(e.diet)||0),0)
+
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+        <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake</button>
+        <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', flexWrap:'wrap', gap:'12px' }}>
+            <div>
+              <h3 style={{ margin:'0 0 4px', fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>{emp?.first_name} {emp?.last_name}</h3>
+              <div style={{ fontSize:'13px', color:'#64748b' }}>Uke {selected.week_number}, {selected.year} · Innlevert {selected.submitted_at?new Date(selected.submitted_at).toLocaleDateString('nb-NO'):''}</div>
+            </div>
+            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
+          </div>
+
+          {/* Entries per day */}
+          {weekDates.map((date,i)=>{
+            const dayEntries = entries.filter(e=>e.date===date)
+            if (dayEntries.length===0) return null
+            return (
+              <div key={date} style={{ marginBottom:'12px', background:'#f8fafc', borderRadius:'12px', padding:'12px 16px' }}>
+                <div style={{ fontWeight:'700', fontSize:'13px', color:'#374151', marginBottom:'8px' }}>{DAYS_FULL[i]} {new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})}</div>
+                {dayEntries.map(e=>{
+                  const proj = projects.find(p=>p.id===e.project_id)
+                  const hours=(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)
+                  return (
+                    <div key={e.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', color:'#475569', marginBottom:'4px' }}>
+                      <span>{proj?.name||'—'} · {e.activity||'—'}{e.start_time?` · ${e.start_time.slice(0,5)}–${e.end_time?.slice(0,5)||'?'}`:''}</span>
+                      <span style={{ fontWeight:'700', color:'#059669' }}>{fmtHours(hours)}t</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+
+          <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', display:'flex', gap:'16px', flexWrap:'wrap', fontSize:'13px', fontWeight:'600', color:'#16a34a', marginBottom:'16px' }}>
+            <span>Normal: {fmtHours(entries.reduce((a,e)=>a+(parseFloat(e.normal_hours)||0),0))}t</span>
+            {entries.reduce((a,e)=>a+(parseFloat(e.overtime_50)||0),0)>0&&<span style={{ color:'#d97706' }}>OT50%: {fmtHours(entries.reduce((a,e)=>a+(parseFloat(e.overtime_50)||0),0))}t</span>}
+            {entries.reduce((a,e)=>a+(parseFloat(e.overtime_100)||0),0)>0&&<span style={{ color:'#dc2626' }}>OT100%: {fmtHours(entries.reduce((a,e)=>a+(parseFloat(e.overtime_100)||0),0))}t</span>}
+            {totalKm>0&&<span style={{ color:'#2563eb' }}>Km: {totalKm}</span>}
+            {totalDiet>0&&<span style={{ color:'#7c3aed' }}>Diett: {totalDiet}kr</span>}
+          </div>
+
+          <div style={{ marginBottom:'12px' }}>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Kommentar ved avslag</label>
+            <textarea value={rejectComment} onChange={e=>setRejectComment(e.target.value)} rows={2} placeholder="Forklar hva som må korrigeres..." style={{ ...tInp, resize:'none' }} />
+          </div>
+
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={()=>handleReject(selected)} disabled={processing} style={{ flex:1, padding:'13px', background:processing?'#fca5a5':'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>❌ Avvis</button>
+            <button onClick={()=>handleApprove(selected)} disabled={processing} style={{ flex:2, padding:'13px', background:processing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>✅ Godkjenn timeliste</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+      {pending.length===0&&<div style={{ background:'#f0fdf4', borderRadius:'14px', border:'1px solid #bbf7d0', padding:'24px', textAlign:'center', color:'#16a34a', fontWeight:'600', fontSize:'14px' }}>✅ Ingen timelister venter godkjenning</div>}
+      {all.map(ts=>{
+        const emp = employees.find(e=>e.id===ts.employee_id)
+        const entries = ts.timesheet_entries||[]
+        const hours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
+        const cfg = TS_STATUS[ts.status]
+        return (
+          <div key={ts.id} onClick={()=>setSelected(ts)}
+            style={{ background:'white', borderRadius:'14px', border:`1px solid ${ts.status==='Innlevert'?'#bfdbfe':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', transition:'box-shadow 0.15s' }}
+            onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{ width:'44px', height:'44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
+              {emp?.first_name?.[0]}{emp?.last_name?.[0]}
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
+                <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{emp?.first_name} {emp?.last_name}</span>
+                <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700' }}>{cfg.emoji} {ts.status}</span>
+              </div>
+              <div style={{ fontSize:'12px', color:'#64748b' }}>Uke {ts.week_number}, {ts.year}{ts.submitted_at?` · Innlevert ${new Date(ts.submitted_at).toLocaleDateString('nb-NO')}`:''}</div>
+            </div>
+            <div style={{ textAlign:'right', flexShrink:0 }}>
+              <div style={{ fontWeight:'800', fontSize:'16px', color:'#059669' }}>{fmtHours(hours)}t</div>
+            </div>
+            <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── END TIMELISTE MODULE ─────────────────────────────────────────────────────
+
 
 
 
@@ -7975,7 +8734,8 @@ function AppContent() {
         {page === 'ordre' && <OrdrePage />}
         {page === 'faktura' && <FakturaPage />}
         {page === 'ansatte' && <AnsattePage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && (
+        {page === 'timelister' && <TimelistePage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
