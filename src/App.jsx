@@ -3268,6 +3268,7 @@ function HandbokView({ rec, proj }) {
 // ─── MASKIN MODULE ────────────────────────────────────────────────────────────
 
 const MASKIN_STATUS = {
+  'Reservert':   { emoji: '📅', bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
   'På lager':    { emoji: '🏭', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
   'På prosjekt': { emoji: '🏗️', bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
   'Service':     { emoji: '🔧', bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
@@ -8939,6 +8940,7 @@ function RessursPage() {
           onClose={()=>setShowBookingModal(null)}
           onSaved={()=>{ setShowBookingModal(null); load() }}
           resourceType={resourceType}
+          machines={machines}
         />
       )}
     </div>
@@ -8946,30 +8948,109 @@ function RessursPage() {
 }
 
 // ── BOOKING MODAL ─────────────────────────────────────────────────────────────
-function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType }) {
+function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines }) {
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
   const [notes, setNotes] = useState(editPlan?.notes||'')
+  const [linkedMachineId, setLinkedMachineId] = useState(editPlan?.linked_machine_id||'')
+  const [machineFromDate, setMachineFromDate] = useState(date)
+  const [machineToDate, setMachineToDate] = useState(date)
+  const [showMachinePicker, setShowMachinePicker] = useState(!!editPlan?.linked_machine_id)
   const [saving, setSaving] = useState(false)
 
   const totalBooked = existingPlans.reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
   const remaining = Math.max(0, 8 - totalBooked + (editPlan ? parseFloat(editPlan.hours)||0 : 0))
   const wouldDouble = (parseFloat(hours)||0) + totalBooked - (editPlan?parseFloat(editPlan.hours)||0:0) > 8
-
   const dateFormatted = new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+  const isEmployee = resourceType==='ansatte'
+  const availableMachines = (machines||[]).filter(m=>m.status!=='Utrangert'&&m.status!=='Service')
+
+  const updateMachineStatus = async (machineId, projectId, fromDate, toDate) => {
+    if (!machineId) return
+    const today = new Date().toISOString().split('T')[0]
+    const newStatus = fromDate <= today ? 'På prosjekt' : 'Reservert'
+    await supabase.from('machines').update({
+      status: newStatus,
+      current_project_id: projectId||null,
+      updated_at: new Date().toISOString()
+    }).eq('id', machineId)
+    // Log in machine_logs
+    await supabase.from('machine_logs').insert({
+      machine_id: machineId,
+      action: newStatus==='På prosjekt' ? `Satt på prosjekt via ressursplan` : `Reservert via ressursplan`,
+      to_status: newStatus,
+      project_id: projectId||null,
+      notes: `Fra ${fromDate} til ${toDate} (ressursplan)`,
+      created_by: user?.id
+    })
+  }
 
   const handleSave = async () => {
     if (!projectId) return alert('Velg et prosjekt')
+    if (showMachinePicker && linkedMachineId && machineFromDate > machineToDate) return alert('Fra-dato kan ikke være etter til-dato for maskin')
     setSaving(true)
     try {
-      const payload = { resource_id:resourceId, resource_type:resourceType==='ansatte'?'employee':'machine', project_id:projectId, date, hours:parseFloat(hours)||8, notes:notes||null, updated_at:new Date().toISOString() }
+      const payload = {
+        resource_id: resourceId,
+        resource_type: isEmployee ? 'employee' : 'machine',
+        project_id: projectId,
+        date, hours: parseFloat(hours)||8,
+        notes: notes||null,
+        linked_machine_id: (isEmployee && showMachinePicker && linkedMachineId) ? linkedMachineId : null,
+        updated_at: new Date().toISOString()
+      }
+
+      let planId = editPlan?.id
       if (editPlan) {
         const {error}=await supabase.from('resource_plans').update(payload).eq('id',editPlan.id)
         if(error) throw error
       } else {
-        const {error}=await supabase.from('resource_plans').insert({...payload,created_by:user?.id})
+        const {data,error}=await supabase.from('resource_plans').insert({...payload,created_by:user?.id}).select().single()
         if(error) throw error
+        planId = data.id
       }
+
+      // If machine linked, create machine bookings for each day in range
+      if (isEmployee && showMachinePicker && linkedMachineId && machineFromDate && machineToDate) {
+        // Delete old machine plans linked to this employee plan if editing
+        if (editPlan?.linked_machine_id) {
+          await supabase.from('resource_plans').delete()
+            .eq('resource_id', editPlan.linked_machine_id)
+            .eq('linked_resource_plan_id', editPlan.id)
+        }
+        // Create new machine plans for each day in range
+        const startD = new Date(machineFromDate)
+        const endD = new Date(machineToDate)
+        const machinePlans = []
+        for (let d = new Date(startD); d <= endD; d.setDate(d.getDate()+1)) {
+          const dateStr = d.toISOString().split('T')[0]
+          const dow = d.getDay()
+          if (dow===0||dow===6) continue // skip weekends
+          machinePlans.push({
+            resource_id: linkedMachineId,
+            resource_type: 'machine',
+            project_id: projectId,
+            date: dateStr,
+            hours: parseFloat(hours)||8,
+            notes: `Koblet til ${resourceName}`,
+            linked_resource_plan_id: planId,
+            created_by: user?.id
+          })
+        }
+        if (machinePlans.length > 0) {
+          const {error} = await supabase.from('resource_plans').insert(machinePlans)
+          if (error) throw error
+        }
+        // Update machine status
+        await updateMachineStatus(linkedMachineId, projectId, machineFromDate, machineToDate)
+      }
+
+      // If machine was unlinked, restore machine status
+      if (editPlan?.linked_machine_id && (!linkedMachineId || !showMachinePicker)) {
+        await supabase.from('machines').update({ status:'På lager', current_project_id:null, updated_at:new Date().toISOString() }).eq('id',editPlan.linked_machine_id)
+        await supabase.from('machine_logs').insert({ machine_id:editPlan.linked_machine_id, action:'Returnert til lager (ressursplan fjernet)', to_status:'På lager', created_by:user?.id })
+      }
+
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -8978,15 +9059,22 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   const handleDelete = async () => {
     if (!editPlan) return
     if (!confirm('Slett denne bookingen?')) return
+    // Remove linked machine plans
+    if (editPlan.linked_machine_id) {
+      await supabase.from('resource_plans').delete().eq('linked_resource_plan_id',editPlan.id)
+      await supabase.from('machines').update({ status:'På lager', current_project_id:null, updated_at:new Date().toISOString() }).eq('id',editPlan.linked_machine_id)
+    }
     await supabase.from('resource_plans').delete().eq('id',editPlan.id)
     onSaved()
   }
 
+  const selectedMachine = availableMachines.find(m=>m.id===linkedMachineId)
+
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'420px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
-        <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexShrink:0 }}>
           <div>
             <h2 style={{ margin:'0 0 4px',fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>{editPlan?'Rediger booking':'Ny booking'}</h2>
             <div style={{ fontSize:'13px',color:'#64748b' }}>
@@ -8996,8 +9084,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
         </div>
 
-        <div style={{ padding:'20px 22px',display:'flex',flexDirection:'column',gap:'14px' }}>
-          {/* Existing bookings on this day */}
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 22px',display:'flex',flexDirection:'column',gap:'14px' }}>
           {existingPlans.filter(p=>p.id!==editPlan?.id).length>0&&(
             <div style={{ background:'#fffbeb',borderRadius:'10px',padding:'10px 14px',border:'1px solid #fde68a' }}>
               <div style={{ fontSize:'12px',fontWeight:'700',color:'#92400e',marginBottom:'6px' }}>Allerede booket denne dagen:</div>
@@ -9016,44 +9103,89 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
             <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
               <option value="">Velg prosjekt...</option>
-              {projects.map(p=>(
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            {projectId&&(
-              <div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}>
-                <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/>
-                <span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span>
-              </div>
-            )}
+            {projectId&&<div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/><span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span></div>}
           </div>
 
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Timer denne dagen</label>
-            <div style={{ display:'flex',gap:'8px',alignItems:'center' }}>
+            <div style={{ display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap' }}>
               {[4,6,7.5,8,10].map(h=>(
                 <button key={h} type="button" onClick={()=>setHours(h)}
-                  style={{ padding:'8px 12px',borderRadius:'8px',border:`2px solid ${hours==h?'#059669':'#e2e8f0'}`,background:hours==h?'#f0fdf4':'white',color:hours==h?'#059669':'#475569',fontWeight:hours==h?'700':'400',fontSize:'13px',cursor:'pointer' }}>
-                  {h}t
-                </button>
+                  style={{ padding:'8px 12px',borderRadius:'8px',border:`2px solid ${hours==h?'#059669':'#e2e8f0'}`,background:hours==h?'#f0fdf4':'white',color:hours==h?'#059669':'#475569',fontWeight:hours==h?'700':'400',fontSize:'13px',cursor:'pointer' }}>{h}t</button>
               ))}
               <input type="number" value={hours} onChange={e=>setHours(e.target.value)} min="0.5" max="24" step="0.5" style={{ ...rInp(),width:'70px',textAlign:'center',fontWeight:'700' }} />
             </div>
             {wouldDouble&&<div style={{ fontSize:'12px',color:'#dc2626',fontWeight:'600',marginTop:'6px' }}>⚠️ Overskrider 8 timer – dobbeltbooking!</div>}
           </div>
 
+          {/* Machine linking – only for employees */}
+          {isEmployee && (
+            <div style={{ background:'#f8fafc',borderRadius:'12px',padding:'14px',border:'1px solid #f1f5f9' }}>
+              <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:showMachinePicker?'12px':'0' }}>
+                <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#0f172a' }}>
+                  <input type="checkbox" checked={showMachinePicker} onChange={e=>{ setShowMachinePicker(e.target.checked); if(!e.target.checked) setLinkedMachineId('') }}
+                    style={{ width:'16px',height:'16px',accentColor:'#059669' }} />
+                  🚜 Legg til maskin på denne bookingen
+                </label>
+              </div>
+
+              {showMachinePicker && (
+                <div style={{ display:'flex',flexDirection:'column',gap:'10px' }}>
+                  <div>
+                    <label style={{ display:'block',fontSize:'12px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Velg maskin</label>
+                    <select value={linkedMachineId} onChange={e=>setLinkedMachineId(e.target.value)} style={rInp()}>
+                      <option value="">Velg maskin...</option>
+                      {availableMachines.map(m=>(
+                        <option key={m.id} value={m.id}>{m.name}{m.category?` (${m.category})`:''} — {m.status}</option>
+                      ))}
+                    </select>
+                    {selectedMachine&&(
+                      <div style={{ marginTop:'6px',background:'white',borderRadius:'8px',padding:'8px 12px',border:'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:'8px',fontSize:'13px' }}>
+                        <span style={{ fontSize:'18px' }}>{selectedMachine.status==='På lager'?'✅':selectedMachine.status==='Reservert'?'📅':'⚠️'}</span>
+                        <div>
+                          <div style={{ fontWeight:'600',color:'#0f172a' }}>{selectedMachine.name}</div>
+                          <div style={{ fontSize:'12px',color:'#64748b' }}>Status: <strong style={{ color:selectedMachine.status==='På lager'?'#16a34a':'#d97706' }}>{selectedMachine.status}</strong></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px' }}>
+                    <div>
+                      <label style={{ display:'block',fontSize:'12px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Maskin fra dato</label>
+                      <input type="date" value={machineFromDate} onChange={e=>setMachineFromDate(e.target.value)} style={rInp()} />
+                    </div>
+                    <div>
+                      <label style={{ display:'block',fontSize:'12px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Maskin til dato</label>
+                      <input type="date" value={machineToDate} onChange={e=>setMachineToDate(e.target.value)} style={rInp()} />
+                    </div>
+                  </div>
+
+                  {machineFromDate&&machineToDate&&linkedMachineId&&(
+                    <div style={{ background:'white',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bbf7d0',fontSize:'12px',color:'#16a34a',fontWeight:'600' }}>
+                      ✅ Maskin bookes fra {machineFromDate} til {machineToDate}
+                      {new Date(machineFromDate) > new Date() ? ' → merkes som Reservert' : ' → merkes som På prosjekt'}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Merknad (valgfritt)</label>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Merknad</label>
             <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} placeholder="F.eks. halv dag, møte om ettermiddagen..." style={{ ...rInp(),resize:'none' }} />
           </div>
+        </div>
 
-          <div style={{ display:'flex',gap:'8px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
-            {editPlan&&<button onClick={handleDelete} style={{ padding:'10px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️ Slett</button>}
-            <button onClick={onClose} style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving||!projectId} style={{ flex:2,padding:'10px',background:saving||!projectId?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving||!projectId?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
-              {saving?'Lagrer...':editPlan?'Lagre endring':'Book'}
-            </button>
-          </div>
+        <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px',flexShrink:0 }}>
+          {editPlan&&<button onClick={handleDelete} style={{ padding:'10px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️ Slett</button>}
+          <button onClick={onClose} style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving||!projectId} style={{ flex:2,padding:'10px',background:saving||!projectId?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving||!projectId?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+            {saving?'Lagrer...':editPlan?'Lagre endring':'Book'}
+          </button>
         </div>
       </div>
     </div>
