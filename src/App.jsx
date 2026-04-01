@@ -4768,6 +4768,790 @@ async function createApprovalToken({ module, recordId, recipientEmail, createdBy
 
 // ─── END GODKJENNING MODULE ───────────────────────────────────────────────────
 
+// ─── ANBUDSMODUL ──────────────────────────────────────────────────────────────
+
+const TENDER_STATUS = {
+  'Utkast':          { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+  'Sendt':           { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '📤' },
+  'Mottatt':         { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', emoji: '📥' },
+  'Under vurdering': { bg: '#fffbeb', color: '#d97706', border: '#fde68a', emoji: '🔍' },
+  'Tildelt':         { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+  'Avslått':         { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+}
+
+const UE_STATUS = {
+  'Invitert': { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+  'Åpnet':    { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
+  'Priset':   { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+  'Avslått':  { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+}
+
+const tInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+const tCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+
+function TenderStatusBadge({ status }) {
+  const cfg = TENDER_STATUS[status] || TENDER_STATUS['Utkast']
+  return <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600' }}>{cfg.emoji} {status}</span>
+}
+
+function calcTenderChapter(ch) {
+  const sum = (ch.posts||[]).reduce((acc,p) => acc + (parseFloat(p.qty)||0)*((parseFloat(p.unitCost)||0)), 0)
+  const markup = parseFloat(ch.markup)||0
+  return { cost: sum, price: sum*(1+markup/100) }
+}
+
+function calcTender(chapters, globalMarkup) {
+  const totalCost = chapters.reduce((acc,ch) => acc + calcTenderChapter(ch).cost, 0)
+  const totalPrice = chapters.reduce((acc,ch) => acc + calcTenderChapter(ch).price, 0)
+  const gm = parseFloat(globalMarkup)||0
+  return { totalCost, totalPrice, grandTotal: totalPrice*(1+gm/100) }
+}
+
+function fmtT(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
+
+function AnbudsPage() {
+  const { user } = useAuth()
+  const [tenders, setTenders] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [filterType, setFilterType] = useState('alle')
+  const [search, setSearch] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [newType, setNewType] = useState(null)
+  const [selected, setSelected] = useState(null)
+
+  const load = async () => {
+    try {
+      const [t, p] = await Promise.all([
+        supabase.from('tenders').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
+      ])
+      setTenders(t); setProjects(p)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = tenders.filter(t => {
+    if (filterStatus !== 'alle' && t.status !== filterStatus) return false
+    if (filterType !== 'alle' && t.type !== filterType) return false
+    if (search && ![t.title, t.tender_number, t.customer_name].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const incoming = tenders.filter(t => t.type === 'incoming')
+  const outgoing = tenders.filter(t => t.type === 'outgoing')
+  const tildelt = tenders.filter(t => t.status === 'Tildelt')
+  const totalTildelt = tildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
+
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
+
+  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbudsportal</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>
+          </div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Ny forespørsel</button>
+            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📤 Send til UE</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+          {[
+            { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
+            { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
+            { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
+          ].map(s => (
+            <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
+              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
+            </button>
+          ))}
+          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+            <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
+            <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
+            <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          {(search||filterStatus!=='alle'||filterType!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} anbud</span>
+        </div>
+
+        {/* List */}
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📑</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen anbud funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{tenders.length===0?'Opprett ditt første anbud.':'Prøv å endre søk eller filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(t => {
+              const cfg = TENDER_STATUS[t.status]
+              const proj = projects.find(p=>p.id===t.project_id)
+              const { grandTotal } = calcTender(t.chapters||[], t.global_markup)
+              const isIncoming = t.type === 'incoming'
+              const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
+              return (
+                <div key={t.id} onClick={()=>setSelected(t)}
+                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
+                      <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+                      <TenderStatusBadge status={t.status} />
+                      <span style={{ background:isIncoming?'#f5f3ff':'#eff6ff', color:isIncoming?'#7c3aed':'#2563eb', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:`1px solid ${isIncoming?'#ddd6fe':'#bfdbfe'}` }}>{isIncoming?'Innkommende':'Utgående UE'}</span>
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
+                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ Frist {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d igjen)`:''}</span>}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {showNew && <AnbudEditorModal type={newType} projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+    </div>
+  )
+}
+
+function AnbudDetaljer({ tender: init, projects, user, onBack }) {
+  const [t, setT] = useState(init)
+  const [ues, setUes] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [showInviteUE, setShowInviteUE] = useState(false)
+  const [showAward, setShowAward] = useState(false)
+  const cfg = TENDER_STATUS[t.status]
+  const proj = projects.find(p=>p.id===t.project_id)
+  const { totalCost, grandTotal } = calcTender(t.chapters||[], t.global_markup)
+  const isIncoming = t.type === 'incoming'
+
+  const load = async () => {
+    const { data } = await supabase.from('tender_ues').select('*').eq('tender_id', t.id).order('created_at')
+    setUes(data||[])
+  }
+  const refresh = async () => {
+    const { data } = await supabase.from('tenders').select('*').eq('id', t.id).single()
+    if (data) setT(data)
+  }
+  useEffect(() => { load() }, [])
+
+  const updateStatus = async (status) => {
+    await supabase.from('tenders').update({ status, updated_at: new Date().toISOString() }).eq('id', t.id)
+    setT(v=>({...v, status}))
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett dette anbudet?')) return
+    await supabase.from('tenders').delete().eq('id', t.id)
+    onBack()
+  }
+
+  const generateQuote = async () => {
+    if (!confirm('Generer tilbud fra dette anbudet? Kapitlene og postene kopieres over.')) return
+    try {
+      const { data, error } = await supabase.from('quotes').insert({
+        title: t.title, quote_number: `TB-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
+        project_id: t.project_id||null, customer_name: t.customer_name, customer_email: t.customer_email,
+        customer_address: t.customer_address, customer_orgnr: t.customer_orgnr,
+        valid_until: t.valid_until, payment_terms: '30 dager netto',
+        chapters: (t.chapters||[]).map(ch => ({
+          ...ch,
+          posts: (ch.posts||[]).map(p => ({ ...p, unitPriceWork: p.unitCost||0, unitPriceMaterial: 0 }))
+        })),
+        global_markup: t.global_markup||0, status: 'Utkast', created_by: user?.id,
+      }).select().single()
+      if (error) throw error
+      await supabase.from('tenders').update({ generated_quote_id: data.id }).eq('id', t.id)
+      alert('✅ Tilbud opprettet! Gå til Tilbud-modulen for å se det.')
+    } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{t.title}</h1>
+                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+                <TenderStatusBadge status={t.status} />
+              </div>
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                {t.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {t.customer_name}</span>}
+                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                {t.deadline && <span style={{ fontSize:'13px', color:'#64748b' }}>⏰ Frist {t.deadline}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
+            {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Inviter UE</button>}
+            {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
+            {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
+            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Description */}
+          {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
+
+          {/* Chapters / kalkyle */}
+          {(t.chapters||[]).length > 0 && (
+            <div style={tCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📊 Kalkyle / Kapitler</h3>
+              {(t.chapters||[]).map((ch,ci) => {
+                const { cost, price } = calcTenderChapter(ch)
+                return (
+                  <div key={ci} style={{ marginBottom:'16px', background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                      <h4 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h4>
+                      <div style={{ textAlign:'right' }}>
+                        <div style={{ fontSize:'12px', color:'#94a3b8' }}>Kostnad: {fmtT(cost)}</div>
+                        {ch.markup>0 && <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669' }}>Pris: {fmtT(price)}</div>}
+                      </div>
+                    </div>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                      <thead><tr style={{ background:'white' }}>
+                        {['Beskrivelse','Mengde','Enhet','Kost/enh','Sum'].map(h=><th key={h} style={{ padding:'6px 8px', textAlign:h==='Sum'||h==='Kost/enh'?'right':'left', color:'#94a3b8', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {(ch.posts||[]).map((p,pi) => {
+                          const ls = (parseFloat(p.qty)||0)*(parseFloat(p.unitCost)||0)
+                          return <tr key={pi} style={{ borderBottom:'1px solid #f8fafc' }}>
+                            <td style={{ padding:'7px 8px', color:'#0f172a', fontWeight:'500' }}>{p.description||'—'}</td>
+                            <td style={{ padding:'7px 8px', textAlign:'right', color:'#475569' }}>{p.qty}</td>
+                            <td style={{ padding:'7px 8px', color:'#475569' }}>{p.unit}</td>
+                            <td style={{ padding:'7px 8px', textAlign:'right', color:'#475569' }}>{fmtT(p.unitCost)}</td>
+                            <td style={{ padding:'7px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtT(ls)}</td>
+                          </tr>
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })}
+              <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'14px 18px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Total kalkylepris eks. mva</div>
+                  {parseFloat(t.global_markup)>0 && <div style={{ fontSize:'12px', color:'#94a3b8' }}>Inkl. generelt påslag {t.global_markup}%</div>}
+                </div>
+                <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{fmtT(grandTotal)}</div>
+              </div>
+            </div>
+          )}
+
+          {/* UE Comparison */}
+          {!isIncoming && ues.length > 0 && (
+            <div style={tCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏢 UE-er og innkomne priser</h3>
+              {pricedUes.length > 0 && (
+                <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bbf7d0', marginBottom:'14px', fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>
+                  🏆 Laveste pris: {pricedUes[0].company_name} — {fmtT(pricedUes[0].total_amount)}
+                </div>
+              )}
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {ues.map(ue => {
+                  const ucfg = UE_STATUS[ue.status]
+                  const isLowest = pricedUes[0]?.id === ue.id
+                  return (
+                    <div key={ue.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:isLowest?'#f0fdf4':'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:`1px solid ${isLowest?'#bbf7d0':'#f1f5f9'}` }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name} {isLowest&&'🏆'}</div>
+                        {ue.contact_name && <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name} · {ue.email}</div>}
+                        {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}</div>}
+                      </div>
+                      <span style={{ background:ucfg.bg, color:ucfg.color, border:`1px solid ${ucfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{ue.status}</span>
+                      {ue.total_amount && <div style={{ fontWeight:'800', fontSize:'15px', color:isLowest?'#16a34a':'#0f172a', minWidth:'100px', textAlign:'right' }}>{fmtT(ue.total_amount)}</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={tCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.keys(TENDER_STATUS).map(s => (
+                <button key={s} onClick={()=>updateStatus(s)} disabled={t.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${t.status===s?TENDER_STATUS[s].border:'#e2e8f0'}`, background:t.status===s?TENDER_STATUS[s].bg:'white', color:t.status===s?TENDER_STATUS[s].color:'#475569', fontWeight:t.status===s?'700':'400', fontSize:'13px', cursor:t.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {t.status===s?'✓ ':''}{TENDER_STATUS[s].emoji} {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={tCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>💰 Økonomi</h3>
+            <div style={{ background:isIncoming?'#f5f3ff':'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', border:`1px solid ${isIncoming?'#ddd6fe':'#bbf7d0'}` }}>
+              <div style={{ fontSize:'11px', color:isIncoming?'#7c3aed':'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Kalkylepris eks. mva</div>
+              <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
+            </div>
+            {t.awarded_ue && <div style={{ marginTop:'10px', fontSize:'13px', color:'#064748' }}><strong>Tildelt:</strong> {t.awarded_ue}</div>}
+          </div>
+          <div style={tCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Info</h3>
+            {[['Kunde/byggherre',t.customer_name],['E-post',t.customer_email],['Prosjekt',proj?.name],['Frist',t.deadline],['Gyldig til',t.valid_until]].filter(r=>r[1]).map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a', textAlign:'right', maxWidth:'55%' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {editing && <AnbudEditorModal type={t.type} projects={projects} user={user} initial={t} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {showInviteUE && <InviterUEModal tender={t} user={user} onClose={()=>setShowInviteUE(false)} onSaved={()=>{setShowInviteUE(false);load();updateStatus('Sendt')}} />}
+      {showAward && <TildelModal tender={t} ues={ues} projects={projects} user={user} onClose={()=>setShowAward(false)} onSaved={()=>{setShowAward(false);refresh()}} />}
+    </div>
+  )
+}
+
+function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const isIncoming = type === 'incoming'
+  const [step, setStep] = useState(1)
+  const [form, setForm] = useState({
+    title: initial?.title||'', tender_number: initial?.tender_number||`ANB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
+    customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
+    deadline: initial?.deadline||'', valid_until: initial?.valid_until||'',
+    description: initial?.description||'', global_markup: initial?.global_markup||0,
+  })
+  const [chapters, setChapters] = useState(initial?.chapters||[
+    { id: Date.now(), title: 'Generelt', markup: 0, posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
+  ])
+  const [saving, setSaving] = useState(false)
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const addChapter = () => setChapters(c=>[...c,{ id:Date.now(), title:`Kapittel ${c.length+1}`, markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitCost:0}] }])
+  const removeChapter = (id) => setChapters(c=>c.filter(x=>x.id!==id))
+  const updateChapter = (id,f,v) => setChapters(c=>c.map(x=>x.id===id?{...x,[f]:v}:x))
+  const addPost = (chId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:[...x.posts,{id:Date.now(),description:'',qty:1,unit:'stk',unitCost:0}]}:x))
+  const removePost = (chId,pId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.filter(p=>p.id!==pId)}:x))
+  const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload = { ...form, type, chapters, project_id: form.project_id||null, updated_at: new Date().toISOString() }
+      if (isEdit) { const {error}=await supabase.from('tenders').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('tenders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+  const { grandTotal } = calcTender(chapters, form.global_markup)
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{isIncoming?'📥':'📤'} {isEdit?'Rediger':'Nytt'} {isIncoming?'innkommende anbud':'utgående anbud til UE'}</h2>
+            <div style={{ display:'flex', gap:'4px' }}>
+              {[['1','Informasjon'],['2','Kalkyle / Poster']].map(([n,l])=>(
+                <button key={n} onClick={()=>setStep(+n)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize:'13px', cursor:'pointer' }}>{n}. {l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtT(grandTotal)}</strong></span>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+          {step===1 && (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
+              <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 {isIncoming?'Byggherre / Oppdragsgiver':'Kontakt / UE-koordinator'}</div></div>
+              <div>{lbl(isIncoming?'Byggherre':'Kontaktnavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={tInp} /></div>
+              <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="epost@firma.no" style={tInp} /></div>
+              <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Gateadresse" style={tInp} /></div>
+              <div>{lbl('Org.nr')}<input value={form.customer_orgnr} onChange={e=>set('customer_orgnr',e.target.value)} placeholder="123 456 789" style={tInp} /></div>
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Frister og betingelser</div></div>
+              <div>{lbl('Anbudsfrist')}<input type="date" value={form.deadline} onChange={e=>set('deadline',e.target.value)} style={tInp} /></div>
+              <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={tInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={tInp} /></div>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Beskrivelse / Omfang')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={4} placeholder="Beskriv arbeidet, omfang, krav og betingelser..." style={{ ...tInp, resize:'none' }} /></div>
+            </div>
+          )}
+          {step===2 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+              {chapters.map((ch,ci) => {
+                const { cost, price } = calcTenderChapter(ch)
+                return (
+                  <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+                    <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
+                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...tInp, flex:1, background:'transparent', fontWeight:'700' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...tInp, width:'100px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtT(price)}</span>
+                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
+                    </div>
+                    <div style={{ padding:'14px 18px' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead><tr>{['Beskrivelse','Mengde','Enhet','Kostpris/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=4?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
+                        <tbody>
+                          {ch.posts.map(p => {
+                            const ls = (parseFloat(p.qty)||0)*(parseFloat(p.unitCost)||0)
+                            return <tr key={p.id}>
+                              <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...tInp, minWidth:'180px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...tInp, width:'70px', textAlign:'right' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...tInp, width:'60px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitCost} onChange={e=>updatePost(ch.id,p.id,'unitCost',e.target.value)} style={{ ...tInp, width:'120px', textAlign:'right' }} /></td>
+                              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtT(ls)}</td>
+                              <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                            </tr>
+                          })}
+                        </tbody>
+                      </table>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginTop:'10px' }}>
+                        <button onClick={()=>addPost(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
+                        <div style={{ fontSize:'13px', color:'#64748b' }}>Kostnad: <strong>{fmtT(cost)}</strong>{ch.markup>0?` → Pris: ${fmtT(price)}`:''}  </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+              <button onClick={addChapter} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
+              <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'18px 24px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div><div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Total kalkylepris eks. mva</div>{parseFloat(form.global_markup)>0&&<div style={{ fontSize:'12px', color:'#94a3b8' }}>Inkl. generelt påslag {form.global_markup}%</div>}</div>
+                <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmtT(grandTotal)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>← Tilbake</button>}</div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            {step===1&&<button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Kalkyle →</button>}
+            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett anbud'}</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InviterUEModal({ tender, user, onClose, onSaved }) {
+  const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'' }])
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'' }])
+  const removeUE = (id) => setUes(u=>u.filter(x=>x.id!==id))
+  const updateUE = (id,f,v) => setUes(u=>u.map(x=>x.id===id?{...x,[f]:v}:x))
+
+  const handleSend = async () => {
+    const valid = ues.filter(u=>u.company_name.trim()&&u.email.trim())
+    if (valid.length===0) return alert('Legg til minst én UE med navn og e-post.')
+    setSending(true)
+    try {
+      for (const ue of valid) {
+        const { data, error } = await supabase.from('tender_ues').insert({ tender_id:tender.id, company_name:ue.company_name.trim(), contact_name:ue.contact_name.trim()||null, email:ue.email.trim(), status:'Invitert' }).select().single()
+        if (error) throw error
+        const pricingUrl = `${window.location.origin}/anbud-pris?token=${data.token}`
+        const { grandTotal } = calcTender(tender.chapters||[], tender.global_markup)
+        const html = `
+          <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+            <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Anbudsforespørsel: ${tender.title}</h1>
+            <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>
+            ${tender.description?`<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">${tender.description}</p></div>`:''}
+            ${tender.deadline?`<p style="color:#dc2626;font-weight:600;font-size:14px">⏰ Anbudsfrist: ${tender.deadline}</p>`:''}
+            <p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for følgende poster.</p>
+            <div style="text-align:center;margin:32px 0">
+              <a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📝 Fyll inn priser</a>
+            </div>
+            <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+            <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+          </div>`
+        const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+          method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+          body: JSON.stringify({ to: ue.email.trim(), subject:`Anbudsforespørsel: ${tender.title} (${tender.tender_number})`, html })
+        })
+        if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
+      }
+      setSent(true)
+      setTimeout(()=>onSaved(), 1500)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Inviter underentreprenører</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center', padding:'20px' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Invitasjoner sendt!</h3>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>UE-ene mottar e-post med lenke for å fylle inn priser.</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', fontSize:'13px', color:'#1d4ed8' }}>
+                📋 <strong>{tender.title}</strong> — {tender.tender_number}{tender.deadline?` · Frist: ${tender.deadline}`:''}
+              </div>
+              {ues.map((ue,i)=>(
+                <div key={ue.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                    <span style={{ fontWeight:'700', fontSize:'13px', color:'#64748b' }}>UE {i+1}</span>
+                    {ues.length>1&&<button onClick={()=>removeUE(ue.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                    <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn *</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={tInp} /></div>
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Kontaktperson</label><input value={ue.contact_name} onChange={e=>updateUE(ue.id,'contact_name',e.target.value)} placeholder="Fullt navn" style={tInp} /></div>
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={tInp} /></div>
+                  </div>
+                </div>
+              ))}
+              <button onClick={addUE} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'12px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Legg til flere UE-er</button>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send invitasjoner'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
+  const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
+  const [selectedUE, setSelectedUE] = useState(pricedUes[0]?.id||'')
+  const [projectId, setProjectId] = useState(tender.project_id||'')
+  const [saving, setSaving] = useState(false)
+
+  const handleAward = async () => {
+    const ue = ues.find(u=>u.id===selectedUE)
+    if (!ue) return alert('Velg en UE')
+    setSaving(true)
+    try {
+      await supabase.from('tenders').update({ status:'Tildelt', awarded_ue:ue.company_name, awarded_amount:ue.total_amount, project_id:projectId||null, updated_at:new Date().toISOString() }).eq('id', tender.id)
+      await supabase.from('tender_ues').update({ status:'Avslått' }).eq('tender_id', tender.id).neq('id', selectedUE)
+      if (user?.id) {
+        await supabase.from('notifications').insert({ user_id:user.id, title:`Anbud tildelt: ${tender.title}`, message:`Tildelt til ${ue.company_name} for ${fmtT(ue.total_amount||0)}`, type:'success', link_page:'anbudsmodul' })
+      }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏆 Tildel anbud</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {pricedUes.length===0 ? (
+            <p style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center', padding:'20px 0' }}>Ingen UE-er har levert pris ennå.</p>
+          ) : (
+            <>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg vinnende UE</label>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {pricedUes.map((ue,i)=>(
+                    <button key={ue.id} onClick={()=>setSelectedUE(ue.id)}
+                      style={{ padding:'14px 16px', borderRadius:'12px', border:`2px solid ${selectedUE===ue.id?'#059669':'#e2e8f0'}`, background:selectedUE===ue.id?'#f0fdf4':'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <div style={{ textAlign:'left' }}>
+                        <div style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{ue.company_name} {i===0&&'🏆'}</div>
+                        {ue.contact_name&&<div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name}</div>}
+                      </div>
+                      <div style={{ fontWeight:'800', color:i===0?'#16a34a':'#0f172a', fontSize:'16px' }}>{fmtT(ue.total_amount)}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Knytt til prosjekt</label>
+                <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={tInp}>
+                  <option value="">Ingen</option>
+                  {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleAward} disabled={saving||!selectedUE} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'🏆 Tildel anbud'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── UE PRISINGSSIDE ──────────────────────────────────────────────────────────
+function UEPrisingsPage() {
+  const [token, setToken] = useState(null)
+  const [ueData, setUeData] = useState(null)
+  const [tender, setTender] = useState(null)
+  const [chapters, setChapters] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('token')
+    if (!t) { setError('Ugyldig lenke.'); setLoading(false); return }
+    setToken(t); loadData(t)
+  }, [])
+
+  const loadData = async (t) => {
+    try {
+      const { data: ue, error: ue_err } = await supabase.from('tender_ues').select('*').eq('token', t).single()
+      if (ue_err||!ue) throw new Error('Lenken er ugyldig eller utløpt.')
+      if (ue.status === 'Priset') { setDone(true); setLoading(false); return }
+      const { data: td, error: td_err } = await supabase.from('tenders').select('*').eq('id', ue.tender_id).single()
+      if (td_err||!td) throw new Error('Anbudet ble ikke funnet.')
+      setUeData(ue); setTender(td)
+      setChapters((td.chapters||[]).map(ch=>({ ...ch, posts:(ch.posts||[]).map(p=>({...p,uePrice:''})) })))
+      await supabase.from('tender_ues').update({ status:'Åpnet' }).eq('id', ue.id)
+    } catch(e) { setError(e.message) }
+    finally { setLoading(false) }
+  }
+
+  const updatePrice = (chId, pId, val) => setChapters(c=>c.map(ch=>ch.id===chId?{...ch,posts:ch.posts.map(p=>p.id===pId?{...p,uePrice:val}:p)}:ch))
+
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    try {
+      const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
+      await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString() }).eq('id', ueData.id)
+      if (tender.created_by) {
+        await supabase.from('notifications').insert({ user_id:tender.created_by, title:`Ny anbудspris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul' })
+      }
+      setDone(true)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSubmitting(false) }
+  }
+
+  const pageStyle = { minHeight:'100vh', background:'linear-gradient(135deg,#eff6ff 0%,#f8fafc 100%)', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 16px', fontFamily:'system-ui,sans-serif' }
+
+  if (loading) return <div style={pageStyle}><div style={{ textAlign:'center', marginTop:'20vh' }}><div style={{ width:'40px', height:'40px', border:'3px solid #e2e8f0', borderTop:'3px solid #2563eb', borderRadius:'50%', margin:'0 auto 16px', animation:'spin 1s linear infinite' }}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style><p style={{ color:'#64748b' }}>Laster anbudsforespørsel...</p></div></div>
+  if (error) return <div style={pageStyle}><div style={{ background:'white', borderRadius:'20px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 8px 40px rgba(0,0,0,0.1)' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>❌</div><h2 style={{ margin:'0 0 8px', color:'#0f172a' }}>Ugyldig lenke</h2><p style={{ margin:0, color:'#64748b' }}>{error}</p></div></div>
+  if (done) return <div style={pageStyle}><div style={{ background:'white', borderRadius:'20px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 8px 40px rgba(0,0,0,0.1)' }}><div style={{ fontSize:'64px', marginBottom:'16px' }}>✅</div><h2 style={{ margin:'0 0 8px', color:'#0f172a', fontSize:'24px' }}>Priser innlevert!</h2><p style={{ margin:'0 0 12px', color:'#64748b' }}>Oppdragsgiver er varslet og vil kontakte deg.</p><p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Du kan lukke denne siden.</p></div></div>
+
+  const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
+
+  return (
+    <div style={pageStyle}>
+      <div style={{ maxWidth:'720px', width:'100%', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ background:'white', borderRadius:'20px', padding:'28px 32px', boxShadow:'0 4px 24px rgba(0,0,0,0.08)', border:'1px solid #f1f5f9' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>📑</div>
+            <div>
+              <h1 style={{ margin:'0 0 4px', fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{tender.title}</h1>
+              <p style={{ margin:0, color:'#64748b', fontSize:'13px' }}>Anbudsnummer: {tender.tender_number} · Invitert: {ueData.company_name}</p>
+              {tender.deadline && <p style={{ margin:'6px 0 0', color:'#dc2626', fontWeight:'600', fontSize:'13px' }}>⏰ Frist: {tender.deadline}</p>}
+            </div>
+          </div>
+          {tender.description && <p style={{ margin:'16px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, background:'#f8fafc', borderRadius:'10px', padding:'12px 16px' }}>{tender.description}</p>}
+        </div>
+
+        {chapters.map((ch,ci)=>(
+          <div key={ch.id} style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'14px' }}>
+              <thead><tr style={{ background:'#f8fafc' }}>{['Beskrivelse','Mengde','Enhet','Din pris/enh','Sum'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:h==='Din pris/enh'||h==='Sum'?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'12px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {(ch.posts||[]).map(p=>{
+                  const ls=(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0)
+                  return <tr key={p.id} style={{ borderBottom:'1px solid #f8fafc' }}>
+                    <td style={{ padding:'10px', color:'#0f172a', fontWeight:'500' }}>{p.description||'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#475569' }}>{p.qty}</td>
+                    <td style={{ padding:'10px', color:'#475569' }}>{p.unit}</td>
+                    <td style={{ padding:'6px' }}><input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'120px', textAlign:'right', borderColor:'#2563eb' }} /></td>
+                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtT(ls)}</td>
+                  </tr>
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+
+        <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+            <div><div style={{ fontSize:'13px', color:'#64748b', fontWeight:'600' }}>Din totalpris eks. mva</div></div>
+            <div style={{ fontSize:'26px', fontWeight:'800', color:'#0f172a' }}>{fmtT(totalAmount)}</div>
+          </div>
+          <button onClick={handleSubmit} disabled={submitting||totalAmount===0}
+            style={{ width:'100%', padding:'16px', background:submitting||totalAmount===0?'#94a3b8':'#2563eb', color:'white', border:'none', borderRadius:'14px', fontSize:'16px', fontWeight:'700', cursor:submitting||totalAmount===0?'not-allowed':'pointer' }}>
+            {submitting?'Sender inn...':'📤 Lever priser'}
+          </button>
+          {totalAmount===0&&<p style={{ margin:'8px 0 0', fontSize:'13px', color:'#94a3b8', textAlign:'center' }}>Fyll inn priser for å levere</p>}
+        </div>
+        <p style={{ margin:0, fontSize:'12px', color:'#cbd5e1', textAlign:'center' }}>Sendt via En Plattform KS-system · enplattform.no</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── END ANBUDSMODUL ──────────────────────────────────────────────────────────
+
 
 
 
@@ -4793,6 +5577,7 @@ function AppContent() {
 
   // Show approval page without login if URL is /godkjenn
   if (window.location.pathname === '/godkjenn') return <GodkjenningsPage />
+  if (window.location.pathname === '/anbud-pris') return <UEPrisingsPage />
 
   if (loading) {
     return (
@@ -4860,7 +5645,8 @@ function AppContent() {
         {page === 'hms' && <HmsPage />}
         {page === 'maskiner' && <MaskinPage />}
         {page === 'tilbud' && <TilbudPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && (
+        {page === 'anbudsmodul' && <AnbudsPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
