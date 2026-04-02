@@ -7363,6 +7363,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
   const [emp, setEmp] = useState(init)
   const [certs, setCerts] = useState([])
   const [empProjects, setEmpProjects] = useState([])
+  const [skills, setSkills] = useState([])
   const [editing, setEditing] = useState(false)
   const [showAddCert, setShowAddCert] = useState(false)
   const [showAddProject, setShowAddProject] = useState(false)
@@ -7370,11 +7371,12 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
   const cfg = EMP_STATUS[emp.status]
 
   const loadDetails = async () => {
-    const [c, ep] = await Promise.all([
+    const [c, ep, sk] = await Promise.all([
       supabase.from('employee_certifications').select('*').eq('employee_id',emp.id).order('expiry_date').then(r=>r.data||[]),
-      supabase.from('employee_projects').select('*, projects(name)').eq('employee_id',emp.id).order('from_date',{ascending:false}).then(r=>r.data||[])
+      supabase.from('employee_projects').select('*, projects(name)').eq('employee_id',emp.id).order('from_date',{ascending:false}).then(r=>r.data||[]),
+      supabase.from('employee_skills').select('*').eq('employee_id',emp.id).order('skill').then(r=>r.data||[])
     ])
-    setCerts(c); setEmpProjects(ep)
+    setCerts(c); setEmpProjects(ep); setSkills(sk)
   }
   const refresh = async () => {
     const {data}=await supabase.from('employees').select('*').eq('id',emp.id).single()
@@ -7408,6 +7410,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
 
   const tabs = [
     { id:'info', label:'Informasjon', emoji:'👤' },
+    { id:'skills', label:'Kompetanser', emoji:'🎯' },
     { id:'certs', label:`Sertifikater (${certs.length})`, emoji:'📜' },
     { id:'projects', label:`Prosjekter (${empProjects.length})`, emoji:'🏗️' },
     { id:'salary', label:'Lønn', emoji:'💰' },
@@ -7480,6 +7483,12 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
               )}
               {emp.notes && <div style={eCard}><h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📝 Notater</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{emp.notes}</p></div>}
             </>
+          )}
+
+
+          {/* SKILLS TAB */}
+          {activeTab==='skills' && (
+            <SkillsTab employeeId={emp.id} skills={skills} onRefresh={loadDetails} />
           )}
 
           {/* CERTS TAB */}
@@ -7873,6 +7882,110 @@ function ImportCSVModal({ user, onClose, onSaved }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+
+const ALL_SKILLS = [
+  'Graving','Sprengning','Betong','Armering','Stål/Sveis','Tømrer','Rørlegger','Elektro',
+  'Stillas','Asfalt','Maskinføring','Kran','Truck','Fallsikring','HMS-ansvarlig',
+  'Prosjektledelse','BIM/Tegning','Anleggsmaskin','Rigg','Kvalitetskontroll','Annet'
+]
+
+const SKILL_LEVELS = {
+  basis:   { label:'Basis',   color:'#64748b', bg:'#f8fafc' },
+  erfaren: { label:'Erfaren', color:'#d97706', bg:'#fffbeb' },
+  ekspert: { label:'Ekspert', color:'#059669', bg:'#f0fdf4' },
+}
+
+function SkillsTab({ employeeId, skills, onRefresh }) {
+  const [adding, setAdding] = useState(false)
+  const [newSkill, setNewSkill] = useState('')
+  const [newLevel, setNewLevel] = useState('basis')
+  const [saving, setSaving] = useState(false)
+  const [customSkill, setCustomSkill] = useState('')
+
+  const handleAdd = async () => {
+    const skillName = newSkill==='Annet' ? customSkill.trim() : newSkill
+    if (!skillName) return alert('Velg eller skriv inn kompetanse')
+    setSaving(true)
+    try {
+      const {error} = await supabase.from('employee_skills').insert({ employee_id:employeeId, skill:skillName, level:newLevel })
+      if (error&&error.code==='23505') { alert('Denne kompetansen er allerede lagt til') }
+      else if (error) throw error
+      else { setAdding(false); setNewSkill(''); setCustomSkill(''); onRefresh() }
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id) => {
+    await supabase.from('employee_skills').delete().eq('id',id)
+    onRefresh()
+  }
+
+  const updateLevel = async (id, level) => {
+    await supabase.from('employee_skills').update({level}).eq('id',id)
+    onRefresh()
+  }
+
+  const existing = skills.map(s=>s.skill)
+
+  return (
+    <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+        <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🎯 Kompetanser og ferdigheter</h3>
+        <button onClick={()=>setAdding(v=>!v)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+      </div>
+
+      {adding && (
+        <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'16px', display:'flex', flexDirection:'column', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Kompetanse</label>
+              <select value={newSkill} onChange={e=>setNewSkill(e.target.value)} style={{ width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'white' }}>
+                <option value="">Velg kompetanse...</option>
+                {ALL_SKILLS.filter(s=>!existing.includes(s)).map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              {newSkill==='Annet'&&<input value={customSkill} onChange={e=>setCustomSkill(e.target.value)} placeholder="Beskriv kompetanse..." style={{ width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', marginTop:'6px', boxSizing:'border-box' }} />}
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Nivå</label>
+              <div style={{ display:'flex', gap:'6px' }}>
+                {Object.entries(SKILL_LEVELS).map(([k,v])=>(
+                  <button key={k} onClick={()=>setNewLevel(k)}
+                    style={{ flex:1, padding:'8px 4px', borderRadius:'8px', border:`2px solid ${newLevel===k?v.color:'#e2e8f0'}`, background:newLevel===k?v.bg:'white', color:newLevel===k?v.color:'#64748b', fontWeight:newLevel===k?'700':'400', fontSize:'12px', cursor:'pointer' }}>
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'8px' }}>
+            <button onClick={()=>setAdding(false)} style={{ padding:'7px 14px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
+            <button onClick={handleAdd} disabled={saving||!newSkill} style={{ padding:'7px 14px', background:saving||!newSkill?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>{saving?'Lagrer...':'Legg til'}</button>
+          </div>
+        </div>
+      )}
+
+      {skills.length===0&&!adding ? (
+        <p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen kompetanser registrert ennå</p>
+      ) : (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+          {skills.map(s=>{
+            const lvl = SKILL_LEVELS[s.level]||SKILL_LEVELS.basis
+            return (
+              <div key={s.id} style={{ display:'flex', alignItems:'center', gap:'6px', background:lvl.bg, border:`1px solid ${lvl.color}30`, borderRadius:'10px', padding:'6px 12px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'600', color:lvl.color }}>🎯 {s.skill}</span>
+                <select value={s.level} onChange={e=>updateLevel(s.id,e.target.value)} style={{ fontSize:'11px', border:'none', background:'transparent', color:lvl.color, fontWeight:'700', cursor:'pointer', outline:'none' }}>
+                  {Object.entries(SKILL_LEVELS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <button onClick={()=>handleDelete(s.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'14px', padding:0, lineHeight:1 }}>×</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -8701,17 +8814,23 @@ function RessursPage() {
   const [showMilestones, setShowMilestones] = useState(false)
   const [showNewMilestone, setShowNewMilestone] = useState(null)
   const [milestoneRange, setMilestoneRange] = useState(90)
+  const [showLedigMannskap, setShowLedigMannskap] = useState(false)
+  const [showLedigMaskiner, setShowLedigMaskiner] = useState(false)
+  const [showOppgaveModal, setShowOppgaveModal] = useState(false)
+  const [allSkills, setAllSkills] = useState([])
 
   const load = async () => {
     try {
-      const [emp, mac, proj, pl, ms] = await Promise.all([
+      const [emp, mac, proj, pl, ms, sk] = await Promise.all([
         supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
         supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
         supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
         supabase.from('resource_plans').select('*').then(r=>r.data||[]),
-        supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date').then(r=>r.data||[])
+        supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date').then(r=>r.data||[]),
+        supabase.from('employee_skills').select('*').then(r=>r.data||[])
       ])
       setEmployees(emp); setMachines(mac); setProjects(proj); setPlans(pl); setMilestones(ms)
+      setAllSkills(sk)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -8805,6 +8924,18 @@ function RessursPage() {
                 ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
               </div>
             )}
+            <button onClick={()=>setShowLedigMannskap(true)}
+              style={{ padding:'9px 14px', background:'#eff6ff', color:'#2563eb', border:'2px solid #bfdbfe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              👷 Ledig mannskap
+            </button>
+            <button onClick={()=>setShowLedigMaskiner(true)}
+              style={{ padding:'9px 14px', background:'#f5f3ff', color:'#7c3aed', border:'2px solid #ddd6fe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              🚜 Ledig utstyr
+            </button>
+            <button onClick={()=>setShowOppgaveModal(true)}
+              style={{ padding:'9px 14px', background:'#f0fdf4', color:'#059669', border:'2px solid #bbf7d0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              ➕ Planlegg oppgave
+            </button>
             <button onClick={()=>setShowMilestones(v=>!v)}
               style={{ padding:'9px 16px', background:showMilestones?'#7c3aed':'white', color:showMilestones?'white':'#7c3aed', border:'2px solid #7c3aed', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
               🏁 Milepæler {milestonesInRange.length>0&&<span style={{ background:showMilestones?'rgba(255,255,255,0.3)':'#7c3aed', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{milestonesInRange.length}</span>}
@@ -9071,6 +9202,28 @@ function RessursPage() {
         />
       )}
 
+      {showLedigMannskap&&(
+        <LedigMannskapModal
+          employees={employees} plans={plans} dates={dates}
+          allSkills={allSkills}
+          onClose={()=>setShowLedigMannskap(false)}
+        />
+      )}
+      {showLedigMaskiner&&(
+        <LedigMaskinerModal
+          machines={machines} plans={plans} dates={dates}
+          onClose={()=>setShowLedigMaskiner(false)}
+        />
+      )}
+      {showOppgaveModal&&(
+        <OppgavePlanleggingModal
+          employees={employees} machines={machines} projects={projects}
+          allSkills={allSkills} plans={plans} dates={dates}
+          user={user}
+          onClose={()=>setShowOppgaveModal(false)}
+          onSaved={()=>{ setShowOppgaveModal(false); load() }}
+        />
+      )}
       {showNewMilestone&&(
         <MilestoneModal
           initial={typeof showNewMilestone==='object'&&showNewMilestone.edit?showNewMilestone.edit:null}
@@ -9405,6 +9558,245 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           <button onClick={handleSave} disabled={saving||!projectId} style={{ flex:2,padding:'10px',background:saving||!projectId?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving||!projectId?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
             {saving?'Lagrer...':editPlan?'Lagre endring':'Book'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── LEDIG MANNSKAP MODAL ──────────────────────────────────────────────────────
+function LedigMannskapModal({ employees, plans, dates, allSkills, onClose }) {
+  const [filterSkill, setFilterSkill] = useState('')
+  const today = new Date().toISOString().split('T')[0]
+  const checkDate = dates.find(d=>d>=today)||today
+  const bookedHours = (empId) => plans.filter(p=>p.resource_id===empId&&p.date===checkDate).reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
+  const skillsPerEmp = employees.reduce((acc,emp)=>{ acc[emp.id]=allSkills.filter(s=>s.employee_id===emp.id).map(s=>s.skill); return acc },{})
+  const uniqueSkills = [...new Set(allSkills.map(s=>s.skill))].sort()
+  const filteredEmps = employees.filter(emp=>!filterSkill||skillsPerEmp[emp.id]?.includes(filterSkill))
+  const available = filteredEmps.filter(e=>bookedHours(e.id)<8)
+  const busy = filteredEmps.filter(e=>bookedHours(e.id)>=8)
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'580px',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <div><h2 style={{ margin:'0 0 2px',fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>👷 Ledig mannskap</h2><div style={{ fontSize:'12px',color:'#94a3b8' }}>Per {new Date(checkDate+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long'})}</div></div>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'12px 24px',borderBottom:'1px solid #f1f5f9',flexShrink:0 }}>
+          <select value={filterSkill} onChange={e=>setFilterSkill(e.target.value)} style={{ width:'100%',padding:'8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white' }}>
+            <option value="">🎯 Alle kompetanser</option>
+            {uniqueSkills.map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
+          <div style={{ fontSize:'12px',fontWeight:'700',color:'#16a34a',textTransform:'uppercase',marginBottom:'8px' }}>✅ Ledig ({available.length})</div>
+          {available.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic',marginBottom:'16px' }}>Ingen ledige{filterSkill?` med kompetanse i ${filterSkill}`:''}</p>}
+          {available.map(emp=>{
+            const booked=bookedHours(emp.id); const empSkills=skillsPerEmp[emp.id]||[]
+            return (<div key={emp.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#f0fdf4',borderRadius:'12px',border:'1px solid #bbf7d0',marginBottom:'6px' }}>
+              <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'800',color:'#16a34a',flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</div>
+                <div style={{ fontSize:'11px',color:'#64748b' }}>{emp.position||emp.department||''}{booked>0?` · ${booked}t booket`:' · Helt ledig'}</div>
+                {empSkills.length>0&&<div style={{ display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'4px' }}>{empSkills.slice(0,5).map(s=><span key={s} style={{ background:'#f0fdf4',color:'#059669',fontSize:'10px',fontWeight:'600',padding:'1px 6px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>{s}</span>)}</div>}
+              </div>
+              <div style={{ textAlign:'right' }}><div style={{ fontWeight:'800',fontSize:'14px',color:'#16a34a' }}>{8-booked}t</div><div style={{ fontSize:'10px',color:'#94a3b8' }}>ledig</div></div>
+            </div>)
+          })}
+          {busy.length>0&&(<>
+            <div style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626',textTransform:'uppercase',marginBottom:'8px',marginTop:'14px' }}>🔴 Fullt booket ({busy.length})</div>
+            {busy.map(emp=>(<div key={emp.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#fef2f2',borderRadius:'12px',border:'1px solid #fecaca',marginBottom:'6px',opacity:0.7 }}>
+              <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:'#fecaca',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'800',color:'#dc2626',flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+              <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{emp.position||''}</div></div>
+              <span style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626' }}>Opptatt</span>
+            </div>))}
+          </>)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LedigMaskinerModal({ machines, plans, dates, onClose }) {
+  const today=new Date().toISOString().split('T')[0]
+  const checkDate=dates.find(d=>d>=today)||today
+  const isBooked=(id)=>plans.some(p=>p.resource_id===id&&p.date===checkDate)
+  const available=machines.filter(m=>m.status!=='Utrangert'&&m.status!=='Service'&&!isBooked(m.id))
+  const bookedMachines=machines.filter(m=>m.status!=='Utrangert'&&isBooked(m.id))
+  const inService=machines.filter(m=>m.status==='Service')
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <div><h2 style={{ margin:'0 0 2px',fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🚜 Ledig utstyr</h2><div style={{ fontSize:'12px',color:'#94a3b8' }}>Per {new Date(checkDate+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long'})}</div></div>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
+          <div style={{ fontSize:'12px',fontWeight:'700',color:'#16a34a',textTransform:'uppercase',marginBottom:'8px' }}>✅ Ledig ({available.length})</div>
+          {available.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen ledige maskiner</p>}
+          {available.map(m=>(<div key={m.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#f0fdf4',borderRadius:'12px',border:'1px solid #bbf7d0',marginBottom:'6px' }}>
+            <span style={{ fontSize:'22px' }}>🚜</span>
+            <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{m.name}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{m.category||''} · {m.status}</div></div>
+            <span style={{ background:'#f0fdf4',color:'#16a34a',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Ledig</span>
+          </div>))}
+          {bookedMachines.length>0&&(<>
+            <div style={{ fontSize:'12px',fontWeight:'700',color:'#d97706',textTransform:'uppercase',marginBottom:'8px',marginTop:'14px' }}>🟡 Booket ({bookedMachines.length})</div>
+            {bookedMachines.map(m=>(<div key={m.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#fffbeb',borderRadius:'12px',border:'1px solid #fde68a',marginBottom:'6px' }}>
+              <span style={{ fontSize:'22px' }}>🚜</span>
+              <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{m.name}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{m.category||''}</div></div>
+              <span style={{ fontSize:'12px',fontWeight:'700',color:'#d97706' }}>Booket</span>
+            </div>))}
+          </>)}
+          {inService.length>0&&(<>
+            <div style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626',textTransform:'uppercase',marginBottom:'8px',marginTop:'14px' }}>🔧 Service ({inService.length})</div>
+            {inService.map(m=>(<div key={m.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#fef2f2',borderRadius:'12px',border:'1px solid #fecaca',marginBottom:'6px' }}>
+              <span style={{ fontSize:'22px' }}>🔧</span>
+              <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{m.name}</div></div>
+              <span style={{ fontSize:'12px',color:'#dc2626',fontWeight:'700' }}>Service</span>
+            </div>))}
+          </>)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OppgavePlanleggingModal({ employees, machines, projects, allSkills, plans, dates, user, onClose, onSaved }) {
+  const [step, setStep] = useState(1)
+  const [projectId, setProjectId] = useState('')
+  const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0])
+  const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0])
+  const [hours, setHours] = useState(8)
+  const [filterSkills, setFilterSkills] = useState([])
+  const [selectedEmployees, setSelectedEmployees] = useState([])
+  const [selectedMachines, setSelectedMachines] = useState([])
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const uniqueSkills = [...new Set(allSkills.map(s=>s.skill))].sort()
+  const skillsPerEmp = employees.reduce((acc,emp)=>{ acc[emp.id]=allSkills.filter(s=>s.employee_id===emp.id).map(s=>s.skill); return acc },{})
+  const toggleSkillFilter = (sk) => setFilterSkills(s=>s.includes(sk)?s.filter(x=>x!==sk):[...s,sk])
+  const toggleEmp = (id) => setSelectedEmployees(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
+  const toggleMachine = (id) => setSelectedMachines(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
+  const filteredEmployees = employees.filter(emp=>filterSkills.length===0||filterSkills.every(sk=>skillsPerEmp[emp.id]?.includes(sk)))
+  const getDatesRange = () => {
+    const result=[]; const d=new Date(fromDate); const end=new Date(toDate)
+    while (d<=end) { const dow=d.getDay(); if(dow!==0&&dow!==6) result.push(d.toISOString().split('T')[0]); d.setDate(d.getDate()+1) }
+    return result
+  }
+  const handleSave = async () => {
+    if (!projectId) return alert('Velg prosjekt')
+    if (selectedEmployees.length===0&&selectedMachines.length===0) return alert('Velg minst én ressurs')
+    setSaving(true)
+    try {
+      const rangeDates=getDatesRange(); const inserts=[]
+      for (const empId of selectedEmployees) for (const date of rangeDates) inserts.push({ resource_id:empId,resource_type:'employee',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id })
+      for (const machId of selectedMachines) for (const date of rangeDates) inserts.push({ resource_id:machId,resource_type:'machine',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id })
+      if (inserts.length>0) { const {error}=await supabase.from('resource_plans').insert(inserts); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'660px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
+          <div>
+            <h2 style={{ margin:'0 0 6px',fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>➕ Planlegg oppgave</h2>
+            <div style={{ display:'flex',gap:'8px',alignItems:'center' }}>
+              {['Prosjekt & Tid','Kompetanse & Ressurser','Bekreft'].map((l,i)=>(
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:'4px' }}>
+                  <div style={{ width:'20px',height:'20px',borderRadius:'50%',background:step>i?'#059669':step===i+1?'#059669':'#e2e8f0',color:'white',fontSize:'10px',fontWeight:'800',display:'flex',alignItems:'center',justifyContent:'center' }}>{i+1}</div>
+                  <span style={{ fontSize:'11px',color:step===i+1?'#059669':'#94a3b8',fontWeight:step===i+1?'700':'400' }}>{l}</span>
+                  {i<2&&<span style={{ color:'#e2e8f0' }}>›</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+          {step===1&&(<>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
+              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white' }}>
+                <option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Fra dato</label><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Til dato</label><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
+            </div>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Timer per dag</label>
+              <div style={{ display:'flex',gap:'8px' }}>
+                {[4,6,7.5,8].map(h=><button key={h} onClick={()=>setHours(h)} style={{ padding:'9px 16px',borderRadius:'10px',border:`2px solid ${hours===h?'#059669':'#e2e8f0'}`,background:hours===h?'#f0fdf4':'white',color:hours===h?'#059669':'#475569',fontWeight:hours===h?'700':'400',fontSize:'14px',cursor:'pointer' }}>{h}t</button>)}
+              </div>
+            </div>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Merknad</label><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',resize:'none',boxSizing:'border-box' }} /></div>
+            {getDatesRange().length>0&&<div style={{ background:'#f0fdf4',borderRadius:'10px',padding:'10px 14px',border:'1px solid #bbf7d0',fontSize:'13px',color:'#16a34a',fontWeight:'600' }}>📅 {getDatesRange().length} arbeidsdag{getDatesRange().length>1?'er':''} valgt</div>}
+          </>)}
+          {step===2&&(<>
+            <div>
+              <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>🎯 Filtrer på kompetanse (valgfritt — ressurslisten oppdateres basert på match)</label>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'10px' }}>
+                {uniqueSkills.map(sk=>{
+                  const active=filterSkills.includes(sk)
+                  return <button key={sk} onClick={()=>toggleSkillFilter(sk)} style={{ padding:'5px 12px',borderRadius:'999px',border:`2px solid ${active?'#059669':'#e2e8f0'}`,background:active?'#f0fdf4':'white',color:active?'#059669':'#64748b',fontWeight:active?'700':'400',fontSize:'12px',cursor:'pointer' }}>{sk}</button>
+                })}
+              </div>
+              {filterSkills.length>0&&<div style={{ fontSize:'12px',color:'#64748b',marginBottom:'8px',background:'#f0fdf4',padding:'6px 10px',borderRadius:'8px',border:'1px solid #bbf7d0' }}>✓ Viser kun ansatte med: {filterSkills.join(', ')}</div>}
+            </div>
+            <div>
+              <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>👷 Velg ansatte ({selectedEmployees.length} valgt)</label>
+              <div style={{ display:'flex',flexDirection:'column',gap:'6px',maxHeight:'220px',overflowY:'auto',border:'1px solid #f1f5f9',borderRadius:'12px',padding:'8px' }}>
+                {filteredEmployees.map(emp=>{
+                  const isSel=selectedEmployees.includes(emp.id); const empSkills=skillsPerEmp[emp.id]||[]
+                  return (<div key={emp.id} onClick={()=>toggleEmp(emp.id)}
+                    style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',border:`2px solid ${isSel?'#059669':'transparent'}`,background:isSel?'#f0fdf4':'white',cursor:'pointer' }}>
+                    <div style={{ width:'34px',height:'34px',borderRadius:'50%',background:isSel?'#dcfce7':'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'800',color:isSel?'#059669':'#64748b',flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</div>
+                      <div style={{ fontSize:'11px',color:'#64748b' }}>{emp.position||emp.department||''}</div>
+                      {empSkills.length>0&&<div style={{ display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'3px' }}>{empSkills.slice(0,5).map(sk=><span key={sk} style={{ background:filterSkills.includes(sk)?'#f0fdf4':'#f8fafc',color:filterSkills.includes(sk)?'#059669':'#94a3b8',fontSize:'10px',fontWeight:'600',padding:'1px 6px',borderRadius:'999px',border:`1px solid ${filterSkills.includes(sk)?'#bbf7d0':'#f1f5f9'}` }}>{sk}</span>)}</div>}
+                    </div>
+                    {isSel&&<span style={{ fontSize:'18px',color:'#059669',flexShrink:0 }}>✓</span>}
+                  </div>)
+                })}
+                {filteredEmployees.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic',padding:'10px' }}>Ingen ansatte med valgte kompetanser</p>}
+              </div>
+            </div>
+            <div>
+              <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>🚜 Maskiner (valgfritt, {selectedMachines.length} valgt)</label>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+                {machines.filter(m=>m.status!=='Utrangert').map(m=>{ const isSel=selectedMachines.includes(m.id); return <button key={m.id} onClick={()=>toggleMachine(m.id)} style={{ padding:'6px 12px',borderRadius:'10px',border:`2px solid ${isSel?'#7c3aed':'#e2e8f0'}`,background:isSel?'#f5f3ff':'white',color:isSel?'#7c3aed':'#64748b',fontWeight:isSel?'700':'400',fontSize:'12px',cursor:'pointer' }}>🚜 {m.name}</button> })}
+              </div>
+            </div>
+          </>)}
+          {step===3&&(
+            <div style={{ display:'flex',flexDirection:'column',gap:'12px' }}>
+              <div style={{ background:'#f0fdf4',borderRadius:'14px',padding:'16px',border:'1px solid #bbf7d0' }}>
+                <div style={{ fontSize:'13px',fontWeight:'700',color:'#16a34a',marginBottom:'10px' }}>✅ Oppsummering</div>
+                {[['Prosjekt',projects.find(p=>p.id===projectId)?.name||'—'],['Periode',`${fromDate} → ${toDate} (${getDatesRange().length} dager)`],['Timer/dag',`${hours}t`],['Ansatte',selectedEmployees.length===0?'Ingen':selectedEmployees.map(id=>{ const e=employees.find(x=>x.id===id); return e?`${e.first_name} ${e.last_name}`:'' }).join(', ')],['Maskiner',selectedMachines.length===0?'Ingen':selectedMachines.map(id=>machines.find(x=>x.id===id)?.name||'').join(', ')]].map(([k,v])=>(
+                  <div key={k} style={{ display:'flex',padding:'6px 0',borderBottom:'1px solid #bbf7d0',fontSize:'13px' }}>
+                    <span style={{ color:'#16a34a',fontWeight:'600',minWidth:'100px',flexShrink:0 }}>{k}</span>
+                    <span style={{ color:'#0f172a',fontWeight:'500' }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background:'#eff6ff',borderRadius:'10px',padding:'12px 14px',border:'1px solid #bfdbfe',fontSize:'13px',color:'#2563eb' }}>
+                📊 Totalt: <strong>{(selectedEmployees.length+selectedMachines.length)*getDatesRange().length} bookinger</strong> opprettes
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',flexShrink:0 }}>
+          <div>{step>1&&<button onClick={()=>setStep(s=>s-1)} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>← Tilbake</button>}</div>
+          <div style={{ display:'flex',gap:'10px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            {step<3&&<button onClick={()=>{ if(step===1&&!projectId) return alert('Velg prosjekt'); setStep(s=>s+1) }} style={{ padding:'10px 24px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>Neste →</button>}
+            {step===3&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Planlegger...':'✅ Bekreft og planlegg'}</button>}
+          </div>
         </div>
       </div>
     </div>
