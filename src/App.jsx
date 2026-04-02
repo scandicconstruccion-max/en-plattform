@@ -8818,6 +8818,14 @@ function RessursPage() {
   const [showLedigMaskiner, setShowLedigMaskiner] = useState(false)
   const [showOppgaveModal, setShowOppgaveModal] = useState(false)
   const [allSkills, setAllSkills] = useState([])
+  const [fullscreen, setFullscreen] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState({
+    showWeekends: true,
+    showHolidays: true,
+    workdayStart: '07:00',
+    workdayEnd: '15:30',
+  })
 
   const load = async () => {
     try {
@@ -8909,10 +8917,20 @@ function RessursPage() {
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ressursplan...</p></div></div>
 
+  // Apply settings filters
+  const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
+
+  // Esc to exit fullscreen
+  React.useEffect(()=>{
+    const handler = (e) => { if(e.key==='Escape'&&fullscreen) setFullscreen(false) }
+    document.addEventListener('keydown',handler)
+    return ()=>document.removeEventListener('keydown',handler)
+  },[fullscreen])
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:fullscreen?'flex':'block', flexDirection:fullscreen?'column':'initial', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:fullscreen?0:'initial' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
@@ -8992,6 +9010,92 @@ function RessursPage() {
             </span>
             <button onClick={()=>navigate(1)} style={{ width:'34px',height:'34px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
             <button onClick={goToToday} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
+            {/* Settings + Fullscreen */}
+            <div style={{ position:'relative', marginLeft:'4px' }}>
+              <button onClick={()=>setShowSettings(v=>!v)}
+                style={{ width:'34px',height:'34px',borderRadius:'8px',border:`1px solid ${showSettings?'#059669':'#e2e8f0'}`,background:showSettings?'#f0fdf4':'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center',color:showSettings?'#059669':'#64748b' }}
+                title="Innstillinger">⚙️</button>
+              {showSettings&&(
+                <>
+                  <div style={{ position:'fixed',inset:0,zIndex:49 }} onClick={()=>setShowSettings(false)} />
+                  <div style={{ position:'absolute',top:'110%',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'16px',boxShadow:'0 12px 40px rgba(0,0,0,0.15)',zIndex:50,width:'300px',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+                    <div style={{ padding:'14px 18px',background:'#f8fafc',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:'8px' }}>
+                      <span style={{ fontSize:'16px' }}>⚙️</span>
+                      <span style={{ fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
+                    </div>
+                    <div style={{ padding:'14px 18px',display:'flex',flexDirection:'column',gap:'2px' }}>
+                      {/* Section: Visning */}
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px',marginTop:'4px' }}>Visning</div>
+                      {[
+                        ['showWeekends','🗓️','Vis lørdag og søndag','Helger vises i planleggingsrutenettet'],
+                        ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i planleggingsrutenettet'],
+                      ].map(([k,emoji,label,desc])=>(
+                        <div key={k} onClick={()=>setSettings(s=>({...s,[k]:!s[k]}))}
+                          style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}
+                          onMouseEnter={e=>{if(!settings[k])e.currentTarget.style.background='#f8fafc'}}
+                          onMouseLeave={e=>{if(!settings[k])e.currentTarget.style.background='white'}}>
+                          <span style={{ fontSize:'18px',flexShrink:0 }}>{emoji}</span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{label}</div>
+                            <div style={{ fontSize:'11px',color:'#94a3b8',marginTop:'1px' }}>{desc}</div>
+                          </div>
+                          <div style={{ width:'36px',height:'20px',borderRadius:'999px',background:settings[k]?'#059669':'#e2e8f0',position:'relative',flexShrink:0,transition:'background 0.2s' }}>
+                            <div style={{ width:'16px',height:'16px',borderRadius:'50%',background:'white',position:'absolute',top:'2px',left:settings[k]?'18px':'2px',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Section: Arbeidstid */}
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'12px',marginBottom:'8px' }}>Standard arbeidstid</div>
+                      <div style={{ background:'#f8fafc',borderRadius:'12px',padding:'14px',border:'1px solid #f1f5f9' }}>
+                        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
+                          <div>
+                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Arbeidsdagen starter</label>
+                            <input type="time" value={settings.workdayStart} onChange={e=>setSettings(s=>({...s,workdayStart:e.target.value}))}
+                              style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
+                          </div>
+                          <div>
+                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Arbeidsdagen slutter</label>
+                            <input type="time" value={settings.workdayEnd} onChange={e=>setSettings(s=>({...s,workdayEnd:e.target.value}))}
+                              style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
+                          </div>
+                        </div>
+                        <div style={{ marginTop:'10px',background:'#eff6ff',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bfdbfe' }}>
+                          <div style={{ fontSize:'12px',color:'#2563eb',fontWeight:'600' }}>
+                            ⏰ Standardtid: {settings.workdayStart} – {settings.workdayEnd}
+                          </div>
+                          <div style={{ fontSize:'11px',color:'#64748b',marginTop:'2px' }}>
+                            Brukes automatisk ved ny booking
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section: Hurtigtilgang */}
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'12px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
+                      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px' }}>
+                        {[['07:00','15:30','Normaltid'],['07:00','16:00','Lang dag'],['08:00','16:00','Kontortid'],['06:00','14:00','Tidligvakt']].map(([start,end,label])=>(
+                          <button key={label} onClick={()=>setSettings(s=>({...s,workdayStart:start,workdayEnd:end}))}
+                            style={{ padding:'8px',borderRadius:'8px',border:`1px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#e2e8f0'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
+                            {label}<br/><span style={{ fontWeight:'400',opacity:0.8 }}>{start}–{end}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ padding:'12px 18px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px' }}>
+                      <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,workdayStart:'07:00',workdayEnd:'15:30'})}
+                        style={{ flex:1,padding:'9px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
+                      <button onClick={()=>setShowSettings(false)}
+                        style={{ flex:2,padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lagre innstillinger</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <button onClick={()=>setFullscreen(v=>!v)}
+              style={{ width:'34px',height:'34px',borderRadius:'8px',border:`1px solid ${fullscreen?'#059669':'#e2e8f0'}`,background:fullscreen?'#f0fdf4':'white',cursor:'pointer',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',color:fullscreen?'#059669':'#64748b',transition:'all 0.15s' }}
+              title={fullscreen?'Avslutt fullskjerm (Esc)':'Fullskjerm'}>
+              {fullscreen?'⊡':'⛶'}
+            </button>
           </div>
         </div>
 
@@ -9072,18 +9176,18 @@ function RessursPage() {
       </div>
 
       {/* Grid */}
-      <div style={{ overflowX:'auto' }}>
-        <div style={{ minWidth:`${240+dates.length*(viewMode==='maned'?36:viewMode==='14'?60:90)}px` }}>
+      <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
+        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?36:viewMode==='14'?60:90)}px` }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
             <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
               {resourceType==='ansatte'?'👷 Ansatt':'🚜 Maskin'}
             </div>
-            {dates.map(date=>{
+            {visibleDates.map(date=>{
               const d=new Date(date+'T12:00:00')
               const weekend=isWeekend(date); const tod=isToday(date)
               const colW=viewMode==='maned'?36:viewMode==='14'?60:90
-              const msOnDate=milestones.filter(m=>m.start_date===date)
+              const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
               return (
                 <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
                   <div style={{ fontSize:'10px',color:tod?'#059669':weekend?'#cbd5e1':'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{DAY_SHORT[d.getDay()===0?6:d.getDay()-1]}</div>
@@ -9095,6 +9199,9 @@ function RessursPage() {
                       ))}
                     </div>
                   )}
+                  {settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date)&&(
+                    <div title={ALL_HOLIDAYS.find(h=>h.date===date)?.title} style={{ width:'6px',height:'6px',borderRadius:'50%',background:'#d97706',margin:'1px auto 0' }}/>
+                  )}
                 </div>
               )
             })}
@@ -9104,9 +9211,9 @@ function RessursPage() {
           {milestones.some(m=>dates.includes(m.start_date)) && (
             <div style={{ display:'flex', background:'#f5f3ff', borderBottom:'1px solid #ddd6fe' }}>
               <div style={{ width:'240px',flexShrink:0,padding:'6px 20px',fontSize:'11px',fontWeight:'700',color:'#7c3aed',borderRight:'1px solid #ddd6fe',display:'flex',alignItems:'center',gap:'4px' }}>🏁 Milepæler</div>
-              {dates.map(date=>{
+              {visibleDates.map(date=>{
                 const colW=viewMode==='maned'?36:viewMode==='14'?60:90
-                const msOnDate=milestones.filter(m=>m.start_date===date)
+                const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
                 return (
                   <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
                     onClick={()=>setShowNewMilestone(date)}>
@@ -9141,7 +9248,7 @@ function RessursPage() {
                     </div>
                   </div>
                 </div>
-                {dates.map(date=>{
+                {visibleDates.map(date=>{
                   const cellPlans=getPlansForCell(res.id,date)
                   const totalH=getTotalHours(res.id,date)
                   const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
@@ -9149,7 +9256,7 @@ function RessursPage() {
                   const colW=viewMode==='maned'?36:viewMode==='14'?60:90
                   return (
                     <div key={date}
-                      style={{ width:`${colW}px`,flexShrink:0,minHeight:'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s' }}
+                      style={{ width:`${colW}px`,flexShrink:0,minHeight:'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s' }}
                       onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
                       onDragOver={e=>{e.preventDefault();setDragOver({resourceId:res.id,date})}}
                       onDrop={()=>handleDrop(res.id,date)}>
@@ -9199,6 +9306,8 @@ function RessursPage() {
           onSaved={()=>{setShowBookingModal(null);load()}}
           resourceType={resourceType}
           machines={machines}
+          defaultStartTime={settings.workdayStart}
+          defaultEndTime={settings.workdayEnd}
         />
       )}
 
@@ -9222,6 +9331,8 @@ function RessursPage() {
           user={user}
           onClose={()=>setShowOppgaveModal(false)}
           onSaved={()=>{ setShowOppgaveModal(false); load() }}
+          defaultStartTime={settings.workdayStart}
+          defaultEndTime={settings.workdayEnd}
         />
       )}
       {showNewMilestone&&(
@@ -9320,10 +9431,18 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
   )
 }
 
-function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines }) {
+function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30' }) {
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
+  const [startTime, setStartTime] = useState(editPlan?.start_time||defaultStartTime)
+  const [endTime, setEndTime] = useState(editPlan?.end_time||defaultEndTime)
   const [notes, setNotes] = useState(editPlan?.notes||'')
+
+  const calcHoursFromTimes = (start, end) => {
+    const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number)
+    const total=(eh*60+em)-(sh*60+sm)
+    if (total>0) setHours(Math.round(total/60*10)/10)
+  }
   const [linkedMachineId, setLinkedMachineId] = useState(editPlan?.linked_machine_id||'')
   const [machineFromDate, setMachineFromDate] = useState(date)
   const [machineToDate, setMachineToDate] = useState(date)
@@ -9482,6 +9601,9 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
 
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Timer denne dagen</label>
+            <div style={{ background:'#f8fafc',borderRadius:'8px',padding:'7px 12px',fontSize:'12px',color:'#64748b',marginBottom:'8px',border:'1px solid #f1f5f9' }}>
+              ⏰ Standard arbeidstid: {defaultStart} – {defaultEnd}
+            </div>
             <div style={{ display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap' }}>
               {[4,6,7.5,8,10].map(h=>(
                 <button key={h} type="button" onClick={()=>setHours(h)}
@@ -9664,12 +9786,13 @@ function LedigMaskinerModal({ machines, plans, dates, onClose }) {
   )
 }
 
-function OppgavePlanleggingModal({ employees, machines, projects, allSkills, plans, dates, user, onClose, onSaved }) {
+function OppgavePlanleggingModal({ employees, machines, projects, allSkills, plans, dates, user, onClose, onSaved, workdayStart='07:00', workdayEnd='15:30' }) {
   const [step, setStep] = useState(1)
   const [projectId, setProjectId] = useState('')
   const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0])
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0])
-  const [hours, setHours] = useState(8)
+  const calcDefaultHours = () => { try { const [sh,sm]=workdayStart.split(':').map(Number); const [eh,em]=workdayEnd.split(':').map(Number); return Math.round(((eh*60+em)-(sh*60+sm))/60*10)/10 } catch(e) { return 8 } }
+  const [hours, setHours] = useState(calcDefaultHours())
   const [filterSkills, setFilterSkills] = useState([])
   const [selectedEmployees, setSelectedEmployees] = useState([])
   const [selectedMachines, setSelectedMachines] = useState([])
@@ -10146,7 +10269,7 @@ function CalWeekView({ currentDate, events, attendees, projects, employees, calV
     const visEmp = employees.filter(e=>visibleEmployees.includes(e.id))
     return (
       <div style={{ padding:'0 24px 24px' }}>
-        <div style={{ overflowX:'auto' }}>
+        <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:'white', borderRadius:'14px', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
             <thead>
               <tr>
@@ -11366,7 +11489,7 @@ function CRMPage() {
 
         {/* PIPELINE VIEW */}
         {view==='pipeline' && (
-          <div style={{ overflowX:'auto' }}>
+          <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(5,280px)', gap:'14px', minWidth:'max-content' }}>
               {['lead','kontaktet','tilbud_sendt','vunnet','tapt'].map(status=>{
                 const cfg=CRM_STATUS[status]
