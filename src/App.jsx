@@ -6301,6 +6301,20 @@ function FakturaPage() {
   }
   useEffect(()=>{ load() },[])
 
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
+
   const filtered = invoices.filter(i => {
     if (filterStatus!=='alle'&&i.status!==filterStatus) return false
     if (search&&![i.title,i.invoice_number,i.customer_name].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
@@ -7181,6 +7195,20 @@ function AnsattePage() {
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
+
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
 
   // Check cert expiry and create notifications
   useEffect(()=>{
@@ -8065,6 +8093,20 @@ function TimelistePage() {
   }
   useEffect(()=>{ load() },[])
 
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
+
   // Find or init current week sheet for selected employee
   const currentSheet = timesheets.find(t=>
     t.week_number===selectedWeek && t.year===selectedYear &&
@@ -8844,6 +8886,20 @@ function RessursPage() {
   }
   useEffect(()=>{ load() },[])
 
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
+
   const days = viewMode==='uke'?7:viewMode==='14'?14:daysInMonth(currentDate)
   const dates = getDatesInRange(viewMode==='maned'?startOfMonth(currentDate):currentDate, days)
 
@@ -8993,7 +9049,16 @@ function RessursPage() {
           {/* View mode */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['uke','Uke'],['14','14 dager'],['maned','Måned']].map(([v,l])=>(
-              <button key={v} onClick={()=>setViewMode(v)}
+              <button key={v} onClick={()=>{
+                setViewMode(v)
+                // When switching to month view, show the month containing today
+                // to avoid showing wrong month (e.g. week starts Mar 30, month would show March)
+                if (v==='maned') {
+                  setCurrentDate(startOfMonth(new Date().toISOString().split('T')[0]))
+                } else if (v==='uke') {
+                  setCurrentDate(startOfWeek(new Date().toISOString().split('T')[0]))
+                }
+              }}
                 style={{ padding:'8px 14px',border:'none',background:viewMode===v?'#0f172a':'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
@@ -9178,6 +9243,18 @@ function RessursPage() {
         </div>
       )}
 
+      {/* Month view scroll hint */}
+      {viewMode==='maned'&&(
+        <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center' }}>
+          <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'600' }}>
+            📅 Månedsvisning — {visibleDates.length} dager · Skroll horisontalt for å se hele måneden
+          </span>
+          <span style={{ fontSize:'12px', color:'#64748b' }}>
+            Totalt {filteredPlans.filter(p=>visibleDates.includes(p.date)).length} bookinger denne måneden
+          </span>
+        </div>
+      )}
+
       {/* Legend */}
       <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center' }}>
         <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
@@ -9191,8 +9268,8 @@ function RessursPage() {
       </div>
 
       {/* Grid */}
-      <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
-        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?52:viewMode==='14'?60:90)}px` }}>
+      <div id="ressurs-grid-scroll" style={{ overflowX:'auto', overflowY:fullscreen?'auto':'visible', flex:fullscreen?1:'initial' }}>
+        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?68:viewMode==='14'?60:90)}px` }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
             <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
@@ -9201,7 +9278,7 @@ function RessursPage() {
             {visibleDates.map(date=>{
               const d=new Date(date+'T12:00:00')
               const weekend=isWeekend(date); const tod=isToday(date)
-              const colW=viewMode==='maned'?52:viewMode==='14'?60:90
+              const colW=viewMode==='maned'?68:viewMode==='14'?60:90
               const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
               return (
                 <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
@@ -9227,7 +9304,7 @@ function RessursPage() {
             <div style={{ display:'flex', background:'#f5f3ff', borderBottom:'1px solid #ddd6fe' }}>
               <div style={{ width:'240px',flexShrink:0,padding:'6px 20px',fontSize:'11px',fontWeight:'700',color:'#7c3aed',borderRight:'1px solid #ddd6fe',display:'flex',alignItems:'center',gap:'4px' }}>🏁 Milepæler</div>
               {visibleDates.map(date=>{
-                const colW=viewMode==='maned'?52:viewMode==='14'?60:90
+                const colW=viewMode==='maned'?68:viewMode==='14'?60:90
                 const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
                 return (
                   <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
@@ -9268,7 +9345,7 @@ function RessursPage() {
                   const totalH=getTotalHours(res.id,date)
                   const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
                   const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
-                  const colW=viewMode==='maned'?52:viewMode==='14'?60:90
+                  const colW=viewMode==='maned'?68:viewMode==='14'?60:90
                   return (
                     <div key={date}
                       style={{ width:`${colW}px`,flexShrink:0,minHeight:viewMode==='maned'?'64px':'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
@@ -10084,6 +10161,20 @@ function KalenderPage() {
   }
   useEffect(()=>{ load() },[])
 
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
+
   const today = new Date().toISOString().split('T')[0]
   const curDate = new Date(currentDate)
 
@@ -10736,6 +10827,20 @@ function InterChatPage() {
 
   useEffect(()=>{ load() },[])
 
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
+
   useEffect(()=>{
     const sub = supabase.channel('chat-global-v2')
       .on('postgres_changes',{event:'*',schema:'public',table:'chat_messages'},()=>load())
@@ -11359,6 +11464,20 @@ function CRMPage() {
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
+
+  // Auto-scroll to today column when in month view
+  useEffect(()=>{
+    if (viewMode==='maned') {
+      setTimeout(()=>{
+        const todayEl = document.getElementById('ressurs-today-col')
+        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
+        else {
+          const grid = document.getElementById('ressurs-grid-scroll')
+          if (grid) grid.scrollLeft = 0
+        }
+      }, 100)
+    }
+  }, [viewMode, currentDate])
 
   // Check overdue tasks and create notifications
   useEffect(()=>{
