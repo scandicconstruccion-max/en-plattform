@@ -14408,6 +14408,152 @@ function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
 
 // ─── END BRUKERADMIN MODULE ───────────────────────────────────────────────────
 
+
+// ─── VARSLER PAGE ─────────────────────────────────────────────────────────────
+
+function VarslerPage() {
+  const { notifs, unread, markRead, markAllRead, load } = useNotif()
+  const [filter, setFilter] = useState('alle')
+  const { user } = useAuth()
+
+  const typeIcon = (type) => ({ info:'ℹ️', success:'✅', warning:'⚠️', quote:'📋', error:'❌' }[type] || 'ℹ️')
+  const typeName = (type) => ({ info:'Info', success:'Fullført', warning:'Advarsel', quote:'Tilbud', error:'Feil' }[type] || 'Info')
+
+  const filtered = notifs.filter(n => {
+    if (filter === 'ulest') return !n.read
+    if (filter !== 'alle') return n.type === filter
+    return true
+  })
+
+  const deleteNotif = async (id, e) => {
+    e.stopPropagation()
+    await supabase.from('notifications').delete().eq('id', id)
+    load()
+  }
+
+  const deleteAll = async () => {
+    if (!confirm('Slett alle varsler?')) return
+    await supabase.from('notifications').delete().eq('user_id', user?.id)
+    load()
+  }
+
+  const groupByDate = (items) => {
+    const groups = {}
+    items.forEach(n => {
+      const d = new Date(n.created_at)
+      const today = new Date()
+      const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1)
+      let key
+      if (d.toDateString()===today.toDateString()) key='I dag'
+      else if (d.toDateString()===yesterday.toDateString()) key='I går'
+      else key = d.toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long'})
+      if (!groups[key]) groups[key]=[]
+      groups[key].push(n)
+    })
+    return groups
+  }
+
+  const grouped = groupByDate(filtered)
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔔 Varsler</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>
+              {unread > 0 ? `${unread} uleste varsler` : 'Alle varsler er lest'}
+            </p>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            {unread > 0 && (
+              <button onClick={markAllRead}
+                style={{ padding:'9px 16px', border:'1px solid #bbf7d0', borderRadius:'10px', background:'#f0fdf4', color:'#059669', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                ✓ Merk alle lest
+              </button>
+            )}
+            {notifs.length > 0 && (
+              <button onClick={deleteAll}
+                style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', color:'#dc2626', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                🗑️ Slett alle
+              </button>
+            )}
+          </div>
+        </div>
+        {/* Filter tabs */}
+        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+          {[
+            ['alle','📋 Alle', notifs.length],
+            ['ulest','🔵 Ulest', unread],
+            ['success','✅ Fullført', notifs.filter(n=>n.type==='success').length],
+            ['warning','⚠️ Advarsel', notifs.filter(n=>n.type==='warning').length],
+            ['info','ℹ️ Info', notifs.filter(n=>n.type==='info').length],
+          ].map(([id, label, count]) => (
+            <button key={id} onClick={() => setFilter(id)}
+              style={{ padding:'7px 14px', borderRadius:'10px', border:'none', background:filter===id?'#059669':'#f8fafc', color:filter===id?'white':'#64748b', fontWeight:filter===id?'700':'500', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
+              {label}
+              {count > 0 && <span style={{ background:filter===id?'rgba(255,255,255,0.3)':'#e2e8f0', color:filter===id?'white':'#475569', fontSize:'11px', fontWeight:'700', padding:'1px 6px', borderRadius:'999px' }}>{count}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 32px', maxWidth:'760px' }}>
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>🔔</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{filter==='ulest'?'Ingen uleste varsler':'Ingen varsler'}</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>
+              {filter==='ulest' ? 'Du er helt oppdatert!' : 'Varsler fra systemet vises her automatisk.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'24px' }}>
+            {Object.entries(grouped).map(([date, items]) => (
+              <div key={date}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'10px', display:'flex', alignItems:'center', gap:'8px' }}>
+                  {date}
+                  <div style={{ flex:1, height:'1px', background:'#f1f5f9' }} />
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {items.map(n => (
+                    <div key={n.id}
+                      onClick={() => markRead(n.id)}
+                      style={{ background:n.read?'white':'#f0fdf4', borderRadius:'12px', border:`1px solid ${n.read?'#f1f5f9':'#bbf7d0'}`, padding:'14px 16px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap:'12px', transition:'background 0.15s' }}
+                      onMouseEnter={e=>{ if(n.read) e.currentTarget.style.background='#f8fafc' }}
+                      onMouseLeave={e=>{ e.currentTarget.style.background=n.read?'white':'#f0fdf4' }}>
+                      <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:n.read?'#f8fafc':'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0, border:`1px solid ${n.read?'#f1f5f9':'#bbf7d0'}` }}>
+                        {typeIcon(n.type)}
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px', flexWrap:'wrap' }}>
+                          <span style={{ fontWeight:n.read?'600':'800', fontSize:'14px', color:'#0f172a' }}>{n.title}</span>
+                          {!n.read && <span style={{ width:'7px', height:'7px', borderRadius:'50%', background:'#059669', flexShrink:0, display:'inline-block' }} />}
+                        </div>
+                        {n.message && <div style={{ fontSize:'13px', color:'#64748b', lineHeight:1.5, marginBottom:'4px' }}>{n.message}</div>}
+                        <div style={{ fontSize:'11px', color:'#cbd5e1' }}>
+                          {new Date(n.created_at).toLocaleTimeString('nb-NO',{hour:'2-digit',minute:'2-digit'})}
+                          {' · '}
+                          <span style={{ color:'#94a3b8' }}>{typeName(n.type)}</span>
+                        </div>
+                      </div>
+                      <button onClick={(e) => deleteNotif(n.id, e)}
+                        style={{ background:'none', border:'none', cursor:'pointer', color:'#cbd5e1', fontSize:'16px', padding:'2px', flexShrink:0, lineHeight:1 }}
+                        onMouseEnter={e=>e.currentTarget.style.color='#dc2626'}
+                        onMouseLeave={e=>e.currentTarget.style.color='#cbd5e1'}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── END VARSLER PAGE ─────────────────────────────────────────────────────────
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -14452,9 +14598,8 @@ function AppContent() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ position: 'fixed', top: 0, left: 0, height: '100vh', width: sidebarWidth, background: 'white', borderRight: '1px solid #e2e8f0', transition: 'width 0.3s', zIndex: 40, display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-        <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', padding: collapsed ? '0' : '0 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: collapsed ? '0' : '0 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
           {collapsed ? <span style={{ fontWeight: 'bold', color: '#059669', fontSize: '18px' }}>EP</span> : <span style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '15px' }}>En Plattform</span>}
-          {!collapsed && <NotifBell onNavigate={navigate} />}
         </div>
         <button onClick={() => setCollapsed(!collapsed)} style={{ position: 'absolute', top: '72px', right: '-12px', width: '24px', height: '24px', borderRadius: '50%', background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
           {collapsed ? '›' : '‹'}
@@ -14478,16 +14623,33 @@ function AppContent() {
               <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: 'bold', fontSize: '13px', flexShrink: 0 }}>
                 {user?.email?.[0]?.toUpperCase() || 'U'}
               </div>
-              <div style={{ flex: 1, minWidth: 0, fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
-              <button onClick={() => supabase.auth.signOut()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '18px' }} title="Logg ut">⏻</button>
+              <div style={{ flex: 1, minWidth: 0, fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email?.split('@')[0]}</div>
             </div>
           ) : (
-            <button onClick={() => supabase.auth.signOut()} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '18px' }} title="Logg ut">⏻</button>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: '800', fontSize: '12px' }}>
+                {user?.email?.[0]?.toUpperCase() || 'U'}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
       <main style={{ marginLeft: sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh' }}>
+        {/* Global top bar */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white', borderBottom: '1px solid #f1f5f9', padding: '0 28px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          <NotifBell onNavigate={navigate} />
+          <div style={{ width: '1px', height: '24px', background: '#f1f5f9' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: '800', fontSize: '12px' }}>
+              {user?.email?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.email?.split('@')[0] || 'Bruker'}
+            </span>
+            <button onClick={() => supabase.auth.signOut()} title="Logg ut" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', padding: '2px', lineHeight: 1 }}>⏻</button>
+          </div>
+        </div>
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
@@ -14510,9 +14672,10 @@ function AppContent() {
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'brukeradmin' && <BrukeradminPage />}
+        {page === 'varsler' && <VarslerPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'varsler' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
