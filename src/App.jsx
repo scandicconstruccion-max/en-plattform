@@ -13828,6 +13828,586 @@ function MinBedriftPage() {
 
 // ─── END MIN BEDRIFT MODULE ───────────────────────────────────────────────────
 
+
+// ─── BRUKERADMIN MODULE ───────────────────────────────────────────────────────
+
+const USER_ROLES = {
+  superadmin: { label:'Superadmin', emoji:'👑', color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe', desc:'Full tilgang til alt, inkl. brukerstyring' },
+  admin:      { label:'Admin',      emoji:'🔑', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', desc:'Kan administrere de fleste funksjoner' },
+  leder:      { label:'Leder',      emoji:'🏗️', color:'#059669', bg:'#f0fdf4', border:'#bbf7d0', desc:'Kan se og redigere prosjekter og team' },
+  ansatt:     { label:'Ansatt',     emoji:'👷', color:'#d97706', bg:'#fffbeb', border:'#fde68a', desc:'Standard tilgang til tildelte moduler' },
+  les:        { label:'Les-only',   emoji:'👁️', color:'#64748b', bg:'#f8fafc', border:'#e2e8f0', desc:'Kan kun se, ikke redigere' },
+}
+
+const ALL_MODULES_LIST = [
+  { id:'prosjekter',   label:'Prosjekter',        emoji:'🏗️' },
+  { id:'prosjektfiler',label:'Prosjektfiler',      emoji:'📁' },
+  { id:'sjekklister',  label:'Sjekklister',        emoji:'✅' },
+  { id:'avvik',        label:'Avvik',              emoji:'⚠️' },
+  { id:'hms',          label:'HMS & Risiko',       emoji:'🛡️' },
+  { id:'maskiner',     label:'Maskiner',           emoji:'🚜' },
+  { id:'tilbud',       label:'Tilbud',             emoji:'📋' },
+  { id:'anbudsmodul',  label:'Anbudsmodul',        emoji:'⚖️' },
+  { id:'ordre',        label:'Ordre',              emoji:'📝' },
+  { id:'faktura',      label:'Faktura',            emoji:'🧾' },
+  { id:'ansatte',      label:'Ansatte',            emoji:'👷' },
+  { id:'timelister',   label:'Timelister',         emoji:'⏱️' },
+  { id:'ressursplan',  label:'Ressursplanlegger',  emoji:'📅' },
+  { id:'kalender',     label:'Kalender',           emoji:'📆' },
+  { id:'chat',         label:'Intern Chat',        emoji:'💬' },
+  { id:'befaring',     label:'Befaring',           emoji:'🔍' },
+  { id:'bildedok',     label:'Bildedokumentasjon', emoji:'📷' },
+  { id:'fdv',          label:'FDV',                emoji:'🏛️' },
+  { id:'crm',          label:'CRM',                emoji:'📊' },
+]
+
+const baInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+
+function BrukeradminPage() {
+  const { user } = useAuth()
+  const [users, setUsers] = useState([])
+  const [invitations, setInvitations] = useState([])
+  const [companyModules, setCompanyModules] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [showInvite, setShowInvite] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filterRole, setFilterRole] = useState('alle')
+
+  const load = async () => {
+    try {
+      const [uData, iData, cData] = await Promise.all([
+        supabase.from('user_profiles').select('*').order('created_at').then(r=>r.data||[]),
+        supabase.from('user_invitations').select('*').is('accepted_at',null).gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('company_settings').select('active_modules,name').limit(1).single().then(r=>r.data||{})
+      ])
+      setUsers(uData)
+      setInvitations(iData)
+      setCompanyModules(cData.active_modules || [])
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Ensure current user has a profile
+  useEffect(()=>{
+    if (!user) return
+    const syncProfile = async () => {
+      const { data } = await supabase.from('user_profiles').select('id').eq('id',user.id).single()
+      if (!data) {
+        await supabase.from('user_profiles').insert({
+          id: user.id,
+          email: user.email,
+          role: 'superadmin',
+          status: 'aktiv',
+          module_access: ALL_MODULES_LIST.map(m=>m.id)
+        })
+        load()
+      }
+    }
+    syncProfile()
+  },[user])
+
+  const filtered = users.filter(u => {
+    if (filterRole !== 'alle' && u.role !== filterRole) return false
+    if (search && ![u.email,u.full_name].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const activeCount = users.filter(u=>u.status==='aktiv').length
+
+  if (loading) return (
+    <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/>
+        <p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster brukere...</p>
+      </div>
+    </div>
+  )
+
+  if (selectedUser) return (
+    <UserDetaljer
+      userProfile={selectedUser}
+      currentUser={user}
+      companyModules={companyModules}
+      onBack={()=>{ setSelectedUser(null); load() }}
+    />
+  )
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding:'20px 32px' }}>
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px',fontWeight:'bold',color:'#0f172a',margin:0 }}>👤 Brukere og tilgang</h1>
+            <p style={{ color:'#64748b',marginTop:'4px',fontSize:'14px',marginBottom:0 }}>Administrer brukere, roller og modultilgang</p>
+          </div>
+          <button onClick={()=>setShowInvite(true)}
+            style={{ padding:'10px 20px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>
+            + Inviter bruker
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px' }}>
+          {[
+            { label:'Totalt', value:users.length, emoji:'👥', bg:'#f8fafc', color:'#0f172a' },
+            { label:'Aktive', value:activeCount, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
+            { label:'Invitert', value:invitations.length, emoji:'📧', bg:'#eff6ff', color:'#2563eb' },
+            { label:'Admin', value:users.filter(u=>u.role==='admin'||u.role==='superadmin').length, emoji:'🔑', bg:'#f5f3ff', color:'#7c3aed' },
+            { label:'Inaktive', value:users.filter(u=>u.status==='inaktiv').length, emoji:'🔒', bg:'#fef2f2', color:'#dc2626' },
+          ].map(s=>(
+            <div key={s.label} style={{ background:s.bg,borderRadius:'12px',padding:'12px 14px' }}>
+              <div style={{ fontSize:'18px',marginBottom:'4px' }}>{s.emoji}</div>
+              <div style={{ fontSize:'20px',fontWeight:'800',color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:'11px',color:'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 32px',display:'flex',flexDirection:'column',gap:'16px' }}>
+        {/* Filters */}
+        <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'14px 18px',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk bruker..." style={{ ...baInp,maxWidth:'220px',flex:1 }} />
+          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ ...baInp,maxWidth:'160px' }}>
+            <option value="alle">Alle roller</option>
+            {Object.entries(USER_ROLES).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+          </select>
+          {(search||filterRole!=='alle')&&<button onClick={()=>{setSearch('');setFilterRole('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto',fontSize:'13px',color:'#94a3b8' }}>{filtered.length} brukere</span>
+        </div>
+
+        {/* Pending invitations */}
+        {invitations.length>0&&(
+          <div style={{ background:'#eff6ff',borderRadius:'14px',border:'1px solid #bfdbfe',padding:'16px 20px' }}>
+            <div style={{ fontSize:'13px',fontWeight:'700',color:'#2563eb',marginBottom:'10px' }}>📧 Ventende invitasjoner ({invitations.length})</div>
+            {invitations.map(inv=>(
+              <div key={inv.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'8px 0',borderBottom:'1px solid #bfdbfe30' }}>
+                <div style={{ width:'32px',height:'32px',borderRadius:'50%',background:'#bfdbfe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px' }}>📧</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:'600',fontSize:'13px',color:'#1e3a8a' }}>{inv.email}</div>
+                  <div style={{ fontSize:'11px',color:'#3b82f6' }}>{USER_ROLES[inv.role]?.label||'Ansatt'} · Utløper {new Date(inv.expires_at).toLocaleDateString('nb-NO')}</div>
+                </div>
+                <button onClick={async()=>{ await supabase.from('user_invitations').delete().eq('id',inv.id); load() }}
+                  style={{ background:'#fef2f2',color:'#dc2626',border:'none',borderRadius:'6px',padding:'4px 10px',fontSize:'12px',cursor:'pointer',fontWeight:'600' }}>
+                  Trekk tilbake
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* User list */}
+        {filtered.length===0 ? (
+          <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'60px 20px',textAlign:'center' }}>
+            <div style={{ fontSize:'40px',marginBottom:'12px' }}>👤</div>
+            <h3 style={{ margin:'0 0 6px',color:'#0f172a' }}>Ingen brukere funnet</h3>
+            <p style={{ margin:0,color:'#94a3b8',fontSize:'14px' }}>{users.length===0?'Inviter din første bruker.':'Prøv å endre filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex',flexDirection:'column',gap:'8px' }}>
+            {filtered.map(u=>{
+              const cfg=USER_ROLES[u.role]||USER_ROLES.ansatt
+              const isCurrentUser = u.id===user?.id
+              const modCount=(u.module_access||[]).length
+              return (
+                <div key={u.id} onClick={()=>setSelectedUser(u)}
+                  style={{ background:'white',borderRadius:'14px',border:`1px solid ${u.status==='inaktiv'?'#fecaca':'#f1f5f9'}`,padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',gap:'16px',transition:'box-shadow 0.15s',opacity:u.status==='inaktiv'?0.7:1 }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
+                  onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  {/* Avatar */}
+                  <div style={{ width:'44px',height:'44px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0 }}>
+                    {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover' }} /> : (u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'15px' }}>{u.full_name||u.email}</span>
+                      {isCurrentUser&&<span style={{ background:'#f0fdf4',color:'#059669',fontSize:'11px',fontWeight:'700',padding:'1px 8px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Deg</span>}
+                      <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
+                      {u.status==='inaktiv'&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>🔒 Inaktiv</span>}
+                    </div>
+                    <div style={{ display:'flex',gap:'12px',flexWrap:'wrap',fontSize:'12px',color:'#64748b' }}>
+                      {u.full_name&&<span>✉️ {u.email}</span>}
+                      {u.phone&&<span>📞 {u.phone}</span>}
+                      <span>🔩 {modCount} moduler</span>
+                      {u.last_seen&&<span>🕐 Sist aktiv {new Date(u.last_seen).toLocaleDateString('nb-NO')}</span>}
+                    </div>
+                  </div>
+                  <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showInvite&&<InviterBrukerModal currentUser={user} companyModules={companyModules} onClose={()=>setShowInvite(false)} onSaved={()=>{setShowInvite(false);load()}} />}
+    </div>
+  )
+}
+
+// ── USER DETAIL PAGE ─────────────────────────────────────────────────────────
+function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }) {
+  const [u, setU] = useState(init)
+  const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState('profil')
+  const cfg = USER_ROLES[u.role]||USER_ROLES.ansatt
+  const isCurrentUser = u.id===currentUser?.id
+  const isSuperAdmin = u.role==='superadmin'
+
+  const save = async (updates) => {
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('user_profiles').update({ ...updates, updated_at:new Date().toISOString() }).eq('id',u.id)
+      if (error) throw error
+      setU(v=>({...v,...updates}))
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  const toggleModule = async (modId) => {
+    const current = u.module_access||[]
+    const next = current.includes(modId) ? current.filter(m=>m!==modId) : [...current,modId]
+    await save({ module_access: next })
+  }
+
+  const giveAllModules = () => save({ module_access: companyModules })
+  const removeAllModules = () => save({ module_access: [] })
+
+  const handleDeactivate = async () => {
+    if (isCurrentUser) return alert('Du kan ikke deaktivere din egen bruker.')
+    if (!confirm(`${u.status==='aktiv'?'Deaktiver':'Aktiver'} ${u.full_name||u.email}?`)) return
+    await save({ status: u.status==='aktiv'?'inaktiv':'aktiv' })
+  }
+
+  const handleDelete = async () => {
+    if (isCurrentUser) return alert('Du kan ikke slette din egen bruker.')
+    if (isSuperAdmin) return alert('Superadmin kan ikke slettes.')
+    if (!confirm(`Slett ${u.full_name||u.email} permanent?`)) return
+    await supabase.from('user_profiles').delete().eq('id',u.id)
+    onBack()
+  }
+
+  const activeCompanyModules = ALL_MODULES_LIST.filter(m=>companyModules.includes(m.id))
+  const userModules = u.module_access||[]
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til brukere</button>
+        <div style={{ display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'16px' }}>
+          <div style={{ display:'flex',alignItems:'flex-start',gap:'14px' }}>
+            <div style={{ width:'56px',height:'56px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:'800',color:cfg.color,flexShrink:0 }}>
+              {(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}
+            </div>
+            <div>
+              <div style={{ display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap',marginBottom:'6px' }}>
+                <h1 style={{ margin:0,fontSize:'20px',fontWeight:'800',color:'#0f172a' }}>{u.full_name||u.email}</h1>
+                {isCurrentUser&&<span style={{ background:'#f0fdf4',color:'#059669',fontSize:'11px',fontWeight:'700',padding:'2px 8px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Deg</span>}
+                <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
+                {u.status==='inaktiv'&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>🔒 Inaktiv</span>}
+              </div>
+              <div style={{ fontSize:'13px',color:'#64748b' }}>{u.email}{u.phone?` · ${u.phone}`:''}</div>
+            </div>
+          </div>
+          {!isCurrentUser&&!isSuperAdmin&&(
+            <div style={{ display:'flex',gap:'8px',flexShrink:0 }}>
+              <button onClick={handleDeactivate}
+                style={{ padding:'9px 14px',border:`1px solid ${u.status==='aktiv'?'#fde68a':'#bbf7d0'}`,borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:u.status==='aktiv'?'#d97706':'#059669' }}>
+                {u.status==='aktiv'?'🔒 Deaktiver':'✅ Aktiver'}
+              </button>
+              <button onClick={handleDelete} style={{ padding:'9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px' }}>🗑️</button>
+            </div>
+          )}
+        </div>
+        <div style={{ display:'flex',gap:'4px',marginTop:'16px' }}>
+          {[['profil','👤 Profil'],['rolle','🔑 Rolle'],['moduler','🔩 Modultilgang']].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding:'8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px',display:'grid',gridTemplateColumns:'2fr 1fr',gap:'20px' }}>
+        <div style={{ display:'flex',flexDirection:'column',gap:'16px' }}>
+
+          {/* PROFIL TAB */}
+          {tab==='profil'&&(
+            <div style={{ background:'white',borderRadius:'16px',border:'1px solid #f1f5f9',padding:'20px 24px' }}>
+              <h3 style={{ margin:'0 0 16px',fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>👤 Profilinformasjon</h3>
+              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+                <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Fullt navn</label>
+                  <input defaultValue={u.full_name||''} onBlur={e=>save({full_name:e.target.value})} style={baInp} placeholder="For- og etternavn" /></div>
+                <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Telefon</label>
+                  <input defaultValue={u.phone||''} onBlur={e=>save({phone:e.target.value})} style={baInp} placeholder="+47 xxx xx xxx" /></div>
+                <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>E-post</label>
+                  <input value={u.email||''} readOnly style={{ ...baInp,background:'#f8fafc',color:'#94a3b8' }} /></div>
+              </div>
+            </div>
+          )}
+
+          {/* ROLLE TAB */}
+          {tab==='rolle'&&(
+            <div style={{ background:'white',borderRadius:'16px',border:'1px solid #f1f5f9',padding:'20px 24px' }}>
+              <h3 style={{ margin:'0 0 16px',fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>🔑 Tilgangsrolle</h3>
+              {isSuperAdmin ? (
+                <div style={{ background:'#f5f3ff',borderRadius:'12px',padding:'16px',border:'1px solid #ddd6fe' }}>
+                  <div style={{ fontSize:'14px',fontWeight:'700',color:'#7c3aed' }}>👑 Superadmin</div>
+                  <div style={{ fontSize:'13px',color:'#6d28d9',marginTop:'4px' }}>Superadmin-rollen kan ikke endres. Eieren av kontoen har alltid full tilgang til alt.</div>
+                </div>
+              ) : (
+                <div style={{ display:'flex',flexDirection:'column',gap:'10px' }}>
+                  {Object.entries(USER_ROLES).filter(([k])=>k!=='superadmin').map(([key,cfg])=>(
+                    <button key={key} onClick={()=>save({role:key})} disabled={isCurrentUser}
+                      style={{ display:'flex',alignItems:'center',gap:'14px',padding:'14px 16px',borderRadius:'12px',border:`2px solid ${u.role===key?cfg.border:'#f1f5f9'}`,background:u.role===key?cfg.bg:'white',cursor:isCurrentUser?'default':'pointer',textAlign:'left',transition:'all 0.15s' }}>
+                      <div style={{ width:'40px',height:'40px',borderRadius:'10px',background:u.role===key?'white':cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:'700',fontSize:'14px',color:u.role===key?cfg.color:'#0f172a' }}>{cfg.label}</div>
+                        <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{cfg.desc}</div>
+                      </div>
+                      {u.role===key&&<span style={{ fontSize:'18px',color:cfg.color }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MODULER TAB */}
+          {tab==='moduler'&&(
+            <div style={{ background:'white',borderRadius:'16px',border:'1px solid #f1f5f9',padding:'20px 24px' }}>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px' }}>
+                <h3 style={{ margin:0,fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>🔩 Modultilgang</h3>
+                <div style={{ display:'flex',gap:'6px' }}>
+                  <button onClick={giveAllModules} style={{ padding:'6px 12px',background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'600' }}>Alle moduler</button>
+                  <button onClick={removeAllModules} style={{ padding:'6px 12px',background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'600' }}>Ingen tilgang</button>
+                </div>
+              </div>
+              {activeCompanyModules.length===0 ? (
+                <p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Bedriften har ikke aktivert noen tilleggsmoduler i «Min bedrift».</p>
+              ) : (
+                <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px' }}>
+                  {activeCompanyModules.map(mod=>{
+                    const hasAccess=userModules.includes(mod.id)
+                    return (
+                      <button key={mod.id} onClick={()=>toggleModule(mod.id)}
+                        style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderRadius:'10px',border:`2px solid ${hasAccess?'#059669':'#e2e8f0'}`,background:hasAccess?'#f0fdf4':'white',cursor:'pointer',textAlign:'left',transition:'all 0.15s' }}>
+                        <span style={{ fontSize:'18px' }}>{mod.emoji}</span>
+                        <span style={{ flex:1,fontSize:'13px',fontWeight:'600',color:hasAccess?'#059669':'#475569' }}>{mod.label}</span>
+                        <span style={{ fontSize:'16px',color:hasAccess?'#059669':'#cbd5e1' }}>{hasAccess?'✓':'○'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <div style={{ marginTop:'14px',background:'#eff6ff',borderRadius:'10px',padding:'10px 14px',border:'1px solid #bfdbfe',fontSize:'12px',color:'#2563eb' }}>
+                ℹ️ Brukeren har tilgang til {userModules.length} av {activeCompanyModules.length} aktive moduler i bedriften.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div style={{ display:'flex',flexDirection:'column',gap:'14px' }}>
+          <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'18px 20px' }}>
+            <h3 style={{ margin:'0 0 12px',fontSize:'13px',fontWeight:'700',color:'#0f172a' }}>📊 Oppsummering</h3>
+            {[['Rolle',`${cfg.emoji} ${cfg.label}`],['Status',u.status==='aktiv'?'✅ Aktiv':'🔒 Inaktiv'],['Moduler',`${userModules.length} stk`],['Opprettet',new Date(u.created_at).toLocaleDateString('nb-NO')]].map(([k,v])=>(
+              <div key={k} style={{ display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f8fafc',fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span>
+                <span style={{ fontWeight:'600',color:'#0f172a' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'18px 20px' }}>
+            <h3 style={{ margin:'0 0 10px',fontSize:'13px',fontWeight:'700',color:'#0f172a' }}>🔩 Aktive moduler</h3>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:'5px' }}>
+              {userModules.length===0 ? <span style={{ fontSize:'12px',color:'#94a3b8',fontStyle:'italic' }}>Ingen moduler</span>
+                : ALL_MODULES_LIST.filter(m=>userModules.includes(m.id)).map(m=>(
+                  <span key={m.id} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',fontSize:'11px',fontWeight:'600',padding:'2px 8px',borderRadius:'999px' }}>{m.emoji} {m.label}</span>
+                ))
+              }
+            </div>
+          </div>
+          {saving&&<div style={{ background:'#fffbeb',borderRadius:'10px',padding:'10px 14px',border:'1px solid #fde68a',fontSize:'13px',color:'#92400e',fontWeight:'600',textAlign:'center' }}>Lagrer endringer...</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── INVITER BRUKER MODAL ─────────────────────────────────────────────────────
+function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
+  const [form, setForm] = useState({ email:'', role:'ansatt', full_name:'' })
+  const [selectedModules, setSelectedModules] = useState([])
+  const [step, setStep] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const [sent, setSent] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+
+  const activeCompanyModules = ALL_MODULES_LIST.filter(m=>companyModules.includes(m.id))
+  const toggleMod = (id) => setSelectedModules(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
+
+  // Preset modules based on role
+  const applyRolePreset = (role) => {
+    set('role',role)
+    if (role==='admin') setSelectedModules(companyModules)
+    else if (role==='les') setSelectedModules([])
+    // others: keep current selection
+  }
+
+  const handleSend = async () => {
+    if (!form.email.trim()) return alert('E-post er påkrevd')
+    setSaving(true)
+    try {
+      // Check if already exists
+      const { data: existing } = await supabase.from('user_invitations').select('id').eq('email',form.email.trim()).single()
+      if (existing) {
+        await supabase.from('user_invitations').delete().eq('email',form.email.trim())
+      }
+
+      const { data: inv, error } = await supabase.from('user_invitations').insert({
+        email: form.email.trim(),
+        role: form.role,
+        module_access: selectedModules,
+        invited_by: currentUser?.id
+      }).select().single()
+      if (error) throw error
+
+      // Send invite email via Edge Function
+      const inviteUrl = `${window.location.origin}?invite=${inv.token}`
+      const roleCfg = USER_ROLES[form.role]||USER_ROLES.ansatt
+      const html = `
+        <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px">
+          <div style="text-align:center;margin-bottom:28px">
+            <div style="width:60px;height:60px;background:#059669;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px">🏢</div>
+            <h1 style="color:#0f172a;font-size:22px;margin:0">Du er invitert til En Plattform</h1>
+          </div>
+          <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:20px">
+            <p style="margin:0 0 8px;font-size:14px;color:#475569">Du er invitert med rolle:</p>
+            <div style="font-size:18px;font-weight:700;color:#0f172a">${roleCfg.emoji} ${roleCfg.label}</div>
+            ${selectedModules.length>0?`<p style="margin:12px 0 6px;font-size:13px;color:#64748b">Du får tilgang til ${selectedModules.length} moduler.</p>`:''}
+          </div>
+          <div style="text-align:center;margin:28px 0">
+            <a href="${inviteUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">
+              ✅ Aksepter invitasjon
+            </a>
+          </div>
+          <p style="color:#94a3b8;font-size:12px;text-align:center">Lenken er gyldig i 7 dager · Sendt via En Plattform KS-system</p>
+        </div>`
+
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to:form.email.trim(), subject:'Du er invitert til En Plattform KS-system', html })
+      })
+
+      setSent(true)
+      setTimeout(()=>onSaved(), 2000)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <div>
+            <h2 style={{ margin:'0 0 4px',fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>+ Inviter ny bruker</h2>
+            <div style={{ display:'flex',gap:'6px' }}>
+              {['E-post og info','Rolle','Modultilgang'].map((l,i)=>(
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:'4px' }}>
+                  <div style={{ width:'18px',height:'18px',borderRadius:'50%',background:step>i?'#059669':step===i+1?'#059669':'#e2e8f0',color:'white',fontSize:'10px',fontWeight:'800',display:'flex',alignItems:'center',justifyContent:'center' }}>{i+1}</div>
+                  <span style={{ fontSize:'11px',color:step===i+1?'#059669':'#94a3b8',fontWeight:step===i+1?'700':'400' }}>{l}</span>
+                  {i<2&&<span style={{ color:'#e2e8f0',fontSize:'11px' }}>›</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center',padding:'20px' }}>
+              <div style={{ fontSize:'56px',marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 8px',fontSize:'18px',color:'#0f172a' }}>Invitasjon sendt!</h3>
+              <p style={{ margin:0,color:'#64748b',fontSize:'14px' }}>{form.email} mottar e-post med invitasjonslenke.</p>
+            </div>
+          ) : step===1 ? (
+            <div style={{ display:'flex',flexDirection:'column',gap:'14px' }}>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>E-postadresse *</label>
+                <input type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="bruker@bedrift.no" style={baInp} /></div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Fullt navn (valgfritt)</label>
+                <input value={form.full_name} onChange={e=>set('full_name',e.target.value)} placeholder="For- og etternavn" style={baInp} /></div>
+              <div style={{ background:'#f8fafc',borderRadius:'10px',padding:'14px',border:'1px solid #f1f5f9',fontSize:'13px',color:'#475569' }}>
+                📧 Brukeren mottar en e-post med en invitasjonslenke som er gyldig i 7 dager.
+              </div>
+            </div>
+          ) : step===2 ? (
+            <div style={{ display:'flex',flexDirection:'column',gap:'10px' }}>
+              <p style={{ margin:'0 0 8px',fontSize:'13px',color:'#64748b' }}>Velg rolle for brukeren. Rollen kan endres senere.</p>
+              {Object.entries(USER_ROLES).filter(([k])=>k!=='superadmin').map(([key,cfg])=>(
+                <button key={key} onClick={()=>applyRolePreset(key)}
+                  style={{ display:'flex',alignItems:'center',gap:'14px',padding:'14px 16px',borderRadius:'12px',border:`2px solid ${form.role===key?cfg.border:'#f1f5f9'}`,background:form.role===key?cfg.bg:'white',cursor:'pointer',textAlign:'left' }}>
+                  <div style={{ width:'40px',height:'40px',borderRadius:'10px',background:form.role===key?'white':cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:'700',fontSize:'14px',color:form.role===key?cfg.color:'#0f172a' }}>{cfg.label}</div>
+                    <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{cfg.desc}</div>
+                  </div>
+                  {form.role===key&&<span style={{ fontSize:'18px',color:cfg.color }}>✓</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display:'flex',flexDirection:'column',gap:'10px' }}>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'4px' }}>
+                <p style={{ margin:0,fontSize:'13px',color:'#64748b' }}>Velg hvilke moduler brukeren skal ha tilgang til.</p>
+                <div style={{ display:'flex',gap:'6px' }}>
+                  <button onClick={()=>setSelectedModules(companyModules)} style={{ padding:'5px 10px',background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'6px',cursor:'pointer',fontSize:'11px',fontWeight:'600' }}>Alle</button>
+                  <button onClick={()=>setSelectedModules([])} style={{ padding:'5px 10px',background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',borderRadius:'6px',cursor:'pointer',fontSize:'11px',fontWeight:'600' }}>Ingen</button>
+                </div>
+              </div>
+              {activeCompanyModules.length===0 ? (
+                <p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Bedriften har ikke aktivert tilleggsmoduler ennå.</p>
+              ) : (
+                <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px' }}>
+                  {activeCompanyModules.map(mod=>{
+                    const has=selectedModules.includes(mod.id)
+                    return (
+                      <button key={mod.id} onClick={()=>toggleMod(mod.id)}
+                        style={{ display:'flex',alignItems:'center',gap:'8px',padding:'10px 12px',borderRadius:'10px',border:`2px solid ${has?'#059669':'#e2e8f0'}`,background:has?'#f0fdf4':'white',cursor:'pointer',textAlign:'left' }}>
+                        <span style={{ fontSize:'16px' }}>{mod.emoji}</span>
+                        <span style={{ flex:1,fontSize:'12px',fontWeight:'600',color:has?'#059669':'#475569' }}>{mod.label}</span>
+                        <span style={{ fontSize:'14px',color:has?'#059669':'#cbd5e1' }}>{has?'✓':'○'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {!sent&&(
+          <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',flexShrink:0 }}>
+            <div>{step>1&&<button onClick={()=>setStep(s=>s-1)} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>← Tilbake</button>}</div>
+            <div style={{ display:'flex',gap:'10px' }}>
+              <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+              {step<3&&<button onClick={()=>{ if(step===1&&!form.email.trim()) return alert('E-post er påkrevd'); setStep(s=>s+1) }} style={{ padding:'10px 24px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>Neste →</button>}
+              {step===3&&<button onClick={handleSend} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Sender...':'📧 Send invitasjon'}</button>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── END BRUKERADMIN MODULE ───────────────────────────────────────────────────
+
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -13929,9 +14509,10 @@ function AppContent() {
         {page === 'crm' && <CRMPage />}
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
+        {page === 'brukeradmin' && <BrukeradminPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
