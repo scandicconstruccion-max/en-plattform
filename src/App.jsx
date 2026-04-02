@@ -8891,15 +8891,30 @@ function RessursPage() {
     return diffDays>=-7 && diffDays<=milestoneRange
   }).sort((a,b)=>a.start_date.localeCompare(b.start_date))
 
-  const handleDragStart = (plan) => setDragging(plan)
+  const [dragCopy, setDragCopy] = useState(false)
+
+  const handleDragStart = (plan, e) => {
+    setDragging(plan)
+    setDragCopy(e?.altKey||e?.ctrlKey||false)
+    if (e?.dataTransfer) { e.dataTransfer.effectAllowed = e?.altKey||e?.ctrlKey ? 'copy' : 'move' }
+  }
+
   const handleDrop = async (resourceId, date) => {
     if (!dragging||!dragOver) return
+    // Same cell — no-op
     if (dragging.date===date&&dragging.resource_id===resourceId) { setDragging(null); setDragOver(null); return }
     try {
-      await supabase.from('resource_plans').update({ date, resource_id:resourceId, updated_at:new Date().toISOString() }).eq('id',dragging.id)
+      if (dragCopy) {
+        // Copy: insert new booking with same data on new date/resource
+        const { id, created_at, updated_at, ...rest } = dragging
+        await supabase.from('resource_plans').insert({ ...rest, date, resource_id:resourceId, updated_at:new Date().toISOString() })
+      } else {
+        // Move: update existing booking
+        await supabase.from('resource_plans').update({ date, resource_id:resourceId, updated_at:new Date().toISOString() }).eq('id',dragging.id)
+      }
       load()
     } catch(e) { alert('Feil: '+e.message) }
-    setDragging(null); setDragOver(null)
+    setDragging(null); setDragOver(null); setDragCopy(false)
   }
 
   const getWeekCapacity = (resourceId) => {
@@ -9177,7 +9192,7 @@ function RessursPage() {
 
       {/* Grid */}
       <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
-        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?36:viewMode==='14'?60:90)}px` }}>
+        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?52:viewMode==='14'?60:90)}px` }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
             <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
@@ -9186,12 +9201,12 @@ function RessursPage() {
             {visibleDates.map(date=>{
               const d=new Date(date+'T12:00:00')
               const weekend=isWeekend(date); const tod=isToday(date)
-              const colW=viewMode==='maned'?36:viewMode==='14'?60:90
+              const colW=viewMode==='maned'?52:viewMode==='14'?60:90
               const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
               return (
                 <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
                   <div style={{ fontSize:'10px',color:tod?'#059669':weekend?'#cbd5e1':'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{DAY_SHORT[d.getDay()===0?6:d.getDay()-1]}</div>
-                  <div style={{ fontSize:viewMode==='maned'?'11px':'13px',fontWeight:tod?'800':'600',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
+                  <div style={{ fontSize:viewMode==='maned'?'12px':'13px',fontWeight:tod?'800':'600',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
                   {msOnDate.length>0&&(
                     <div style={{ display:'flex',justifyContent:'center',gap:'2px',marginTop:'2px' }}>
                       {msOnDate.map(ms=>(
@@ -9212,7 +9227,7 @@ function RessursPage() {
             <div style={{ display:'flex', background:'#f5f3ff', borderBottom:'1px solid #ddd6fe' }}>
               <div style={{ width:'240px',flexShrink:0,padding:'6px 20px',fontSize:'11px',fontWeight:'700',color:'#7c3aed',borderRight:'1px solid #ddd6fe',display:'flex',alignItems:'center',gap:'4px' }}>🏁 Milepæler</div>
               {visibleDates.map(date=>{
-                const colW=viewMode==='maned'?36:viewMode==='14'?60:90
+                const colW=viewMode==='maned'?52:viewMode==='14'?60:90
                 const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
                 return (
                   <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
@@ -9253,23 +9268,26 @@ function RessursPage() {
                   const totalH=getTotalHours(res.id,date)
                   const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
                   const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
-                  const colW=viewMode==='maned'?36:viewMode==='14'?60:90
+                  const colW=viewMode==='maned'?52:viewMode==='14'?60:90
                   return (
                     <div key={date}
-                      style={{ width:`${colW}px`,flexShrink:0,minHeight:'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s' }}
+                      style={{ width:`${colW}px`,flexShrink:0,minHeight:viewMode==='maned'?'64px':'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
                       onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
-                      onDragOver={e=>{e.preventDefault();setDragOver({resourceId:res.id,date})}}
+                      onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
                       onDrop={()=>handleDrop(res.id,date)}>
                       {dblBook&&<div style={{ position:'absolute',top:1,right:2,fontSize:'10px',color:'#dc2626',fontWeight:'800' }}>!</div>}
+                      {isDragTarget&&dragCopy&&<div style={{ position:'absolute',top:1,left:2,fontSize:'10px',color:'#2563eb',fontWeight:'800',background:'#eff6ff',borderRadius:'3px',padding:'0 3px' }}>+</div>}
                       {cellPlans.map(plan=>{
                         const proj=projects.find(p=>p.id===plan.project_id)
                         const col=getProjectColor(plan.project_id,projects)
                         return (
-                          <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan)}}
+                          <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan,e)}}
                             onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
-                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'1px 3px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden' }}>
+                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1 }}>
                             {viewMode==='maned'?(
-                              <div style={{ width:'100%',height:'6px',borderRadius:'3px',background:col }}/>
+                              <div style={{ background:col,borderRadius:'3px',padding:'2px 4px',marginBottom:'1px',overflow:'hidden' }}>
+                                <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name?.slice(0,8)||'—'}</div>
+                              </div>
                             ):(
                               <>
                                 <div style={{ fontSize:'10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{proj?.name||'—'}</div>
@@ -9292,6 +9310,22 @@ function RessursPage() {
           })}
         </div>
       </div>
+
+      {/* Drag tip */}
+      {dragging&&(
+        <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(15,23,42,0.95)',color:'white',borderRadius:'14px',padding:'12px 22px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.35)',display:'flex',alignItems:'center',gap:'14px',backdropFilter:'blur(8px)' }}>
+          <span style={{ fontSize:'22px' }}>{dragCopy?'📋':'↕️'}</span>
+          <div>
+            <div style={{ fontWeight:'800',fontSize:'14px' }}>{dragCopy?'Kopierer booking':'Flytter booking'}</div>
+            <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.55)',marginTop:'2px' }}>
+              {dragCopy?'Slipp på ny celle for å kopiere':'Hold Alt eller Ctrl mens du drar for å kopiere'}
+            </div>
+          </div>
+          <div style={{ background:'rgba(255,255,255,0.1)',borderRadius:'8px',padding:'4px 10px',fontSize:'11px',color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap' }}>
+            {dragCopy?'📋 Kopi':'↕️ Flytt'}
+          </div>
+        </div>
+      )}
 
       {showBookingModal&&(
         <BookingModal
