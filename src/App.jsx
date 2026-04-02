@@ -99,6 +99,7 @@ const navItems = [
   { id: 'befaring', label: 'Befaring', emoji: '🔍' },
   { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
   { id: 'fdv', label: 'FDV', emoji: '🏛️' },
+  { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
   { id: 'brukeradmin', label: 'Brukere', emoji: '👤' },
   { id: 'varsler', label: 'Varsler', emoji: '🔔' },
 ]
@@ -123,6 +124,7 @@ const moduleCards = [
   { id: 'befaring', name: 'Befaring', desc: 'Befaringsrapporter', emoji: '🔍', color: '#f0fdf4' },
   { id: 'bildedok', name: 'Bildedok', desc: 'Foto og dokumenter', emoji: '📷', color: '#fdf4ff' },
   { id: 'fdv', name: 'FDV', desc: 'Forvaltning, Drift og Vedlikehold', emoji: '🏛️', color: '#fef9ec' },
+  { id: 'minbedrift', name: 'Min bedrift', desc: 'Bedriftsinnstillinger og moduler', emoji: '🏢', color: '#f0fdf4' },
   { id: 'brukeradmin', name: 'Brukere', desc: 'Brukeradministrasjon', emoji: '👤', color: '#f8fafc' },
   { id: 'varsler', name: 'Varsler', desc: 'Notifikasjoner', emoji: '🔔', color: '#fffbeb' },
 ]
@@ -143,7 +145,7 @@ const moduleSections = [
   },
   {
     title: '⚙️ SALG & ADMIN',
-    modules: ['crm', 'brukeradmin', 'varsler'],
+    modules: ['crm', 'minbedrift', 'brukeradmin', 'varsler'],
   },
   {
     title: '📸 DOKUMENTASJON & OVERLEVERING',
@@ -13326,6 +13328,506 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
 
 
 
+
+// ─── MIN BEDRIFT MODULE ───────────────────────────────────────────────────────
+
+const MODULE_CATALOG = [
+  {
+    id: 'grunnpakke',
+    name: 'Grunnpakke',
+    desc: 'Dashboard, Prosjekter, Sjekklister, Avvik, HMS & Risiko og Maskiner',
+    emoji: '🔹',
+    pricePerUser: 139,
+    required: true,
+    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner'],
+  },
+  {
+    id: 'tilbud',
+    name: 'Tilbudsmodul',
+    desc: 'Tilbudsadministrasjon med PDF og e-post til kunde',
+    emoji: '📋',
+    price: 29,
+    navId: 'tilbud',
+  },
+  {
+    id: 'anbudsmodul',
+    name: 'Anbudsmodul',
+    desc: 'Anbudsforespørsler og leverandørtilbud',
+    emoji: '⚖️',
+    price: 189,
+    navId: 'anbudsmodul',
+  },
+  {
+    id: 'ordre',
+    name: 'Ordre',
+    desc: 'Arbeidsordre og endringsmeldinger',
+    emoji: '📝',
+    price: 39,
+    navId: 'ordre',
+  },
+  {
+    id: 'faktura',
+    name: 'Faktura',
+    desc: 'Fakturering og betalinger',
+    emoji: '🧾',
+    price: 49,
+    navId: 'faktura',
+  },
+  {
+    id: 'endringsmeldinger',
+    name: 'Endringsmeldinger',
+    desc: 'Håndtering av endringsmeldinger',
+    emoji: '🔄',
+    price: 25,
+    navId: 'ordre',
+  },
+  {
+    id: 'ansatte',
+    name: 'Ansatte',
+    desc: 'Personaladministrasjon og kompetanser',
+    emoji: '👷',
+    price: 19,
+    navId: 'ansatte',
+  },
+  {
+    id: 'timelister',
+    name: 'Timelister',
+    desc: 'Timeføring og rapportering',
+    emoji: '⏱️',
+    price: 39,
+    navId: 'timelister',
+  },
+  {
+    id: 'ressursplan',
+    name: 'Ressursplanlegger',
+    desc: 'Bemanning og allokering',
+    emoji: '📅',
+    price: 89,
+    navId: 'ressursplan',
+  },
+  {
+    id: 'kalender',
+    name: 'Kalender',
+    desc: 'Hendelser og møter',
+    emoji: '📆',
+    price: 12,
+    navId: 'kalender',
+  },
+  {
+    id: 'chat',
+    name: 'Intern Chat',
+    desc: 'Teamkommunikasjon',
+    emoji: '💬',
+    price: 89,
+    navId: 'chat',
+  },
+  {
+    id: 'befaring',
+    name: 'Befaring',
+    desc: 'Befaringer og oppfølging',
+    emoji: '🔍',
+    price: 49,
+    navId: 'befaring',
+  },
+  {
+    id: 'bildedok',
+    name: 'Bildedokumentasjon',
+    desc: 'Foto og dokumentasjon',
+    emoji: '📷',
+    price: 79,
+    navId: 'bildedok',
+  },
+  {
+    id: 'fdv',
+    name: 'FDV',
+    desc: 'Forvaltning, drift og vedlikehold',
+    emoji: '🏛️',
+    price: 109,
+    navId: 'fdv',
+  },
+  {
+    id: 'crm',
+    name: 'CRM',
+    desc: 'Kundeadministrasjon og salgspipeline',
+    emoji: '📊',
+    price: 149,
+    navId: 'crm',
+  },
+]
+
+const mbInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+const mbCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const mbLbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+const mbSec = t => <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'12px', marginTop:'8px' }}>{t}</div>
+
+function MinBedriftPage() {
+  const { user } = useAuth()
+  const [tab, setTab] = useState('info')
+  const [settings, setSettings] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [activeModules, setActiveModules] = useState(['grunnpakke'])
+  const [numUsers, setNumUsers] = useState(1)
+  const [confirmModule, setConfirmModule] = useState(null) // {mod, action: 'add'|'remove'}
+  const fileInputRef = React.useRef(null)
+
+  const load = async () => {
+    try {
+      const { data } = await supabase.from('company_settings').select('*').limit(1).single()
+      if (data) {
+        setSettings(data)
+        setActiveModules(data.active_modules || ['grunnpakke'])
+        setNumUsers(data.num_users || 1)
+      }
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const handleSaveInfo = async () => {
+    if (!settings) return
+    setSaving(true)
+    try {
+      const payload = { ...settings, updated_at: new Date().toISOString() }
+      if (settings.id) {
+        const { error } = await supabase.from('company_settings').update(payload).eq('id', settings.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('company_settings').insert(payload)
+        if (error) throw error
+      }
+      alert('✅ Bedriftsinformasjon lagret!')
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const uploadLogo = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setLogoUploading(true)
+    try {
+      const path = `logos/${Date.now()}_${file.name}`
+      const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+      if (upErr) throw upErr
+      const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      setSettings(s => ({ ...s, logo_url: publicUrl }))
+    } catch(e) { alert('Feil ved opplasting: ' + e.message) }
+    finally { setLogoUploading(false); e.target.value = '' }
+  }
+
+  const toggleModule = async (modId, action) => {
+    const newModules = action === 'add'
+      ? [...activeModules, modId]
+      : activeModules.filter(m => m !== modId)
+    setActiveModules(newModules)
+    try {
+      await supabase.from('company_settings')
+        .update({ active_modules: newModules, updated_at: new Date().toISOString() })
+        .eq('id', settings.id)
+    } catch(e) { alert('Feil: ' + e.message); setActiveModules(activeModules) }
+    setConfirmModule(null)
+  }
+
+  const saveNumUsers = async (n) => {
+    const num = Math.max(1, parseInt(n) || 1)
+    setNumUsers(num)
+    try {
+      await supabase.from('company_settings').update({ num_users: num, updated_at: new Date().toISOString() }).eq('id', settings.id)
+    } catch(e) { console.error(e) }
+  }
+
+  const set = (k, v) => setSettings(s => ({ ...s, [k]: v }))
+
+  // Cost calculation
+  const grunnpakke = MODULE_CATALOG.find(m => m.id === 'grunnpakke')
+  const grunnpakkeCost = (grunnpakke?.pricePerUser || 139) * numUsers
+  const tilleggCost = MODULE_CATALOG
+    .filter(m => !m.required && activeModules.includes(m.id))
+    .reduce((acc, m) => acc + (m.price || 0), 0)
+  const totalCost = grunnpakkeCost + tilleggCost
+  const activeAddons = MODULE_CATALOG.filter(m => !m.required && activeModules.includes(m.id))
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
+        <p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster bedriftsinnstillinger...</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
+            {settings?.logo_url
+              ? <img src={settings.logo_url} alt="Logo" style={{ width:'52px', height:'52px', borderRadius:'12px', objectFit:'contain', border:'1px solid #f1f5f9', background:'white' }} />
+              : <div style={{ width:'52px', height:'52px', borderRadius:'12px', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px' }}>🏢</div>
+            }
+            <div>
+              <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>{settings?.name || 'Min bedrift'}</h1>
+              <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>{settings?.org_number ? `Org.nr: ${settings.org_number}` : 'Legg til bedriftsinformasjon'}</p>
+            </div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'2px' }}>Månedlig kostnad</div>
+            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8' }}>eks. mva · {numUsers} bruker{numUsers>1?'e':''}</div>
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:'4px' }}>
+          {[['info','🏢 Bedriftsinformasjon'],['moduler','📦 Moduler og priser']].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+              style={{ padding:'8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize:'13px', cursor:'pointer' }}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px', maxWidth:'900px' }}>
+
+        {/* TAB: BEDRIFTSINFORMASJON */}
+        {tab === 'info' && (
+          <>
+            {/* Logo */}
+            <div style={mbCard}>
+              {mbSec('Firmalogo')}
+              <div style={{ display:'flex', alignItems:'center', gap:'20px' }}>
+                {settings?.logo_url
+                  ? <img src={settings.logo_url} alt="Logo" style={{ width:'80px', height:'80px', objectFit:'contain', borderRadius:'12px', border:'1px solid #f1f5f9' }} />
+                  : <div style={{ width:'80px', height:'80px', borderRadius:'12px', background:'#f8fafc', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px' }}>🏢</div>
+                }
+                <div>
+                  <div style={{ fontSize:'13px', color:'#475569', marginBottom:'10px' }}>Logoen brukes på tilbud, fakturaer og e-poster til kunder.</div>
+                  <button onClick={() => fileInputRef.current?.click()} disabled={logoUploading}
+                    style={{ padding:'8px 16px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                    {logoUploading ? 'Laster opp...' : '📸 Last opp logo'}
+                  </button>
+                  <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadLogo} accept="image/*" />
+                  {settings?.logo_url && <button onClick={() => set('logo_url', null)} style={{ marginLeft:'8px', padding:'8px 14px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'13px' }}>Fjern</button>}
+                </div>
+              </div>
+            </div>
+
+            {/* Firmainfo */}
+            <div style={mbCard}>
+              {mbSec('Firmainfo')}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                <div style={{ gridColumn:'1/-1' }}>{mbLbl('Firmanavn *')}<input value={settings?.name||''} onChange={e=>set('name',e.target.value)} placeholder="Bedriftens offisielle navn" style={mbInp} /></div>
+                <div>{mbLbl('Org.nr')}<input value={settings?.org_number||''} onChange={e=>set('org_number',e.target.value)} placeholder="123 456 789" style={mbInp} /></div>
+                <div>{mbLbl('MVA-nummer')}<input value={settings?.vat_number||''} onChange={e=>set('vat_number',e.target.value)} placeholder="NO 123 456 789 MVA" style={mbInp} /></div>
+                <div style={{ gridColumn:'1/-1' }}>{mbLbl('Adresse')}<input value={settings?.address||''} onChange={e=>set('address',e.target.value)} placeholder="Gateadresse og nummer" style={mbInp} /></div>
+                <div>{mbLbl('Postnummer')}<input value={settings?.postal_code||''} onChange={e=>set('postal_code',e.target.value)} placeholder="0000" style={mbInp} /></div>
+                <div>{mbLbl('Poststed')}<input value={settings?.city||''} onChange={e=>set('city',e.target.value)} placeholder="By" style={mbInp} /></div>
+                <div>{mbLbl('Telefon')}<input value={settings?.phone||''} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={mbInp} /></div>
+                <div>{mbLbl('E-post')}<input type="email" value={settings?.email||''} onChange={e=>set('email',e.target.value)} placeholder="post@bedrift.no" style={mbInp} /></div>
+                <div style={{ gridColumn:'1/-1' }}>{mbLbl('Nettside')}<input value={settings?.website||''} onChange={e=>set('website',e.target.value)} placeholder="www.bedrift.no" style={mbInp} /></div>
+              </div>
+            </div>
+
+            {/* Økonomi */}
+            <div style={mbCard}>
+              {mbSec('Økonomiinnstillinger')}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                <div>{mbLbl('Bankkontonummer')}<input value={settings?.bank_account||''} onChange={e=>set('bank_account',e.target.value)} placeholder="xxxx.xx.xxxxx" style={mbInp} /></div>
+                <div>{mbLbl('Standard betalingsbetingelser')}<input value={settings?.default_payment_terms||''} onChange={e=>set('default_payment_terms',e.target.value)} placeholder="30 dager netto" style={mbInp} /></div>
+                <div>{mbLbl('Standard MVA-sats (%)')}<input type="number" value={settings?.default_vat_rate||25} onChange={e=>set('default_vat_rate',e.target.value)} placeholder="25" style={mbInp} /></div>
+              </div>
+            </div>
+
+            {/* Standardtekster */}
+            <div style={mbCard}>
+              {mbSec('Standardtekster for tilbud og fakturaer')}
+              <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                <div>{mbLbl('Innledning på tilbud')}<textarea value={settings?.quote_intro_text||''} onChange={e=>set('quote_intro_text',e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...mbInp, resize:'none' }} /></div>
+                <div>{mbLbl('Avslutning på tilbud')}<textarea value={settings?.quote_outro_text||''} onChange={e=>set('quote_outro_text',e.target.value)} rows={2} placeholder="Vi håper tilbudet er av interesse og ser frem til et godt samarbeid." style={{ ...mbInp, resize:'none' }} /></div>
+                <div>{mbLbl('Bunntekst på faktura')}<textarea value={settings?.invoice_footer||''} onChange={e=>set('invoice_footer',e.target.value)} rows={2} placeholder="Kontonummer: xxxx.xx.xxxxx · Purregebyr ved forsinket betaling" style={{ ...mbInp, resize:'none' }} /></div>
+              </div>
+            </div>
+
+            {/* Nøkkelpersoner */}
+            <div style={mbCard}>
+              {mbSec('Nøkkelpersoner')}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                <div>{mbLbl('Daglig leder')}<input value={settings?.contact_ceo||''} onChange={e=>set('contact_ceo',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
+                <div>{mbLbl('HMS-ansvarlig')}<input value={settings?.contact_hms||''} onChange={e=>set('contact_hms',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
+                <div>{mbLbl('Regnskapsfører')}<input value={settings?.contact_accountant||''} onChange={e=>set('contact_accountant',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
+              </div>
+            </div>
+
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={handleSaveInfo} disabled={saving}
+                style={{ padding:'12px 28px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', cursor:saving?'not-allowed':'pointer', fontSize:'15px', fontWeight:'700' }}>
+                {saving ? 'Lagrer...' : '✅ Lagre bedriftsinformasjon'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* TAB: MODULER OG PRISER */}
+        {tab === 'moduler' && (
+          <>
+            {/* Brukere */}
+            <div style={{ ...mbCard, background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'20px' }}>
+                <div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
+                    <span style={{ fontSize:'18px' }}>🔹</span>
+                    <h3 style={{ margin:0, fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Grunnpakke</h3>
+                    <span style={{ background:'#059669', color:'white', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>Alltid inkludert</span>
+                  </div>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#475569' }}>Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko og Maskiner</p>
+                  <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                    {['Dashboard','Prosjekter','Sjekklister','Avvik','HMS & Risiko','Maskiner'].map(m => (
+                      <span key={m} style={{ background:'white', color:'#059669', border:'1px solid #bbf7d0', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px' }}>✓ {m}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ textAlign:'right', flexShrink:0 }}>
+                  <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>139 kr/bruker/mnd</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', justifyContent:'flex-end' }}>
+                    <label style={{ fontSize:'13px', color:'#475569', fontWeight:'600' }}>Antall brukere:</label>
+                    <input type="number" value={numUsers} min="1" max="100"
+                      onChange={e => saveNumUsers(e.target.value)}
+                      style={{ width:'64px', padding:'6px 10px', border:'1px solid #bbf7d0', borderRadius:'8px', fontSize:'14px', fontWeight:'700', textAlign:'center', outline:'none', background:'white' }} />
+                  </div>
+                  <div style={{ fontSize:'18px', fontWeight:'800', color:'#059669', marginTop:'6px' }}>{grunnpakkeCost.toLocaleString('nb-NO')} kr/mnd</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tilleggsmoduler header */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px' }}>
+              <div>
+                <h2 style={{ margin:'0 0 2px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Tilleggsmoduler</h2>
+                <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Legg til moduler etter behov. Alle priser per måned, eks. mva. Aktiveres og deaktiveres umiddelbart.</p>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>Total månedlig kostnad</div>
+                <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
+              </div>
+            </div>
+
+            {/* Module grid */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+              {MODULE_CATALOG.filter(m => !m.required).map(mod => {
+                const isActive = activeModules.includes(mod.id)
+                return (
+                  <div key={mod.id}
+                    style={{ background:'white', borderRadius:'14px', border:`2px solid ${isActive?'#059669':'#f1f5f9'}`, padding:'16px 18px', display:'flex', flexDirection:'column', gap:'10px', position:'relative', transition:'border-color 0.15s' }}>
+                    {isActive && (
+                      <div style={{ position:'absolute', top:'12px', right:'12px', background:'#059669', color:'white', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>Aktiv</div>
+                    )}
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                      <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:isActive?'#f0fdf4':'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{mod.emoji}</div>
+                      <div>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{mod.name}</div>
+                        <div style={{ fontSize:'12px', color:'#64748b', marginTop:'1px' }}>{mod.desc}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'4px' }}>
+                      <div style={{ fontSize:'16px', fontWeight:'800', color:isActive?'#059669':'#0f172a' }}>{mod.price} kr/mnd</div>
+                      <button
+                        onClick={() => setConfirmModule({ mod, action: isActive ? 'remove' : 'add' })}
+                        style={{ padding:'7px 16px', borderRadius:'8px', border:'none', background:isActive?'#fef2f2':'#059669', color:isActive?'#dc2626':'white', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
+                        {isActive ? 'Avslutt' : 'Bestill'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Active addons summary */}
+            {activeAddons.length > 0 && (
+              <div style={mbCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📦 Aktive tilleggsmoduler ({activeAddons.length})</h3>
+                {activeAddons.map(mod => (
+                  <div key={mod.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
+                    <span style={{ fontSize:'16px' }}>{mod.emoji}</span>
+                    <span style={{ flex:1, fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{mod.name}</span>
+                    <span style={{ fontSize:'13px', color:'#64748b' }}>{mod.price} kr/mnd</span>
+                    <button onClick={() => setConfirmModule({ mod, action:'remove' })}
+                      style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer', fontWeight:'600' }}>Avslutt</button>
+                  </div>
+                ))}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 0 0', borderTop:'1px solid #f1f5f9', marginTop:'8px' }}>
+                  <span style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Totalt per måned</span>
+                  <span style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>{totalCost.toLocaleString('nb-NO')} kr</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Confirm modal */}
+      {confirmModule && (
+        <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setConfirmModule(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', padding:'28px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ textAlign:'center', marginBottom:'20px' }}>
+              <div style={{ fontSize:'44px', marginBottom:'10px' }}>{confirmModule.action === 'add' ? '✅' : '⚠️'}</div>
+              <h2 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>
+                {confirmModule.action === 'add' ? `Bestill ${confirmModule.mod.name}?` : `Avslutt ${confirmModule.mod.name}?`}
+              </h2>
+              <p style={{ margin:0, fontSize:'14px', color:'#64748b', lineHeight:1.6 }}>
+                {confirmModule.action === 'add'
+                  ? `Du legger til ${confirmModule.mod.name} for ${confirmModule.mod.price} kr/mnd. Modulen aktiveres umiddelbart.`
+                  : `Du avslutter ${confirmModule.mod.name}. Modulen deaktiveres umiddelbart og fjernes fra faktureringen.`
+                }
+              </p>
+            </div>
+            {confirmModule.action === 'add' && (
+              <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px 16px', border:'1px solid #bbf7d0', marginBottom:'16px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', marginBottom:'4px' }}>
+                  <span style={{ color:'#475569' }}>Nåværende kostnad</span>
+                  <span style={{ fontWeight:'600', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', marginBottom:'4px' }}>
+                  <span style={{ color:'#475569' }}>+ {confirmModule.mod.name}</span>
+                  <span style={{ fontWeight:'600', color:'#059669' }}>+ {confirmModule.mod.price} kr/mnd</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'16px', fontWeight:'800', color:'#0f172a', borderTop:'1px solid #bbf7d0', paddingTop:'8px', marginTop:'8px' }}>
+                  <span>Ny kostnad</span>
+                  <span style={{ color:'#059669' }}>{(totalCost + confirmModule.mod.price).toLocaleString('nb-NO')} kr/mnd</span>
+                </div>
+              </div>
+            )}
+            {confirmModule.action === 'remove' && (
+              <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'14px 16px', border:'1px solid #fecaca', marginBottom:'16px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', marginBottom:'4px' }}>
+                  <span style={{ color:'#475569' }}>Nåværende kostnad</span>
+                  <span style={{ fontWeight:'600', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', marginBottom:'4px' }}>
+                  <span style={{ color:'#475569' }}>- {confirmModule.mod.name}</span>
+                  <span style={{ fontWeight:'600', color:'#dc2626' }}>- {confirmModule.mod.price} kr/mnd</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'16px', fontWeight:'800', color:'#0f172a', borderTop:'1px solid #fecaca', paddingTop:'8px', marginTop:'8px' }}>
+                  <span>Ny kostnad</span>
+                  <span>{(totalCost - confirmModule.mod.price).toLocaleString('nb-NO')} kr/mnd</span>
+                </div>
+              </div>
+            )}
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button onClick={() => setConfirmModule(null)}
+                style={{ flex:1, padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+              <button onClick={() => toggleModule(confirmModule.mod.id, confirmModule.action)}
+                style={{ flex:2, padding:'12px', background:confirmModule.action==='add'?'#059669':'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+                {confirmModule.action === 'add' ? '✅ Bestill nå' : '⚠️ Avslutt modul'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── END MIN BEDRIFT MODULE ───────────────────────────────────────────────────
+
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -13426,9 +13928,10 @@ function AppContent() {
         {page === 'chat' && <InterChatPage />}
         {page === 'crm' && <CRMPage />}
         {page === 'befaring' && <BefaringPage />}
+        {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
