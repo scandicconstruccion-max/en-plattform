@@ -96,6 +96,9 @@ const navItems = [
   { id: 'chat', label: 'Intern Chat', emoji: '💬' },
   null,
   { id: 'crm', label: 'CRM', emoji: '📊' },
+  { id: 'befaring', label: 'Befaring', emoji: '🔍' },
+  { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
+  { id: 'fdv', label: 'FDV', emoji: '🏛️' },
   { id: 'brukeradmin', label: 'Brukere', emoji: '👤' },
   { id: 'varsler', label: 'Varsler', emoji: '🔔' },
 ]
@@ -117,6 +120,9 @@ const moduleCards = [
   { id: 'kalender', name: 'Kalender', desc: 'Hendelser og møter', emoji: '📆', color: '#eff6ff' },
   { id: 'chat', name: 'Intern Chat', desc: 'Intern kommunikasjon', emoji: '💬', color: '#fdf4ff' },
   { id: 'crm', name: 'CRM', desc: 'Kundeadministrasjon', emoji: '📊', color: '#fff1f2' },
+  { id: 'befaring', name: 'Befaring', desc: 'Befaringsrapporter', emoji: '🔍', color: '#f0fdf4' },
+  { id: 'bildedok', name: 'Bildedok', desc: 'Foto og dokumenter', emoji: '📷', color: '#fdf4ff' },
+  { id: 'fdv', name: 'FDV', desc: 'Forvaltning, Drift og Vedlikehold', emoji: '🏛️', color: '#fef9ec' },
   { id: 'brukeradmin', name: 'Brukere', desc: 'Brukeradministrasjon', emoji: '👤', color: '#f8fafc' },
   { id: 'varsler', name: 'Varsler', desc: 'Notifikasjoner', emoji: '🔔', color: '#fffbeb' },
 ]
@@ -12217,6 +12223,1102 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
 
 // ─── END CRM MODULE ───────────────────────────────────────────────────────────
 
+// ─── BEFARING MODULE ──────────────────────────────────────────────────────────
+
+const INS_STATUS = {
+  planlagt:     { label:'Planlagt',     emoji:'📅', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+  gjennomfort:  { label:'Gjennomført',  emoji:'✅', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
+  avsluttet:    { label:'Avsluttet',    emoji:'🔒', color:'#64748b', bg:'#f8fafc', border:'#e2e8f0' },
+}
+
+const bInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+const bCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+function BefaringPage() {
+  const { user } = useAuth()
+  const [inspections, setInspections] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState(null)
+  const [showNew, setShowNew] = useState(false)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [filterProject, setFilterProject] = useState('alle')
+  const [search, setSearch] = useState('')
+
+  const load = async () => {
+    try {
+      const [ins, proj] = await Promise.all([
+        supabase.from('inspections').select('*, inspection_items(*), inspection_followups(*), inspection_files(*)').order('date',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+      ])
+      setInspections(ins); setProjects(proj)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  const filtered = inspections.filter(i=>{
+    if (filterStatus!=='alle'&&i.status!==filterStatus) return false
+    if (filterProject!=='alle'&&i.project_id!==filterProject) return false
+    if (search&&![i.title,i.location].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
+  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>
+          </div>
+          <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny befaring</button>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+          {[
+            { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
+            { label:'Planlagt', value:inspections.filter(i=>i.status==='planlagt').length, emoji:'📅', bg:'#eff6ff', color:'#2563eb' },
+            { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
+            { label:'Åpne oppfølg.', value:openFollowups, emoji:'⏰', bg:openFollowups>0?'#fffbeb':'#f8fafc', color:openFollowups>0?'#d97706':'#64748b' },
+          ].map(s=>(
+            <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px 16px' }}>
+              <div style={{ fontSize:'18px', marginBottom:'4px' }}>{s.emoji}</div>
+              <div style={{ fontSize:'20px', fontWeight:'800', color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk befaring, sted..." style={{ ...bInp, maxWidth:'220px', flex:1 }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth:'160px' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+          </select>
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth:'180px' }}>
+            <option value="alle">Alle prosjekter</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
+        </div>
+
+        {filtered.length===0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🔍</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen befaringer funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{inspections.length===0?'Registrer din første befaring.':'Prøv å endre filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(ins=>{
+              const cfg=INS_STATUS[ins.status]
+              const proj=projects.find(p=>p.id===ins.project_id)
+              const items=ins.inspection_items||[]
+              const followups=ins.inspection_followups||[]
+              const openF=followups.filter(f=>!f.completed).length
+              const avvik=items.filter(i=>i.status==='avvik').length
+              return (
+                <div key={ins.id} onClick={()=>setSelected(ins)}
+                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{ins.title}</span>
+                      <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
+                      {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
+                      {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {ins.date}</span>
+                      {ins.location&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {ins.location}</span>}
+                      {proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} punkter</span>}
+                    </div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {showNew&&<BefaringModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+    </div>
+  )
+}
+
+function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
+  const [ins, setIns] = useState(init)
+  const [items, setItems] = useState(init.inspection_items||[])
+  const [followups, setFollowups] = useState(init.inspection_followups||[])
+  const [files, setFiles] = useState(init.inspection_files||[])
+  const [tab, setTab] = useState('sjekkliste')
+  const [editing, setEditing] = useState(false)
+  const [newItem, setNewItem] = useState('')
+  const [newFollowup, setNewFollowup] = useState({ description:'', responsible:'', due_date:'' })
+  const [saving, setSaving] = useState(false)
+  const fileInputRef = React.useRef(null)
+  const proj = projects.find(p=>p.id===ins.project_id)
+  const cfg = INS_STATUS[ins.status]
+
+  const loadDetails = async () => {
+    const [it, fu, fi] = await Promise.all([
+      supabase.from('inspection_items').select('*').eq('inspection_id',ins.id).order('sort_order').then(r=>r.data||[]),
+      supabase.from('inspection_followups').select('*').eq('inspection_id',ins.id).order('created_at').then(r=>r.data||[]),
+      supabase.from('inspection_files').select('*').eq('inspection_id',ins.id).order('created_at').then(r=>r.data||[])
+    ])
+    setItems(it); setFollowups(fu); setFiles(fi)
+  }
+  const refresh = async () => { const {data}=await supabase.from('inspections').select('*').eq('id',ins.id).single(); if(data) setIns(data) }
+
+  const addItem = async () => {
+    if (!newItem.trim()) return
+    await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:newItem.trim(), sort_order:items.length })
+    setNewItem(''); loadDetails()
+  }
+
+  const toggleItemStatus = async (item) => {
+    const next = item.status==='ok'?'avvik':item.status==='avvik'?'na':'ok'
+    await supabase.from('inspection_items').update({ status:next }).eq('id',item.id)
+    loadDetails()
+  }
+
+  const deleteItem = async (id) => {
+    await supabase.from('inspection_items').delete().eq('id',id)
+    loadDetails()
+  }
+
+  const addFollowup = async () => {
+    if (!newFollowup.description.trim()) return
+    await supabase.from('inspection_followups').insert({ inspection_id:ins.id, ...newFollowup, due_date:newFollowup.due_date||null })
+    setNewFollowup({ description:'', responsible:'', due_date:'' }); loadDetails()
+  }
+
+  const toggleFollowup = async (fu) => {
+    await supabase.from('inspection_followups').update({ completed:!fu.completed }).eq('id',fu.id)
+    loadDetails()
+  }
+
+  const uploadFile = async (e) => {
+    const file=e.target.files?.[0]; if(!file) return
+    setSaving(true)
+    try {
+      const path=`befaring/${ins.id}/${Date.now()}_${file.name}`
+      const {error}=await supabase.storage.from('plattform-files').upload(path,file)
+      if(error) throw error
+      const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
+      await supabase.from('inspection_files').insert({ inspection_id:ins.id, name:file.name, file_url:publicUrl, file_type:file.type })
+      loadDetails()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false); e.target.value='' }
+  }
+
+  const updateStatus = async (status) => {
+    await supabase.from('inspections').update({ status,updated_at:new Date().toISOString() }).eq('id',ins.id)
+    setIns(v=>({...v,status}))
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne befaringen?')) return
+    await supabase.from('inspections').delete().eq('id',ins.id)
+    onBack()
+  }
+
+  const avvik=items.filter(i=>i.status==='avvik').length
+  const ok=items.filter(i=>i.status==='ok').length
+  const openF=followups.filter(f=>!f.completed).length
+  const today=new Date().toISOString().split('T')[0]
+
+  const ITEM_STATUS = {
+    ok:    { label:'OK',    color:'#16a34a', bg:'#f0fdf4', next:'avvik' },
+    avvik: { label:'Avvik', color:'#dc2626', bg:'#fef2f2', next:'na' },
+    na:    { label:'N/A',   color:'#94a3b8', bg:'#f8fafc', next:'ok' },
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til befaringer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
+            <div style={{ width:'52px',height:'52px',borderRadius:'14px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',flexShrink:0 }}>{cfg.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
+                <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
+                {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik} avvik</span>}
+              </div>
+              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                <span style={{ fontSize:'13px', color:'#64748b' }}>📅 {ins.date}</span>
+                {ins.location&&<span style={{ fontSize:'13px', color:'#64748b' }}>📍 {ins.location}</span>}
+                {proj&&<span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding:'9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px' }}>🗑️</button>
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:'4px', marginTop:'16px', flexWrap:'wrap' }}>
+          {[['sjekkliste',`☑️ Sjekkliste (${items.length})`],['oppfolging',`⏰ Oppfølging (${openF})`],['filer',`📎 Filer (${files.length})`],['info','ℹ️ Info']].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding:'8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+
+          {tab==='sjekkliste'&&(
+            <div style={bCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>☑️ Sjekkpunkter</h3>
+                {items.length>0&&(
+                  <div style={{ display:'flex', gap:'8px', fontSize:'12px' }}>
+                    <span style={{ background:'#f0fdf4',color:'#16a34a',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>✅ {ok} OK</span>
+                    {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>⚠️ {avvik} avvik</span>}
+                  </div>
+                )}
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
+                {items.map(item=>{
+                  const st=ITEM_STATUS[item.status]
+                  return (
+                    <div key={item.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9' }}>
+                      <button onClick={()=>toggleItemStatus(item)} style={{ padding:'4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth:'52px' }}>{st.label}</button>
+                      <span style={{ flex:1, fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
+                      <button onClick={()=>deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex:1 }} />
+                <button onClick={addItem} style={{ padding:'9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700',whiteSpace:'nowrap' }}>+ Legg til</button>
+              </div>
+            </div>
+          )}
+
+          {tab==='oppfolging'&&(
+            <div style={bCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⏰ Oppfølgingspunkter</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px' }}>
+                {followups.map(fu=>{
+                  const overdue=fu.due_date&&fu.due_date<today&&!fu.completed
+                  return (
+                    <div key={fu.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'12px 14px', background:fu.completed?'#f8fafc':overdue?'#fef2f2':'#fffbeb', borderRadius:'10px', border:`1px solid ${fu.completed?'#f1f5f9':overdue?'#fecaca':'#fde68a'}` }}>
+                      <input type="checkbox" checked={fu.completed} onChange={()=>toggleFollowup(fu)} style={{ width:'16px',height:'16px',accentColor:'#059669',cursor:'pointer',flexShrink:0 }} />
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', textDecoration:fu.completed?'line-through':'none' }}>{fu.description}</div>
+                        <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
+                          {fu.responsible&&<span>👤 {fu.responsible}</span>}
+                          {fu.due_date&&<span style={{ color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 Frist: {fu.due_date}{overdue?' ⚠️ FORFALT':''}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {followups.length===0&&<p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen oppfølgingspunkter</p>}
+              </div>
+              <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'10px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>+ Nytt oppfølgingspunkt</div>
+                <input value={newFollowup.description} onChange={e=>setNewFollowup(f=>({...f,description:e.target.value}))} placeholder="Beskrivelse av oppfølging..." style={bInp} />
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <input value={newFollowup.responsible} onChange={e=>setNewFollowup(f=>({...f,responsible:e.target.value}))} placeholder="Ansvarlig person" style={bInp} />
+                  <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
+                </div>
+                <button onClick={addFollowup} style={{ padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>Legg til oppfølging</button>
+              </div>
+            </div>
+          )}
+
+          {tab==='filer'&&(
+            <div style={bCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Bilder og dokumenter</h3>
+                <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
+                <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadFile} accept="image/*,.pdf,.doc,.docx" multiple />
+              </div>
+              {files.length===0 ? <p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen filer lastet opp</p> : (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:'10px' }}>
+                  {files.map(f=>{
+                    const isImg=f.file_type?.startsWith('image/')
+                    return (
+                      <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" style={{ textDecoration:'none' }}>
+                        <div style={{ borderRadius:'10px', border:'1px solid #f1f5f9', overflow:'hidden', background:'#f8fafc' }}>
+                          {isImg ? <img src={f.file_url} alt={f.name} style={{ width:'100%',height:'100px',objectFit:'cover' }} />
+                            : <div style={{ width:'100%',height:'100px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'32px' }}>📄</div>}
+                          <div style={{ padding:'6px 8px', fontSize:'11px', color:'#475569', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
+                        </div>
+                      </a>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab==='info'&&(
+            <div style={bCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Befaringsinfo</h3>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                {[['Tittel',ins.title],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
+                  <div key={k} style={{ background:'#f8fafc',borderRadius:'8px',padding:'9px 12px' }}>
+                    <div style={{ fontSize:'11px',color:'#94a3b8',textTransform:'uppercase',fontWeight:'600' }}>{k}</div>
+                    <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a',marginTop:'2px' }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {ins.participants?.length>0&&<div style={{ marginTop:'12px' }}><div style={{ fontSize:'12px',color:'#64748b',fontWeight:'600',marginBottom:'6px' }}>👥 Deltakere</div><div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>{ins.participants.map((p,i)=><span key={i} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600' }}>{p}</span>)}</div></div>}
+              {ins.notes&&<div style={{ marginTop:'12px',background:'#f8fafc',borderRadius:'8px',padding:'10px 12px' }}><div style={{ fontSize:'11px',color:'#94a3b8',fontWeight:'600',marginBottom:'4px' }}>NOTATER</div><p style={{ margin:0,fontSize:'13px',color:'#475569',lineHeight:1.6 }}>{ins.notes}</p></div>}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div style={bCard}>
+            <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            {Object.entries(INS_STATUS).map(([k,v])=>(
+              <button key={k} onClick={()=>updateStatus(k)} disabled={ins.status===k}
+                style={{ width:'100%',padding:'9px 14px',borderRadius:'10px',border:`1px solid ${ins.status===k?v.border:'#e2e8f0'}`,background:ins.status===k?v.bg:'white',color:ins.status===k?v.color:'#475569',fontWeight:ins.status===k?'700':'400',fontSize:'13px',cursor:ins.status===k?'default':'pointer',textAlign:'left',marginBottom:'5px' }}>
+                {ins.status===k?'✓ ':''}{v.emoji} {v.label}
+              </button>
+            ))}
+          </div>
+          <div style={bCard}>
+            <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Oppsummering</h3>
+            {[['Sjekkpunkter',items.length],['OK',ok],['Avvik',avvik],['N/A',items.filter(i=>i.status==='na').length],['Oppfølginger',followups.length],['Åpne',openF],['Filer',files.length]].map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700',color:'#0f172a' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+    </div>
+  )
+}
+
+function BefaringModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit=!!initial
+  const [form, setForm] = useState({ title:initial?.title||'', date:initial?.date||new Date().toISOString().split('T')[0], location:initial?.location||'', project_id:initial?.project_id||'', status:initial?.status||'planlagt', notes:initial?.notes||'', participants:initial?.participants||[] })
+  const [participantInput, setParticipantInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+
+  const addParticipant = () => { if(participantInput.trim()) { set('participants',[...form.participants,participantInput.trim()]); setParticipantInput('') } }
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const payload={...form,project_id:form.project_id||null,updated_at:new Date().toISOString()}
+      if (isEdit) { const {error}=await supabase.from('inspections').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('inspections').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔍 {isEdit?'Rediger':'Ny'} befaring</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
+          {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
+            <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
+          ))}
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
+            <div style={{ display:'flex',gap:'8px',marginBottom:'6px' }}>
+              <input value={participantInput} onChange={e=>setParticipantInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addParticipant()} placeholder="Legg til deltaker" style={{ ...bInp,flex:1 }} />
+              <button onClick={addParticipant} style={{ padding:'9px 14px',background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>+</button>
+            </div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+              {form.participants.map((p,i)=><span key={i} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'5px' }}>{p}<button onClick={()=>set('participants',form.participants.filter((_,j)=>j!==i))} style={{ background:'none',border:'none',cursor:'pointer',color:'#059669',padding:0,fontSize:'13px' }}>×</button></span>)}
+            </div>
+          </div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notater</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...bInp,resize:'none' }} placeholder="Generelle notater fra befaringen..." /></div>
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett befaring'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END BEFARING MODULE ──────────────────────────────────────────────────────
+
+// ─── BILDEDOKUMENTASJON MODULE ────────────────────────────────────────────────
+
+const PHOTO_CATS = {
+  fremdrift: { label:'Fremdrift',   emoji:'📸', color:'#2563eb', bg:'#eff6ff' },
+  avvik:     { label:'Avvik',       emoji:'⚠️', color:'#dc2626', bg:'#fef2f2' },
+  for_etter: { label:'Før/Etter',   emoji:'🔄', color:'#7c3aed', bg:'#f5f3ff' },
+  overlevering: { label:'Overlevering', emoji:'📦', color:'#059669', bg:'#f0fdf4' },
+  annet:     { label:'Annet',       emoji:'📁', color:'#64748b', bg:'#f8fafc' },
+}
+
+function BildedokPage() {
+  const { user } = useAuth()
+  const [albums, setAlbums] = useState([])
+  const [photos, setPhotos] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedAlbum, setSelectedAlbum] = useState(null)
+  const [showNewAlbum, setShowNewAlbum] = useState(false)
+  const [filterProject, setFilterProject] = useState('alle')
+  const [filterCat, setFilterCat] = useState('alle')
+  const [lightbox, setLightbox] = useState(null)
+
+  const load = async () => {
+    try {
+      const [al, ph, proj] = await Promise.all([
+        supabase.from('photo_albums').select('*, photos(id)').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('photos').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+      ])
+      setAlbums(al); setPhotos(ph); setProjects(proj)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  const filtered = albums.filter(a=>{
+    if (filterProject!=='alle'&&a.project_id!==filterProject) return false
+    if (filterCat!=='alle'&&a.category!==filterCat) return false
+    return true
+  })
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster bilder...</p></div></div>
+  if (selectedAlbum) return <AlbumView album={selectedAlbum} photos={photos.filter(p=>p.album_id===selectedAlbum.id)} projects={projects} user={user} onBack={()=>{setSelectedAlbum(null);load()}} onRefresh={load} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📷 Bildedokumentasjon</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Foto, album og gallerivisning per prosjekt</p>
+          </div>
+          <button onClick={()=>setShowNewAlbum(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Nytt album</button>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'8px' }}>
+          {Object.entries(PHOTO_CATS).map(([k,v])=>(
+            <button key={k} onClick={()=>setFilterCat(filterCat===k?'alle':k)}
+              style={{ padding:'10px 12px',borderRadius:'12px',border:`2px solid ${filterCat===k?v.color:'#f1f5f9'}`,background:filterCat===k?v.bg:'white',cursor:'pointer',textAlign:'left' }}>
+              <div style={{ fontSize:'16px',marginBottom:'4px' }}>{v.emoji}</div>
+              <div style={{ fontSize:'12px',fontWeight:'700',color:filterCat===k?v.color:'#0f172a' }}>{v.label}</div>
+              <div style={{ fontSize:'11px',color:'#94a3b8' }}>{albums.filter(a=>a.category===k).length} album</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white' }}>
+            <option value="alle">Alle prosjekter</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {(filterProject!=='alle'||filterCat!=='alle')&&<button onClick={()=>{setFilterProject('alle');setFilterCat('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} album · {photos.length} bilder totalt</span>
+        </div>
+
+        {filtered.length===0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📷</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen album funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Opprett ditt første fotoalbum.</p>
+          </div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:'14px' }}>
+            {filtered.map(album=>{
+              const cat=PHOTO_CATS[album.category]||PHOTO_CATS.annet
+              const proj=projects.find(p=>p.id===album.project_id)
+              const photoCount=(album.photos||[]).length
+              const albumPhotos=photos.filter(p=>p.album_id===album.id)
+              const coverPhoto=albumPhotos[0]
+              return (
+                <div key={album.id} onClick={()=>setSelectedAlbum(album)}
+                  style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', overflow:'hidden', cursor:'pointer', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ height:'150px', background:coverPhoto?'#000':`${cat.bg}`, position:'relative', overflow:'hidden' }}>
+                    {coverPhoto ? <img src={coverPhoto.file_url} alt="" style={{ width:'100%',height:'100%',objectFit:'cover',opacity:0.9 }} />
+                      : <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'48px' }}>{cat.emoji}</div>}
+                    <div style={{ position:'absolute',top:'10px',left:'10px',background:cat.bg,color:cat.color,border:`1px solid ${cat.color}30`,borderRadius:'999px',padding:'3px 10px',fontSize:'11px',fontWeight:'700' }}>{cat.emoji} {cat.label}</div>
+                    <div style={{ position:'absolute',bottom:'10px',right:'10px',background:'rgba(0,0,0,0.6)',color:'white',borderRadius:'8px',padding:'3px 8px',fontSize:'12px',fontWeight:'700' }}>📷 {photoCount}</div>
+                  </div>
+                  <div style={{ padding:'14px 16px' }}>
+                    <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'4px' }}>{album.title}</div>
+                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                      {proj&&<span>🏗️ {proj.name}</span>}
+                      {album.description&&<span>{album.description}</span>}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNewAlbum&&<AlbumModal projects={projects} user={user} onClose={()=>setShowNewAlbum(false)} onSaved={()=>{setShowNewAlbum(false);load()}} />}
+    </div>
+  )
+}
+
+function AlbumView({ album, photos, projects, user, onBack, onRefresh }) {
+  const [uploading, setUploading] = useState(false)
+  const [lightbox, setLightbox] = useState(null)
+  const [editingPhoto, setEditingPhoto] = useState(null)
+  const fileInputRef = React.useRef(null)
+  const cat = PHOTO_CATS[album.category]||PHOTO_CATS.annet
+  const proj = projects.find(p=>p.id===album.project_id)
+  const shareUrl = `${window.location.origin}/bildedok?album=${album.share_token}`
+
+  const uploadPhotos = async (e) => {
+    const files = Array.from(e.target.files||[])
+    if (!files.length) return
+    setUploading(true)
+    try {
+      for (const file of files) {
+        const path=`bildedok/${album.id}/${Date.now()}_${file.name}`
+        const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
+        if(upErr) throw upErr
+        const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
+        await supabase.from('photos').insert({ album_id:album.id, project_id:album.project_id, file_url:publicUrl, file_name:file.name, created_by:user?.id })
+      }
+      onRefresh()
+    } catch(e) { alert('Opplasting feilet: '+e.message) }
+    finally { setUploading(false); e.target.value='' }
+  }
+
+  const deletePhoto = async (id) => {
+    if (!confirm('Slett dette bildet?')) return
+    await supabase.from('photos').delete().eq('id',id)
+    onRefresh()
+  }
+
+  const copyShareLink = () => {
+    navigator.clipboard.writeText(shareUrl)
+    alert('Delingslenke kopiert!')
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {lightbox&&(
+        <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center' }} onClick={()=>setLightbox(null)}>
+          <img src={lightbox.file_url} alt={lightbox.description||''} style={{ maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:'8px' }} />
+          <button onClick={()=>setLightbox(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'50%',width:'40px',height:'40px',color:'white',fontSize:'20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
+          {lightbox.description&&<div style={{ position:'absolute',bottom:'20px',left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'white',borderRadius:'10px',padding:'10px 20px',fontSize:'14px' }}>{lightbox.description}</div>}
+        </div>
+      )}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til album</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
+              <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{album.title}</h1>
+              <span style={{ background:cat.bg,color:cat.color,border:`1px solid ${cat.color}20`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+            </div>
+            <div style={{ display:'flex', gap:'10px', fontSize:'13px', color:'#64748b' }}>
+              {proj&&<span>🏗️ {proj.name}</span>}
+              <span>📷 {photos.length} bilder</span>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={copyShareLink} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#475569' }}>🔗 Del album</button>
+            <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} style={{ padding:'9px 18px',background:uploading?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>
+              {uploading?'Laster opp...':'📷 Last opp bilder'}
+            </button>
+            <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadPhotos} accept="image/*" multiple />
+          </div>
+        </div>
+      </div>
+      <div style={{ padding:'24px 32px' }}>
+        {photos.length===0 ? (
+          <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>📷</div>
+            <h3 style={{ margin:'0 0 8px', color:'#0f172a' }}>Ingen bilder ennå</h3>
+            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>Last opp bilder for å fylle albumet</p>
+            <button onClick={()=>fileInputRef.current?.click()} style={{ padding:'11px 22px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>📷 Last opp bilder</button>
+          </div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:'12px' }}>
+            {photos.map(photo=>(
+              <div key={photo.id} style={{ borderRadius:'12px', overflow:'hidden', background:'white', border:'1px solid #f1f5f9', position:'relative', cursor:'pointer' }}
+                onClick={()=>setLightbox(photo)}
+                onMouseEnter={e=>e.currentTarget.querySelector('.photo-actions').style.opacity='1'}
+                onMouseLeave={e=>e.currentTarget.querySelector('.photo-actions').style.opacity='0'}>
+                <img src={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'160px', objectFit:'cover', display:'block' }} />
+                <div className="photo-actions" style={{ position:'absolute',top:'6px',right:'6px',display:'flex',gap:'4px',opacity:0,transition:'opacity 0.15s' }}>
+                  <button onClick={e=>{e.stopPropagation();deletePhoto(photo.id)}} style={{ background:'rgba(220,38,38,0.9)',border:'none',borderRadius:'6px',padding:'4px 8px',color:'white',cursor:'pointer',fontSize:'12px' }}>🗑️</button>
+                </div>
+                {photo.description&&<div style={{ padding:'8px 10px', fontSize:'12px', color:'#475569', fontWeight:'500' }}>{photo.description}</div>}
+                {photo.taken_date&&<div style={{ padding:'0 10px 8px', fontSize:'11px', color:'#94a3b8' }}>{photo.taken_date}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AlbumModal({ projects, user, onClose, onSaved }) {
+  const [form, setForm] = useState({ title:'', category:'fremdrift', project_id:'', description:'' })
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try { const {error}=await supabase.from('photo_albums').insert({...form,project_id:form.project_id||null,created_by:user?.id}); if(error) throw error; onSaved() }
+    catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📷 Nytt album</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Albumnavn *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Fremdrift uke 14" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Kategori</label>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px' }}>
+              {Object.entries(PHOTO_CATS).map(([k,v])=>(
+                <button key={k} onClick={()=>set('category',k)} style={{ padding:'8px',borderRadius:'8px',border:`2px solid ${form.category===k?v.color:'#e2e8f0'}`,background:form.category===k?v.bg:'white',cursor:'pointer',fontSize:'11px',fontWeight:'700',color:form.category===k?v.color:'#64748b' }}>{v.emoji} {v.label}</button>
+              ))}
+            </div>
+          </div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Beskrivelse</label><input value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
+          <div style={{ display:'flex',justifyContent:'flex-end',gap:'12px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':'Opprett album'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── END BILDEDOKUMENTASJON MODULE ────────────────────────────────────────────
+
+// ─── FDV MODULE ───────────────────────────────────────────────────────────────
+
+const FDV_CATEGORIES = ['Ventilasjon','Elektro','VVS/Rør','Heis','Brann','Alarm','Tak/Fasade','Gulv/Vegg','Kjøling','Oppvarming','Utendørs','Annet']
+
+const FDV_DOC_TYPES = {
+  manual:      { label:'Manual',       emoji:'📖' },
+  sertifikat:  { label:'Sertifikat',   emoji:'🏅' },
+  tegning:     { label:'Tegning',      emoji:'📐' },
+  rapport:     { label:'Rapport',      emoji:'📋' },
+  garanti:     { label:'Garanti',      emoji:'🛡️' },
+  annet:       { label:'Annet',        emoji:'📄' },
+}
+
+const fInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+
+function FDVPage() {
+  const { user } = useAuth()
+  const [components, setComponents] = useState([])
+  const [documents, setDocuments] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterProject, setFilterProject] = useState('alle')
+  const [filterCat, setFilterCat] = useState('alle')
+  const [view, setView] = useState('komponenter')
+  const [showNewComp, setShowNewComp] = useState(false)
+  const [showUploadDoc, setShowUploadDoc] = useState(false)
+  const [selectedComp, setSelectedComp] = useState(null)
+  const [search, setSearch] = useState('')
+
+  const load = async () => {
+    try {
+      const [comp, docs, proj] = await Promise.all([
+        supabase.from('fdv_components').select('*').order('category').then(r=>r.data||[]),
+        supabase.from('fdv_documents').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+      ])
+      setComponents(comp); setDocuments(docs); setProjects(proj)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Service reminders
+  const today = new Date().toISOString().split('T')[0]
+  const servicedue = components.filter(c=>c.next_service_date&&c.next_service_date<=new Date(Date.now()+30*24*60*60*1000).toISOString().split('T')[0])
+
+  const filteredComps = components.filter(c=>{
+    if (filterProject!=='alle'&&c.project_id!==filterProject) return false
+    if (filterCat!=='alle'&&c.category!==filterCat) return false
+    if (search&&![c.name,c.manufacturer,c.model,c.location].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const filteredDocs = documents.filter(d=>{
+    if (filterProject!=='alle'&&d.project_id!==filterProject) return false
+    if (search&&![d.title,d.folder_path].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const exportFDVPakke = async () => {
+    const proj = filterProject!=='alle' ? projects.find(p=>p.id===filterProject) : null
+    const projDocs = filterProject!=='alle' ? filteredDocs : documents
+    const projComps = filterProject!=='alle' ? filteredComps : components
+    const content = [
+      `FDV-DOKUMENTASJON`,
+      `Prosjekt: ${proj?.name||'Alle prosjekter'}`,
+      `Generert: ${new Date().toLocaleDateString('nb-NO')}`,
+      ``,
+      `=== KOMPONENTER (${projComps.length}) ===`,
+      ...projComps.map(c=>`\n${c.name}\n  Kategori: ${c.category||'-'}\n  Plassering: ${c.location||'-'}\n  Produsent: ${c.manufacturer||'-'} · Modell: ${c.model||'-'}\n  Serienr: ${c.serial_number||'-'}\n  Installert: ${c.installed_date||'-'}\n  Neste service: ${c.next_service_date||'-'}`),
+      ``,
+      `=== DOKUMENTER (${projDocs.length}) ===`,
+      ...projDocs.map(d=>`\n${d.title}\n  Type: ${FDV_DOC_TYPES[d.doc_type]?.label||'-'}\n  Mappe: ${d.folder_path||'/'}\n  URL: ${d.file_url||'-'}`)
+    ].join('\n')
+    const blob=new Blob([content],{type:'text/plain;charset=utf-8'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a'); a.href=url; a.download=`FDV-${proj?.name||'alle'}-${today}.txt`; a.click()
+  }
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster FDV...</p></div></div>
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px', flexWrap:'wrap', gap:'12px' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🏛️ FDV</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Forvaltning, Drift og Vedlikehold</p>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={exportFDVPakke} style={{ padding:'9px 16px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#475569' }}>📦 Eksporter FDV-pakke</button>
+            <button onClick={()=>view==='komponenter'?setShowNewComp(true):setShowUploadDoc(true)} style={{ padding:'10px 18px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>
+              {view==='komponenter'?'+ Ny komponent':'📎 Last opp dokument'}
+            </button>
+          </div>
+        </div>
+
+        {servicedue.length>0&&(
+          <div style={{ background:'#fffbeb', borderRadius:'12px', padding:'12px 16px', border:'1px solid #fde68a', marginBottom:'14px', display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'18px' }}>🔧</span>
+            <span style={{ fontSize:'13px', fontWeight:'600', color:'#92400e' }}>{servicedue.length} komponent{servicedue.length>1?'er':''} har service forfalt eller innen 30 dager</span>
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[['komponenter','🔩 Komponenter'],['dokumenter','📄 Dokumenter']].map(([v,l])=>(
+              <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 16px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+            ))}
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...fInp,maxWidth:'180px' }}>
+            <option value="alle">Alle prosjekter</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {view==='komponenter'&&<select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...fInp,maxWidth:'150px' }}>
+            <option value="alle">Alle kategorier</option>
+            {FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>}
+        </div>
+      </div>
+
+      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'14px' }}>
+
+        {/* KOMPONENTER */}
+        {view==='komponenter'&&(
+          filteredComps.length===0 ? (
+            <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'60px 20px',textAlign:'center' }}>
+              <div style={{ fontSize:'40px',marginBottom:'12px' }}>🔩</div>
+              <h3 style={{ margin:'0 0 6px',color:'#0f172a' }}>Ingen komponenter registrert</h3>
+              <p style={{ margin:0,color:'#94a3b8',fontSize:'14px' }}>Legg til tekniske installasjoner og utstyr.</p>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {filteredComps.map(comp=>{
+                const proj=projects.find(p=>p.id===comp.project_id)
+                const overdue=comp.next_service_date&&comp.next_service_date<today
+                const soonService=comp.next_service_date&&!overdue&&comp.next_service_date<=new Date(Date.now()+30*24*60*60*1000).toISOString().split('T')[0]
+                const compDocs=documents.filter(d=>d.component_id===comp.id)
+                return (
+                  <div key={comp.id} onClick={()=>setSelectedComp(comp)}
+                    style={{ background:'white',borderRadius:'14px',border:`1px solid ${overdue?'#fecaca':soonService?'#fde68a':'#f1f5f9'}`,padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',gap:'16px',transition:'box-shadow 0.15s' }}
+                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                    <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:overdue?'#fef2f2':soonService?'#fffbeb':'#f0fdf4',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',flexShrink:0 }}>🔩</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
+                        <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'15px' }}>{comp.name}</span>
+                        {comp.category&&<span style={{ background:'#f8fafc',color:'#64748b',border:'1px solid #f1f5f9',padding:'2px 8px',borderRadius:'999px',fontSize:'11px' }}>{comp.category}</span>}
+                        {overdue&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>🔧 Service forfalt</span>}
+                        {soonService&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ Service snart</span>}
+                      </div>
+                      <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                        {comp.manufacturer&&<span>🏭 {comp.manufacturer}{comp.model?` · ${comp.model}`:''}</span>}
+                        {comp.location&&<span>📍 {comp.location}</span>}
+                        {proj&&<span style={{ color:'#2563eb',fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                        {comp.next_service_date&&<span style={{ color:overdue?'#dc2626':soonService?'#d97706':'#64748b',fontWeight:overdue||soonService?'700':'400' }}>🔧 Service: {comp.next_service_date}</span>}
+                        {compDocs.length>0&&<span>📄 {compDocs.length} dok.</span>}
+                      </div>
+                    </div>
+                    <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {/* DOKUMENTER */}
+        {view==='dokumenter'&&(
+          filteredDocs.length===0 ? (
+            <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'60px 20px',textAlign:'center' }}>
+              <div style={{ fontSize:'40px',marginBottom:'12px' }}>📄</div>
+              <h3 style={{ margin:'0 0 6px',color:'#0f172a' }}>Ingen FDV-dokumenter</h3>
+              <p style={{ margin:0,color:'#94a3b8',fontSize:'14px' }}>Last opp manualer, sertifikater og tegninger.</p>
+            </div>
+          ) : (
+            <div>
+              {/* Group by folder */}
+              {[...new Set(filteredDocs.map(d=>d.folder_path||'/'))].sort().map(folder=>{
+                const folderDocs=filteredDocs.filter(d=>(d.folder_path||'/')===folder)
+                return (
+                  <div key={folder} style={{ marginBottom:'16px' }}>
+                    <div style={{ fontSize:'13px',fontWeight:'700',color:'#64748b',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px' }}>
+                      <span>📁</span>{folder}
+                      <span style={{ color:'#cbd5e1',fontWeight:'400' }}>({folderDocs.length})</span>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                      {folderDocs.map(doc=>{
+                        const proj=projects.find(p=>p.id===doc.project_id)
+                        const comp=doc.component_id?{name:'Komponent'}:null
+                        const typeInfo=FDV_DOC_TYPES[doc.doc_type]||FDV_DOC_TYPES.annet
+                        return (
+                          <div key={doc.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'12px 16px',background:'white',borderRadius:'12px',border:'1px solid #f1f5f9' }}>
+                            <span style={{ fontSize:'20px',flexShrink:0 }}>{typeInfo.emoji}</span>
+                            <div style={{ flex:1,minWidth:0 }}>
+                              <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a' }}>{doc.title}</div>
+                              <div style={{ display:'flex',gap:'10px',fontSize:'11px',color:'#64748b',marginTop:'2px' }}>
+                                <span>{typeInfo.label}</span>
+                                {proj&&<span>🏗️ {proj.name}</span>}
+                                <span>{new Date(doc.created_at).toLocaleDateString('nb-NO')}</span>
+                              </div>
+                            </div>
+                            {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{ padding:'6px 12px',background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'600',textDecoration:'none' }}>↓ Last ned</a>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+      </div>
+
+      {showNewComp&&<FDVComponentModal projects={projects} user={user} onClose={()=>setShowNewComp(false)} onSaved={()=>{setShowNewComp(false);load()}} />}
+      {showUploadDoc&&<FDVDocModal projects={projects} components={components} user={user} onClose={()=>setShowUploadDoc(false)} onSaved={()=>{setShowUploadDoc(false);load()}} />}
+      {selectedComp&&<FDVComponentDetaljer comp={selectedComp} documents={documents.filter(d=>d.component_id===selectedComp.id)} projects={projects} user={user} onClose={()=>{setSelectedComp(null);load()}} onRefresh={load} />}
+    </div>
+  )
+}
+
+function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
+  const isEdit=!!initial
+  const [form, setForm] = useState({ name:initial?.name||'', category:initial?.category||'', location:initial?.location||'', project_id:initial?.project_id||'', manufacturer:initial?.manufacturer||'', model:initial?.model||'', serial_number:initial?.serial_number||'', installed_date:initial?.installed_date||'', next_service_date:initial?.next_service_date||'', service_interval_months:initial?.service_interval_months||'', notes:initial?.notes||'' })
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const lbl=t=><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{t}</label>
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return alert('Navn er påkrevd')
+    setSaving(true)
+    try {
+      const payload={...form,project_id:form.project_id||null,installed_date:form.installed_date||null,next_service_date:form.next_service_date||null,service_interval_months:form.service_interval_months?parseInt(form.service_interval_months):null,updated_at:new Date().toISOString()}
+      if (isEdit) { const {error}=await supabase.from('fdv_components').update(payload).eq('id',initial.id); if(error) throw error }
+      else { const {error}=await supabase.from('fdv_components').insert({...payload,created_by:user?.id}); if(error) throw error }
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'620px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔩 {isEdit?'Rediger':'Ny'} komponent</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
+          <div>{lbl('Kategori')}<select value={form.category} onChange={e=>set('category',e.target.value)} style={fInp}><option value="">Velg...</option>{FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+          <div>{lbl('Plassering')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Kjeller / Rom 101" style={fInp} /></div>
+          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div>{lbl('Produsent')}<input value={form.manufacturer} onChange={e=>set('manufacturer',e.target.value)} placeholder="F.eks. Nibe" style={fInp} /></div>
+          <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={fInp} /></div>
+          <div>{lbl('Serienummer')}<input value={form.serial_number} onChange={e=>set('serial_number',e.target.value)} style={fInp} /></div>
+          <div>{lbl('Installasjonsdato')}<input type="date" value={form.installed_date} onChange={e=>set('installed_date',e.target.value)} style={fInp} /></div>
+          <div>{lbl('Neste service')}<input type="date" value={form.next_service_date} onChange={e=>set('next_service_date',e.target.value)} style={fInp} /></div>
+          <div>{lbl('Serviceintervall (mnd)')}<input type="number" value={form.service_interval_months} onChange={e=>set('service_interval_months',e.target.value)} placeholder="12" style={fInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...fInp,resize:'none' }} /></div>
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Legg til'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FDVDocModal({ projects, components, user, onClose, onSaved }) {
+  const [form, setForm] = useState({ title:'', doc_type:'manual', project_id:'', component_id:'', folder_path:'/' })
+  const [file, setFile] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      let fileUrl=null, fileName=null, fileType=null
+      if (file) {
+        const path=`fdv/${Date.now()}_${file.name}`
+        const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
+        if(upErr) throw upErr
+        const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
+        fileUrl=publicUrl; fileName=file.name; fileType=file.type
+      }
+      const {error}=await supabase.from('fdv_documents').insert({ ...form, project_id:form.project_id||null, component_id:form.component_id||null, file_url:fileUrl, file_name:fileName, file_type:fileType, created_by:user?.id })
+      if(error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+
+  const filteredComponents = form.project_id ? components.filter(c=>c.project_id===form.project_id) : components
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📎 Last opp FDV-dokument</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
+          {[['Tittel *','title','text','F.eks. Brukermanual ventilasjon']].map(([l,k,t,ph])=>(
+            <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={fInp} /></div>
+          ))}
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Dokumenttype</label>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px' }}>
+              {Object.entries(FDV_DOC_TYPES).map(([k,v])=>(
+                <button key={k} onClick={()=>set('doc_type',k)} style={{ padding:'7px',borderRadius:'8px',border:`2px solid ${form.doc_type===k?'#059669':'#e2e8f0'}`,background:form.doc_type===k?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'700',color:form.doc_type===k?'#059669':'#64748b' }}>{v.emoji} {v.label}</button>
+              ))}
+            </div>
+          </div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Koble til komponent (valgfritt)</label><select value={form.component_id} onChange={e=>set('component_id',e.target.value)} style={fInp}><option value="">Ingen</option>{filteredComponents.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mappe</label><input value={form.folder_path} onChange={e=>set('folder_path',e.target.value)} placeholder="/Ventilasjon" style={fInp} /></div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Fil</label>
+            <input type="file" onChange={e=>setFile(e.target.files?.[0]||null)} accept=".pdf,.doc,.docx,.dwg,.png,.jpg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',boxSizing:'border-box' }} />
+          </div>
+        </div>
+        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Laster opp...':'Last opp'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefresh }) {
+  const [editing, setEditing] = useState(false)
+  const [showUploadDoc, setShowUploadDoc] = useState(false)
+  const proj = projects.find(p=>p.id===comp.project_id)
+  const today = new Date().toISOString().split('T')[0]
+  const overdue = comp.next_service_date&&comp.next_service_date<today
+
+  const handleDelete = async () => {
+    if (!confirm('Slett denne komponenten?')) return
+    await supabase.from('fdv_components').delete().eq('id',comp.id)
+    onClose()
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔩 {comp.name}</h2>
+          <div style={{ display:'flex',gap:'8px' }}>
+            <button onClick={()=>setEditing(true)} style={{ padding:'7px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding:'7px 10px',border:'1px solid #fecaca',borderRadius:'8px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px' }}>🗑️</button>
+            <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          </div>
+        </div>
+        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
+            {[['Kategori',comp.category],['Plassering',comp.location],['Produsent',comp.manufacturer],['Modell',comp.model],['Serienummer',comp.serial_number],['Installert',comp.installed_date],['Neste service',comp.next_service_date],['Intervall',comp.service_interval_months?`${comp.service_interval_months} mnd`:null],['Prosjekt',proj?.name]].filter(r=>r[1]).map(([k,v])=>(
+              <div key={k} style={{ background:'#f8fafc',borderRadius:'8px',padding:'9px 12px' }}>
+                <div style={{ fontSize:'11px',color:'#94a3b8',textTransform:'uppercase',fontWeight:'600' }}>{k}</div>
+                <div style={{ fontSize:'13px',fontWeight:'600',color:k==='Neste service'&&overdue?'#dc2626':'#0f172a',marginTop:'2px' }}>{v}{k==='Neste service'&&overdue?' ⚠️ FORFALT':''}</div>
+              </div>
+            ))}
+          </div>
+          {comp.notes&&<div style={{ background:'#f8fafc',borderRadius:'10px',padding:'12px' }}><p style={{ margin:0,fontSize:'13px',color:'#475569',lineHeight:1.6 }}>{comp.notes}</p></div>}
+          <div>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px' }}>
+              <div style={{ fontSize:'13px',fontWeight:'700',color:'#0f172a' }}>📄 Tilknyttede dokumenter ({documents.length})</div>
+              <button onClick={()=>setShowUploadDoc(true)} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>+ Legg til</button>
+            </div>
+            {documents.map(d=>(
+              <div key={d.id} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',background:'#f8fafc',borderRadius:'10px',border:'1px solid #f1f5f9',marginBottom:'6px' }}>
+                <span style={{ fontSize:'18px' }}>{FDV_DOC_TYPES[d.doc_type]?.emoji||'📄'}</span>
+                <div style={{ flex:1 }}><div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a' }}>{d.title}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{FDV_DOC_TYPES[d.doc_type]?.label}</div></div>
+                {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{ padding:'5px 10px',background:'#f0fdf4',color:'#059669',borderRadius:'7px',fontSize:'12px',fontWeight:'600',textDecoration:'none' }}>↓</a>}
+              </div>
+            ))}
+            {documents.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen dokumenter knyttet til denne komponenten</p>}
+          </div>
+        </div>
+        {editing&&<FDVComponentModal projects={projects} user={user} initial={comp} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);onRefresh();onClose()}} />}
+        {showUploadDoc&&<FDVDocModal projects={projects} components={[comp]} user={user} onClose={()=>setShowUploadDoc(false)} onSaved={()=>{setShowUploadDoc(false);onRefresh()}} />}
+      </div>
+    </div>
+  )
+}
+
+// ─── END FDV MODULE ───────────────────────────────────────────────────────────
+
 
 
 
@@ -12319,7 +13421,10 @@ function AppContent() {
         {page === 'kalender' && <KalenderPage />}
         {page === 'chat' && <InterChatPage />}
         {page === 'crm' && <CRMPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && (
+        {page === 'befaring' && <BefaringPage />}
+        {page === 'bildedok' && <BildedokPage />}
+        {page === 'fdv' && <FDVPage />}
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
       </main>
