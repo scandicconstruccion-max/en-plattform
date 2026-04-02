@@ -8930,17 +8930,17 @@ function RessursPage() {
     },{})
   ).filter(h=>h>8).length
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ressursplan...</p></div></div>
-
-  // Apply settings filters
-  const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
-
-  // Esc to exit fullscreen
+  // Esc to exit fullscreen — must be before any early return
   React.useEffect(()=>{
     const handler = (e) => { if(e.key==='Escape'&&fullscreen) setFullscreen(false) }
     document.addEventListener('keydown',handler)
     return ()=>document.removeEventListener('keydown',handler)
   },[fullscreen])
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ressursplan...</p></div></div>
+
+  // Apply settings filters
+  const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:fullscreen?'flex':'block', flexDirection:fullscreen?'column':'initial', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible' }}>
