@@ -145,6 +145,10 @@ const moduleSections = [
     title: '⚙️ SALG & ADMIN',
     modules: ['crm', 'brukeradmin', 'varsler'],
   },
+  {
+    title: '📸 DOKUMENTASJON & OVERLEVERING',
+    modules: ['befaring', 'bildedok', 'fdv'],
+  },
 ]
 
 function ModuleCard({ module, onNavigate }) {
