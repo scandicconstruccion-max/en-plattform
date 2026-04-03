@@ -83,6 +83,7 @@ const navItems = [
   { id: 'avvik', label: 'Avvik', emoji: '⚠️' },
   { id: 'hms', label: 'HMS & Risiko', emoji: '🛡️' },
   { id: 'maskiner', label: 'Maskiner', emoji: '🚜' },
+  { id: 'varsler', label: 'Varsler', emoji: '🔔' },
   null,
   { id: 'tilbud', label: 'Tilbud', emoji: '📋' },
   { id: 'anbudsmodul', label: 'Anbudsmodul', emoji: '⚖️' },
@@ -101,7 +102,6 @@ const navItems = [
   { id: 'fdv', label: 'FDV', emoji: '🏛️' },
   { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
   { id: 'brukeradmin', label: 'Brukere', emoji: '👤' },
-  { id: 'varsler', label: 'Varsler', emoji: '🔔' },
 ]
 
 const moduleCards = [
@@ -132,7 +132,7 @@ const moduleCards = [
 const moduleSections = [
   {
     title: '🔹 GRUNNPAKKE',
-    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner'],
+    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner', 'varsler'],
     singleRow: true,
   },
   {
@@ -145,7 +145,7 @@ const moduleSections = [
   },
   {
     title: '⚙️ SALG & ADMIN',
-    modules: ['crm', 'minbedrift', 'brukeradmin', 'varsler'],
+    modules: ['crm', 'minbedrift', 'brukeradmin'],
   },
   {
     title: '📸 DOKUMENTASJON & OVERLEVERING',
@@ -1987,6 +1987,10 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         created_by: user?.id,
       })
       if (error) throw error
+      // Varsle prosjektleder om nytt avvik
+      if (form.project_id) {
+        await notifyProjectManager(form.project_id, `Nytt avvik registrert: ${form.title.trim()}`, `Alvorlighet: ${form.severity||'–'}${form.location ? ' · Sted: '+form.location : ''}`, 'warning', 'avvik')
+      }
       onSaved()
     } catch (e) { alert('Feil: ' + e.message) }
     finally { setUploading(false) }
@@ -2721,6 +2725,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
       const payload = { title:title.trim(), project_id:projectId, type:'sja', status:initial?.status||'Utkast', data:{ dato,sted,ansvarlig,arbeidsBeskrivelse,utstyr,nodNummer,operasjoner,deltakere }, updated_at:new Date().toISOString() }
       if (isEdit) { const {error} = await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error} = await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      if (!isEdit && payload.project_id) { await notifyProjectManager(payload.project_id, `Nytt HMS-dokument: ${payload.title}`, `Type: ${payload.type?.toUpperCase()||'HMS'} · Opprettet av ansatt`, 'info', 'hms') }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -2879,6 +2884,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
       const payload = { title:title.trim(), project_id:projectId, type:'ruh', status:initial?.status||'Utkast', data:form, updated_at:new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      if (!isEdit && payload.project_id) { await notifyProjectManager(payload.project_id, `Nytt HMS-dokument: ${payload.title}`, `Type: ${payload.type?.toUpperCase()||'HMS'} · Opprettet av ansatt`, 'info', 'hms') }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -2968,6 +2974,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
       const payload = { title:title.trim(), project_id:projectId, type:'risiko', status:initial?.status||'Utkast', data:{...form,risikoer}, updated_at:new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      if (!isEdit && payload.project_id) { await notifyProjectManager(payload.project_id, `Nytt HMS-dokument: ${payload.title}`, `Type: ${payload.type?.toUpperCase()||'HMS'} · Opprettet av ansatt`, 'info', 'hms') }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -3092,6 +3099,7 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
       const payload = { title:title.trim(), project_id:projectId, type:'mottakskontroll', status:initial?.status||'Utkast', data:{...form,varer,kontrollpunkter:kp}, updated_at:new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      if (!isEdit && payload.project_id) { await notifyProjectManager(payload.project_id, `Nytt HMS-dokument: ${payload.title}`, `Type: ${payload.type?.toUpperCase()||'HMS'} · Opprettet av ansatt`, 'info', 'hms') }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -3206,6 +3214,7 @@ function HandbokModal({ projects, user, initial, onClose, onSaved }) {
       const payload = { title:title.trim(), project_id:projectId, type:'handbok', status:initial?.status||'Utkast', data:{...form,seksjoner}, updated_at:new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
+      if (!isEdit && payload.project_id) { await notifyProjectManager(payload.project_id, `Nytt HMS-dokument: ${payload.title}`, `Type: ${payload.type?.toUpperCase()||'HMS'} · Opprettet av ansatt`, 'info', 'hms') }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -3852,6 +3861,20 @@ function NotifProvider({ children }) {
 }
 
 const useNotif = () => React.useContext(NotifContext)
+
+// Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
+async function notifyProjectManager(projectId, title, message, type, linkPage) {
+  if (!projectId) return
+  try {
+    const { data: project } = await supabase.from('projects').select('project_manager_email, project_manager_name').eq('id', projectId).single()
+    if (!project?.project_manager_email) return
+    // Finn bruker-id basert på e-post
+    const { data: users } = await supabase.from('employees').select('user_id').eq('email', project.project_manager_email).limit(1)
+    const userId = users?.[0]?.user_id
+    if (!userId) return
+    await supabase.from('notifications').insert({ user_id: userId, title, message, type: type||'info', link_page: linkPage||null })
+  } catch(e) { console.error('notifyProjectManager error:', e) }
+}
 
 function NotifBell({ onNavigate }) {
   const { notifs, unread, markRead, markAllRead } = useNotif()
@@ -8192,6 +8215,21 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
     setSubmitting(true)
     try {
       await supabase.from('timesheets').update({ status:'Innlevert', submitted_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id',sheet.id)
+      // Varsle den ansatte om bekreftelse
+      if (user?.id) {
+        await supabase.from('notifications').insert({ user_id:user.id, title:`Timeliste innlevert – uke ${week}`, message:`Din timeliste for uke ${week}, ${year} er innlevert og venter på godkjenning.`, type:'info', link_page:'timelister' })
+      }
+      // Varsle brukere med admin-rolle om ny timeliste til godkjenning
+      const { data: admins } = await supabase.from('user_roles').select('user_id').eq('role','admin')
+      if (admins?.length) {
+        const emp = await supabase.from('employees').select('first_name,last_name').eq('id',employeeId).single()
+        const empName = emp?.data ? `${emp.data.first_name||''} ${emp.data.last_name||''}`.trim() : 'En ansatt'
+        for (const a of admins) {
+          if (a.user_id !== user?.id) {
+            await supabase.from('notifications').insert({ user_id:a.user_id, title:`Ny timeliste til godkjenning`, message:`${empName} har levert inn timeliste for uke ${week}, ${year}.`, type:'info', link_page:'timelister' })
+          }
+        }
+      }
       onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSubmitting(false) }
@@ -8648,6 +8686,7 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
     setProcessing(true)
     try {
       await supabase.from('timesheets').update({ status:'Godkjent', approved_at:new Date().toISOString(), approved_by:user?.id, updated_at:new Date().toISOString() }).eq('id',ts.id)
+      if (ts.created_by) { await supabase.from('notifications').insert({ user_id:ts.created_by, title:`Timeliste godkjent – uke ${ts.week_number}`, message:`Din timeliste for uke ${ts.week_number}, ${ts.year} er godkjent.`, type:'success', link_page:'timelister' }) }
       setSelected(null)
       onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
@@ -8659,6 +8698,7 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
     setProcessing(true)
     try {
       await supabase.from('timesheets').update({ status:'Avvist', reject_comment:rejectComment.trim(), updated_at:new Date().toISOString() }).eq('id',ts.id)
+      if (ts.created_by) { await supabase.from('notifications').insert({ user_id:ts.created_by, title:`Timeliste avvist – uke ${ts.week_number}`, message:`Din timeliste for uke ${ts.week_number}, ${ts.year} ble avvist.${rejectComment.trim() ? ' Kommentar: '+rejectComment.trim() : ''}`, type:'warning', link_page:'timelister' }) }
       setRejectComment(''); setSelected(null)
       onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
