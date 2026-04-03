@@ -75,34 +75,58 @@ function Login() {
   )
 }
 
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', emoji: '🏠' },
-  { id: 'prosjekter', label: 'Prosjekter', emoji: '🏗️' },
-  { id: 'prosjektfiler', label: 'Prosjektfiler', emoji: '📁' },
-  { id: 'sjekklister', label: 'Sjekklister', emoji: '✅' },
-  { id: 'avvik', label: 'Avvik', emoji: '⚠️' },
-  { id: 'hms', label: 'HMS & Risiko', emoji: '🛡️' },
-  { id: 'maskiner', label: 'Maskiner', emoji: '🚜' },
-  { id: 'varsler', label: 'Varsler', emoji: '🔔' },
-  null,
-  { id: 'tilbud', label: 'Tilbud', emoji: '📋' },
-  { id: 'anbudsmodul', label: 'Anbudsmodul', emoji: '⚖️' },
-  { id: 'ordre', label: 'Ordre', emoji: '📝' },
-  { id: 'faktura', label: 'Faktura', emoji: '🧾' },
-  null,
-  { id: 'ansatte', label: 'Ansatte', emoji: '👷' },
-  { id: 'timelister', label: 'Timelister', emoji: '⏱️' },
-  { id: 'ressursplan', label: 'Ressursplan', emoji: '📅' },
-  { id: 'kalender', label: 'Kalender', emoji: '📆' },
-  { id: 'chat', label: 'Intern Chat', emoji: '💬' },
-  null,
-  { id: 'crm', label: 'CRM', emoji: '📊' },
-  { id: 'befaring', label: 'Befaring', emoji: '🔍' },
-  { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
-  { id: 'fdv', label: 'FDV', emoji: '🏛️' },
-  { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
-  { id: 'brukeradmin', label: 'Brukere', emoji: '👤' },
+const navGroups = [
+  {
+    title: 'GRUNNMODUL',
+    items: [
+      { id: 'dashboard',    label: 'Dashboard',    emoji: '🏠' },
+      { id: 'prosjekter',   label: 'Prosjekter',   emoji: '🏗️' },
+      { id: 'prosjektfiler',label: 'Prosjektfiler',emoji: '📁' },
+      { id: 'sjekklister',  label: 'Sjekklister',  emoji: '✅' },
+      { id: 'avvik',        label: 'Avvik',         emoji: '⚠️' },
+      { id: 'hms',          label: 'HMS & Risiko',  emoji: '🛡️' },
+      { id: 'maskiner',     label: 'Maskiner',      emoji: '🚜' },
+      { id: 'varsler',      label: 'Varsler',       emoji: '🔔' },
+    ]
+  },
+  {
+    title: 'ØKONOMI & KONTRAKT',
+    items: [
+      { id: 'tilbud',      label: 'Tilbud',       emoji: '📋' },
+      { id: 'anbudsmodul', label: 'Anbudsmodul',  emoji: '⚖️' },
+      { id: 'ordre',       label: 'Ordre',         emoji: '📝' },
+      { id: 'faktura',     label: 'Faktura',       emoji: '🧾' },
+    ]
+  },
+  {
+    title: 'PERSONELL & RESSURSER',
+    items: [
+      { id: 'ansatte',     label: 'Ansatte',      emoji: '👷' },
+      { id: 'timelister',  label: 'Timelister',   emoji: '⏱️' },
+      { id: 'ressursplan', label: 'Ressursplan',  emoji: '📅' },
+      { id: 'kalender',    label: 'Kalender',     emoji: '📆' },
+      { id: 'chat',        label: 'Intern Chat',  emoji: '💬' },
+    ]
+  },
+  {
+    title: 'SALG & ADMIN',
+    items: [
+      { id: 'crm',        label: 'CRM',         emoji: '📊' },
+      { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
+      { id: 'brukeradmin',label: 'Brukere',     emoji: '👤' },
+    ]
+  },
+  {
+    title: 'DOKUMENTASJON & OVERLEVERING',
+    items: [
+      { id: 'befaring', label: 'Befaring', emoji: '🔍' },
+      { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
+      { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
+    ]
+  },
 ]
+// Flat list for backwards compatibility
+const navItems = navGroups.flatMap(g => g.items)
 
 const moduleCards = [
   { id: 'prosjekter', name: 'Prosjekter', desc: 'Administrer prosjekter', emoji: '🏗️', color: '#ecfdf5' },
@@ -14592,17 +14616,26 @@ function AppContent() {
           {collapsed ? '›' : '‹'}
         </button>
         <nav style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-          {navItems.map((item, i) => {
-            if (!item) return <div key={i} style={{ height: '1px', background: '#f1f5f9', margin: '8px 0' }} />
-            const isActive = activePage === item.id
-            return (
-              <button key={item.id} onClick={() => navigate(item.id)} title={collapsed ? item.label : undefined}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '10px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '2px' }}>
-                <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
-                {!collapsed && item.label}
-              </button>
-            )
-          })}
+          {navGroups.map((group, gi) => (
+            <div key={gi} style={{ marginBottom: '4px' }}>
+              {!collapsed && (
+                <div style={{ padding: '10px 12px 4px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.08em', userSelect: 'none' }}>
+                  {group.title}
+                </div>
+              )}
+              {collapsed && gi > 0 && <div style={{ height: '1px', background: '#f1f5f9', margin: '6px 0' }} />}
+              {group.items.map(item => {
+                const isActive = activePage === item.id
+                return (
+                  <button key={item.id} onClick={() => navigate(item.id)} title={collapsed ? item.label : undefined}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px' }}>
+                    <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
+                    {!collapsed && item.label}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
         </nav>
         <div style={{ padding: '12px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
           {!collapsed ? (
