@@ -882,14 +882,13 @@ function ProsjektfilerPage() {
   )
 
   const countForCat = (catId) => {
-    const active = projectFiles.filter(f => f.category === catId && f.archived !== true)
-    // Count unique documents (by document_group or id)
+    const active = projectFiles.filter(f => f.category === catId && !f.archived)
     const unique = new Set(active.map(f => f.document_group || f.id))
     return unique.size
   }
 
   const countForSub = (catId, sub) => {
-    const active = projectFiles.filter(f => f.category === catId && f.sub_folder === sub && f.archived !== true)
+    const active = projectFiles.filter(f => f.category === catId && f.sub_folder === sub && !f.archived)
     const unique = new Set(active.map(f => f.document_group || f.id))
     return unique.size
   }
@@ -904,12 +903,13 @@ function ProsjektfilerPage() {
     })
   }, [projectFiles, selectedCategory, selectedSub, search])
 
+  // archived can be true, false, or null — treat anything truthy as archived
   const activePanelFiles = React.useMemo(() =>
-    allPanelFiles.filter(f => f.archived !== true),
+    allPanelFiles.filter(f => !f.archived),
     [allPanelFiles]
   )
   const archivedPanelFiles = React.useMemo(() =>
-    allPanelFiles.filter(f => f.archived === true),
+    allPanelFiles.filter(f => !!f.archived),
     [allPanelFiles]
   )
 
