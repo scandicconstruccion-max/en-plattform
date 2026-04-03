@@ -957,36 +957,40 @@ function ProsjektfilerPage() {
     if (!file) return
     setUploading(true)
     try {
-      // Find all revisions of this document
       const docGroup = baseFile.document_group || baseFile.id
       const allRevisions = files.filter(f => (f.document_group || f.id) === docGroup)
       const newLabel = nextRevision(allRevisions)
-      // Archive the current active revision
-      await supabase.from('project_files').update({ archived: true }).eq('id', baseFile.id)
-      // Upload new revision
+
+      // 1. Arkiver gammel revisjon
+      const { error: archErr } = await supabase.from('project_files')
+        .update({ archived: true, document_group: docGroup })
+        .eq('id', baseFile.id)
+      if (archErr) { alert('Kunne ikke arkivere gammel revisjon: ' + archErr.message); return }
+
+      // 2. Last opp ny fil til storage
       const ext = file.name.split('.').pop()
       const path = `projects/${baseFile.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
-      if (upErr) throw upErr
-      await supabase.from('project_files').insert({
-        name: baseFile.name, // Keep original document name
+      if (upErr) { alert('Feil ved filopplasting: ' + upErr.message); return }
+
+      // 3. Lagre ny revisjon i database
+      const { error: insErr } = await supabase.from('project_files').insert({
+        name: baseFile.name,
         project_id: baseFile.project_id,
         file_url: path,
         file_type: ext,
         file_size: file.size,
         category: baseFile.category,
-        sub_folder: baseFile.sub_folder,
-        description: baseFile.description,
-        access_level: baseFile.access_level,
+        sub_folder: baseFile.sub_folder || null,
+        description: baseFile.description || null,
+        access_level: baseFile.access_level || 'alle',
         uploaded_by: user?.id,
         revision_label: newLabel,
         document_group: docGroup,
         archived: false,
       })
-      // Also update all old revisions to use this document_group
-      if (!baseFile.document_group) {
-        await supabase.from('project_files').update({ document_group: docGroup }).eq('id', baseFile.id)
-      }
+      if (insErr) { alert('Feil ved lagring av ny revisjon: ' + insErr.message); return }
+
       loadData()
     } catch(e) { alert('Feil ved revisjon: ' + e.message) }
     finally { setUploading(false); e.target.value = '' }
@@ -1007,10 +1011,11 @@ function ProsjektfilerPage() {
     try {
       // Slett fra storage (ignorer feil hvis filen ikke finnes)
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
-      // Slett alltid fra database
+      // Slett fra database
       const { error } = await supabase.from('project_files').delete().eq('id', file.id)
-      if (error) throw error
-      loadData()
+      if (error) { alert('Feil ved sletting: ' + error.message); return }
+      // Oppdater lokal state umiddelbart uten å vente på loadData
+      setFiles(prev => prev.filter(f => f.id !== file.id))
     } catch(e) { alert('Feil ved sletting: ' + e.message) }
   }
 
