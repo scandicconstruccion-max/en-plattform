@@ -842,6 +842,7 @@ function nextRevision(existingRevisions) {
 }
 
 function ProsjektfilerPage() {
+  const confirm = useConfirm()
   const [files, setFiles] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1003,7 +1004,6 @@ function ProsjektfilerPage() {
   }
 
   const handleDelete = async (file) => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: `Slett ${file.name}?`, subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
     try {
       await supabase.storage.from('plattform-files').remove([file.file_url])
@@ -1390,6 +1390,7 @@ const CATEGORY_LABELS = {
 
 // ─── SJEKKLISTER PAGE ─────────────────────────────────────────────────────
 function SjekklistePage({ onNavigateDetail }) {
+  const confirm = useConfirm()
   const [checklists, setChecklists] = useState([])
   const [projects, setProjects] = useState([])
   const [templates, setTemplates] = useState([])
@@ -1477,14 +1478,12 @@ function SjekklistePage({ onNavigateDetail }) {
   }
 
   const handleDeleteChecklist = async (id) => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett sjekkliste?', subMessage: 'Sjekklisten og alle svar slettes permanent.', danger: true }))) return
     await supabase.from('checklists').delete().eq('id', id)
     loadData()
   }
 
   const handleDeleteTemplate = async (id) => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett mal?', subMessage: 'Malen slettes permanent.', danger: true }))) return
     await supabase.from('checklist_templates').delete().eq('id', id)
     loadData()
@@ -2309,6 +2308,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
 }
 
 function AvvikDetaljer({ deviation, projects, onBack, user }) {
+  const confirm = useConfirm()
   const [dev, setDev] = useState(deviation)
   const [showClose, setShowClose] = useState(false)
   const [closeComment, setCloseComment] = useState('')
@@ -2347,7 +2347,6 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett dette avviket?', subMessage: 'Avviket og all tilknyttet informasjon slettes permanent.', danger: true }))) return
     await supabase.from('deviations').delete().eq('id', dev.id)
     onBack()
@@ -2815,6 +2814,7 @@ function HmsPage() {
 }
 
 function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [rec, setRec] = useState(initialRecord)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -2832,7 +2832,6 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett dette skjemaet?', subMessage: 'HMS-skjemaet slettes permanent.', danger: true }))) return
     await supabase.from('hms_records').delete().eq('id', rec.id)
     onBack()
@@ -3734,6 +3733,7 @@ function MaskinPage() {
 }
 
 function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [m, setM] = useState(init)
   const [logs, setLogs] = useState([])
   const [editing, setEditing] = useState(false)
@@ -3752,7 +3752,6 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
   useEffect(() => { loadLogs() }, [])
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne maskinen?', subMessage: 'Maskinen og all tilhørende logg slettes permanent.', danger: true }))) return
     await supabase.from('machines').delete().eq('id', m.id)
     onBack()
@@ -4338,6 +4337,7 @@ function TilbudPage() {
 }
 
 function TilbudDetaljer({ quote: init, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [q, setQ] = useState(init)
   const [editing, setEditing] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -4352,7 +4352,6 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett dette tilbudet?', subMessage: 'Tilbudet og alle tilhørende linjer slettes permanent.', danger: true }))) return
     await supabase.from('quotes').delete().eq('id', q.id)
     onBack()
@@ -5247,6 +5246,7 @@ function AnbudsPage() {
 }
 
 function AnbudDetaljer({ tender: init, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [t, setT] = useState(init)
   const [ues, setUes] = useState([])
   const [editing, setEditing] = useState(false)
@@ -5273,14 +5273,12 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett dette anbudet?', subMessage: 'Anbudet og alle tilhørende data slettes permanent.', danger: true }))) return
     await supabase.from('tenders').delete().eq('id', t.id)
     onBack()
   }
 
   const generateQuote = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Generer tilbud fra dette anbudet?', subMessage: 'Kapitlene og postene kopieres over til et nytt tilbud.', confirmLabel: 'Generer tilbud', danger: false }))) return
     try {
       const { data, error } = await supabase.from('quotes').insert({
@@ -6016,6 +6014,7 @@ function OrdrePage() {
 }
 
 function OrdreDetaljer({ order: init, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [o, setO] = useState(init)
   const [changes, setChanges] = useState([])
   const [editing, setEditing] = useState(false)
@@ -6045,7 +6044,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne ordren?', subMessage: 'Ordren og alle endringsmeldinger slettes permanent.', danger: true }))) return
     await supabase.from('orders').delete().eq('id',o.id)
     onBack()
@@ -6755,6 +6753,7 @@ function FakturaPage() {
 }
 
 function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
+  const confirm = useConfirm()
   const [inv, setInv] = useState(init)
   const [editing, setEditing] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -6774,14 +6773,12 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne fakturaen?', subMessage: 'Fakturaen slettes permanent.', danger: true }))) return
     await supabase.from('invoices').delete().eq('id',inv.id)
     onBack()
   }
 
   const sendPurring = async () => {
-    const confirm = useConfirm()
     if (!inv.customer_email) return alert('Ingen e-postadresse på fakturaen')
     if (!(await confirm({ message: `Send purring til ${inv.customer_email}?`, subMessage: 'Kunden mottar en purring på e-post.', confirmLabel: 'Send purring', danger: false }))) return
     try {
@@ -7664,6 +7661,7 @@ function AnsattePage() {
 }
 
 function AnsattDetaljer({ employee: init, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [emp, setEmp] = useState(init)
   const [certs, setCerts] = useState([])
   const [empProjects, setEmpProjects] = useState([])
@@ -7696,14 +7694,12 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne ansatte?', subMessage: 'Den ansatte og all historikk slettes permanent. Dette kan ikke angres.', danger: true }))) return
     await supabase.from('employees').delete().eq('id',emp.id)
     onBack()
   }
 
   const deleteCert = async (id) => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett sertifikat?', subMessage: 'Sertifikatet slettes permanent.', danger: true }))) return
     await supabase.from('employee_certifications').delete().eq('id',id)
     loadDetails()
@@ -8471,6 +8467,7 @@ function TimelistePage() {
 
 // ── WEEK SHEET – mobile-first weekly overview ─────────────────────────────────
 function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRefresh }) {
+  const confirm = useConfirm()
   const weekDates = getWeekDates(week, year)
   const entries = sheet?.timesheet_entries || []
   const [submitting, setSubmitting] = useState(false)
@@ -8481,7 +8478,6 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
   const totalExpenses = entries.reduce((acc,e)=>acc+(parseFloat(e.expenses)||0), 0)
 
   const handleSubmit = async () => {
-    const confirm = useConfirm()
     if (!sheet) return alert('Ingen timeliste å levere inn. Registrer timer først.')
     if (!(await confirm({ message: `Lever inn timelisten for uke ${week}?`, subMessage: 'Timelisten sendes til godkjenning og kan ikke redigeres uten å bli returnert.', confirmLabel: 'Lever inn', danger: false }))) return
     setSubmitting(true)
@@ -9743,6 +9739,7 @@ function RessursPage() {
 }
 
 function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
+  const confirm = useConfirm()
   const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title||'',
@@ -9767,7 +9764,6 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne milepælen?', subMessage: 'Milepælen slettes permanent.', danger: true }))) return
     await supabase.from('calendar_events').delete().eq('id',initial.id)
     onSaved()
@@ -9826,6 +9822,7 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
 }
 
 function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30' }) {
+  const confirm = useConfirm()
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
   const [startTime, setStartTime] = useState(editPlan?.start_time||defaultStartTime)
@@ -9942,7 +9939,6 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!editPlan) return
     if (!(await confirm({ message: 'Slett denne bookingen?', subMessage: 'Bookingen slettes permanent.', danger: true }))) return
     // Remove linked machine plans
@@ -10912,12 +10908,12 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
 
 // ── EVENT DETAIL MODAL ────────────────────────────────────────────────────────
 function EventDetailModal({ event, projects, employees, attendees, user, onClose, onEdit, onDeleted }) {
+  const confirm = useConfirm()
   const cfg = EVENT_TYPES[event.type]||EVENT_TYPES.other
   const proj = projects.find(p=>p.id===event.project_id)
   const col = event.color||cfg.color
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne hendelsen?', subMessage: 'Kalenderhendelsen slettes permanent.', danger: true }))) return
     await supabase.from('calendar_events').delete().eq('id',event.id)
     onDeleted()
@@ -11943,6 +11939,7 @@ function CRMPage() {
 }
 
 function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
+  const confirm = useConfirm()
   const [c, setC] = useState(init)
   const [cts, setCts] = useState(contacts)
   const [acts, setActs] = useState(activities)
@@ -11973,7 +11970,6 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne kunden?', subMessage: 'Kunden og all historikk, aktiviteter og dokumenter slettes permanent.', danger: true }))) return
     await supabase.from('crm_customers').delete().eq('id',c.id)
     onBack()
@@ -11993,7 +11989,6 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   }
 
   const deleteDoc = async (id) => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett dokument?', subMessage: 'Dokumentet slettes permanent.', danger: true }))) return
     await supabase.from('crm_documents').delete().eq('id',id)
     loadDetails()
@@ -12596,6 +12591,7 @@ function BefaringPage() {
 }
 
 function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
+  const confirm = useConfirm()
   const [ins, setIns] = useState(init)
   const [items, setItems] = useState(init.inspection_items||[])
   const [followups, setFollowups] = useState(init.inspection_followups||[])
@@ -12667,7 +12663,6 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne befaringen?', subMessage: 'Befaringen og alle bilder slettes permanent.', danger: true }))) return
     await supabase.from('inspections').delete().eq('id',ins.id)
     onBack()
@@ -13532,6 +13527,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
 }
 
 function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefresh }) {
+  const confirm = useConfirm()
   const [editing, setEditing] = useState(false)
   const [showUploadDoc, setShowUploadDoc] = useState(false)
   const proj = projects.find(p=>p.id===comp.project_id)
@@ -13539,7 +13535,6 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
   const overdue = comp.next_service_date&&comp.next_service_date<today
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett denne komponenten?', subMessage: 'Komponenten og tilhørende dokumenter slettes permanent.', danger: true }))) return
     await supabase.from('fdv_components').delete().eq('id',comp.id)
     onClose()
@@ -14316,6 +14311,7 @@ function BrukeradminPage() {
 
 // ── USER DETAIL PAGE ─────────────────────────────────────────────────────────
 function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }) {
+  const confirm = useConfirm()
   const [u, setU] = useState(init)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState('profil')
@@ -14343,14 +14339,12 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
   const removeAllModules = () => save({ module_access: [] })
 
   const handleDeactivate = async () => {
-    const confirm = useConfirm()
     if (isCurrentUser) return alert('Du kan ikke deaktivere din egen bruker.')
     if (!(await confirm({ message: `${u.status==='aktiv'?'Deaktiver':'Aktiver'} bruker?`, subMessage: `${u.full_name||u.email} vil bli ${u.status==='aktiv'?'deaktivert':'aktivert'}.`, confirmLabel: u.status==='aktiv'?'Deaktiver':'Aktiver', danger: u.status==='aktiv' }))) return
     await save({ status: u.status==='aktiv'?'inaktiv':'aktiv' })
   }
 
   const handleDelete = async () => {
-    const confirm = useConfirm()
     if (isCurrentUser) return alert('Du kan ikke slette din egen bruker.')
     if (isSuperAdmin) return alert('Superadmin kan ikke slettes.')
     if (!(await confirm({ message: `Slett ${u.full_name||u.email}?`, subMessage: 'Brukeren slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
@@ -14680,6 +14674,7 @@ function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
 // ─── VARSLER PAGE ─────────────────────────────────────────────────────────────
 
 function VarslerPage() {
+  const confirm = useConfirm()
   const { notifs, unread, markRead, markAllRead, load } = useNotif()
   const [filter, setFilter] = useState('alle')
   const { user } = useAuth()
@@ -14700,7 +14695,6 @@ function VarslerPage() {
   }
 
   const deleteAll = async () => {
-    const confirm = useConfirm()
     if (!(await confirm({ message: 'Slett alle varsler?', subMessage: 'Alle varsler slettes permanent.', danger: true }))) return
     await supabase.from('notifications').delete().eq('user_id', user?.id)
     load()
