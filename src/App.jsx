@@ -1025,11 +1025,17 @@ function ProsjektfilerPage() {
 
   // handleDelete called by FileRow AFTER confirmation
   const handleDelete = async (file) => {
+    // confirm() is called here in ProsjektfilerPage where useConfirm() is guaranteed to work
+    const ok = await confirm({
+      message: `Slett ${file.name}?`,
+      subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.',
+      danger: true
+    })
+    if (!ok) return
     try {
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
       const { error } = await supabase.from('project_files').delete().eq('id', file.id)
       if (error) throw error
-      // Reload from server — single source of truth
       await loadData()
     } catch(e) { alert('Feil ved sletting: ' + e.message) }
   }
@@ -1283,21 +1289,10 @@ function ProsjektfilerPage() {
 }
 
 function FileRow({ file, isCurrent, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
-  const confirm = useConfirm()
   const isArchived = file.archived === true
   const revBg    = isArchived ? '#fef2f2' : '#f0fdf4'
   const revColor = isArchived ? '#dc2626' : '#059669'
   const revBorder= isArchived ? '#fecaca' : '#bbf7d0'
-
-  const handleDeleteClick = async () => {
-    const ok = await confirm({
-      message: `Slett ${file.name}?`,
-      subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.',
-      danger: true
-    })
-    if (!ok) return
-    await onDelete(file)
-  }
 
   return (
     <div style={{ background: isArchived ? '#fef9f9' : 'white', borderRadius: '12px',
@@ -1342,7 +1337,7 @@ function FileRow({ file, isCurrent, catBg, catColor, supportsRevision, onDownloa
         )}
         <button onClick={() => onDownload(file)} title="Last ned"
           style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
-        <button onClick={handleDeleteClick} title="Slett"
+        <button onClick={() => onDelete(file)} title="Slett"
           style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
       </div>
     </div>
@@ -4124,43 +4119,52 @@ function NotifProvider({ children }) {
 const useNotif = () => React.useContext(NotifContext)
 
 // ─── GLOBAL CONFIRM DIALOG ────────────────────────────────────────────────────
-const ConfirmContext = React.createContext({ confirm: () => Promise.resolve(false) })
+const ConfirmContext = React.createContext(null)
 
 function ConfirmProvider({ children }) {
-  const [state, setState] = React.useState(null)
-  const resolveRef = React.useRef(null)
+  // Keep ALL state in a single ref to avoid stale closure issues
+  const [dialog, setDialog] = React.useState(null)
+  // dialog = { message, subMessage, confirmLabel, danger } | null
+  const cbRef = React.useRef(null) // holds { resolve }
 
-  const confirm = React.useCallback((opts) => new Promise(resolve => {
+  // confirm() opens the dialog and returns a Promise
+  const confirm = React.useCallback((opts) => {
     const options = typeof opts === 'string' ? { message: opts } : opts
-    resolveRef.current = resolve
-    setState(options)
-  }), [])
+    return new Promise((resolve) => {
+      cbRef.current = resolve
+      setDialog(options)
+    })
+  }, [])
 
-  const handleConfirm = () => { resolveRef.current?.(true);  resolveRef.current = null; setState(null) }
-  const handleCancel  = () => { resolveRef.current?.(false); resolveRef.current = null; setState(null) }
+  const respond = (value) => {
+    setDialog(null)
+    const cb = cbRef.current
+    cbRef.current = null
+    if (cb) cb(value)
+  }
 
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <ConfirmContext.Provider value={confirm}>
       {children}
-      {state && (
+      {dialog && (
         <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={handleCancel} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => respond(false)} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'24px 24px 0' }}>
-              <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: state.danger ? '#fef2f2' : '#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
-                {state.danger ? '⚠️' : '❓'}
+              <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: dialog.danger ? '#fef2f2' : '#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
+                {dialog.danger ? '⚠️' : '❓'}
               </div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{state.message}</h3>
-              {state.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{state.subMessage}</p>}
+              <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{dialog.message}</h3>
+              {dialog.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{dialog.subMessage}</p>}
             </div>
             <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end' }}>
-              <button onClick={handleCancel}
+              <button onClick={() => respond(false)}
                 style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
                 Avbryt
               </button>
-              <button onClick={handleConfirm}
-                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: state.danger ? '#dc2626' : '#059669' }}>
-                {state.confirmLabel || (state.danger ? 'Slett' : 'Bekreft')}
+              <button onClick={() => respond(true)}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: dialog.danger ? '#dc2626' : '#059669' }}>
+                {dialog.confirmLabel || (dialog.danger ? 'Slett' : 'Bekreft')}
               </button>
             </div>
           </div>
@@ -4170,7 +4174,7 @@ function ConfirmProvider({ children }) {
   )
 }
 
-const useConfirm = () => React.useContext(ConfirmContext).confirm
+const useConfirm = () => React.useContext(ConfirmContext)
 // ─── END CONFIRM DIALOG ───────────────────────────────────────────────────────
 
 // Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
