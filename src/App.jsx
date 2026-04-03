@@ -6313,20 +6313,6 @@ function FakturaPage() {
   }
   useEffect(()=>{ load() },[])
 
-  // Auto-scroll to today column when in month view
-  useEffect(()=>{
-    if (viewMode==='maned') {
-      setTimeout(()=>{
-        const todayEl = document.getElementById('ressurs-today-col')
-        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
-        else {
-          const grid = document.getElementById('ressurs-grid-scroll')
-          if (grid) grid.scrollLeft = 0
-        }
-      }, 100)
-    }
-  }, [viewMode, currentDate])
-
   const filtered = invoices.filter(i => {
     if (filterStatus!=='alle'&&i.status!==filterStatus) return false
     if (search&&![i.title,i.invoice_number,i.customer_name].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
