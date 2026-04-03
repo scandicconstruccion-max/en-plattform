@@ -806,14 +806,15 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
 
 // ─── PROSJEKTFILER PAGE ───────────────────────────────────────────────────
 const FILE_CATEGORIES = [
-  { id: 'tegninger', name: 'Tegninger / Planer', emoji: '📐', color: '#3b82f6' },
-  { id: 'beskrivelser', name: 'Beskrivelser / Spesifikasjoner', emoji: '📄', color: '#10b981' },
-  { id: 'kontrakt', name: 'Kontrakt / Avtaler', emoji: '📋', color: '#f59e0b' },
-  { id: 'okonomi', name: 'Økonomi', emoji: '💰', color: '#ef4444' },
-  { id: 'motereferater', name: 'Møtereferater', emoji: '📝', color: '#8b5cf6' },
-  { id: 'tillatelser', name: 'Tillatelser / Sertifikater', emoji: '🏅', color: '#06b6d4' },
-  { id: 'bilder', name: 'Bilder', emoji: '🖼️', color: '#ec4899' },
-  { id: 'annet', name: 'Annet', emoji: '📎', color: '#6b7280' },
+  { id: 'tegninger',    name: 'Tegninger / Planer',             emoji: '📐', color: '#3b82f6', bg: '#eff6ff',
+    sub: ['Arkitekttegninger', 'Konstruksjonstegninger', 'Elektrisk / VVS'] },
+  { id: 'beskrivelser', name: 'Beskrivelser / Spesifikasjoner', emoji: '📄', color: '#10b981', bg: '#f0fdf4', sub: [] },
+  { id: 'kontrakt',     name: 'Kontrakt / Avtaler',             emoji: '📋', color: '#f59e0b', bg: '#fffbeb', sub: [] },
+  { id: 'okonomi',      name: 'Økonomi',                        emoji: '💰', color: '#ef4444', bg: '#fef2f2', sub: [] },
+  { id: 'motereferater',name: 'Møtereferater / Kommunikasjon',  emoji: '📝', color: '#8b5cf6', bg: '#f5f3ff', sub: [] },
+  { id: 'tillatelser',  name: 'Tillatelser / Sertifikater',     emoji: '🏅', color: '#06b6d4', bg: '#ecfeff', sub: [] },
+  { id: 'bilder',       name: 'Bilder',                         emoji: '🖼️', color: '#ec4899', bg: '#fdf2f8', sub: [] },
+  { id: 'annet',        name: 'Annet',                          emoji: '📎', color: '#6b7280', bg: '#f8fafc', sub: [] },
 ]
 
 const formatFileSize = (bytes) => {
@@ -839,16 +840,15 @@ function ProsjektfilerPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
-  const [projectFilter, setProjectFilter] = useState('all')
-  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [selectedProject, setSelectedProject] = useState('all')
+  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [selectedSub, setSelectedSub] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
-  const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', description: '', access_level: 'alle' })
+  const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
   const [uploadFiles, setUploadFiles] = useState([])
-  const [dragOver, setDragOver] = useState(false)
+  const [expandedCats, setExpandedCats] = useState({ tegninger: true })
   const { user } = useAuth()
   const fileInputRef = React.useRef()
-  const f = { fontFamily: 'system-ui, sans-serif' }
-  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
 
   const loadData = async () => {
@@ -865,17 +865,21 @@ function ProsjektfilerPage() {
 
   useEffect(() => { loadData() }, [])
 
-  const filtered = files.filter(f => {
-    const ms = !search || f.name?.toLowerCase().includes(search.toLowerCase()) || f.description?.toLowerCase().includes(search.toLowerCase())
-    const mp = projectFilter === 'all' || f.project_id === projectFilter
-    const mc = categoryFilter === 'all' || f.category === categoryFilter
-    return ms && mp && mc
-  })
+  // Files filtered by project
+  const projectFiles = files.filter(f => selectedProject === 'all' || f.project_id === selectedProject)
 
-  const grouped = FILE_CATEGORIES.map(cat => ({
-    ...cat,
-    files: filtered.filter(f => f.category === cat.id)
-  })).filter(cat => cat.files.length > 0)
+  // Count files per category (and sub)
+  const countForCat = (catId) => projectFiles.filter(f => f.category === catId).length
+  const countForSub = (catId, sub) => projectFiles.filter(f => f.category === catId && f.sub_folder === sub).length
+
+  // Files shown in right panel
+  const panelFiles = projectFiles.filter(f => {
+    if (!selectedCategory) return false
+    if (f.category !== selectedCategory) return false
+    if (selectedSub && f.sub_folder !== selectedSub) return false
+    if (search && !f.name?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
 
   const handleUpload = async (e) => {
     e.preventDefault()
@@ -895,6 +899,7 @@ function ProsjektfilerPage() {
           file_type: ext,
           file_size: file.size,
           category: uploadForm.category,
+          sub_folder: uploadForm.sub || null,
           description: uploadForm.description,
           access_level: uploadForm.access_level,
           uploaded_by: user?.id,
@@ -902,7 +907,7 @@ function ProsjektfilerPage() {
       }
       setShowUpload(false)
       setUploadFiles([])
-      setUploadForm({ project_id: '', category: 'annet', description: '', access_level: 'alle' })
+      setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
       loadData()
     } catch(e) { alert('Feil ved opplasting: ' + e.message) }
     finally { setUploading(false) }
@@ -914,9 +919,7 @@ function ProsjektfilerPage() {
       if (error) throw error
       const url = URL.createObjectURL(data)
       const a = document.createElement('a')
-      a.href = url
-      a.download = file.name
-      a.click()
+      a.href = url; a.download = file.name; a.click()
       URL.revokeObjectURL(url)
     } catch(e) { alert('Feil ved nedlasting: ' + e.message) }
   }
@@ -927,127 +930,158 @@ function ProsjektfilerPage() {
       await supabase.storage.from('plattform-files').remove([file.file_url])
       await supabase.from('project_files').delete().eq('id', file.id)
       loadData()
-    } catch(e) { alert('Feil ved sletting: ' + e.message) }
+    } catch(e) { alert('Feil: ' + e.message) }
   }
 
-  const handleDrop = (e) => {
-    e.preventDefault()
-    setDragOver(false)
-    const dropped = Array.from(e.dataTransfer.files)
-    setUploadFiles(prev => [...prev, ...dropped])
-    setShowUpload(true)
-  }
+  const toggleCat = (catId) => setExpandedCats(p => ({ ...p, [catId]: !p[catId] }))
 
-  const getProjectName = (id) => projects.find(p => p.id === id)?.name || '–'
+  const selectedCat = FILE_CATEGORIES.find(c => c.id === selectedCategory)
 
   return (
-    <div style={f}>
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-            <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748b' }}>{files.length} filer totalt</p>
-          </div>
-          <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>⬆️ Last opp fil</button>
-        </div>
+    <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Header */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          ⬆️ Last opp fil
+        </button>
       </div>
 
-      <div style={{ padding: '24px 32px' }}>
-        {/* Filters */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>🔍</span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter fil..." style={{ ...inp, paddingLeft: '36px' }} />
-          </div>
-          <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '200px', background: 'white' }}>
-            <option value="all">Alle prosjekter</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ ...inp, width: '200px', background: 'white' }}>
-            <option value="all">Alle kategorier</option>
-            {FILE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
-          </select>
-        </div>
+      {/* Project selector */}
+      <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: '12px 32px' }}>
+        <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
+          style={{ padding: '8px 32px 8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: '#0f172a', appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%2394a3b8\' d=\'M6 8L1 3h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}>
+          <option value="all">Alle prosjekter</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
 
-        {/* Drop zone */}
-        <div
-          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          style={{ border: `2px dashed ${dragOver ? '#059669' : '#e2e8f0'}`, borderRadius: '16px', padding: '24px', textAlign: 'center', marginBottom: '24px', background: dragOver ? '#f0fdf4' : 'transparent', transition: 'all 0.2s', cursor: 'pointer' }}
-          onClick={() => { setShowUpload(true) }}
-        >
-          <p style={{ margin: 0, color: dragOver ? '#059669' : '#94a3b8', fontSize: '14px' }}>
-            {dragOver ? '📂 Slipp filene her!' : '📂 Dra og slipp filer her, eller klikk for å laste opp'}
-          </p>
-        </div>
+      {/* Two-panel layout */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* File list */}
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
-            <h3 style={{ color: '#0f172a', margin: '0 0 8px' }}>Ingen filer</h3>
-            <p style={{ color: '#64748b', margin: '0 0 20px' }}>{search ? 'Ingen filer matcher søket' : 'Last opp din første fil'}</p>
+        {/* LEFT PANEL — kategori-liste */}
+        <div style={{ width: '260px', flexShrink: 0, background: 'white', borderRight: '1px solid #e2e8f0', overflowY: 'auto', padding: '12px 0' }}>
+          <div style={{ padding: '4px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em' }}>KATEGORIER</span>
+            <button onClick={() => setShowUpload(true)} title="Ny fil" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '18px', lineHeight: 1, padding: '0 2px' }}>+</button>
           </div>
-        ) : grouped.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {grouped.map(cat => (
+          {FILE_CATEGORIES.map(cat => {
+            const catCount = countForCat(cat.id)
+            const isActive = selectedCategory === cat.id && !selectedSub
+            const isExpanded = expandedCats[cat.id]
+            const hasSubs = cat.sub.length > 0
+            return (
               <div key={cat.id}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '18px' }}>{cat.emoji}</span>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{cat.name}</span>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>({cat.files.length})</span>
-                  <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
+                {/* Category row */}
+                <div
+                  onClick={() => { setSelectedCategory(cat.id); setSelectedSub(null); if (hasSubs) toggleCat(cat.id) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px', cursor: 'pointer', background: isActive ? '#f0fdf4' : 'transparent', borderLeft: isActive ? `3px solid ${cat.color}` : '3px solid transparent', transition: 'background 0.1s' }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{cat.emoji}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: isActive ? '600' : '500', color: isActive ? cat.color : '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.name}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : `${catCount} fil${catCount !== 1 ? 'er' : ''}`}</div>
+                  </div>
+                  {hasSubs && <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {cat.files.map(file => (
-                    <div key={file.id} style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                {/* Sub-folders */}
+                {hasSubs && isExpanded && cat.sub.map(sub => {
+                  const subCount = countForSub(cat.id, sub)
+                  const isSubActive = selectedCategory === cat.id && selectedSub === sub
+                  return (
+                    <div key={sub}
+                      onClick={() => { setSelectedCategory(cat.id); setSelectedSub(sub) }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 16px 7px 44px', cursor: 'pointer', background: isSubActive ? '#f0fdf4' : 'transparent', borderLeft: isSubActive ? `3px solid ${cat.color}` : '3px solid transparent' }}
+                      onMouseEnter={e => { if (!isSubActive) e.currentTarget.style.background = '#f8fafc' }}
+                      onMouseLeave={e => { if (!isSubActive) e.currentTarget.style.background = 'transparent' }}>
+                      <span style={{ fontSize: '13px' }}>📂</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '12px', fontWeight: isSubActive ? '600' : '400', color: isSubActive ? cat.color : '#475569' }}>{sub}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{subCount} fil{subCount !== 1 ? 'er' : ''}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* RIGHT PANEL — filvisning */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
+          {!selectedCategory ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px', color: '#94a3b8' }}>
+              <div style={{ fontSize: '48px', marginBottom: '12px' }}>📂</div>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Velg en kategori</div>
+              <div style={{ fontSize: '13px' }}>Velg en kategori fra venstre panel for å se filer</div>
+            </div>
+          ) : (
+            <>
+              {/* Panel header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
+                    {selectedCat?.emoji} {selectedSub || selectedCat?.name}
+                  </h2>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                    {panelFiles.length} fil{panelFiles.length !== 1 ? 'er' : ''}
+                    {selectedSub && <span> · {selectedCat?.name}</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..." style={{ paddingLeft: '30px', padding: '8px 12px 8px 30px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px' }} />
+                  </div>
+                  <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
+                    style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    ⬆️ Last opp fil
+                  </button>
+                </div>
+              </div>
+
+              {/* File list */}
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster...</div>
+              ) : panelFiles.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Ingen filer her ennå</div>
+                  <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>Last opp den første filen i denne kategorien</div>
+                  <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
+                    style={{ padding: '9px 20px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                    ⬆️ Last opp fil
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {panelFiles.map(file => (
+                    <div key={file.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', transition: 'box-shadow 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'}
+                      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '9px', background: selectedCat?.bg || '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
                         {getFileEmoji(file.name, file.file_type)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: '0 0 3px', fontWeight: '600', color: '#0f172a', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b' }}>
-                          <span>📁 {getProjectName(file.project_id)}</span>
+                        <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+                        <div style={{ display: 'flex', gap: '10px', fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
                           {file.file_size && <span>{formatFileSize(file.file_size)}</span>}
-                          {file.description && <span>{file.description}</span>}
-                          <span>{new Date(file.created_at).toLocaleDateString('nb-NO')}</span>
+                          {file.description && <span>· {file.description}</span>}
+                          <span>· {new Date(file.created_at).toLocaleDateString('nb-NO')}</span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                         <button onClick={() => handleDownload(file)} title="Last ned" style={{ background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
                         <button onClick={() => handleDelete(file)} title="Slett" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {filtered.map(file => (
-              <div key={file.id} style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
-                  {getFileEmoji(file.name, file.file_type)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: '0 0 3px', fontWeight: '600', color: '#0f172a', fontSize: '14px' }}>{file.name}</p>
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b' }}>
-                    <span>📁 {getProjectName(file.project_id)}</span>
-                    {file.file_size && <span>{formatFileSize(file.file_size)}</span>}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={() => handleDownload(file)} style={{ background: '#f0fdf4', color: '#059669', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
-                  <button onClick={() => handleDelete(file)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Upload Modal */}
@@ -1059,17 +1093,17 @@ function ProsjektfilerPage() {
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Last opp filer</h2>
               <button onClick={() => setShowUpload(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
             </div>
-            <form onSubmit={handleUpload} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
-              {/* File picker */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
+            <form onSubmit={handleUpload} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
+              <div onClick={() => fileInputRef.current?.click()}
                 style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc' }}
-              >
-                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>📂 Klikk for å velge filer</p>
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#059669'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                <div style={{ fontSize: '28px', marginBottom: '6px' }}>📂</div>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Klikk for å velge filer</p>
                 {uploadFiles.length > 0 && (
-                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     {uploadFiles.map((f, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '8px', padding: '8px 12px', border: '1px solid #f1f5f9' }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '8px', padding: '7px 12px', border: '1px solid #f1f5f9' }}>
                         <span style={{ fontSize: '13px', color: '#0f172a' }}>{getFileEmoji(f.name)} {f.name}</span>
                         <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatFileSize(f.size)}</span>
                       </div>
@@ -1078,33 +1112,45 @@ function ProsjektfilerPage() {
                 )}
               </div>
               <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={e => setUploadFiles(Array.from(e.target.files))} />
-
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
-                <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
-                  <option value="">Velg prosjekt</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
+                  <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
+                    <option value="">Velg prosjekt</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Kategori</label>
+                  <select value={uploadForm.category} onChange={e => setUploadForm(f => ({...f, category: e.target.value, sub: ''}))} style={{ ...inp, background: 'white' }}>
+                    {FILE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Kategori</label>
-                <select value={uploadForm.category} onChange={e => setUploadForm(f => ({...f, category: e.target.value}))} style={{ ...inp, background: 'white' }}>
-                  {FILE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
-                </select>
+              {FILE_CATEGORIES.find(c => c.id === uploadForm.category)?.sub?.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Undermappe</label>
+                  <select value={uploadForm.sub} onChange={e => setUploadForm(f => ({...f, sub: e.target.value}))} style={{ ...inp, background: 'white' }}>
+                    <option value="">Ingen undermappe</option>
+                    {FILE_CATEGORIES.find(c => c.id === uploadForm.category).sub.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Tilgangsnivå</label>
+                  <select value={uploadForm.access_level} onChange={e => setUploadForm(f => ({...f, access_level: e.target.value}))} style={{ ...inp, background: 'white' }}>
+                    <option value="alle">👥 Alle brukere</option>
+                    <option value="prosjektleder">🔒 Prosjektleder</option>
+                    <option value="admin">🛡️ Admin</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Beskrivelse</label>
+                  <input value={uploadForm.description} onChange={e => setUploadForm(f => ({...f, description: e.target.value}))} placeholder="Valgfri..." style={inp} />
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Tilgangsnivå</label>
-                <select value={uploadForm.access_level} onChange={e => setUploadForm(f => ({...f, access_level: e.target.value}))} style={{ ...inp, background: 'white' }}>
-                  <option value="alle">👥 Alle brukere</option>
-                  <option value="prosjektleder">🔒 Prosjektleder</option>
-                  <option value="admin">🛡️ Admin</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Beskrivelse</label>
-                <textarea value={uploadForm.description} onChange={e => setUploadForm(f => ({...f, description: e.target.value}))} placeholder="Valgfri beskrivelse..." rows={2} style={{ ...inp, resize: 'vertical', fontFamily: 'system-ui, sans-serif' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '4px' }}>
                 <button type="button" onClick={() => setShowUpload(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
                 <button type="submit" disabled={uploading} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600', opacity: uploading ? 0.7 : 1 }}>{uploading ? 'Laster opp...' : 'Last opp'}</button>
               </div>
@@ -1115,7 +1161,6 @@ function ProsjektfilerPage() {
     </div>
   )
 }
-
 // ─── DEFAULT TEMPLATES ────────────────────────────────────────────────────
 const DEFAULT_TEMPLATES = [
   {
