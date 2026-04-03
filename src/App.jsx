@@ -882,12 +882,14 @@ function ProsjektfilerPage() {
   )
 
   const countForCat = (catId) => {
+    if (selectedProject === 'all') return 0
     const active = projectFiles.filter(f => f.category === catId && !f.archived)
     const unique = new Set(active.map(f => f.document_group || f.id))
     return unique.size
   }
 
   const countForSub = (catId, sub) => {
+    if (selectedProject === 'all') return 0
     const active = projectFiles.filter(f => f.category === catId && f.sub_folder === sub && !f.archived)
     const unique = new Set(active.map(f => f.document_group || f.id))
     return unique.size
@@ -1057,8 +1059,8 @@ function ProsjektfilerPage() {
       {/* Project selector */}
       <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: '12px 32px' }}>
         <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
-          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: '#0f172a', minWidth: '200px' }}>
-          <option value="all">Alle prosjekter</option>
+          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '200px' }}>
+          <option value="all">Velg prosjekt</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
@@ -1117,7 +1119,13 @@ function ProsjektfilerPage() {
 
         {/* RIGHT: File panel */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
-          {!selectedCategory ? (
+          {selectedProject === 'all' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏗️</div>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Velg et prosjekt</div>
+              <div style={{ fontSize: '13px', color: '#94a3b8' }}>Velg et prosjekt øverst til venstre for å se filer</div>
+            </div>
+          ) : !selectedCategory ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px' }}>
               <div style={{ fontSize: '48px', marginBottom: '12px' }}>📂</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Velg en kategori</div>
