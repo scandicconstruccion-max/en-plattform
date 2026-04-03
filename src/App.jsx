@@ -903,13 +903,13 @@ function ProsjektfilerPage() {
     })
   }, [projectFiles, selectedCategory, selectedSub, search])
 
-  // archived can be true, false, or null — treat anything truthy as archived
+  // archived can be true, false, null, or undefined (if column doesn't exist yet)
   const activePanelFiles = React.useMemo(() =>
-    allPanelFiles.filter(f => !f.archived),
+    allPanelFiles.filter(f => f.archived !== true),
     [allPanelFiles]
   )
   const archivedPanelFiles = React.useMemo(() =>
-    allPanelFiles.filter(f => !!f.archived),
+    allPanelFiles.filter(f => f.archived === true),
     [allPanelFiles]
   )
 
@@ -978,18 +978,22 @@ function ProsjektfilerPage() {
       const newLabel = nextRevision(allRevisions)
 
       // 1. Arkiver gammel revisjon
+      // NOTE: requires archived + document_group columns in Supabase
       const { error: archErr } = await supabase.from('project_files')
         .update({ archived: true, document_group: docGroup })
         .eq('id', baseFile.id)
-      if (archErr) throw new Error('Arkivering feilet: ' + archErr.message)
+      if (archErr) {
+        alert('Feil: Kunne ikke arkivere gammel revisjon.\n\nKjør denne SQL-en i Supabase:\n\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS document_group text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_label text DEFAULT \'Rev01\';\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS sub_folder text;')
+        return
+      }
 
-      // 2. Last opp ny fil
+      // 2. Last opp ny fil til storage
       const ext = file.name.split('.').pop()
       const path = `projects/${baseFile.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
       if (upErr) throw new Error('Filopplasting feilet: ' + upErr.message)
 
-      // 3. Lagre ny revisjon
+      // 3. Lagre ny revisjon i database
       const { error: insErr } = await supabase.from('project_files').insert({
         name: baseFile.name,
         project_id: baseFile.project_id,
