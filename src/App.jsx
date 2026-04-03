@@ -1004,7 +1004,6 @@ function ProsjektfilerPage() {
   }
 
   const handleDelete = async (file) => {
-    if (!(await confirm({ message: `Slett ${file.name}?`, subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
     try {
       // Slett fra storage (ignorer feil hvis filen ikke finnes)
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
@@ -1252,8 +1251,14 @@ function ProsjektfilerPage() {
 }
 
 function FileRow({ file, isCurrent, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
+  const confirm = useConfirm()
   const revFileRef = React.useRef()
   const isArchived = file.archived
+  
+  const handleDeleteClick = async () => {
+    if (!(await confirm({ message: `Slett ${file.name}?`, subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
+    onDelete(file)
+  }
   const rowBg = isArchived ? '#fef2f2' : 'white'
   const borderColor = isArchived ? '#fecaca' : '#f1f5f9'
   const revBg = isArchived ? '#fef2f2' : '#f0fdf4'
@@ -1299,7 +1304,7 @@ function FileRow({ file, isCurrent, catBg, catColor, supportsRevision, onDownloa
           </label>
         )}
         <button onClick={() => onDownload(file)} title="Last ned" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
-        <button onClick={() => onDelete(file)} title="Slett" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
+        <button onClick={handleDeleteClick} title="Slett" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
       </div>
     </div>
   )
