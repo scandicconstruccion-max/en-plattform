@@ -834,7 +834,6 @@ const getFileEmoji = (name, type) => {
   return '📄'
 }
 
-// Generer neste revisjonsnummer: Rev01, Rev02 ...
 function nextRevision(existingRevisions) {
   const nums = existingRevisions.map(r => parseInt((r.revision_label||'Rev00').replace(/\D/g,''))||0)
   const max = nums.length ? Math.max(...nums) : 0
@@ -843,6 +842,7 @@ function nextRevision(existingRevisions) {
 
 function ProsjektfilerPage() {
   const confirm = useConfirm()
+  const { user } = useAuth()
   const [files, setFiles] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -852,71 +852,80 @@ function ProsjektfilerPage() {
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedSub, setSelectedSub] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
-  const [showRevisionFor, setShowRevisionFor] = useState(null) // file object to add revision to
   const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
   const [uploadFiles, setUploadFiles] = useState([])
   const [expandedCats, setExpandedCats] = useState({ tegninger: true })
   const [showArchive, setShowArchive] = useState(false)
-  const { user } = useAuth()
   const fileInputRef = React.useRef()
-  const revFileRef = React.useRef()
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
 
+  // ── Data loading ──────────────────────────────────────────────────────────
   const loadData = async () => {
+    setLoading(true)
     try {
-      const [filesData, projectsData] = await Promise.all([
-        supabase.from('project_files').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+      const [filesRes, projRes] = await Promise.all([
+        supabase.from('project_files').select('*').order('created_at', { ascending: false }),
+        supabase.from('projects').select('id, name').order('name')
       ])
-      setFiles(filesData)
-      setProjects(projectsData)
+      setFiles(filesRes.data || [])
+      setProjects(projRes.data || [])
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
 
   useEffect(() => { loadData() }, [])
 
-  // Files filtered by project
-  const projectFiles = files.filter(f => selectedProject === 'all' || f.project_id === selectedProject)
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const projectFiles = React.useMemo(() =>
+    files.filter(f => selectedProject === 'all' || f.project_id === selectedProject),
+    [files, selectedProject]
+  )
 
-  // Count active (non-archived) files per category
-  const countForCat = (catId) => projectFiles.filter(f => f.category === catId && !f.archived).length
-  const countForSub = (catId, sub) => projectFiles.filter(f => f.category === catId && f.sub_folder === sub && !f.archived).length
+  const countForCat = (catId) =>
+    projectFiles.filter(f => f.category === catId && f.archived !== true).length
 
-  // Group files by document_group (same base name = same document, different revisions)
-  // document_group is set when uploading a revision — it links all versions together
-  const groupFiles = (fileList) => {
+  const countForSub = (catId, sub) =>
+    projectFiles.filter(f => f.category === catId && f.sub_folder === sub && f.archived !== true).length
+
+  const allPanelFiles = React.useMemo(() => {
+    if (!selectedCategory) return []
+    return projectFiles.filter(f => {
+      if (f.category !== selectedCategory) return false
+      if (selectedSub && f.sub_folder !== selectedSub) return false
+      if (search && !f.name?.toLowerCase().includes(search.toLowerCase())) return false
+      return true
+    })
+  }, [projectFiles, selectedCategory, selectedSub, search])
+
+  const activePanelFiles = React.useMemo(() =>
+    allPanelFiles.filter(f => f.archived !== true),
+    [allPanelFiles]
+  )
+  const archivedPanelFiles = React.useMemo(() =>
+    allPanelFiles.filter(f => f.archived === true),
+    [allPanelFiles]
+  )
+
+  // Group by document_group — each group shows as one document with revisions
+  const fileGroups = React.useMemo(() => {
     const groups = {}
-    fileList.forEach(f => {
+    activePanelFiles.forEach(f => {
       const key = f.document_group || f.id
       if (!groups[key]) groups[key] = []
       groups[key].push(f)
     })
-    // Sort each group by revision number desc (latest first)
     Object.values(groups).forEach(g => g.sort((a,b) => {
       const an = parseInt((a.revision_label||'Rev00').replace(/\D/g,''))||0
       const bn = parseInt((b.revision_label||'Rev00').replace(/\D/g,''))||0
       return bn - an
     }))
     return Object.values(groups)
-  }
+  }, [activePanelFiles])
 
-  // Panel files — active only unless showArchive
-  const allPanelFiles = projectFiles.filter(f => {
-    if (!selectedCategory) return false
-    if (f.category !== selectedCategory) return false
-    if (selectedSub && f.sub_folder !== selectedSub) return false
-    if (search && !f.name?.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
-  const activePanelFiles = allPanelFiles.filter(f => !f.archived)
-  const archivedPanelFiles = allPanelFiles.filter(f => f.archived)
+  const selectedCat = FILE_CATEGORIES.find(c => c.id === selectedCategory)
+  const catSupportsRevision = selectedCat?.revisjon || false
 
-  // Group active files — each group's first item is current (latest) revision
-  const fileGroups = groupFiles(activePanelFiles)
-  const activeCount = activePanelFiles.length
-  const archivedCount = archivedPanelFiles.length
-
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleUpload = async (e) => {
     e.preventDefault()
     if (uploadFiles.length === 0) return alert('Velg minst én fil')
@@ -928,7 +937,7 @@ function ProsjektfilerPage() {
         const path = `projects/${uploadForm.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
         const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
         if (upErr) throw upErr
-        await supabase.from('project_files').insert({
+        const { error: dbErr } = await supabase.from('project_files').insert({
           name: file.name,
           project_id: uploadForm.project_id,
           file_url: path,
@@ -936,22 +945,22 @@ function ProsjektfilerPage() {
           file_size: file.size,
           category: uploadForm.category,
           sub_folder: uploadForm.sub || null,
-          description: uploadForm.description,
+          description: uploadForm.description || null,
           access_level: uploadForm.access_level,
           uploaded_by: user?.id,
           revision_label: 'Rev01',
           archived: false,
         })
+        if (dbErr) throw dbErr
       }
       setShowUpload(false)
       setUploadFiles([])
       setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
-      loadData()
+      await loadData()
     } catch(e) { alert('Feil ved opplasting: ' + e.message) }
     finally { setUploading(false) }
   }
 
-  // Upload a new revision for an existing document
   const handleNewRevision = async (e, baseFile) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -965,15 +974,15 @@ function ProsjektfilerPage() {
       const { error: archErr } = await supabase.from('project_files')
         .update({ archived: true, document_group: docGroup })
         .eq('id', baseFile.id)
-      if (archErr) { alert('Kunne ikke arkivere gammel revisjon: ' + archErr.message); return }
+      if (archErr) throw new Error('Arkivering feilet: ' + archErr.message)
 
-      // 2. Last opp ny fil til storage
+      // 2. Last opp ny fil
       const ext = file.name.split('.').pop()
       const path = `projects/${baseFile.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
-      if (upErr) { alert('Feil ved filopplasting: ' + upErr.message); return }
+      if (upErr) throw new Error('Filopplasting feilet: ' + upErr.message)
 
-      // 3. Lagre ny revisjon i database
+      // 3. Lagre ny revisjon
       const { error: insErr } = await supabase.from('project_files').insert({
         name: baseFile.name,
         project_id: baseFile.project_id,
@@ -989,10 +998,10 @@ function ProsjektfilerPage() {
         document_group: docGroup,
         archived: false,
       })
-      if (insErr) { alert('Feil ved lagring av ny revisjon: ' + insErr.message); return }
+      if (insErr) throw new Error('Lagring feilet: ' + insErr.message)
 
-      loadData()
-    } catch(e) { alert('Feil ved revisjon: ' + e.message) }
+      await loadData()
+    } catch(e) { alert(e.message) }
     finally { setUploading(false); e.target.value = '' }
   }
 
@@ -1007,28 +1016,26 @@ function ProsjektfilerPage() {
     } catch(e) { alert('Feil ved nedlasting: ' + e.message) }
   }
 
+  // handleDelete called by FileRow AFTER confirmation
   const handleDelete = async (file) => {
     try {
-      // Slett fra storage (ignorer feil hvis filen ikke finnes)
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
-      // Slett fra database
       const { error } = await supabase.from('project_files').delete().eq('id', file.id)
-      if (error) { alert('Feil ved sletting: ' + error.message); return }
-      // Oppdater lokal state umiddelbart uten å vente på loadData
-      setFiles(prev => prev.filter(f => f.id !== file.id))
+      if (error) throw error
+      // Reload from server — single source of truth
+      await loadData()
     } catch(e) { alert('Feil ved sletting: ' + e.message) }
   }
 
   const toggleCat = (catId) => setExpandedCats(p => ({ ...p, [catId]: !p[catId] }))
-  const selectedCat = FILE_CATEGORIES.find(c => c.id === selectedCategory)
-  const catSupportsRevision = selectedCat?.revisjon || false
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
           ⬆️ Last opp fil
         </button>
       </div>
@@ -1036,7 +1043,7 @@ function ProsjektfilerPage() {
       {/* Project selector */}
       <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: '12px 32px' }}>
         <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
-          style={{ padding: '8px 32px 8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: '#0f172a', minWidth: '200px' }}>
+          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: '#0f172a', minWidth: '200px' }}>
           <option value="all">Alle prosjekter</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -1045,11 +1052,11 @@ function ProsjektfilerPage() {
       {/* Two-panel layout */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* LEFT PANEL */}
+        {/* LEFT: Category list */}
         <div style={{ width: '260px', flexShrink: 0, background: 'white', borderRight: '1px solid #e2e8f0', overflowY: 'auto', padding: '12px 0' }}>
           <div style={{ padding: '4px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em' }}>KATEGORIER</span>
-            <button onClick={() => setShowUpload(true)} title="Ny fil" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '18px', lineHeight: 1, padding: '0 2px' }}>+</button>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.07em' }}>KATEGORIER</span>
+            <button onClick={() => setShowUpload(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '20px', lineHeight: 1 }}>+</button>
           </div>
           {FILE_CATEGORIES.map(cat => {
             const catCount = countForCat(cat.id)
@@ -1059,7 +1066,9 @@ function ProsjektfilerPage() {
             return (
               <div key={cat.id}>
                 <div onClick={() => { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false); if (hasSubs) toggleCat(cat.id) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px', cursor: 'pointer', background: isActive ? '#f0fdf4' : 'transparent', borderLeft: isActive ? `3px solid ${cat.color}` : '3px solid transparent', transition: 'background 0.1s' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px', cursor: 'pointer',
+                    background: isActive ? '#f0fdf4' : 'transparent',
+                    borderLeft: isActive ? `3px solid ${cat.color}` : '3px solid transparent' }}
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{cat.emoji}</div>
@@ -1067,14 +1076,16 @@ function ProsjektfilerPage() {
                     <div style={{ fontSize: '13px', fontWeight: isActive ? '600' : '500', color: isActive ? cat.color : '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.name}</div>
                     <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : `${catCount} fil${catCount !== 1 ? 'er' : ''}`}</div>
                   </div>
-                  {hasSubs && <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>}
+                  {hasSubs && <span style={{ fontSize: '11px', color: '#94a3b8' }}>{isExpanded ? '▾' : '▸'}</span>}
                 </div>
                 {hasSubs && isExpanded && cat.sub.map(sub => {
                   const subCount = countForSub(cat.id, sub)
                   const isSubActive = selectedCategory === cat.id && selectedSub === sub
                   return (
                     <div key={sub} onClick={() => { setSelectedCategory(cat.id); setSelectedSub(sub); setShowArchive(false) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 16px 7px 44px', cursor: 'pointer', background: isSubActive ? '#f0fdf4' : 'transparent', borderLeft: isSubActive ? `3px solid ${cat.color}` : '3px solid transparent' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 16px 7px 44px', cursor: 'pointer',
+                        background: isSubActive ? '#f0fdf4' : 'transparent',
+                        borderLeft: isSubActive ? `3px solid ${cat.color}` : '3px solid transparent' }}
                       onMouseEnter={e => { if (!isSubActive) e.currentTarget.style.background = '#f8fafc' }}
                       onMouseLeave={e => { if (!isSubActive) e.currentTarget.style.background = 'transparent' }}>
                       <span style={{ fontSize: '13px' }}>📂</span>
@@ -1090,28 +1101,31 @@ function ProsjektfilerPage() {
           })}
         </div>
 
-        {/* RIGHT PANEL */}
+        {/* RIGHT: File panel */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
           {!selectedCategory ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px', color: '#94a3b8' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px' }}>
               <div style={{ fontSize: '48px', marginBottom: '12px' }}>📂</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Velg en kategori</div>
-              <div style={{ fontSize: '13px' }}>Velg en kategori fra venstre panel for å se filer</div>
+              <div style={{ fontSize: '13px', color: '#94a3b8' }}>Velg en kategori fra venstre panel for å se filer</div>
             </div>
           ) : (
             <>
-              {/* Panel header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* Panel toolbar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..." style={{ paddingLeft: '30px', padding: '8px 12px 8px 30px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '220px' }} />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..."
+                      style={{ paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px' }} />
                   </div>
-                  {archivedCount > 0 && (
+                  {archivedPanelFiles.length > 0 && (
                     <button onClick={() => setShowArchive(v => !v)}
-                      style={{ padding: '8px 14px', background: showArchive ? '#fef2f2' : 'white', color: showArchive ? '#dc2626' : '#64748b', border: `1px solid ${showArchive ? '#fecaca' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                      style={{ padding: '8px 14px', background: showArchive ? '#fef2f2' : 'white', color: showArchive ? '#dc2626' : '#64748b',
+                        border: `1px solid ${showArchive ? '#fecaca' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                        display: 'flex', alignItems: 'center', gap: '6px' }}>
                       🗄️ {showArchive ? 'Skjul arkiv' : 'Vis arkiverte revisjoner'}
-                      <span style={{ background: '#dc2626', color: 'white', borderRadius: '999px', fontSize: '10px', fontWeight: '700', padding: '1px 6px' }}>{archivedCount}</span>
+                      <span style={{ background: '#dc2626', color: 'white', borderRadius: '999px', fontSize: '10px', fontWeight: '700', padding: '1px 6px' }}>{archivedPanelFiles.length}</span>
                     </button>
                   )}
                 </div>
@@ -1122,8 +1136,11 @@ function ProsjektfilerPage() {
               </div>
 
               {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster...</div>
-              ) : activeCount === 0 && !showArchive ? (
+                <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+                  <div style={{ width: '32px', height: '32px', border: '3px solid #e2e8f0', borderTop: '3px solid #059669', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
+                  Laster filer...
+                </div>
+              ) : fileGroups.length === 0 && !showArchive ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
                   <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Ingen filer her ennå</div>
@@ -1134,39 +1151,38 @@ function ProsjektfilerPage() {
                   </button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-
-                  {/* ACTIVE FILES */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {/* Active files */}
                   {fileGroups.length > 0 && (
                     <>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em' }}>
-                        DOKUMENTER ({activeCount})
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>
+                        DOKUMENTER ({activePanelFiles.length})
                       </div>
-                      {fileGroups.map(group => {
-                        const current = group[0] // latest revision = current
-                        return (
-                          <FileRow key={current.id} file={current} isCurrent={true}
-                            catBg={selectedCat?.bg} catColor={selectedCat?.color}
-                            supportsRevision={catSupportsRevision}
-                            onDownload={handleDownload} onDelete={handleDelete}
-                            onNewRevision={handleNewRevision} uploading={uploading} />
-                        )
-                      })}
+                      {fileGroups.map(group => (
+                        <FileRow key={group[0].id} file={group[0]} isCurrent={true}
+                          catBg={selectedCat?.bg} catColor={selectedCat?.color}
+                          supportsRevision={catSupportsRevision}
+                          onDownload={handleDownload}
+                          onDelete={handleDelete}
+                          onNewRevision={handleNewRevision}
+                          uploading={uploading} />
+                      ))}
                     </>
                   )}
-
-                  {/* ARCHIVED FILES */}
-                  {showArchive && archivedCount > 0 && (
+                  {/* Archived files */}
+                  {showArchive && archivedPanelFiles.length > 0 && (
                     <>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#dc2626', marginTop: '16px', marginBottom: '4px', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        🗄️ ARKIVERTE REVISJONER ({archivedCount})
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginTop: '16px', marginBottom: '6px', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        🗄️ ARKIVERTE REVISJONER ({archivedPanelFiles.length})
                       </div>
                       {archivedPanelFiles.map(file => (
                         <FileRow key={file.id} file={file} isCurrent={false}
                           catBg="#fef2f2" catColor="#dc2626"
                           supportsRevision={false}
-                          onDownload={handleDownload} onDelete={handleDelete}
-                          onNewRevision={null} uploading={false} />
+                          onDownload={handleDownload}
+                          onDelete={handleDelete}
+                          onNewRevision={null}
+                          uploading={false} />
                       ))}
                     </>
                   )}
@@ -1184,7 +1200,7 @@ function ProsjektfilerPage() {
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(560px, calc(100vw - 32px))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Last opp filer</h2>
-              <button onClick={() => setShowUpload(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
+              <button onClick={() => { setShowUpload(false); setUploadFiles([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
             </div>
             <form onSubmit={handleUpload} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
               <div onClick={() => fileInputRef.current?.click()}
@@ -1244,8 +1260,12 @@ function ProsjektfilerPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '4px' }}>
-                <button type="button" onClick={() => setShowUpload(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
-                <button type="submit" disabled={uploading} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600', opacity: uploading ? 0.7 : 1 }}>{uploading ? 'Laster opp...' : 'Last opp'}</button>
+                <button type="button" onClick={() => { setShowUpload(false); setUploadFiles([]) }}
+                  style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
+                <button type="submit" disabled={uploading}
+                  style={{ padding: '10px 24px', background: uploading ? '#6ee7b7' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>
+                  {uploading ? 'Laster opp...' : 'Last opp'}
+                </button>
               </div>
             </form>
           </div>
@@ -1257,63 +1277,71 @@ function ProsjektfilerPage() {
 
 function FileRow({ file, isCurrent, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
   const confirm = useConfirm()
-  const revFileRef = React.useRef()
-  const isArchived = file.archived
-  
-  const handleDeleteClick = async () => {
-    if (!(await confirm({ message: `Slett ${file.name}?`, subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
-    onDelete(file)
-  }
-  const rowBg = isArchived ? '#fef2f2' : 'white'
-  const borderColor = isArchived ? '#fecaca' : '#f1f5f9'
-  const revBg = isArchived ? '#fef2f2' : '#f0fdf4'
+  const isArchived = file.archived === true
+  const revBg    = isArchived ? '#fef2f2' : '#f0fdf4'
   const revColor = isArchived ? '#dc2626' : '#059669'
-  const revBorder = isArchived ? '#fecaca' : '#bbf7d0'
+  const revBorder= isArchived ? '#fecaca' : '#bbf7d0'
+
+  const handleDeleteClick = async () => {
+    const ok = await confirm({
+      message: `Slett ${file.name}?`,
+      subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.',
+      danger: true
+    })
+    if (!ok) return
+    await onDelete(file)
+  }
 
   return (
-    <div style={{ background: rowBg, borderRadius: '12px', border: `1px solid ${borderColor}`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', transition: 'box-shadow 0.15s', opacity: isArchived ? 0.85 : 1 }}
+    <div style={{ background: isArchived ? '#fef9f9' : 'white', borderRadius: '12px',
+      border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: '12px 16px',
+      display: 'flex', alignItems: 'center', gap: '12px', opacity: isArchived ? 0.85 : 1 }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-      {/* Checkbox placeholder */}
       <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />
-      {/* File icon */}
-      <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
+      <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
         {getFileEmoji(file.name, file.file_type)}
       </div>
-      {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : '#0f172a', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+        <div style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : '#0f172a', fontSize: '14px',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
-          {/* Revision badge */}
           {file.revision_label && (
-            <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`, borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '1px 8px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`,
+              borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '1px 8px',
+              display: 'flex', alignItems: 'center', gap: '3px' }}>
               {file.revision_label}
-              {isCurrent && !isArchived && <span style={{ fontSize: '10px' }}>✓</span>}
-              {isArchived && <span style={{ fontSize: '10px' }}>🗄️</span>}
+              {isCurrent && !isArchived && <span>✓</span>}
+              {isArchived && <span>🗄️</span>}
             </span>
           )}
           <span style={{ fontSize: '12px', color: '#94a3b8' }}>
             {file.file_size ? formatFileSize(file.file_size) : ''}
-            {file.file_size ? '  ' : ''}
+            {file.file_size && '  '}
             {new Date(file.created_at).toLocaleDateString('nb-NO')}
             {file.description ? `  ·  ${file.description}` : ''}
           </span>
         </div>
       </div>
-      {/* Actions */}
       <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
         {supportsRevision && isCurrent && !isArchived && onNewRevision && (
-          <label title="Last opp ny revisjon" style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+          <label style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669',
+            border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer',
+            fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
             🔄 Ny revisjon
             <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
           </label>
         )}
-        <button onClick={() => onDownload(file)} title="Last ned" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
-        <button onClick={handleDeleteClick} title="Slett" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
+        <button onClick={() => onDownload(file)} title="Last ned"
+          style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
+        <button onClick={handleDeleteClick} title="Slett"
+          style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
       </div>
     </div>
   )
 }
+
 // ─── DEFAULT TEMPLATES ────────────────────────────────────────────────────
 const DEFAULT_TEMPLATES = [
   {
