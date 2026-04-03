@@ -1006,10 +1006,13 @@ function ProsjektfilerPage() {
   const handleDelete = async (file) => {
     if (!(await confirm({ message: `Slett ${file.name}?`, subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
     try {
-      await supabase.storage.from('plattform-files').remove([file.file_url])
-      await supabase.from('project_files').delete().eq('id', file.id)
+      // Slett fra storage (ignorer feil hvis filen ikke finnes)
+      try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
+      // Slett alltid fra database
+      const { error } = await supabase.from('project_files').delete().eq('id', file.id)
+      if (error) throw error
       loadData()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { alert('Feil ved sletting: ' + e.message) }
   }
 
   const toggleCat = (catId) => setExpandedCats(p => ({ ...p, [catId]: !p[catId] }))
