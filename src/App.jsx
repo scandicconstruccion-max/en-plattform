@@ -1124,7 +1124,7 @@ function ProsjektfilerPage() {
             </div>
           ) : (
             <>
-              {/* Panel toolbar */}
+              {/* Toolbar: search + archive toggle + upload */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ position: 'relative' }}>
@@ -1134,11 +1134,12 @@ function ProsjektfilerPage() {
                   </div>
                   {archivedPanelFiles.length > 0 && (
                     <button onClick={() => setShowArchive(v => !v)}
-                      style={{ padding: '8px 14px', background: showArchive ? '#fef2f2' : 'white', color: showArchive ? '#dc2626' : '#64748b',
-                        border: `1px solid ${showArchive ? '#fecaca' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                      style={{ padding: '8px 14px', background: showArchive ? '#f0fdf4' : 'white',
+                        color: showArchive ? '#059669' : '#64748b',
+                        border: `1px solid ${showArchive ? '#bbf7d0' : '#e2e8f0'}`,
+                        borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                         display: 'flex', alignItems: 'center', gap: '6px' }}>
                       🗄️ {showArchive ? 'Skjul arkiv' : 'Vis arkiverte revisjoner'}
-                      <span style={{ background: '#dc2626', color: 'white', borderRadius: '999px', fontSize: '10px', fontWeight: '700', padding: '1px 6px' }}>{archivedPanelFiles.length}</span>
                     </button>
                   )}
                 </div>
@@ -1153,7 +1154,7 @@ function ProsjektfilerPage() {
                   <div style={{ width: '32px', height: '32px', border: '3px solid #e2e8f0', borderTop: '3px solid #059669', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
                   Laster filer...
                 </div>
-              ) : fileGroups.length === 0 && !showArchive ? (
+              ) : fileGroups.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
                   <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Ingen filer her ennå</div>
@@ -1164,41 +1165,45 @@ function ProsjektfilerPage() {
                   </button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {/* Active files */}
-                  {fileGroups.length > 0 && (
-                    <>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>
-                        DOKUMENTER ({activePanelFiles.length})
-                      </div>
-                      {fileGroups.map(group => (
-                        <FileRow key={group[0].id} file={group[0]} isCurrent={true}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.06em' }}>
+                    DOKUMENTER ({fileGroups.length})
+                  </div>
+                  {/* Each group: current revision + archived revisions inline below */}
+                  {fileGroups.map(group => {
+                    const current = group[0]
+                    const docGroup = current.document_group || current.id
+                    const archived = archivedPanelFiles.filter(f => (f.document_group || f.id) === docGroup)
+                      .sort((a,b) => {
+                        const an = parseInt((a.revision_label||'Rev00').replace(/\D/g,''))||0
+                        const bn = parseInt((b.revision_label||'Rev00').replace(/\D/g,''))||0
+                        return bn - an
+                      })
+                    return (
+                      <div key={current.id} style={{ marginBottom: '10px' }}>
+                        {/* Current (active) revision — green */}
+                        <FileRow file={current} isArchived={false}
                           catBg={selectedCat?.bg} catColor={selectedCat?.color}
                           supportsRevision={catSupportsRevision}
                           onDownload={handleDownload}
                           onDelete={handleDelete}
                           onNewRevision={handleNewRevision}
                           uploading={uploading} />
-                      ))}
-                    </>
-                  )}
-                  {/* Archived files */}
-                  {showArchive && archivedPanelFiles.length > 0 && (
-                    <>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginTop: '16px', marginBottom: '6px', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        🗄️ ARKIVERTE REVISJONER ({archivedPanelFiles.length})
+                        {/* Archived revisions — shown inline below when showArchive is true */}
+                        {showArchive && archived.map(f => (
+                          <div key={f.id} style={{ marginTop: '3px', marginLeft: '20px' }}>
+                            <FileRow file={f} isArchived={true}
+                              catBg="#fef2f2" catColor="#dc2626"
+                              supportsRevision={false}
+                              onDownload={handleDownload}
+                              onDelete={handleDelete}
+                              onNewRevision={null}
+                              uploading={false} />
+                          </div>
+                        ))}
                       </div>
-                      {archivedPanelFiles.map(file => (
-                        <FileRow key={file.id} file={file} isCurrent={false}
-                          catBg="#fef2f2" catColor="#dc2626"
-                          supportsRevision={false}
-                          onDownload={handleDownload}
-                          onDelete={handleDelete}
-                          onNewRevision={null}
-                          uploading={false} />
-                      ))}
-                    </>
-                  )}
+                    )
+                  })}
                 </div>
               )}
             </>
@@ -1288,8 +1293,8 @@ function ProsjektfilerPage() {
   )
 }
 
-function FileRow({ file, isCurrent, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
-  const isArchived = file.archived === true
+function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
+  // isArchived passed as prop for clarity
   const revBg    = isArchived ? '#fef2f2' : '#f0fdf4'
   const revColor = isArchived ? '#dc2626' : '#059669'
   const revBorder= isArchived ? '#fecaca' : '#bbf7d0'
