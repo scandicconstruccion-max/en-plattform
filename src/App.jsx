@@ -4080,15 +4080,16 @@ const ConfirmContext = React.createContext({})
 
 function ConfirmProvider({ children }) {
   const [state, setState] = React.useState(null)
-  // state = { message, subMessage, confirmLabel, danger, resolve }
+  const resolveRef = React.useRef(null)
 
-  const confirm = (opts) => new Promise(resolve => {
+  const confirm = React.useCallback((opts) => new Promise(resolve => {
     const options = typeof opts === 'string' ? { message: opts } : opts
-    setState({ ...options, resolve })
-  })
+    resolveRef.current = resolve
+    setState(options)
+  }), [])
 
-  const handleConfirm = () => { state?.resolve(true);  setState(null) }
-  const handleCancel  = () => { state?.resolve(false); setState(null) }
+  const handleConfirm = () => { resolveRef.current?.(true);  resolveRef.current = null; setState(null) }
+  const handleCancel  = () => { resolveRef.current?.(false); resolveRef.current = null; setState(null) }
 
   return (
     <ConfirmContext.Provider value={{ confirm }}>
