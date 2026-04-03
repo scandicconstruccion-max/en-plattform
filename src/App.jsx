@@ -841,7 +841,6 @@ function nextRevision(existingRevisions) {
 }
 
 function ProsjektfilerPage() {
-  const confirm = useConfirm()
   const { user } = useAuth()
   const [files, setFiles] = useState([])
   const [projects, setProjects] = useState([])
@@ -856,6 +855,7 @@ function ProsjektfilerPage() {
   const [uploadFiles, setUploadFiles] = useState([])
   const [expandedCats, setExpandedCats] = useState({ tegninger: true })
   const [showArchive, setShowArchive] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null) // file to confirm delete
   const fileInputRef = React.useRef()
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
 
@@ -1023,19 +1023,16 @@ function ProsjektfilerPage() {
     } catch(e) { alert('Feil ved nedlasting: ' + e.message) }
   }
 
-  // handleDelete called by FileRow AFTER confirmation
-  const handleDelete = async (file) => {
-    // confirm() is called here in ProsjektfilerPage where useConfirm() is guaranteed to work
-    const ok = await confirm({
-      message: `Slett ${file.name}?`,
-      subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.',
-      danger: true
-    })
-    if (!ok) return
+  // Show local confirm dialog then delete
+  const handleDelete = (file) => setDeleteTarget(file)
+
+  const confirmDelete = async () => {
+    const file = deleteTarget
+    setDeleteTarget(null)
     try {
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
       const { error } = await supabase.from('project_files').delete().eq('id', file.id)
-      if (error) throw error
+      if (error) { alert('Feil ved sletting: ' + error.message); return }
       await loadData()
     } catch(e) { alert('Feil ved sletting: ' + e.message) }
   }
@@ -1132,7 +1129,7 @@ function ProsjektfilerPage() {
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..."
                       style={{ paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px' }} />
                   </div>
-                  {archivedPanelFiles.length > 0 && (
+                  {catSupportsRevision && (
                     <button onClick={() => setShowArchive(v => !v)}
                       style={{ padding: '8px 14px', background: showArchive ? '#f0fdf4' : 'white',
                         color: showArchive ? '#059669' : '#64748b',
@@ -1210,6 +1207,30 @@ function ProsjektfilerPage() {
           )}
         </div>
       </div>
+
+      {/* Local delete confirmation dialog */}
+      {deleteTarget && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setDeleteTarget(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'24px 24px 0' }}>
+              <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>⚠️</div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Slett {deleteTarget.name}?</h3>
+              <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b' }}>Filen slettes permanent og kan ikke gjenopprettes.</p>
+            </div>
+            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end' }}>
+              <button onClick={() => setDeleteTarget(null)}
+                style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
+                Avbryt
+              </button>
+              <button onClick={confirmDelete}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background:'#dc2626' }}>
+                Slett
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload Modal */}
       {showUpload && (
