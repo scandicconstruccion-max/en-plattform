@@ -7194,20 +7194,6 @@ function AnsattePage() {
   }
   useEffect(()=>{ load() },[])
 
-  // Auto-scroll to today column when in month view
-  useEffect(()=>{
-    if (viewMode==='maned') {
-      setTimeout(()=>{
-        const todayEl = document.getElementById('ressurs-today-col')
-        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
-        else {
-          const grid = document.getElementById('ressurs-grid-scroll')
-          if (grid) grid.scrollLeft = 0
-        }
-      }, 100)
-    }
-  }, [viewMode, currentDate])
-
   // Check cert expiry and create notifications
   useEffect(()=>{
     if (!user||employees.length===0) return
@@ -8090,20 +8076,6 @@ function TimelistePage() {
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
-
-  // Auto-scroll to today column when in month view
-  useEffect(()=>{
-    if (viewMode==='maned') {
-      setTimeout(()=>{
-        const todayEl = document.getElementById('ressurs-today-col')
-        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
-        else {
-          const grid = document.getElementById('ressurs-grid-scroll')
-          if (grid) grid.scrollLeft = 0
-        }
-      }, 100)
-    }
-  }, [viewMode, currentDate])
 
   // Find or init current week sheet for selected employee
   const currentSheet = timesheets.find(t=>
@@ -10159,20 +10131,6 @@ function KalenderPage() {
   }
   useEffect(()=>{ load() },[])
 
-  // Auto-scroll to today column when in month view
-  useEffect(()=>{
-    if (viewMode==='maned') {
-      setTimeout(()=>{
-        const todayEl = document.getElementById('ressurs-today-col')
-        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
-        else {
-          const grid = document.getElementById('ressurs-grid-scroll')
-          if (grid) grid.scrollLeft = 0
-        }
-      }, 100)
-    }
-  }, [viewMode, currentDate])
-
   const today = new Date().toISOString().split('T')[0]
   const curDate = new Date(currentDate)
 
@@ -10825,20 +10783,6 @@ function InterChatPage() {
 
   useEffect(()=>{ load() },[])
 
-  // Auto-scroll to today column when in month view
-  useEffect(()=>{
-    if (viewMode==='maned') {
-      setTimeout(()=>{
-        const todayEl = document.getElementById('ressurs-today-col')
-        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
-        else {
-          const grid = document.getElementById('ressurs-grid-scroll')
-          if (grid) grid.scrollLeft = 0
-        }
-      }, 100)
-    }
-  }, [viewMode, currentDate])
-
   useEffect(()=>{
     const sub = supabase.channel('chat-global-v2')
       .on('postgres_changes',{event:'*',schema:'public',table:'chat_messages'},()=>load())
@@ -11462,20 +11406,6 @@ function CRMPage() {
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
-
-  // Auto-scroll to today column when in month view
-  useEffect(()=>{
-    if (viewMode==='maned') {
-      setTimeout(()=>{
-        const todayEl = document.getElementById('ressurs-today-col')
-        if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' })
-        else {
-          const grid = document.getElementById('ressurs-grid-scroll')
-          if (grid) grid.scrollLeft = 0
-        }
-      }, 100)
-    }
-  }, [viewMode, currentDate])
 
   // Check overdue tasks and create notifications
   useEffect(()=>{
