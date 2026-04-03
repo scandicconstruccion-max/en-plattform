@@ -1003,7 +1003,8 @@ function ProsjektfilerPage() {
   }
 
   const handleDelete = async (file) => {
-    if (!confirm(`Slett ${file.name}?`)) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: `Slett ${file.name}?`, subMessage: 'Filen slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
     try {
       await supabase.storage.from('plattform-files').remove([file.file_url])
       await supabase.from('project_files').delete().eq('id', file.id)
@@ -1476,13 +1477,15 @@ function SjekklistePage({ onNavigateDetail }) {
   }
 
   const handleDeleteChecklist = async (id) => {
-    if (!confirm('Slett sjekkliste?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett sjekkliste?', subMessage: 'Sjekklisten og alle svar slettes permanent.', danger: true }))) return
     await supabase.from('checklists').delete().eq('id', id)
     loadData()
   }
 
   const handleDeleteTemplate = async (id) => {
-    if (!confirm('Slett mal?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett mal?', subMessage: 'Malen slettes permanent.', danger: true }))) return
     await supabase.from('checklist_templates').delete().eq('id', id)
     loadData()
   }
@@ -2344,7 +2347,8 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett dette avviket?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett dette avviket?', subMessage: 'Avviket og all tilknyttet informasjon slettes permanent.', danger: true }))) return
     await supabase.from('deviations').delete().eq('id', dev.id)
     onBack()
   }
@@ -2828,7 +2832,8 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett dette skjemaet?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett dette skjemaet?', subMessage: 'HMS-skjemaet slettes permanent.', danger: true }))) return
     await supabase.from('hms_records').delete().eq('id', rec.id)
     onBack()
   }
@@ -3747,7 +3752,8 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
   useEffect(() => { loadLogs() }, [])
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne maskinen og all logg?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne maskinen?', subMessage: 'Maskinen og all tilhørende logg slettes permanent.', danger: true }))) return
     await supabase.from('machines').delete().eq('id', m.id)
     onBack()
   }
@@ -4070,6 +4076,55 @@ function NotifProvider({ children }) {
 
 const useNotif = () => React.useContext(NotifContext)
 
+// ─── GLOBAL CONFIRM DIALOG ────────────────────────────────────────────────────
+const ConfirmContext = React.createContext({})
+
+function ConfirmProvider({ children }) {
+  const [state, setState] = React.useState(null)
+  // state = { message, subMessage, confirmLabel, danger, resolve }
+
+  const confirm = (opts) => new Promise(resolve => {
+    const options = typeof opts === 'string' ? { message: opts } : opts
+    setState({ ...options, resolve })
+  })
+
+  const handleConfirm = () => { state?.resolve(true);  setState(null) }
+  const handleCancel  = () => { state?.resolve(false); setState(null) }
+
+  return (
+    <ConfirmContext.Provider value={{ confirm }}>
+      {children}
+      {state && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={handleCancel} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'24px 24px 0' }}>
+              <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: state.danger ? '#fef2f2' : '#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
+                {state.danger ? '⚠️' : '❓'}
+              </div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{state.message}</h3>
+              {state.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{state.subMessage}</p>}
+            </div>
+            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end' }}>
+              <button onClick={handleCancel}
+                style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
+                Avbryt
+              </button>
+              <button onClick={handleConfirm}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: state.danger ? '#dc2626' : '#059669' }}>
+                {state.confirmLabel || (state.danger ? 'Slett' : 'Bekreft')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ConfirmContext.Provider>
+  )
+}
+
+const useConfirm = () => React.useContext(ConfirmContext).confirm
+// ─── END CONFIRM DIALOG ───────────────────────────────────────────────────────
+
 // Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
 async function notifyProjectManager(projectId, title, message, type, linkPage) {
   if (!projectId) return
@@ -4297,7 +4352,8 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett dette tilbudet?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett dette tilbudet?', subMessage: 'Tilbudet og alle tilhørende linjer slettes permanent.', danger: true }))) return
     await supabase.from('quotes').delete().eq('id', q.id)
     onBack()
   }
@@ -5217,13 +5273,15 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett dette anbudet?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett dette anbudet?', subMessage: 'Anbudet og alle tilhørende data slettes permanent.', danger: true }))) return
     await supabase.from('tenders').delete().eq('id', t.id)
     onBack()
   }
 
   const generateQuote = async () => {
-    if (!confirm('Generer tilbud fra dette anbudet? Kapitlene og postene kopieres over.')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Generer tilbud fra dette anbudet?', subMessage: 'Kapitlene og postene kopieres over til et nytt tilbud.', confirmLabel: 'Generer tilbud', danger: false }))) return
     try {
       const { data, error } = await supabase.from('quotes').insert({
         title: t.title, quote_number: `TB-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
@@ -5987,7 +6045,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne ordren?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne ordren?', subMessage: 'Ordren og alle endringsmeldinger slettes permanent.', danger: true }))) return
     await supabase.from('orders').delete().eq('id',o.id)
     onBack()
   }
@@ -6715,14 +6774,16 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne fakturaen?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne fakturaen?', subMessage: 'Fakturaen slettes permanent.', danger: true }))) return
     await supabase.from('invoices').delete().eq('id',inv.id)
     onBack()
   }
 
   const sendPurring = async () => {
+    const confirm = useConfirm()
     if (!inv.customer_email) return alert('Ingen e-postadresse på fakturaen')
-    if (!confirm(`Send purring til ${inv.customer_email}?`)) return
+    if (!(await confirm({ message: `Send purring til ${inv.customer_email}?`, subMessage: 'Kunden mottar en purring på e-post.', confirmLabel: 'Send purring', danger: false }))) return
     try {
       const html = `
         <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
@@ -7635,13 +7696,15 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne ansatte? All historikk slettes.')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne ansatte?', subMessage: 'Den ansatte og all historikk slettes permanent. Dette kan ikke angres.', danger: true }))) return
     await supabase.from('employees').delete().eq('id',emp.id)
     onBack()
   }
 
   const deleteCert = async (id) => {
-    if (!confirm('Slett sertifikat?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett sertifikat?', subMessage: 'Sertifikatet slettes permanent.', danger: true }))) return
     await supabase.from('employee_certifications').delete().eq('id',id)
     loadDetails()
   }
@@ -8418,8 +8481,9 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
   const totalExpenses = entries.reduce((acc,e)=>acc+(parseFloat(e.expenses)||0), 0)
 
   const handleSubmit = async () => {
+    const confirm = useConfirm()
     if (!sheet) return alert('Ingen timeliste å levere inn. Registrer timer først.')
-    if (!confirm('Lever inn timelisten for uke '+week+'?')) return
+    if (!(await confirm({ message: `Lever inn timelisten for uke ${week}?`, subMessage: 'Timelisten sendes til godkjenning og kan ikke redigeres uten å bli returnert.', confirmLabel: 'Lever inn', danger: false }))) return
     setSubmitting(true)
     try {
       await supabase.from('timesheets').update({ status:'Innlevert', submitted_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id',sheet.id)
@@ -9703,7 +9767,8 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne milepælen?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne milepælen?', subMessage: 'Milepælen slettes permanent.', danger: true }))) return
     await supabase.from('calendar_events').delete().eq('id',initial.id)
     onSaved()
   }
@@ -9877,8 +9942,9 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   }
 
   const handleDelete = async () => {
+    const confirm = useConfirm()
     if (!editPlan) return
-    if (!confirm('Slett denne bookingen?')) return
+    if (!(await confirm({ message: 'Slett denne bookingen?', subMessage: 'Bookingen slettes permanent.', danger: true }))) return
     // Remove linked machine plans
     if (editPlan.linked_machine_id) {
       await supabase.from('resource_plans').delete().eq('linked_resource_plan_id',editPlan.id)
@@ -10851,7 +10917,8 @@ function EventDetailModal({ event, projects, employees, attendees, user, onClose
   const col = event.color||cfg.color
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne hendelsen?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne hendelsen?', subMessage: 'Kalenderhendelsen slettes permanent.', danger: true }))) return
     await supabase.from('calendar_events').delete().eq('id',event.id)
     onDeleted()
   }
@@ -11906,7 +11973,8 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne kunden? All historikk slettes.')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne kunden?', subMessage: 'Kunden og all historikk, aktiviteter og dokumenter slettes permanent.', danger: true }))) return
     await supabase.from('crm_customers').delete().eq('id',c.id)
     onBack()
   }
@@ -11925,7 +11993,8 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   }
 
   const deleteDoc = async (id) => {
-    if (!confirm('Slett dokument?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett dokument?', subMessage: 'Dokumentet slettes permanent.', danger: true }))) return
     await supabase.from('crm_documents').delete().eq('id',id)
     loadDetails()
   }
@@ -12598,7 +12667,8 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne befaringen?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne befaringen?', subMessage: 'Befaringen og alle bilder slettes permanent.', danger: true }))) return
     await supabase.from('inspections').delete().eq('id',ins.id)
     onBack()
   }
@@ -13469,7 +13539,8 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
   const overdue = comp.next_service_date&&comp.next_service_date<today
 
   const handleDelete = async () => {
-    if (!confirm('Slett denne komponenten?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett denne komponenten?', subMessage: 'Komponenten og tilhørende dokumenter slettes permanent.', danger: true }))) return
     await supabase.from('fdv_components').delete().eq('id',comp.id)
     onClose()
   }
@@ -14272,15 +14343,17 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
   const removeAllModules = () => save({ module_access: [] })
 
   const handleDeactivate = async () => {
+    const confirm = useConfirm()
     if (isCurrentUser) return alert('Du kan ikke deaktivere din egen bruker.')
-    if (!confirm(`${u.status==='aktiv'?'Deaktiver':'Aktiver'} ${u.full_name||u.email}?`)) return
+    if (!(await confirm({ message: `${u.status==='aktiv'?'Deaktiver':'Aktiver'} bruker?`, subMessage: `${u.full_name||u.email} vil bli ${u.status==='aktiv'?'deaktivert':'aktivert'}.`, confirmLabel: u.status==='aktiv'?'Deaktiver':'Aktiver', danger: u.status==='aktiv' }))) return
     await save({ status: u.status==='aktiv'?'inaktiv':'aktiv' })
   }
 
   const handleDelete = async () => {
+    const confirm = useConfirm()
     if (isCurrentUser) return alert('Du kan ikke slette din egen bruker.')
     if (isSuperAdmin) return alert('Superadmin kan ikke slettes.')
-    if (!confirm(`Slett ${u.full_name||u.email} permanent?`)) return
+    if (!(await confirm({ message: `Slett ${u.full_name||u.email}?`, subMessage: 'Brukeren slettes permanent og kan ikke gjenopprettes.', danger: true }))) return
     await supabase.from('user_profiles').delete().eq('id',u.id)
     onBack()
   }
@@ -14627,7 +14700,8 @@ function VarslerPage() {
   }
 
   const deleteAll = async () => {
-    if (!confirm('Slett alle varsler?')) return
+    const confirm = useConfirm()
+    if (!(await confirm({ message: 'Slett alle varsler?', subMessage: 'Alle varsler slettes permanent.', danger: true }))) return
     await supabase.from('notifications').delete().eq('user_id', user?.id)
     load()
   }
@@ -14888,5 +14962,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AuthProvider><NotifProvider><AppContent /></NotifProvider></AuthProvider>
+  return <AuthProvider><NotifProvider><ConfirmProvider><AppContent /></ConfirmProvider></NotifProvider></AuthProvider>
 }
