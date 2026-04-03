@@ -12592,254 +12592,285 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
 
 // ─── BILDEDOKUMENTASJON MODULE ────────────────────────────────────────────────
 
-const PHOTO_CATS = {
-  fremdrift: { label:'Fremdrift',   emoji:'📸', color:'#2563eb', bg:'#eff6ff' },
-  avvik:     { label:'Avvik',       emoji:'⚠️', color:'#dc2626', bg:'#fef2f2' },
-  for_etter: { label:'Før/Etter',   emoji:'🔄', color:'#7c3aed', bg:'#f5f3ff' },
-  overlevering: { label:'Overlevering', emoji:'📦', color:'#059669', bg:'#f0fdf4' },
-  annet:     { label:'Annet',       emoji:'📁', color:'#64748b', bg:'#f8fafc' },
-}
+const BYGGEFASER = [
+  { id:'for_arbeid',      label:'Før arbeid',         emoji:'🔍', color:'#7c3aed', bg:'#f5f3ff' },
+  { id:'under_arbeid',    label:'Under arbeid',        emoji:'🔨', color:'#2563eb', bg:'#eff6ff' },
+  { id:'ferdigstilt',     label:'Ferdigstilt arbeid',  emoji:'✅', color:'#059669', bg:'#f0fdf4' },
+  { id:'avvik',           label:'Avvik',               emoji:'⚠️', color:'#dc2626', bg:'#fef2f2' },
+  { id:'endringsarbeid',  label:'Endringsarbeid',      emoji:'🔄', color:'#d97706', bg:'#fffbeb' },
+  { id:'fdv_dok',         label:'Dokumentasjon (FDV)', emoji:'📦', color:'#0891b2', bg:'#ecfeff' },
+]
 
 function BildedokPage() {
   const { user } = useAuth()
-  const [albums, setAlbums] = useState([])
   const [photos, setPhotos] = useState([])
   const [projects, setProjects] = useState([])
+  const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedAlbum, setSelectedAlbum] = useState(null)
-  const [showNewAlbum, setShowNewAlbum] = useState(false)
+  const [view, setView] = useState('mappe')
   const [filterProject, setFilterProject] = useState('alle')
-  const [filterCat, setFilterCat] = useState('alle')
+  const [filterFase, setFilterFase] = useState('alle')
+  const [filterRom, setFilterRom] = useState('alle')
+  const [filterAnsatt, setFilterAnsatt] = useState('alle')
+  const [filterDato, setFilterDato] = useState('alle')
   const [lightbox, setLightbox] = useState(null)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadFase, setUploadFase] = useState('under_arbeid')
+  const [uploading, setUploading] = useState(false)
+  const [expandedFaser, setExpandedFaser] = useState(new Set(['under_arbeid']))
 
   const load = async () => {
     try {
-      const [al, ph, proj] = await Promise.all([
-        supabase.from('photo_albums').select('*, photos(id)').order('created_at',{ascending:false}).then(r=>r.data||[]),
+      const [ph, proj, emp] = await Promise.all([
         supabase.from('photos').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('employees').select('id,name').order('name').then(r=>r.data||[]),
       ])
-      setAlbums(al); setPhotos(ph); setProjects(proj)
+      setPhotos(ph); setProjects(proj); setEmployees(emp)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
 
-  const filtered = albums.filter(a=>{
-    if (filterProject!=='alle'&&a.project_id!==filterProject) return false
-    if (filterCat!=='alle'&&a.category!==filterCat) return false
+  const allRooms = [...new Set(photos.map(p=>p.room).filter(Boolean))]
+
+  const filtered = photos.filter(p => {
+    if (filterProject!=='alle' && p.project_id!==filterProject) return false
+    if (filterFase!=='alle' && p.fase!==filterFase) return false
+    if (filterRom!=='alle' && p.room!==filterRom) return false
+    if (filterAnsatt!=='alle' && p.created_by!==filterAnsatt) return false
+    if (filterDato!=='alle') {
+      const d = new Date(p.created_at); const now = new Date()
+      if (filterDato==='idag' && d.toDateString()!==now.toDateString()) return false
+      if (filterDato==='uke' && (now-d)/86400000>7) return false
+      if (filterDato==='maned' && (now-d)/86400000>30) return false
+    }
     return true
   })
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster bilder...</p></div></div>
-  if (selectedAlbum) return <AlbumView album={selectedAlbum} photos={photos.filter(p=>p.album_id===selectedAlbum.id)} projects={projects} user={user} onBack={()=>{setSelectedAlbum(null);load()}} onRefresh={load} />
-
-  return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-          <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📷 Bildedokumentasjon</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Foto, album og gallerivisning per prosjekt</p>
-          </div>
-          <button onClick={()=>setShowNewAlbum(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Nytt album</button>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'8px' }}>
-          {Object.entries(PHOTO_CATS).map(([k,v])=>(
-            <button key={k} onClick={()=>setFilterCat(filterCat===k?'alle':k)}
-              style={{ padding:'10px 12px',borderRadius:'12px',border:`2px solid ${filterCat===k?v.color:'#f1f5f9'}`,background:filterCat===k?v.bg:'white',cursor:'pointer',textAlign:'left' }}>
-              <div style={{ fontSize:'16px',marginBottom:'4px' }}>{v.emoji}</div>
-              <div style={{ fontSize:'12px',fontWeight:'700',color:filterCat===k?v.color:'#0f172a' }}>{v.label}</div>
-              <div style={{ fontSize:'11px',color:'#94a3b8' }}>{albums.filter(a=>a.category===k).length} album</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white' }}>
-            <option value="alle">Alle prosjekter</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {(filterProject!=='alle'||filterCat!=='alle')&&<button onClick={()=>{setFilterProject('alle');setFilterCat('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
-          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} album · {photos.length} bilder totalt</span>
-        </div>
-
-        {filtered.length===0 ? (
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📷</div>
-            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen album funnet</h3>
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Opprett ditt første fotoalbum.</p>
-          </div>
-        ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:'14px' }}>
-            {filtered.map(album=>{
-              const cat=PHOTO_CATS[album.category]||PHOTO_CATS.annet
-              const proj=projects.find(p=>p.id===album.project_id)
-              const photoCount=(album.photos||[]).length
-              const albumPhotos=photos.filter(p=>p.album_id===album.id)
-              const coverPhoto=albumPhotos[0]
-              return (
-                <div key={album.id} onClick={()=>setSelectedAlbum(album)}
-                  style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', overflow:'hidden', cursor:'pointer', transition:'box-shadow 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ height:'150px', background:coverPhoto?'#000':`${cat.bg}`, position:'relative', overflow:'hidden' }}>
-                    {coverPhoto ? <img src={coverPhoto.file_url} alt="" style={{ width:'100%',height:'100%',objectFit:'cover',opacity:0.9 }} />
-                      : <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'48px' }}>{cat.emoji}</div>}
-                    <div style={{ position:'absolute',top:'10px',left:'10px',background:cat.bg,color:cat.color,border:`1px solid ${cat.color}30`,borderRadius:'999px',padding:'3px 10px',fontSize:'11px',fontWeight:'700' }}>{cat.emoji} {cat.label}</div>
-                    <div style={{ position:'absolute',bottom:'10px',right:'10px',background:'rgba(0,0,0,0.6)',color:'white',borderRadius:'8px',padding:'3px 8px',fontSize:'12px',fontWeight:'700' }}>📷 {photoCount}</div>
-                  </div>
-                  <div style={{ padding:'14px 16px' }}>
-                    <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'4px' }}>{album.title}</div>
-                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
-                      {proj&&<span>🏗️ {proj.name}</span>}
-                      {album.description&&<span>{album.description}</span>}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {showNewAlbum&&<AlbumModal projects={projects} user={user} onClose={()=>setShowNewAlbum(false)} onSaved={()=>{setShowNewAlbum(false);load()}} />}
-    </div>
-  )
-}
-
-function AlbumView({ album, photos, projects, user, onBack, onRefresh }) {
-  const [uploading, setUploading] = useState(false)
-  const [lightbox, setLightbox] = useState(null)
-  const [editingPhoto, setEditingPhoto] = useState(null)
-  const fileInputRef = React.useRef(null)
-  const cat = PHOTO_CATS[album.category]||PHOTO_CATS.annet
-  const proj = projects.find(p=>p.id===album.project_id)
-  const shareUrl = `${window.location.origin}/bildedok?album=${album.share_token}`
-
-  const uploadPhotos = async (e) => {
-    const files = Array.from(e.target.files||[])
+  const uploadPhotos = async (files, fase, projectId, rom, note) => {
     if (!files.length) return
     setUploading(true)
     try {
       for (const file of files) {
-        const path=`bildedok/${album.id}/${Date.now()}_${file.name}`
+        const path=`bildedok/${Date.now()}_${file.name}`
         const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
         if(upErr) throw upErr
         const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
-        await supabase.from('photos').insert({ album_id:album.id, project_id:album.project_id, file_url:publicUrl, file_name:file.name, created_by:user?.id })
+        await supabase.from('photos').insert({ file_url:publicUrl, file_name:file.name, fase:fase||'under_arbeid', project_id:projectId||null, room:rom||null, description:note||null, created_by:user?.id, upload_method:'manuell' })
       }
-      onRefresh()
+      load()
     } catch(e) { alert('Opplasting feilet: '+e.message) }
-    finally { setUploading(false); e.target.value='' }
+    finally { setUploading(false) }
   }
 
-  const deletePhoto = async (id) => {
-    if (!confirm('Slett dette bildet?')) return
-    await supabase.from('photos').delete().eq('id',id)
-    onRefresh()
-  }
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster bilder...</p></div></div>
 
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(shareUrl)
-    alert('Delingslenke kopiert!')
-  }
+  const faseGroups = BYGGEFASER.map(fase => ({ ...fase, photos: filtered.filter(p=>p.fase===fase.id) }))
+  const byDate = {}
+  filtered.forEach(p => {
+    const d = new Date(p.created_at).toLocaleDateString('nb-NO',{day:'2-digit',month:'long',year:'numeric'})
+    if (!byDate[d]) byDate[d] = []
+    byDate[d].push(p)
+  })
+
+  const selStyle = { padding:'8px 32px 8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',appearance:'none',cursor:'pointer',fontWeight:'500',color:'#0f172a' }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      {lightbox&&(
-        <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center' }} onClick={()=>setLightbox(null)}>
-          <img src={lightbox.file_url} alt={lightbox.description||''} style={{ maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:'8px' }} />
-          <button onClick={()=>setLightbox(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'50%',width:'40px',height:'40px',color:'white',fontSize:'20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
-          {lightbox.description&&<div style={{ position:'absolute',bottom:'20px',left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'white',borderRadius:'10px',padding:'10px 20px',fontSize:'14px' }}>{lightbox.description}</div>}
-        </div>
-      )}
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc' }}>
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til album</button>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
           <div>
-            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
-              <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{album.title}</h1>
-              <span style={{ background:cat.bg,color:cat.color,border:`1px solid ${cat.color}20`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
-            </div>
-            <div style={{ display:'flex', gap:'10px', fontSize:'13px', color:'#64748b' }}>
-              {proj&&<span>🏗️ {proj.name}</span>}
-              <span>📷 {photos.length} bilder</span>
-            </div>
+            <h1 style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a', margin:0 }}>Bildedokumentasjon</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>{filtered.length} bilder totalt</p>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={copyShareLink} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#475569' }}>🔗 Del album</button>
-            <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} style={{ padding:'9px 18px',background:uploading?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>
-              {uploading?'Laster opp...':'📷 Last opp bilder'}
+          <button onClick={()=>setShowUploadModal(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700', display:'flex', alignItems:'center', gap:'8px' }}>
+            + Last opp bilder
+          </button>
+        </div>
+        <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', borderRadius:'10px', padding:'4px', width:'fit-content', marginBottom:'16px' }}>
+          {[{id:'mappe',label:'Mappestruktur',icon:'⊞'},{id:'tidslinje',label:'Tidslinje',icon:'◷'}].map(t=>(
+            <button key={t.id} onClick={()=>setView(t.id)} style={{ padding:'7px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600', background:view===t.id?'white':'transparent', color:view===t.id?'#0f172a':'#64748b', boxShadow:view===t.id?'0 1px 3px rgba(0,0,0,0.1)':'none', display:'flex', alignItems:'center', gap:'6px' }}>
+              {t.icon} {t.label}
             </button>
-            <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadPhotos} accept="image/*" multiple />
-          </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterFase} onChange={e=>setFilterFase(e.target.value)} style={selStyle}><option value="alle">Alle faser</option>{BYGGEFASER.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterRom} onChange={e=>setFilterRom(e.target.value)} style={selStyle}><option value="alle">Alle rom</option>{allRooms.map(r=><option key={r} value={r}>{r}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterAnsatt} onChange={e=>setFilterAnsatt(e.target.value)} style={selStyle}><option value="alle">Alle ansatte</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterDato} onChange={e=>setFilterDato(e.target.value)} style={selStyle}><option value="alle">Alle datoer</option><option value="idag">I dag</option><option value="uke">Siste 7 dager</option><option value="maned">Siste 30 dager</option></select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          {(filterProject!=='alle'||filterFase!=='alle'||filterRom!=='alle'||filterAnsatt!=='alle'||filterDato!=='alle')&&<button onClick={()=>{setFilterProject('alle');setFilterFase('alle');setFilterRom('alle');setFilterAnsatt('alle');setFilterDato('alle')}} style={{ padding:'8px 14px',background:'#f1f5f9',border:'none',borderRadius:'10px',fontSize:'13px',cursor:'pointer',color:'#64748b',fontWeight:'500' }}>✕ Nullstill</button>}
         </div>
       </div>
+
       <div style={{ padding:'24px 32px' }}>
-        {photos.length===0 ? (
-          <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
-            <div style={{ fontSize:'48px', marginBottom:'12px' }}>📷</div>
-            <h3 style={{ margin:'0 0 8px', color:'#0f172a' }}>Ingen bilder ennå</h3>
-            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>Last opp bilder for å fylle albumet</p>
-            <button onClick={()=>fileInputRef.current?.click()} style={{ padding:'11px 22px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>📷 Last opp bilder</button>
+        {view==='mappe' ? (
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            {faseGroups.map(fase => {
+              const expanded = expandedFaser.has(fase.id)
+              const toggle = () => setExpandedFaser(prev=>{ const n=new Set(prev); n.has(fase.id)?n.delete(fase.id):n.add(fase.id); return n })
+              return (
+              <div key={fase.id} style={{ background:'white', borderRadius:'16px', border:'1px solid #e2e8f0', overflow:'hidden' }}>
+                <div onClick={toggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 20px', cursor:'pointer', userSelect:'none', transition:'background 0.1s' }}
+                  onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                    <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:fase.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{fase.emoji||'📁'}</div>
+                    <div>
+                      <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{fase.label}</span>
+                      <div style={{ fontSize:'12px',color:'#94a3b8',marginTop:'1px' }}>{fase.photos.length} bilder</div>
+                    </div>
+                    <span style={{ background:fase.bg, color:fase.color, border:`1px solid ${fase.color}30`, borderRadius:'999px', padding:'2px 10px', fontSize:'12px', fontWeight:'700' }}>{fase.photos.length}</span>
+                  </div>
+                  <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                    {fase.photos.slice(0,4).map((p,i)=>(
+                      <img key={p.id} src={p.file_url} alt="" style={{ width:'30px',height:'30px',borderRadius:'6px',objectFit:'cover',border:'2px solid white',marginLeft:i>0?'-8px':0 }} />
+                    ))}
+                    <button onClick={e=>{e.stopPropagation();setUploadFase(fase.id);setShowUploadModal(true)}} style={{ padding:'5px 12px', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', marginLeft:'4px' }}>+ Legg til</button>
+                    <span style={{ color:'#94a3b8',fontSize:'18px',transform:expanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block',marginLeft:'4px' }}>▾</span>
+                  </div>
+                </div>
+                {expanded && (fase.photos.length > 0 ? (
+                  <div style={{ padding:'4px 20px 20px', borderTop:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:'10px', marginTop:'12px' }}>
+                      {fase.photos.map(photo => (
+                        <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding:'16px 20px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'8px', color:'#94a3b8', fontSize:'13px' }}>
+                    Ingen bilder ennå.
+                    <button onClick={()=>{setUploadFase(fase.id);setShowUploadModal(true)}} style={{ background:'none', border:'none', color:'#059669', cursor:'pointer', fontWeight:'600', fontSize:'13px' }}>Last opp nå →</button>
+                  </div>
+                ))}
+              </div>
+            )})}
           </div>
         ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:'12px' }}>
-            {photos.map(photo=>(
-              <div key={photo.id} style={{ borderRadius:'12px', overflow:'hidden', background:'white', border:'1px solid #f1f5f9', position:'relative', cursor:'pointer' }}
-                onClick={()=>setLightbox(photo)}
-                onMouseEnter={e=>e.currentTarget.querySelector('.photo-actions').style.opacity='1'}
-                onMouseLeave={e=>e.currentTarget.querySelector('.photo-actions').style.opacity='0'}>
-                <img src={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'160px', objectFit:'cover', display:'block' }} />
-                <div className="photo-actions" style={{ position:'absolute',top:'6px',right:'6px',display:'flex',gap:'4px',opacity:0,transition:'opacity 0.15s' }}>
-                  <button onClick={e=>{e.stopPropagation();deletePhoto(photo.id)}} style={{ background:'rgba(220,38,38,0.9)',border:'none',borderRadius:'6px',padding:'4px 8px',color:'white',cursor:'pointer',fontSize:'12px' }}>🗑️</button>
+          <div style={{ display:'flex', flexDirection:'column', gap:'24px' }}>
+            {Object.keys(byDate).length === 0 ? (
+              <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+                <div style={{ fontSize:'40px', marginBottom:'12px' }}>📷</div>
+                <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen bilder funnet</h3>
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Prøv å endre filtrene eller last opp bilder.</p>
+              </div>
+            ) : Object.entries(byDate).map(([date, datePhotos]) => (
+              <div key={date}>
+                <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
+                  <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:'#059669', flexShrink:0 }} />
+                  <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{date}</span>
+                  <span style={{ color:'#94a3b8', fontSize:'13px' }}>{datePhotos.length} bilder</span>
+                  <div style={{ flex:1, height:'1px', background:'#f1f5f9' }} />
                 </div>
-                {photo.description&&<div style={{ padding:'8px 10px', fontSize:'12px', color:'#475569', fontWeight:'500' }}>{photo.description}</div>}
-                {photo.taken_date&&<div style={{ padding:'0 10px 8px', fontSize:'11px', color:'#94a3b8' }}>{photo.taken_date}</div>}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:'10px' }}>
+                  {datePhotos.map(photo => {
+                    const fase = BYGGEFASER.find(f=>f.id===photo.fase)
+                    return <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
+                  })}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {lightbox&&(
+        <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center' }} onClick={()=>setLightbox(null)}>
+          <img src={lightbox.file_url} alt={lightbox.description||''} style={{ maxWidth:'90vw',maxHeight:'85vh',objectFit:'contain',borderRadius:'8px' }} />
+          <button onClick={()=>setLightbox(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',borderRadius:'50%',width:'40px',height:'40px',color:'white',fontSize:'20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
+          <div style={{ position:'absolute',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'white',borderRadius:'12px',padding:'12px 20px',fontSize:'13px',display:'flex',gap:'14px',alignItems:'center',flexWrap:'wrap',maxWidth:'80vw' }}>
+            {lightbox.upload_method==='manuell'&&<span style={{ background:'rgba(255,255,255,0.15)',borderRadius:'6px',padding:'2px 8px',fontSize:'11px' }}>Manuell opplasting</span>}
+            {lightbox.fase&&<span>{BYGGEFASER.find(f=>f.id===lightbox.fase)?.label}</span>}
+            {lightbox.room&&<span>🚪 {lightbox.room}</span>}
+            {lightbox.description&&<span>{lightbox.description}</span>}
+          </div>
+        </div>
+      )}
+
+      {showUploadModal&&<BildedokUploadModal projects={projects} initialFase={uploadFase} user={user} uploading={uploading} onClose={()=>setShowUploadModal(false)} onUpload={async(files,fase,pid,rom,note)=>{ await uploadPhotos(files,fase,pid,rom,note); setShowUploadModal(false) }} />}
     </div>
   )
 }
 
-function AlbumModal({ projects, user, onClose, onSaved }) {
-  const [form, setForm] = useState({ title:'', category:'fremdrift', project_id:'', description:'' })
-  const [saving, setSaving] = useState(false)
-  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
-  const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
-    setSaving(true)
-    try { const {error}=await supabase.from('photo_albums').insert({...form,project_id:form.project_id||null,created_by:user?.id}); if(error) throw error; onSaved() }
-    catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
-  }
+function BildedokThumbnail({ photo, fase, projects, onClick, onDelete }) {
+  const proj = projects.find(p=>p.id===photo.project_id)
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div style={{ borderRadius:'12px', overflow:'hidden', background:'white', border:'1px solid #f1f5f9', position:'relative', cursor:'pointer' }}
+      onClick={onClick}
+      onMouseEnter={e=>{ e.currentTarget.querySelector('.pa').style.opacity='1'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)' }}
+      onMouseLeave={e=>{ e.currentTarget.querySelector('.pa').style.opacity='0'; e.currentTarget.style.boxShadow='none' }}>
+      <img src={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'140px', objectFit:'cover', display:'block' }} />
+      {photo.upload_method==='manuell'&&<div style={{ position:'absolute',top:'7px',left:'7px',background:'rgba(0,0,0,0.55)',color:'white',borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'600' }}>Manuell opplasting</div>}
+      {fase&&<div style={{ position:'absolute',bottom:'7px',left:'7px',background:fase.bg,color:fase.color,borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'700' }}>{fase.label}</div>}
+      <div className="pa" style={{ position:'absolute',top:'6px',right:'6px',opacity:0,transition:'opacity 0.15s' }}>
+        <button onClick={e=>{e.stopPropagation();onDelete()}} style={{ background:'rgba(220,38,38,0.85)',border:'none',borderRadius:'6px',padding:'4px 8px',color:'white',cursor:'pointer',fontSize:'11px' }}>🗑️</button>
+      </div>
+      {(photo.description||photo.room||proj)&&(
+        <div style={{ padding:'8px 10px' }}>
+          {photo.room&&<div style={{ fontSize:'11px',color:'#64748b',marginBottom:'2px' }}>🚪 {photo.room}</div>}
+          {proj&&<div style={{ fontSize:'11px',color:'#64748b',marginBottom:'2px' }}>🏗️ {proj.name}</div>}
+          {photo.description&&<div style={{ fontSize:'11px',color:'#475569',fontWeight:'500' }}>{photo.description}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, onUpload }) {
+  const [fase, setFase] = useState(initialFase||'under_arbeid')
+  const [projectId, setProjectId] = useState('')
+  const [rom, setRom] = useState('')
+  const [note, setNote] = useState('')
+  const [files, setFiles] = useState([])
+  const [previews, setPreviews] = useState([])
+  const fileRef = React.useRef(null)
+
+  const handleFiles = (newFiles) => {
+    const arr = Array.from(newFiles); setFiles(arr)
+    setPreviews(arr.map(f=>URL.createObjectURL(f)))
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px',fontFamily:'system-ui,sans-serif' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📷 Nytt album</h2>
+      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'540px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',overflow:'hidden',maxHeight:'90vh',display:'flex',flexDirection:'column' }}>
+        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📷 Last opp bilder</h2>
           <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Albumnavn *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Fremdrift uke 14" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
+        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px',overflowY:'auto' }}>
+          <div onDrop={e=>{e.preventDefault();handleFiles(e.dataTransfer.files)}} onDragOver={e=>e.preventDefault()} onClick={()=>fileRef.current?.click()}
+            style={{ border:'2px dashed #e2e8f0',borderRadius:'14px',padding:'28px',textAlign:'center',cursor:'pointer',background:'#f8fafc' }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor='#059669'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
+            <div style={{ fontSize:'32px',marginBottom:'8px' }}>📸</div>
+            <div style={{ fontWeight:'600',color:'#0f172a',fontSize:'14px',marginBottom:'4px' }}>Dra og slipp bilder her</div>
+            <div style={{ color:'#94a3b8',fontSize:'12px' }}>eller klikk for å velge filer</div>
+            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e=>handleFiles(e.target.files)} accept="image/*" multiple />
+          </div>
+          {previews.length>0&&(
+            <div style={{ display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center' }}>
+              {previews.map((src,i)=><img key={i} src={src} alt="" style={{ width:'56px',height:'56px',objectFit:'cover',borderRadius:'8px',border:'1px solid #e2e8f0' }} />)}
+              <span style={{ fontSize:'13px',color:'#64748b' }}>{files.length} fil{files.length>1?'er':''} valgt</span>
+            </div>
+          )}
           <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Kategori</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px' }}>
-              {Object.entries(PHOTO_CATS).map(([k,v])=>(
-                <button key={k} onClick={()=>set('category',k)} style={{ padding:'8px',borderRadius:'8px',border:`2px solid ${form.category===k?v.color:'#e2e8f0'}`,background:form.category===k?v.bg:'white',cursor:'pointer',fontSize:'11px',fontWeight:'700',color:form.category===k?v.color:'#64748b' }}>{v.emoji} {v.label}</button>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Byggefase *</label>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'6px' }}>
+              {BYGGEFASER.map(f=>(
+                <button key={f.id} onClick={()=>setFase(f.id)} style={{ padding:'9px 10px',borderRadius:'10px',border:`2px solid ${fase===f.id?f.color:'#e2e8f0'}`,background:fase===f.id?f.bg:'white',cursor:'pointer',fontSize:'12px',fontWeight:'700',color:fase===f.id?f.color:'#64748b',textAlign:'left' }}>{f.label}</button>
               ))}
             </div>
           </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Beskrivelse</label><input value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
-          <div style={{ display:'flex',justifyContent:'flex-end',gap:'12px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Rom / område</label><input value={rom} onChange={e=>setRom(e.target.value)} placeholder="F.eks. Bad 2. etg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
+          </div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notat</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
+          <div style={{ display:'flex',justifyContent:'flex-end',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
             <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':'Opprett album'}</button>
+            <button onClick={()=>{ if(!files.length) return alert('Velg minst ett bilde'); onUpload(files,fase,projectId,rom,note) }} disabled={uploading||!files.length} style={{ padding:'10px 24px',background:uploading||!files.length?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{uploading?'Laster opp...':'Last opp'}</button>
           </div>
         </div>
       </div>
