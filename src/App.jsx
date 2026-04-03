@@ -1294,7 +1294,6 @@ function ProsjektfilerPage() {
 }
 
 function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
-  // isArchived passed as prop for clarity
   const revBg    = isArchived ? '#fef2f2' : '#f0fdf4'
   const revColor = isArchived ? '#dc2626' : '#059669'
   const revBorder= isArchived ? '#fecaca' : '#bbf7d0'
@@ -1319,7 +1318,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '1px 8px',
               display: 'flex', alignItems: 'center', gap: '3px' }}>
               {file.revision_label}
-              {isCurrent && !isArchived && <span>✓</span>}
+              {!isArchived && <span>✓</span>}
               {isArchived && <span>🗄️</span>}
             </span>
           )}
@@ -1332,7 +1331,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
         </div>
       </div>
       <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
-        {supportsRevision && isCurrent && !isArchived && onNewRevision && (
+        {supportsRevision && !isArchived && onNewRevision && (
           <label style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669',
             border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer',
             fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
