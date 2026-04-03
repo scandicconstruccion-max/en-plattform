@@ -881,11 +881,18 @@ function ProsjektfilerPage() {
     [files, selectedProject]
   )
 
-  const countForCat = (catId) =>
-    projectFiles.filter(f => f.category === catId && f.archived !== true).length
+  const countForCat = (catId) => {
+    const active = projectFiles.filter(f => f.category === catId && f.archived !== true)
+    // Count unique documents (by document_group or id)
+    const unique = new Set(active.map(f => f.document_group || f.id))
+    return unique.size
+  }
 
-  const countForSub = (catId, sub) =>
-    projectFiles.filter(f => f.category === catId && f.sub_folder === sub && f.archived !== true).length
+  const countForSub = (catId, sub) => {
+    const active = projectFiles.filter(f => f.category === catId && f.sub_folder === sub && f.archived !== true)
+    const unique = new Set(active.map(f => f.document_group || f.id))
+    return unique.size
+  }
 
   const allPanelFiles = React.useMemo(() => {
     if (!selectedCategory) return []
@@ -4117,7 +4124,7 @@ function NotifProvider({ children }) {
 const useNotif = () => React.useContext(NotifContext)
 
 // ─── GLOBAL CONFIRM DIALOG ────────────────────────────────────────────────────
-const ConfirmContext = React.createContext({})
+const ConfirmContext = React.createContext({ confirm: () => Promise.resolve(false) })
 
 function ConfirmProvider({ children }) {
   const [state, setState] = React.useState(null)
