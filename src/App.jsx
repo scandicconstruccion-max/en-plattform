@@ -585,6 +585,7 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [viewMode, setViewMode] = useState('grid')
+  const [sortBy, setSortBy] = useState('created_desc')
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const f = { fontFamily:'system-ui, sans-serif' }
@@ -593,11 +594,22 @@ function ProsjekterPage({ onNavigateDetail }) {
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
-  const filtered = projects.filter(p => {
-    const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.client_name?.toLowerCase().includes(search.toLowerCase())
-    const mst = statusFilter === 'all' || p.status === statusFilter
-    return ms && mst
-  })
+  const filtered = React.useMemo(() => {
+    const list = projects.filter(p => {
+      const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.client_name?.toLowerCase().includes(search.toLowerCase())
+      const mst = statusFilter === 'all' || p.status === statusFilter
+      return ms && mst
+    })
+    return list.sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc':   return (a.name||'').localeCompare(b.name||'', 'nb')
+        case 'name_desc':  return (b.name||'').localeCompare(a.name||'', 'nb')
+        case 'created_asc':  return new Date(a.created_at) - new Date(b.created_at)
+        case 'created_desc': return new Date(b.created_at) - new Date(a.created_at)
+        default: return 0
+      }
+    })
+  }, [projects, search, statusFilter, sortBy])
 
   const handleCreate = async (form) => {
     setSaving(true)
@@ -628,6 +640,13 @@ function ProsjekterPage({ onNavigateDetail }) {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width:'160px', background:'white' }}>
             <option value="all">Alle statuser</option>
             {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+            style={{ padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', background:'white', cursor:'pointer', color:'#374151', fontWeight:'500' }}>
+            <option value="name_asc">A → Å</option>
+            <option value="name_desc">Å → A</option>
+            <option value="created_desc">Nyeste først</option>
+            <option value="created_asc">Eldste først</option>
           </select>
           <div style={{ display:'flex', gap:'4px' }}>
             {['grid','list'].map(v => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }}>{v==='grid'?'⊞':'☰'}</button>)}
