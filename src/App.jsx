@@ -86,6 +86,7 @@ const navGroups = [
       { id: 'avvik',        label: 'Avvik',         emoji: '⚠️' },
       { id: 'hms',          label: 'HMS & Risiko',  emoji: '🛡️' },
       { id: 'maskiner',     label: 'Maskiner',      emoji: '🚜' },
+      { id: 'kunder',       label: 'Kundeoversikt', emoji: '🏢' },
       { id: 'varsler',      label: 'Varsler',       emoji: '🔔' },
     ]
   },
@@ -149,6 +150,7 @@ const moduleCards = [
   { id: 'bildedok', name: 'Bildedok', desc: 'Foto og dokumenter', emoji: '📷', color: '#fdf4ff' },
   { id: 'fdv', name: 'FDV', desc: 'Forvaltning, Drift og Vedlikehold', emoji: '🏛️', color: '#fef9ec' },
   { id: 'minbedrift', name: 'Min bedrift', desc: 'Bedriftsinnstillinger og moduler', emoji: '🏢', color: '#f0fdf4' },
+  { id: 'kunder',     name: 'Kundeoversikt', desc: 'Kunder og oppdragsgivere', emoji: '🏢', color: '#f0fdf4' },
   { id: 'brukeradmin', name: 'Brukere', desc: 'Brukeradministrasjon', emoji: '👤', color: '#f8fafc' },
   { id: 'varsler', name: 'Varsler', desc: 'Notifikasjoner', emoji: '🔔', color: '#fffbeb' },
 ]
@@ -156,7 +158,7 @@ const moduleCards = [
 const moduleSections = [
   {
     title: '🔹 GRUNNPAKKE',
-    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner', 'varsler'],
+    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner', 'varsler', 'kunder'],
     singleRow: true,
   },
   {
@@ -444,7 +446,7 @@ const emptyProsjekt = {
   start_date:'', end_date:'', budget:'',
   client_name:'', client_contact:'', client_email:'', client_phone:'',
   resident_name:'', resident_phone:'', resident_email:'',
-  project_manager_name:'', project_manager_email:'', project_manager_phone:'',
+  project_manager_name:'', project_manager_email:'', project_manager_phone:'', customer_id:'',
   subcontractors:[], architects:[], consultants:[],
 }
 
@@ -11856,6 +11858,567 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
 
 // ─── END INTERN CHAT MODULE ───────────────────────────────────────────────────
 
+
+// ─── KUNDER MODULE ────────────────────────────────────────────────────────────
+
+const KUNDE_TYPE = {
+  bedrift:  { label: 'Bedrift',      emoji: '🏢', color: '#2563eb', bg: '#eff6ff' },
+  privat:   { label: 'Privat',       emoji: '👤', color: '#7c3aed', bg: '#f5f3ff' },
+  offentlig:{ label: 'Offentlig',    emoji: '🏛️', color: '#0891b2', bg: '#ecfeff' },
+  borettslag:{ label:'Borettslag',   emoji: '🏘️', color: '#059669', bg: '#f0fdf4' },
+}
+
+const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+
+function KunderPage() {
+  const { user } = useAuth()
+  const confirm = useConfirm()
+  const [kunder, setKunder] = useState([])
+  const [prosjekter, setProsjekter] = useState([])
+  const [tilbud, setTilbud] = useState([])
+  const [fakturaer, setFakturaer] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filterType, setFilterType] = useState('alle')
+  const [selected, setSelected] = useState(null)
+  const [showNew, setShowNew] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [k, p, q, inv] = await Promise.all([
+        supabase.from('customers').select('*').order('name').then(r => r.data || []),
+        supabase.from('projects').select('id,name,status,customer_id').order('name').then(r => r.data || []),
+        supabase.from('quotes').select('id,title,status,total_amount,customer_id,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
+        supabase.from('invoices').select('id,title,status,total_amount,customer_id,created_at,due_date').order('created_at',{ascending:false}).then(r => r.data || []),
+      ])
+      setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const filtered = kunder.filter(k => {
+    if (filterType !== 'alle' && k.type !== filterType) return false
+    if (search && ![k.name, k.email, k.phone, k.orgnr, k.city].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const handleDelete = async (kunde) => {
+    const ok = await confirm({ message: `Slett ${kunde.name}?`, subMessage: 'Kunden og all tilhørende informasjon slettes permanent.', danger: true })
+    if (!ok) return
+    try {
+      await supabase.from('customers').delete().eq('id', kunde.id)
+      await load()
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/>
+        <p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster kunder...</p>
+      </div>
+    </div>
+  )
+
+  if (selected) return (
+    <KundeDetaljer
+      kunde={selected}
+      prosjekter={prosjekter.filter(p => p.customer_id === selected.id)}
+      tilbud={tilbud.filter(t => t.customer_id === selected.id)}
+      fakturaer={fakturaer.filter(f => f.customer_id === selected.id)}
+      user={user}
+      onBack={() => { setSelected(null); load() }}
+      onRefresh={load}
+    />
+  )
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div>
+          <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
+          <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{kunder.length} registrerte kunder</p>
+        </div>
+        <button onClick={() => setShowNew(true)}
+          style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>
+          + Ny kunde
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding:'12px 32px', display:'flex', gap:'24px' }}>
+        {Object.entries(KUNDE_TYPE).map(([key, cfg]) => {
+          const count = kunder.filter(k => k.type === key).length
+          return (
+            <button key={key} onClick={() => setFilterType(filterType === key ? 'alle' : key)}
+              style={{ display:'flex', alignItems:'center', gap:'8px', background:'none', border:'none', cursor:'pointer', padding:'6px 12px', borderRadius:'10px',
+                background: filterType === key ? cfg.bg : 'transparent',
+                color: filterType === key ? cfg.color : '#64748b' }}>
+              <span style={{ fontSize:'16px' }}>{cfg.emoji}</span>
+              <span style={{ fontSize:'13px', fontWeight:'600' }}>{cfg.label}</span>
+              <span style={{ background: filterType === key ? cfg.color : '#e2e8f0', color: filterType === key ? 'white' : '#64748b',
+                borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'1px 7px' }}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Search */}
+      <div style={{ padding:'16px 32px', background:'white', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'10px', alignItems:'center' }}>
+        <div style={{ position:'relative', flex:1, maxWidth:'360px' }}>
+          <span style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8', fontSize:'14px' }}>🔍</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk på navn, e-post, telefon, orgnr..."
+            style={{ ...kundeInp, paddingLeft:'34px' }} />
+        </div>
+        {(search || filterType !== 'alle') && (
+          <button onClick={() => { setSearch(''); setFilterType('alle') }}
+            style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>
+            Nullstill
+          </button>
+        )}
+        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kunder</span>
+      </div>
+
+      {/* Customer list */}
+      <div style={{ padding:'20px 32px' }}>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>🏢</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{search ? 'Ingen kunder funnet' : 'Ingen kunder ennå'}</h3>
+            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>{search ? 'Prøv et annet søkeord' : 'Registrer din første kunde'}</p>
+            {!search && <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'11px 22px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde</button>}
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(kunde => {
+              const type = KUNDE_TYPE[kunde.type] || KUNDE_TYPE.bedrift
+              const antallProsjekter = prosjekter.filter(p => p.customer_id === kunde.id).length
+              return (
+                <div key={kunde.id}
+                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'16px', cursor:'pointer', transition:'box-shadow 0.15s' }}
+                  onClick={() => setSelected(kunde)}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                  {/* Avatar */}
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>
+                    {type.emoji}
+                  </div>
+                  {/* Info */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{kunde.name}</span>
+                      <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px' }}>{type.emoji} {type.label}</span>
+                    </div>
+                    <div style={{ display:'flex', gap:'16px', fontSize:'13px', color:'#64748b', flexWrap:'wrap' }}>
+                      {kunde.orgnr && <span>Org: {kunde.orgnr}</span>}
+                      {kunde.email && <span>✉️ {kunde.email}</span>}
+                      {kunde.phone && <span>📞 {kunde.phone}</span>}
+                      {kunde.city && <span>📍 {kunde.city}</span>}
+                    </div>
+                  </div>
+                  {/* Prosjekter */}
+                  {antallProsjekter > 0 && (
+                    <div style={{ textAlign:'center', flexShrink:0 }}>
+                      <div style={{ fontSize:'18px', fontWeight:'800', color:'#059669' }}>{antallProsjekter}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>prosjekt{antallProsjekter !== 1 ? 'er' : ''}</div>
+                    </div>
+                  )}
+                  {/* Actions */}
+                  <div style={{ display:'flex', gap:'6px', flexShrink:0 }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setSelected(kunde)}
+                      style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                      Åpne
+                    </button>
+                    <button onClick={() => handleDelete(kunde)}
+                      style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'14px' }}>
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showNew && <KundeModal user={user} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
+    </div>
+  )
+}
+
+function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
+  const confirm = useConfirm()
+  const [editing, setEditing] = useState(false)
+  const [kontakter, setKontakter] = useState([])
+  const [notater, setNotater] = useState([])
+  const [nyttNotat, setNyttNotat] = useState('')
+  const [showNyKontakt, setShowNyKontakt] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const type = KUNDE_TYPE[kunde.type] || KUNDE_TYPE.bedrift
+
+  const loadDetails = async () => {
+    setLoading(true)
+    try {
+      const [k, n] = await Promise.all([
+        supabase.from('customer_contacts').select('*').eq('customer_id', kunde.id).order('name').then(r => r.data || []),
+        supabase.from('customer_notes').select('*').eq('customer_id', kunde.id).order('created_at', {ascending:false}).then(r => r.data || []),
+      ])
+      setKontakter(k); setNotater(n)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { loadDetails() }, [])
+
+  const lagreNotat = async () => {
+    if (!nyttNotat.trim()) return
+    try {
+      await supabase.from('customer_notes').insert({ customer_id:kunde.id, content:nyttNotat.trim(), created_by:user?.id })
+      setNyttNotat('')
+      loadDetails()
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
+  const slettKontakt = async (id) => {
+    const ok = await confirm({ message: 'Slett kontaktperson?', danger: true })
+    if (!ok) return
+    await supabase.from('customer_contacts').delete().eq('id', id)
+    loadDetails()
+  }
+
+  const slettNotat = async (id) => {
+    const ok = await confirm({ message: 'Slett notat?', danger: true })
+    if (!ok) return
+    await supabase.from('customer_notes').delete().eq('id', id)
+    loadDetails()
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
+                <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
+              </div>
+              <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
+                {kunde.orgnr && <span>Org.nr: {kunde.orgnr}  </span>}
+                {kunde.city && <span>📍 {kunde.city}</span>}
+              </div>
+            </div>
+          </div>
+          <button onClick={() => setEditing(true)}
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 20px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>
+            ✏️ Rediger
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'1fr 340px', gap:'20px' }}>
+        {/* Venstre kolonne */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+
+          {/* Kontaktinfo */}
+          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+            <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Kontaktinformasjon</h3>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+              {[
+                ['E-post', kunde.email, `mailto:${kunde.email}`],
+                ['Telefon', kunde.phone, `tel:${kunde.phone}`],
+                ['Adresse', kunde.address, null],
+                ['Postnummer / By', [kunde.postal_code, kunde.city].filter(Boolean).join(' '), null],
+                ['Org.nummer', kunde.orgnr, null],
+                ['Faktura e-post', kunde.invoice_email, `mailto:${kunde.invoice_email}`],
+              ].filter(r => r[1]).map(([label, value, href]) => (
+                <div key={label} style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'3px' }}>{label}</div>
+                  {href
+                    ? <a href={href} style={{ fontSize:'14px', fontWeight:'600', color:'#059669', textDecoration:'none' }}>{value}</a>
+                    : <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{value}</div>
+                  }
+                </div>
+              ))}
+            </div>
+            {kunde.notes && (
+              <div style={{ marginTop:'12px', background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a' }}>
+                <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'600', marginBottom:'4px' }}>MERKNAD</div>
+                <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{kunde.notes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Tilknyttede prosjekter */}
+          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+            <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Prosjekter ({prosjekter.length})</h3>
+            {prosjekter.length === 0 ? (
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen prosjekter koblet til denne kunden ennå.</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {prosjekter.map(p => (
+                  <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                    <span style={{ fontSize:'16px' }}>🏗️</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
+                    <span style={{ fontSize:'12px', color:'#64748b', background:'white', borderRadius:'6px', padding:'2px 8px', border:'1px solid #e2e8f0' }}>{p.status || 'Aktiv'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tilbud */}
+          {tilbud.length > 0 && (
+            <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+              <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Tilbud ({tilbud.length})</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {tilbud.map(t => {
+                  const statusCfg = { Utkast:{bg:'#f8fafc',color:'#64748b'}, Sendt:{bg:'#eff6ff',color:'#2563eb'}, Akseptert:{bg:'#f0fdf4',color:'#059669'}, Avslått:{bg:'#fef2f2',color:'#dc2626'} }[t.status] || {bg:'#f8fafc',color:'#64748b'}
+                  return (
+                    <div key={t.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                      <span style={{ fontSize:'16px' }}>📋</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
+                        <div style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(t.created_at).toLocaleDateString('nb-NO')}</div>
+                      </div>
+                      {t.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(t.total_amount).toLocaleString('nb-NO')} kr</span>}
+                      <span style={{ background:statusCfg.bg, color:statusCfg.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{t.status}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Fakturaer */}
+          {fakturaer.length > 0 && (
+            <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+              <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🧾 Fakturaer ({fakturaer.length})</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {fakturaer.map(f => {
+                  const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
+                  const statusColor = f.status === 'Betalt' ? '#059669' : isOverdue ? '#dc2626' : '#d97706'
+                  const statusBg = f.status === 'Betalt' ? '#f0fdf4' : isOverdue ? '#fef2f2' : '#fffbeb'
+                  return (
+                    <div key={f.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                      <span style={{ fontSize:'16px' }}>🧾</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.title}</div>
+                        <div style={{ fontSize:'12px', color:'#94a3b8' }}>{f.due_date ? `Forfall: ${new Date(f.due_date).toLocaleDateString('nb-NO')}` : new Date(f.created_at).toLocaleDateString('nb-NO')}</div>
+                      </div>
+                      {f.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(f.total_amount).toLocaleString('nb-NO')} kr</span>}
+                      <span style={{ background:statusBg, color:statusColor, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{isOverdue ? '⚠️ Forfalt' : f.status}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Notater */}
+          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+            <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📝 Notater</h3>
+            <div style={{ display:'flex', gap:'8px', marginBottom:'14px' }}>
+              <textarea value={nyttNotat} onChange={e => setNyttNotat(e.target.value)}
+                placeholder="Skriv et notat om kunden..."
+                rows={2} style={{ ...kundeInp, flex:1, resize:'none', fontSize:'13px' }} />
+              <button onClick={lagreNotat} disabled={!nyttNotat.trim()}
+                style={{ background: nyttNotat.trim() ? '#059669' : '#e2e8f0', color: nyttNotat.trim() ? 'white' : '#94a3b8',
+                  border:'none', borderRadius:'10px', padding:'0 16px', cursor: nyttNotat.trim() ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>
+                Lagre
+              </button>
+            </div>
+            {notater.length === 0 ? (
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen notater ennå.</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {notater.map(n => (
+                  <div key={n.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', display:'flex', gap:'10px' }}>
+                    <div style={{ flex:1 }}>
+                      <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#374151', lineHeight:1.5 }}>{n.content}</p>
+                      <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(n.created_at).toLocaleDateString('nb-NO', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <button onClick={() => slettNotat(n.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0', alignSelf:'flex-start' }}>🗑️</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Høyre kolonne — kontaktpersoner */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+              <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👥 Kontaktpersoner</h3>
+              <button onClick={() => setShowNyKontakt(true)}
+                style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                + Legg til
+              </button>
+            </div>
+            {kontakter.length === 0 ? (
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen kontaktpersoner registrert.</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                {kontakter.map(k => (
+                  <div key={k.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                      <div>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'4px' }}>{k.name}</div>
+                        {k.title && <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>{k.title}</div>}
+                        {k.email && <a href={`mailto:${k.email}`} style={{ display:'block', fontSize:'12px', color:'#059669', textDecoration:'none', marginBottom:'2px' }}>✉️ {k.email}</a>}
+                        {k.phone && <a href={`tel:${k.phone}`} style={{ display:'block', fontSize:'12px', color:'#059669', textDecoration:'none' }}>📞 {k.phone}</a>}
+                      </div>
+                      <button onClick={() => slettKontakt(k.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', padding:'0' }}>🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {editing && <KundeModal user={user} initial={kunde} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onRefresh() }} />}
+      {showNyKontakt && <KontaktpersonModal customerId={kunde.id} onClose={() => setShowNyKontakt(false)} onSaved={() => { setShowNyKontakt(false); loadDetails() }} />}
+    </div>
+  )
+}
+
+function KundeModal({ user, initial, onClose, onSaved }) {
+  const isEdit = !!initial
+  const [form, setForm] = useState({
+    name: initial?.name || '',
+    type: initial?.type || 'bedrift',
+    orgnr: initial?.orgnr || '',
+    email: initial?.email || '',
+    phone: initial?.phone || '',
+    address: initial?.address || '',
+    postal_code: initial?.postal_code || '',
+    city: initial?.city || '',
+    invoice_email: initial?.invoice_email || '',
+    notes: initial?.notes || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) return alert('Navn er påkrevd')
+    setSaving(true)
+    try {
+      if (isEdit) {
+        const { error } = await supabase.from('customers').update({ ...form, updated_at: new Date().toISOString() }).eq('id', initial.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('customers').insert({ ...form, created_by: user?.id })
+        if (error) throw error
+      }
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = (t) => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{t}</label>
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'600px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏢 {isEdit ? 'Rediger kunde' : 'Ny kunde'}</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <form onSubmit={handleSave} style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'14px', overflowY:'auto' }}>
+          {/* Kundetype */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kunde</label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+              {Object.entries(KUNDE_TYPE).map(([key, cfg]) => (
+                <button key={key} type="button" onClick={() => set('type', key)}
+                  style={{ padding:'9px 8px', borderRadius:'10px', border:`2px solid ${form.type === key ? cfg.color : '#e2e8f0'}`,
+                    background: form.type === key ? cfg.bg : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'700',
+                    color: form.type === key ? cfg.color : '#64748b', textAlign:'center' }}>
+                  {cfg.emoji} {cfg.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={kundeInp} /></div>
+            <div>{lbl('Organisasjonsnummer')}<input value={form.orgnr} onChange={e => set('orgnr', e.target.value)} placeholder="9 siffer" style={kundeInp} /></div>
+            <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="kontakt@bedrift.no" style={kundeInp} /></div>
+            <div>{lbl('Telefon')}<input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+47 000 00 000" style={kundeInp} /></div>
+            <div>{lbl('Faktura e-post')}<input type="email" value={form.invoice_email} onChange={e => set('invoice_email', e.target.value)} placeholder="faktura@bedrift.no" style={kundeInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Adresse')}<input value={form.address} onChange={e => set('address', e.target.value)} placeholder="Gateadresse" style={kundeInp} /></div>
+            <div>{lbl('Postnummer')}<input value={form.postal_code} onChange={e => set('postal_code', e.target.value)} placeholder="0000" style={kundeInp} /></div>
+            <div>{lbl('By / Sted')}<input value={form.city} onChange={e => set('city', e.target.value)} placeholder="Oslo" style={kundeInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Merknad / notat')}<textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Interne merknader om kunden..." style={{ ...kundeInp, resize:'none' }} /></div>
+          </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button type="submit" disabled={saving} style={{ padding:'10px 24px', background: saving ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+              {saving ? 'Lagrer...' : isEdit ? 'Lagre endringer' : 'Opprett kunde'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function KontaktpersonModal({ customerId, onClose, onSaved }) {
+  const [form, setForm] = useState({ name:'', title:'', email:'', phone:'' })
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) return alert('Navn er påkrevd')
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('customer_contacts').insert({ ...form, customer_id: customerId })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = (t) => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{t}</label>
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>👤 Ny kontaktperson</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <form onSubmit={handleSave} style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'12px' }}>
+          <div>{lbl('Navn *')}<input value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Fullt navn" style={kundeInp} /></div>
+          <div>{lbl('Stilling / Rolle')}<input value={form.title} onChange={e => set('title', e.target.value)} placeholder="F.eks. Prosjektleder" style={kundeInp} /></div>
+          <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="navn@bedrift.no" style={kundeInp} /></div>
+          <div>{lbl('Telefon')}<input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+47 000 00 000" style={kundeInp} /></div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Avbryt</button>
+            <button type="submit" disabled={saving} style={{ padding:'10px 24px', background: saving ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+              {saving ? 'Lagrer...' : 'Legg til'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── END KUNDER MODULE ────────────────────────────────────────────────────────
+
 // ─── CRM MODULE ───────────────────────────────────────────────────────────────
 
 const CRM_STATUS = {
@@ -15150,6 +15713,7 @@ function AppContent() {
         {page === 'ressursplan' && <RessursPage />}
         {page === 'kalender' && <KalenderPage />}
         {page === 'chat' && <InterChatPage />}
+        {page === 'kunder' && <KunderPage />}
         {page === 'crm' && <CRMPage />}
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
