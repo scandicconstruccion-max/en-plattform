@@ -2785,6 +2785,39 @@ function HmsPage() {
   }
   useEffect(() => { loadData() }, [])
 
+  // Sjekk om HMS-håndbok trenger revisjon — varsler admin innen 30 dager
+  useEffect(() => {
+    const checkHandbokRevisjon = async () => {
+      try {
+        const { data: handbok } = await supabase.from('hms_records')
+          .select('id,data').eq('type','handbok').order('updated_at',{ascending:false}).limit(1).single()
+        if (!handbok?.data?.neste_revisjon) return
+        const dager = Math.ceil((new Date(handbok.data.neste_revisjon) - new Date()) / 86400000)
+        if (dager > 30) return
+        const today = new Date().toISOString().split('T')[0]
+        const { data: existing } = await supabase.from('notifications')
+          .select('id').ilike('title','%HMS-håndbok%').gte('created_at', today+'T00:00:00').limit(1)
+        if (existing?.length) return
+        const { data: admins } = await supabase.from('user_roles').select('user_id').eq('role','admin')
+        if (!admins?.length) return
+        const msg = dager < 0
+          ? `HMS-håndboken er forfalt for revisjon! Planlagt dato: ${handbok.data.neste_revisjon}.`
+          : dager === 0 ? `HMS-håndboken skal revideres i dag.`
+          : `HMS-håndboken bør revideres om ${dager} dager (${handbok.data.neste_revisjon}). Sjekk at innholdet er oppdatert.`
+        for (const a of admins) {
+          await supabase.from('notifications').insert({
+            user_id: a.user_id,
+            title: '📗 HMS-håndbok – revisjon nærmer seg',
+            message: msg,
+            type: dager < 0 ? 'warning' : 'info',
+            link_page: 'hms'
+          })
+        }
+      } catch(e) { /* ignore */ }
+    }
+    checkHandbokRevisjon()
+  }, [])
+
   const filtered = records.filter(r => {
     if (activeTab !== 'alle' && r.type !== activeTab) return false
     if (filterProject !== 'alle' && r.project_id !== filterProject) return false
@@ -2888,7 +2921,7 @@ function HmsPage() {
       {newType === 'ruh'             && <RuhModal            projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
       {newType === 'risiko'          && <RisikoModal         projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
       {newType === 'mottakskontroll' && <MottakskontrollModal projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
-      {newType === 'handbok'         && <HandbokModal        projects={projects} user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
+      {newType === 'handbok'         && <HandbokModal        user={user} onClose={() => setNewType(null)} onSaved={() => { setNewType(null); loadData() }} />}
     </div>
   )
 }
@@ -2983,7 +3016,7 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
       {editing && rec.type==='ruh'             && <RuhModal            projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
       {editing && rec.type==='risiko'          && <RisikoModal         projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
       {editing && rec.type==='mottakskontroll' && <MottakskontrollModal projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
-      {editing && rec.type==='handbok'         && <HandbokModal        projects={projects} user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
+      {editing && rec.type==='handbok'         && <HandbokModal        user={user} initial={rec} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshRec() }} />}
     </div>
   )
 }
@@ -3479,71 +3512,140 @@ function MottakskontrollView({ rec, proj }) {
   )
 }
 
-function HandbokModal({ projects, user, initial, onClose, onSaved }) {
+const HMS_HANDBOK_KAPITLER = [
+  { id:1,  tittel:'Mål for HMS',                innhold:'', mal:'Bedriftens HMS-mål og nullvisjon for skader. Beskriv overordnede mål og målbare resultater. [Tilpass til din bedrift]' },
+  { id:2,  tittel:'Organisasjon og ansvar',      innhold:'', mal:'Beskriv ansvarsfordeling: Daglig leder, HMS-ansvarlig, Verneombud, Prosjektleder og ansatte. [Tilpass til din bedrift]' },
+  { id:3,  tittel:'Rutine for avvik',            innhold:'', mal:'Beskriv hvordan avvik registreres, behandles og lukkes. Hvem varsles, frister og ansvar. [Tilpass til din bedrift]' },
+  { id:4,  tittel:'Rutine for RUH',              innhold:'', mal:'Rapport om Uønsket Hendelse. Beskriv hva som skal meldes, hvordan og av hvem. [Tilpass til din bedrift]' },
+  { id:5,  tittel:'Rutine for SJA',              innhold:'', mal:'Sikker Jobb Analyse. Når kreves SJA, hvem deltar, og hvordan gjennomføres den. [Tilpass til din bedrift]' },
+  { id:6,  tittel:'Rutine for risikovurdering',  innhold:'', mal:'Beskriv metode for risikovurdering, risikomatrise og tiltaksgrenser. [Tilpass til din bedrift]' },
+  { id:7,  tittel:'Rutine for vernerunde',       innhold:'', mal:'Frekvens, deltakere, gjennomføring og oppfølging av vernerunder. [Tilpass til din bedrift]' },
+  { id:8,  tittel:'Rutine for opplæring',        innhold:'', mal:'Obligatorisk opplæring, sertifiseringskrav og dokumentasjon. [Tilpass til din bedrift]' },
+  { id:9,  tittel:'Varslingsrutiner',            innhold:'', mal:'Nødnummer, intern varsling ved ulykke og kontaktpersoner. [Tilpass til din bedrift]' },
+  { id:10, tittel:'Beredskapsrutiner',           innhold:'', mal:'Evakuering, beredskapsansvarlig, møteplass og øvelsesfrekvens. [Tilpass til din bedrift]' },
+]
+
+function HandbokModal({ user, initial, onClose, onSaved }) {
   const isEdit = !!initial
-  const [title, setTitle] = useState(initial?.title||'')
-  const [projectId, setProjectId] = useState(initial?.project_id||'')
   const d0 = initial?.data||{}
-  const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], versjon:d0.versjon||'1.0', ansvarlig:d0.ansvarlig||'', formal:d0.formal||'', omfang:d0.omfang||'', malsetning:d0.malsetning||'' })
-  const [seksjoner, setSeksjoner] = useState(d0.seksjoner||[
-    {id:1,tittel:'HMS-policy',innhold:''},
-    {id:2,tittel:'Organisasjon og ansvar',innhold:''},
-    {id:3,tittel:'Risikovurdering',innhold:''},
-    {id:4,tittel:'Verneutstyr (PPE)',innhold:''},
-    {id:5,tittel:'Beredskapsplan',innhold:''},
-  ])
+  const [form, setForm] = useState({
+    dato: d0.dato||new Date().toISOString().split('T')[0],
+    versjon: d0.versjon||'1.0',
+    ansvarlig: d0.ansvarlig||'',
+    bedrift: d0.bedrift||'',
+    revisjonsansvarlig: d0.revisjonsansvarlig||'',
+    neste_revisjon: d0.neste_revisjon||new Date(new Date().setFullYear(new Date().getFullYear()+1)).toISOString().split('T')[0],
+  })
+  const [kapitler, setKapitler] = useState(d0.kapitler || HMS_HANDBOK_KAPITLER.map(k=>({...k})))
+  const [aktivKap, setAktivKap] = useState(0)
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
-  const addSeksjon = () => setSeksjoner(s=>[...s,{id:Date.now(),tittel:'',innhold:''}])
-  const removeSeksjon = (id) => setSeksjoner(s=>s.filter(x=>x.id!==id))
-  const updateSeksjon = (id,f,v) => setSeksjoner(s=>s.map(x=>x.id===id?{...x,[f]:v}:x))
+  const updateKap = (id,felt,v) => setKapitler(ks=>ks.map(k=>k.id===id?{...k,[felt]:v}:k))
+  const brukMal = (id) => setKapitler(ks=>ks.map(k=>k.id===id?{...k,innhold:k.mal}:k))
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!title.trim()||!projectId) return alert('Tittel og prosjekt er påkrevd')
+    if (!form.ansvarlig.trim()) return alert('HMS-ansvarlig er påkrevd')
     setSaving(true)
     try {
-      const payload = { title:title.trim(), project_id:projectId, type:'handbok', status:initial?.status||'Utkast', data:{...form,seksjoner}, updated_at:new Date().toISOString() }
-      if (isEdit) { const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id}); if(error) throw error }
-      if (!isEdit && payload.project_id) { await notifyProjectManager(payload.project_id, `Nytt HMS-dokument: ${payload.title}`, `Type: ${payload.type?.toUpperCase()||'HMS'} · Opprettet av ansatt`, 'info', 'hms') }
+      const title = `HMS-håndbok – ${form.bedrift||'Bedriften'} – v${form.versjon}`
+      const payload = {
+        title,
+        project_id: null, // HMS-håndbok gjelder bedriften, ikke et prosjekt
+        type: 'handbok',
+        status: initial?.status||'Gjeldende',
+        data: { ...form, kapitler },
+        updated_at: new Date().toISOString()
+      }
+      if (isEdit) {
+        const {error}=await supabase.from('hms_records').update(payload).eq('id',initial.id)
+        if(error) throw error
+      } else {
+        const {error}=await supabase.from('hms_records').insert({...payload,created_by:user?.id})
+        if(error) throw error
+        // Send varsel til admin om ny håndbok
+        const {data:admins}=await supabase.from('user_roles').select('user_id').eq('role','admin')
+        if(admins?.length) {
+          for(const a of admins) {
+            await supabase.from('notifications').insert({
+              user_id:a.user_id, title:'Ny HMS-håndbok opprettet',
+              message:`HMS-håndboken er opprettet og må gjennomgås. Neste revisjon: ${form.neste_revisjon}`,
+              type:'info', link_page:'hms'
+            })
+          }
+        }
+      }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
   }
+
   const lbl = () => ({ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' })
+  const kap = kapitler[aktivKap]
+
   return (
     <HmsModalShell title={`📗 ${isEdit?'Rediger':'Ny'} HMS-håndbok`} onClose={onClose} size="xl">
-      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. HMS-håndbok – Prosjekt X 2025" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-          <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
+      <form onSubmit={handleSave} style={{ display:'flex', flexDirection:'column', height:'100%', maxHeight:'80vh' }}>
+        {/* Toppinfo */}
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
+          <div><label style={lbl()}>Bedrift</label><input value={form.bedrift} onChange={e=>set('bedrift',e.target.value)} placeholder="Bedriftens navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>HMS-ansvarlig *</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} required placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Revisjonsansvarlig</label><input value={form.revisjonsansvarlig} onChange={e=>set('revisjonsansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Versjon</label><input value={form.versjon} onChange={e=>set('versjon',e.target.value)} placeholder="1.0" style={hmsInp} /></div>
-          <div><label style={lbl()}>HMS-ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
-          <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Formål</label><textarea value={form.formal} onChange={e=>set('formal',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Formålet med HMS-håndboken..." /></div>
-          <div><label style={lbl()}>Omfang</label><textarea value={form.omfang} onChange={e=>set('omfang',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hvem gjelder håndboken for?" /></div>
-          <div><label style={lbl()}>HMS-målsetning</label><textarea value={form.malsetning} onChange={e=>set('malsetning',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Bedriftens HMS-målsetninger..." /></div>
+          <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
+          <div><label style={lbl()}>Neste revisjon</label><input type="date" value={form.neste_revisjon} onChange={e=>set('neste_revisjon',e.target.value)} style={hmsInp} /></div>
         </div>
-        <div>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
-            <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Seksjoner ({seksjoner.length})</h3>
-            <button type="button" onClick={addSeksjon} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til seksjon</button>
+        {/* To-panel: kapitler til venstre, innhold til høyre */}
+        <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
+          {/* Venstre: kapittelliste */}
+          <div style={{ width:'220px', flexShrink:0, borderRight:'1px solid #f1f5f9', overflowY:'auto', padding:'12px 0' }}>
+            <div style={{ padding:'4px 14px 8px', fontSize:'11px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.06em' }}>KAPITLER</div>
+            {kapitler.map((k,idx) => {
+              const ferdig = k.innhold && k.innhold !== k.mal && k.innhold.trim().length > 10
+              return (
+                <div key={k.id} onClick={()=>setAktivKap(idx)}
+                  style={{ padding:'9px 14px', cursor:'pointer', background:aktivKap===idx?'#f0fdf4':'transparent',
+                    borderLeft:aktivKap===idx?'3px solid #059669':'3px solid transparent',
+                    display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span style={{ width:'20px', height:'20px', borderRadius:'50%', fontSize:'10px', fontWeight:'700', flexShrink:0,
+                    background:ferdig?'#059669':'#f1f5f9', color:ferdig?'white':'#94a3b8',
+                    display:'flex', alignItems:'center', justifyContent:'center' }}>{idx+1}</span>
+                  <span style={{ fontSize:'12px', fontWeight:aktivKap===idx?'600':'400', color:aktivKap===idx?'#059669':'#374151', lineHeight:1.3 }}>{k.tittel}</span>
+                </div>
+              )
+            })}
           </div>
-          {seksjoner.map((s,idx) => (
-            <div key={s.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'10px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
-                <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#ecfdf5', color:'#059669', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{idx+1}</span>
-                <input value={s.tittel} onChange={e=>updateSeksjon(s.id,'tittel',e.target.value)} placeholder="Seksjonstittel" style={{ ...hmsInp, flex:1 }} />
-                {seksjoner.length>1&&<button type="button" onClick={()=>removeSeksjon(s.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px' }}>Fjern</button>}
+          {/* Høyre: innhold */}
+          {kap && (
+            <div style={{ flex:1, padding:'20px 24px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'12px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{aktivKap+1}. {kap.tittel}</h3>
+                {(!kap.innhold || kap.innhold.trim().length < 10) && (
+                  <button type="button" onClick={()=>brukMal(kap.id)}
+                    style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                    📋 Bruk standardmal
+                  </button>
+                )}
               </div>
-              <textarea value={s.innhold} onChange={e=>updateSeksjon(s.id,'innhold',e.target.value)} placeholder="Skriv innhold for denne seksjonen..." rows={4} style={{ ...hmsInp, resize:'vertical' }} />
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', fontSize:'12px', color:'#92400e' }}>
+                ✏️ Tilpass innholdet til din bedrift. Klikk «Bruk standardmal» for å starte med et forslag.
+              </div>
+              <textarea value={kap.innhold} onChange={e=>updateKap(kap.id,'innhold',e.target.value)}
+                placeholder={kap.mal}
+                rows={16} style={{ ...hmsInp, resize:'vertical', fontFamily:'system-ui,sans-serif', lineHeight:'1.7', fontSize:'13px' }} />
             </div>
-          ))}
+          )}
         </div>
-        <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett HMS-håndbok'}</button>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', borderTop:'1px solid #f1f5f9', padding:'14px 24px', flexShrink:0 }}>
+          <span style={{ fontSize:'12px', color:'#94a3b8' }}>
+            {kapitler.filter(k=>k.innhold&&k.innhold.trim().length>10).length}/{kapitler.length} kapitler utfylt
+          </span>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>
+              {saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett HMS-håndbok'}
+            </button>
+          </div>
         </div>
       </form>
     </HmsModalShell>
@@ -3552,23 +3654,41 @@ function HandbokModal({ projects, user, initial, onClose, onSaved }) {
 
 function HandbokView({ rec, proj }) {
   const d = rec.data||{}
+  const kapitler = d.kapitler || d.seksjoner || []
+  const nesteRevisjon = d.neste_revisjon
+  const dagerTilRevisjon = nesteRevisjon ? Math.ceil((new Date(nesteRevisjon)-new Date())/86400000) : null
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      {/* Header-kort */}
       <div style={hmsCard}>
-        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#059669' }}>📗 HMS-håndbok</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
-          {[['Prosjekt',proj?.name],['Dato',d.dato],['Versjon',d.versjon],['HMS-ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
-            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
+          <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#059669' }}>📗 HMS-håndbok – Bedriften</h3>
+          {dagerTilRevisjon !== null && (
+            <span style={{ background:dagerTilRevisjon<30?'#fef2f2':dagerTilRevisjon<90?'#fffbeb':'#f0fdf4',
+              color:dagerTilRevisjon<30?'#dc2626':dagerTilRevisjon<90?'#d97706':'#059669',
+              border:`1px solid ${dagerTilRevisjon<30?'#fecaca':dagerTilRevisjon<90?'#fde68a':'#bbf7d0'}`,
+              borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'3px 12px' }}>
+              {dagerTilRevisjon<0 ? '⚠️ Revisjon forfalt!' : dagerTilRevisjon===0 ? '🔴 Revisjon i dag!' : `📅 Revisjon om ${dagerTilRevisjon} dager`}
+            </span>
+          )}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+          {[['Bedrift',d.bedrift],['Versjon',d.versjon],['Dato',d.dato],['HMS-ansvarlig',d.ansvarlig],['Revisjonsansvarlig',d.revisjonsansvarlig],['Neste revisjon',d.neste_revisjon]].filter(r=>r[1]).map(([k,v]) => (
+            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
+              <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+              <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
+            </div>
           ))}
         </div>
-        {[['Formål',d.formal],['Omfang',d.omfang],['HMS-målsetning',d.malsetning]].filter(r=>r[1]).map(([k,v]) => (
-          <div key={k} style={{ marginBottom:'10px' }}><div style={{ fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'4px', textTransform:'uppercase' }}>{k}</div><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{v}</p></div>
-        ))}
       </div>
-      {d.seksjoner?.length>0&&d.seksjoner.map((s,i) => (
+      {/* Kapitler */}
+      {kapitler.map((k,i) => (
         <div key={i} style={hmsCard}>
-          <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{i+1}. {s.tittel}</h3>
-          <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{s.innhold||<span style={{ color:'#94a3b8', fontStyle:'italic' }}>Ingen innhold</span>}</p>
+          <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{i+1}. {k.tittel||k.tittel}</h3>
+          {k.innhold && k.innhold.trim().length > 5
+            ? <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{k.innhold}</p>
+            : <p style={{ margin:0, fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>Dette kapittelet er ikke utfylt ennå. Klikk Rediger for å legge til innhold.</p>
+          }
         </div>
       ))}
     </div>
