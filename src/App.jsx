@@ -223,7 +223,9 @@ function Dashboard({ onNavigate, user }) {
               </div>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                gridTemplateColumns: section.singleRow
+                  ? 'repeat(4, 1fr)'
+                  : 'repeat(auto-fill, minmax(150px, 1fr))',
                 gap: '14px'
               }}>
                 {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} />)}
