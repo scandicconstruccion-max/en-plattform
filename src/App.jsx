@@ -15687,12 +15687,12 @@ function AppContent() {
           {collapsed ? <span style={{ fontWeight: 'bold', color: '#059669', fontSize: '18px' }}>EP</span> : <span style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '15px' }}>En Plattform</span>}
         </div>
         <button onClick={() => setCollapsed(!collapsed)}
-          style={{ position: 'fixed', top: '14px', left: collapsed ? '48px' : '208px', width: '28px', height: '28px', borderRadius: '50%',
-            background: '#059669', border: '2px solid white',
-            cursor: 'pointer', fontSize: '13px', fontWeight: '700',
+          style={{ position: 'absolute', top: '108px', right: '-13px', width: '26px', height: '26px', borderRadius: '50%',
+            background: 'white', border: '1.5px solid #cbd5e1',
+            cursor: 'pointer', fontSize: '14px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 50, boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
-            color: 'white', transition: 'left 0.3s', lineHeight: 1 }}>
+            zIndex: 50, boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+            color: '#64748b', lineHeight: 1 }}>
           {collapsed ? '›' : '‹'}
         </button>
         <nav style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
