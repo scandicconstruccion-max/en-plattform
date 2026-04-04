@@ -126,19 +126,19 @@ const navGroups = [
     ]
   },
   {
-    title: 'SALG & ADMIN',
-    items: [
-      { id: 'crm',        label: 'CRM',         emoji: '📊' },
-      { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
-      { id: 'brukeradmin',label: 'Brukere',     emoji: '👤' },
-    ]
-  },
-  {
     title: 'DOKUMENTASJON & OVERLEVERING',
     items: [
       { id: 'befaring', label: 'Befaring', emoji: '🔍' },
       { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
       { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
+    ]
+  },
+  {
+    title: 'SALG & ADMIN',
+    items: [
+      { id: 'crm',        label: 'CRM',         emoji: '📊' },
+      { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
+      { id: 'brukeradmin',label: 'Brukere',     emoji: '👤' },
     ]
   },
 ]
@@ -186,12 +186,12 @@ const moduleSections = [
     modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat'],
   },
   {
-    title: '⚙️ SALG & ADMIN',
-    modules: ['crm', 'minbedrift', 'brukeradmin'],
-  },
-  {
     title: '📸 DOKUMENTASJON & OVERLEVERING',
     modules: ['befaring', 'bildedok', 'fdv'],
+  },
+  {
+    title: '⚙️ SALG & ADMIN',
+    modules: ['crm', 'minbedrift', 'brukeradmin'],
   },
 ]
 
