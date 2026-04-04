@@ -174,7 +174,7 @@ const moduleCards = [
 const moduleSections = [
   {
     title: '🔹 GRUNNPAKKE',
-    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner', 'varsler', 'kunder'],
+    modules: ['prosjekter', 'prosjektfiler', 'sjekklister', 'avvik', 'hms', 'maskiner', 'kunder', 'varsler'],
     singleRow: true,
   },
   {
@@ -200,14 +200,14 @@ function ModuleCard({ module, onNavigate }) {
   if (!m) return null
   return (
     <button onClick={() => onNavigate(m.id)}
-      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '20px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.2s' }}
+      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: '14px', padding: '14px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.2s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-      <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', marginBottom: '12px' }}>
+      <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginBottom: '10px' }}>
         {m.emoji}
       </div>
-      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', marginBottom: '4px' }}>{m.name}</div>
-      <div style={{ color: '#94a3b8', fontSize: '12px' }}>{m.desc}</div>
+      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '13px', marginBottom: '3px' }}>{m.name}</div>
+      <div style={{ color: '#94a3b8', fontSize: '11px' }}>{m.desc}</div>
     </button>
   )
 }
@@ -242,8 +242,8 @@ function Dashboard({ onNavigate, user }) {
                 display: 'grid',
                 gridTemplateColumns: section.singleRow
                   ? 'repeat(4, 1fr)'
-                  : 'repeat(auto-fill, minmax(150px, 1fr))',
-                gap: '14px'
+                  : 'repeat(auto-fill, minmax(130px, 1fr))',
+                gap: '12px'
               }}>
                 {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} />)}
               </div>
