@@ -713,7 +713,11 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
   }
 
   const handleDelete = async () => {
-    try { await db.deleteProject(projectId); onBack() } catch(e) { alert('Feil: ' + e.message) }
+    try {
+      const { error } = await supabase.from('projects').delete().eq('id', projectId)
+      if (error) { alert('Feil ved sletting: ' + error.message); return }
+      onBack()
+    } catch(e) { alert('Feil: ' + e.message) }
   }
 
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
