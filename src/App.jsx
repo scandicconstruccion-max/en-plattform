@@ -15686,7 +15686,13 @@ function AppContent() {
         <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: collapsed ? '0' : '0 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
           {collapsed ? <span style={{ fontWeight: 'bold', color: '#059669', fontSize: '18px' }}>EP</span> : <span style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '15px' }}>En Plattform</span>}
         </div>
-        <button onClick={() => setCollapsed(!collapsed)} style={{ position: 'absolute', top: '72px', right: '-12px', width: '24px', height: '24px', borderRadius: '50%', background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
+        <button onClick={() => setCollapsed(!collapsed)}
+          style={{ position: 'fixed', top: '14px', left: collapsed ? '48px' : '208px', width: '28px', height: '28px', borderRadius: '50%',
+            background: '#059669', border: '2px solid white',
+            cursor: 'pointer', fontSize: '13px', fontWeight: '700',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 50, boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
+            color: 'white', transition: 'left 0.3s', lineHeight: 1 }}>
           {collapsed ? '›' : '‹'}
         </button>
         <nav style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
