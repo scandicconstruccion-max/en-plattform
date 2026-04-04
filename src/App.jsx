@@ -10,18 +10,34 @@ const AuthContext = createContext({})
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const loadProfile = async (authUser) => {
+    if (!authUser) { setProfile(null); return }
+    try {
+      const { data } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
+      setProfile(data || null)
+    } catch(e) { setProfile(null) }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
+      loadProfile(session?.user ?? null)
       setLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      loadProfile(session?.user ?? null)
     })
     return () => subscription.unsubscribe()
   }, [])
-  return <AuthContext.Provider value={{ user, loading, supabase }}>{children}</AuthContext.Provider>
+
+  // Display name: full_name from profile, fallback to email prefix
+  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
+
+  return <AuthContext.Provider value={{ user, profile, displayName, loading, supabase }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -201,7 +217,8 @@ function Dashboard({ onNavigate, user }) {
   const months = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']
   const d = new Date()
   const dateStr = `${days[d.getDay()]} ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`
-  const firstName = user?.email?.split('@')[0] || 'Bruker'
+  const { displayName } = useAuth()
+  const firstName = displayName
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
@@ -11449,7 +11466,7 @@ function InterChatPage() {
             <div style={{ position:'absolute',bottom:0,right:0,width:'10px',height:'10px',borderRadius:'50%',background:'#22c55e',border:'2px solid white' }}/>
           </div>
           <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.email?.split('@')[0]}</div>
+            <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{displayName}</div>
             <div style={{ fontSize:'10px',color:'#22c55e',fontWeight:'600' }}>● Online</div>
           </div>
         </div>
@@ -15605,7 +15622,7 @@ function ComingSoon({ title }) {
 }
 
 function AppContent() {
-  const { user, loading, supabase } = useAuth()
+  const { user, loading, supabase, displayName } = useAuth()
   const [page, setPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
@@ -15672,7 +15689,7 @@ function AppContent() {
               <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: 'bold', fontSize: '13px', flexShrink: 0 }}>
                 {user?.email?.[0]?.toUpperCase() || 'U'}
               </div>
-              <div style={{ flex: 1, minWidth: 0, fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email?.split('@')[0]}</div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -15694,7 +15711,7 @@ function AppContent() {
               {user?.email?.[0]?.toUpperCase() || 'U'}
             </div>
             <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.email?.split('@')[0] || 'Bruker'}
+              {displayName}
             </span>
             <button onClick={() => supabase.auth.signOut()} title="Logg ut" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', padding: '2px', lineHeight: 1 }}>⏻</button>
           </div>
