@@ -208,21 +208,23 @@ function Dashboard({ onNavigate, user }) {
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen tilbake, {firstName}</h1>
         <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>{dateStr}</p>
       </div>
-      <div style={{ padding: '32px' }}>
+      <style>{`
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+        @media (min-width: 1200px) { .dashboard-grid-single { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
+      `}</style>
+      <div style={{ padding: '24px 32px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#0f172a', marginBottom: '24px', marginTop: 0 }}>Moduler</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {moduleSections.map((section, i) => (
             <div key={i}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{section.title}</span>
                 <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
               </div>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: section.singleRow
-                  ? `repeat(${section.modules.length}, minmax(140px, 1fr))`
-                  : 'repeat(auto-fill, minmax(160px, 1fr))',
-                gap: '16px'
+                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                gap: '14px'
               }}>
                 {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} />)}
               </div>
@@ -15628,7 +15630,7 @@ function AppContent() {
 
   if (!user) return <Login />
 
-  const sidebarWidth = collapsed ? 60 : 240
+  const sidebarWidth = collapsed ? 60 : 220
   const activePage = page === 'prosjekt_detaljer' ? 'prosjekter' : page === 'avvik_detaljer' ? 'avvik' : page
 
   return (
