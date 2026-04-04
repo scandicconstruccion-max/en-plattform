@@ -15621,13 +15621,43 @@ function ComingSoon({ title }) {
 
 function AppContent() {
   const { user, loading, supabase, displayName } = useAuth()
-  const [page, setPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
 
-  const navigate = (p) => { setPage(p); setProjectId(null) }
-  const openProject = (id) => { setPage('prosjekt_detaljer'); setProjectId(id) }
+  // ── Browser history navigation ────────────────────────────────────────────
+  const getPageFromHash = () => {
+    const hash = window.location.hash.replace('#', '')
+    if (!hash || hash === 'godkjenn' || hash === 'anbud-pris') return 'dashboard'
+    return hash
+  }
+
+  const [page, setPage] = React.useState(getPageFromHash)
+
+  const navigate = (p) => {
+    if (p === page) return
+    window.history.pushState({ page: p }, '', '#' + p)
+    setPage(p)
+    setProjectId(null)
+  }
+
+  const openProject = (id) => {
+    window.history.pushState({ page: 'prosjekt_detaljer', projectId: id }, '', '#prosjekt_detaljer')
+    setPage('prosjekt_detaljer')
+    setProjectId(id)
+  }
+
+  React.useEffect(() => {
+    const onPop = (e) => {
+      const p = e.state?.page || getPageFromHash()
+      setPage(p)
+      if (e.state?.projectId) setProjectId(e.state.projectId)
+      else setProjectId(null)
+    }
+    window.addEventListener('popstate', onPop)
+    window.history.replaceState({ page: getPageFromHash() }, '', window.location.hash || '#dashboard')
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   // Show approval page without login if URL is /godkjenn
   if (window.location.pathname === '/godkjenn') return <GodkjenningsPage />
@@ -15717,7 +15747,7 @@ function AppContent() {
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
-        {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
+        {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { window.history.pushState({ page: 'sjekkliste_detaljer', checklistId: id }, '', '#sjekkliste_detaljer'); setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
         {page === 'sjekkliste_detaljer' && <SjekklisteDetaljerPage checklistId={checklistId} onBack={() => setPage('sjekklister')} />}
         {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
         {page === 'avvik' && <AvvikPage />}
