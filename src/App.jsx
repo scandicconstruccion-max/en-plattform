@@ -14552,8 +14552,6 @@ function MinBedriftPage() {
   const [activeModules, setActiveModules] = useState(['grunnpakke'])
   const [numUsers, setNumUsers] = useState(1)
   const [confirmModule, setConfirmModule] = useState(null) // {mod, action: 'add'|'remove'}
-  const [kalkFaktorer, setKalkFaktorer] = useState({})
-  const [savingFaktorer, setSavingFaktorer] = useState(false)
   const fileInputRef = React.useRef(null)
 
   const load = async () => {
@@ -14563,7 +14561,6 @@ function MinBedriftPage() {
         setSettings(data)
         setActiveModules(data.active_modules || ['grunnpakke'])
         setNumUsers(data.num_users || 1)
-        setKalkFaktorer(data.kalk_faktorer || {})
       }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
@@ -14663,7 +14660,7 @@ function MinBedriftPage() {
           </div>
         </div>
         <div style={{ display:'flex', gap:'4px' }}>
-          {[['info','🏢 Bedriftsinformasjon'],['moduler','📦 Moduler og priser'],['kalkfaktorer','🧮 Kalkulasjonsfaktorer']].map(([id, label]) => (
+          {[['info','🏢 Bedriftsinformasjon'],['moduler','📦 Moduler og priser']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               style={{ padding:'8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize:'13px', cursor:'pointer' }}>{label}</button>
           ))}
@@ -14843,91 +14840,6 @@ function MinBedriftPage() {
                 </div>
               </div>
             )}
-          </>
-        )}
-
-        {/* TAB: KALKULASJONSFAKTORER */}
-        {tab === 'kalkfaktorer' && (
-          <>
-            <div style={mbCard}>
-              {mbSec('Om kalkulasjonsfaktorer')}
-              <p style={{ color:'#64748b', fontSize:'13px', margin:'0 0 16px', lineHeight:1.6 }}>
-                Kalkulasjonsfaktorene definerer bedriftens kostnadsstruktur per faggruppe. De brukes som utgangspunkt i alle nye kalkulasjoner. Du kan overstyre dem per kalkulasjon ved behov.
-              </p>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', fontSize:'12px', color:'#64748b', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px' }}>
-                <div><strong>Produksjonslønn:</strong> Timelønn for fagarbeider</div>
-                <div><strong>Sosiale kostn.:</strong> Arbeidsgiveravg., feriepenger etc.</div>
-                <div><strong>Faste kostn.:</strong> Kontor, admin, forsikring etc.</div>
-                <div><strong>Grunntid-just.:</strong> 1.0 = tariff, 1.2 = 20% tregere</div>
-                <div><strong>Fortj. lønn:</strong> Ønsket fortjeneste på timekost</div>
-                <div><strong>Fortj. innkjøp:</strong> Ønsket fortjeneste på materialer/UE</div>
-                <div><strong>Mat.justering:</strong> Tillegg for festemidler, spill etc.</div>
-              </div>
-            </div>
-
-            {FAGGRUPPER.filter(f => f.id !== 'ue').map(fag => {
-              const fakt = kalkFaktorer[fag.id] || getDefaultFaktorer(fag.id)
-              const updateF = (field, value) => setKalkFaktorer(f => ({ ...f, [fag.id]: { ...(f[fag.id] || getDefaultFaktorer(fag.id)), [field]: value } }))
-              // Beregn effektiv timekostnad for preview
-              const effTimekost = (parseFloat(fakt.produksjonslonn) || 0) * (1 + (parseFloat(fakt.sosiale_prosent) || 0) / 100 + (parseFloat(fakt.faste_prosent) || 0) / 100)
-              const effMedFortjeneste = effTimekost * (1 + (parseFloat(fakt.fortjeneste_lonn_prosent) || 0) / 100)
-              return (
-                <div key={fag.id} style={mbCard}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                      <span style={{ fontSize:'20px' }}>{fag.emoji}</span>
-                      <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{fag.name}</span>
-                    </div>
-                    <div style={{ display:'flex', gap:'12px', fontSize:'12px' }}>
-                      <span style={{ color:'#64748b' }}>Timekostnad: <strong style={{ color:'#0f172a' }}>{Math.round(effTimekost)} kr</strong></span>
-                      <span style={{ color:'#059669' }}>Med fortjeneste: <strong>{Math.round(effMedFortjeneste)} kr/t</strong></span>
-                    </div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px' }}>
-                    <div>{mbLbl('Prod.lønn kr/t')}<input type="number" value={fakt.produksjonslonn} onChange={e=>updateF('produksjonslonn',e.target.value)} style={mbInp} /></div>
-                    <div>{mbLbl('Sosiale %')}<input type="number" value={fakt.sosiale_prosent} onChange={e=>updateF('sosiale_prosent',e.target.value)} style={mbInp} /></div>
-                    <div>{mbLbl('Faste kostn. %')}<input type="number" value={fakt.faste_prosent} onChange={e=>updateF('faste_prosent',e.target.value)} style={mbInp} /></div>
-                    <div>{mbLbl('Grunntid-just.')}<input type="number" step="0.1" value={fakt.grunntid_justering} onChange={e=>updateF('grunntid_justering',e.target.value)} style={mbInp} /></div>
-                    <div>{mbLbl('Fortj. lønn %')}<input type="number" value={fakt.fortjeneste_lonn_prosent} onChange={e=>updateF('fortjeneste_lonn_prosent',e.target.value)} style={mbInp} /></div>
-                    <div>{mbLbl('Fortj. innkjøp %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateF('fortjeneste_innkjop_prosent',e.target.value)} style={mbInp} /></div>
-                    <div>{mbLbl('Mat.justering %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateF('mat_justering_prosent',e.target.value)} style={mbInp} /></div>
-                  </div>
-                </div>
-              )
-            })}
-
-            {/* Underleverandør-faktorer separat */}
-            {(() => {
-              const ueFag = FAGGRUPPER.find(f => f.id === 'ue')
-              const fakt = kalkFaktorer['ue'] || getDefaultFaktorer('ue')
-              const updateF = (field, value) => setKalkFaktorer(f => ({ ...f, ue: { ...(f.ue || getDefaultFaktorer('ue')), [field]: value } }))
-              return (
-                <div style={mbCard}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
-                    <span style={{ fontSize:'20px' }}>{ueFag.emoji}</span>
-                    <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{ueFag.name}</span>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px', maxWidth:'400px' }}>
-                    <div>{mbLbl('Fortjeneste på UE %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateF('fortjeneste_innkjop_prosent',e.target.value)} style={mbInp} /></div>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Save button */}
-            <div style={{ display:'flex', justifyContent:'flex-end' }}>
-              <button onClick={async () => {
-                setSavingFaktorer(true)
-                try {
-                  await supabase.from('company_settings').update({ kalk_faktorer: kalkFaktorer, updated_at: new Date().toISOString() }).eq('id', settings.id)
-                  alert('✅ Kalkulasjonsfaktorer lagret!')
-                } catch(e) { alert('Feil: ' + e.message) }
-                finally { setSavingFaktorer(false) }
-              }} disabled={savingFaktorer}
-                style={{ background:savingFaktorer?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', padding:'12px 28px', fontSize:'14px', fontWeight:'700', cursor:savingFaktorer?'not-allowed':'pointer' }}>
-                {savingFaktorer ? 'Lagrer...' : '💾 Lagre kalkulasjonsfaktorer'}
-              </button>
-            </div>
           </>
         )}
       </div>
@@ -15928,6 +15840,7 @@ function KalkulasjonPage({ onNavigate }) {
   const [showEditor, setShowEditor] = useState(false)
   const [editKalk, setEditKalk] = useState(null)
   const [viewKalk, setViewKalk] = useState(null)
+  const [showFaktorerPage, setShowFaktorerPage] = useState(false)
 
   const load = async () => {
     try {
@@ -15965,6 +15878,8 @@ function KalkulasjonPage({ onNavigate }) {
 
   if (viewKalk) return <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setViewKalk(null); setEditKalk(k); setShowEditor(true) }} />
 
+  if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       {/* Header */}
@@ -15974,10 +15889,16 @@ function KalkulasjonPage({ onNavigate }) {
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 Kalkulasjon</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Prosjektkalkulasjon med fagkalkyler, bygningsdeler og fortjenesteberegning</p>
           </div>
-          <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
-            + Nytt kalkulasjonsprosjekt
-          </button>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => setShowFaktorerPage(true)}
+              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
+              ⚙️ Kalkulasjonsfaktorer
+            </button>
+            <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
+              style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+              + Nytt kalkulasjonsprosjekt
+            </button>
+          </div>
         </div>
       </div>
 
@@ -16046,6 +15967,147 @@ function KalkulasjonPage({ onNavigate }) {
       </div>
 
       {showEditor && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
+    </div>
+  )
+}
+
+// ─── KALKULASJONSFAKTORER PAGE ────────────────────────────────────────────────
+
+function KalkFaktorerPage({ onBack }) {
+  const { user } = useAuth()
+  const [faktorer, setFaktorer] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [settingsId, setSettingsId] = useState(null)
+
+  useEffect(() => {
+    supabase.from('company_settings').select('id, kalk_faktorer').limit(1).single()
+      .then(({ data }) => {
+        if (data) {
+          setSettingsId(data.id)
+          setFaktorer(data.kalk_faktorer || {})
+        }
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const updateF = (fagId, field, value) => {
+    setFaktorer(f => ({ ...f, [fagId]: { ...(f[fagId] || getDefaultFaktorer(fagId)), [field]: value } }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await supabase.from('company_settings').update({ kalk_faktorer: faktorer, updated_at: new Date().toISOString() }).eq('id', settingsId)
+      alert('✅ Kalkulasjonsfaktorer lagret!')
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const resetToDefaults = (fagId) => {
+    setFaktorer(f => ({ ...f, [fagId]: getDefaultFaktorer(fagId) }))
+  }
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
+        <p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster faktorer...</p>
+      </div>
+    </div>
+  )
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⚙️ Kalkulasjonsfaktorer</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Bedriftens kostnadsstruktur per faggruppe — brukes som standard i alle nye kalkulasjoner</p>
+          </div>
+          <button onClick={handleSave} disabled={saving}
+            style={{ background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 24px', fontSize:'14px', fontWeight:'700', cursor:saving?'not-allowed':'pointer' }}>
+            {saving ? 'Lagrer...' : '💾 Lagre faktorer'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'16px', maxWidth:'1000px' }}>
+        {/* Forklaring */}
+        <div style={{ background:'#eff6ff', borderRadius:'14px', border:'1px solid #bfdbfe', padding:'16px 20px' }}>
+          <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'8px' }}>Hvordan faktorene brukes</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'12px', color:'#1e40af', lineHeight:1.5 }}>
+            <div><strong>Produksjonslønn:</strong> Timelønn for fagarbeider</div>
+            <div><strong>Sosiale kostn.:</strong> Arbeidsgiveravg., feriepenger etc.</div>
+            <div><strong>Faste kostn.:</strong> Kontor, admin, forsikring etc.</div>
+            <div><strong>Grunntid-just.:</strong> 1.0 = tariff, 1.2 = 20% tregere</div>
+            <div><strong>Fortj. lønn:</strong> Ønsket fortjeneste på timekostnad</div>
+            <div><strong>Fortj. innkjøp:</strong> Ønsket fortjeneste på materialer/UE</div>
+            <div><strong>Mat.justering:</strong> Tillegg for festemidler, spill etc.</div>
+            <div><strong>Timekostnad:</strong> Lønn × (1 + sosiale + faste)</div>
+          </div>
+        </div>
+
+        {/* Faggrupper */}
+        {FAGGRUPPER.filter(f => f.id !== 'ue').map(fag => {
+          const fakt = faktorer[fag.id] || getDefaultFaktorer(fag.id)
+          const effTimekost = (parseFloat(fakt.produksjonslonn) || 0) * (1 + (parseFloat(fakt.sosiale_prosent) || 0) / 100 + (parseFloat(fakt.faste_prosent) || 0) / 100)
+          const effMedFortjeneste = effTimekost * (1 + (parseFloat(fakt.fortjeneste_lonn_prosent) || 0) / 100)
+          return (
+            <div key={fag.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                  <span style={{ fontSize:'22px' }}>{fag.emoji}</span>
+                  <span style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>{fag.name}</span>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+                  <div style={{ background:'#f8fafc', borderRadius:'8px', padding:'6px 12px', display:'flex', gap:'16px', fontSize:'12px' }}>
+                    <span style={{ color:'#64748b' }}>Timekostnad: <strong style={{ color:'#0f172a' }}>{Math.round(effTimekost)} kr</strong></span>
+                    <span style={{ color:'#059669' }}>Utpris: <strong>{Math.round(effMedFortjeneste)} kr/t</strong></span>
+                  </div>
+                  <button onClick={() => resetToDefaults(fag.id)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'12px', color:'#94a3b8' }} title="Tilbakestill til standard">↺</button>
+                </div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px' }}>
+                <div>{lbl('Prod.lønn kr/t')}<input type="number" value={fakt.produksjonslonn} onChange={e=>updateF(fag.id,'produksjonslonn',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Sosiale %')}<input type="number" value={fakt.sosiale_prosent} onChange={e=>updateF(fag.id,'sosiale_prosent',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Faste kostn. %')}<input type="number" value={fakt.faste_prosent} onChange={e=>updateF(fag.id,'faste_prosent',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Grunntid-just.')}<input type="number" step="0.1" value={fakt.grunntid_justering} onChange={e=>updateF(fag.id,'grunntid_justering',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Fortj. lønn %')}<input type="number" value={fakt.fortjeneste_lonn_prosent} onChange={e=>updateF(fag.id,'fortjeneste_lonn_prosent',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Fortj. innkjøp %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateF(fag.id,'fortjeneste_innkjop_prosent',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Mat.justering %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateF(fag.id,'mat_justering_prosent',e.target.value)} style={qInp} /></div>
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Underleverandør */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
+            <span style={{ fontSize:'22px' }}>🤝</span>
+            <span style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Underleverandører</span>
+          </div>
+          <div style={{ maxWidth:'250px' }}>
+            {lbl('Fortjeneste på UE %')}
+            <input type="number" value={(faktorer['ue'] || getDefaultFaktorer('ue')).fortjeneste_innkjop_prosent} onChange={e=>updateF('ue','fortjeneste_innkjop_prosent',e.target.value)} style={qInp} />
+          </div>
+        </div>
+
+        {/* Bottom save */}
+        <div style={{ display:'flex', justifyContent:'flex-end', paddingTop:'8px' }}>
+          <button onClick={handleSave} disabled={saving}
+            style={{ background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', padding:'12px 28px', fontSize:'14px', fontWeight:'700', cursor:saving?'not-allowed':'pointer' }}>
+            {saving ? 'Lagrer...' : '💾 Lagre kalkulasjonsfaktorer'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
