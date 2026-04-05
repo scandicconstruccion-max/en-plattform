@@ -16233,6 +16233,108 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Vindu 2-lags 120×120', mengde: 1, enhet: 'stk', enhetspris: 4200 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 180 }],
     underleverandorer: [], enhet: 'stk'
   },
+  { id: 'tom_vindu_3lag', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 3-lags energi', beskrivelse: 'Montering 3-lags energivindu med foring og listverk',
+    arbeidsarter: [{ beskrivelse: 'Demontering gammelt vindu', grunntid: 0.5 }, { beskrivelse: 'Montering nytt vindu', grunntid: 1.8 }, { beskrivelse: 'Foring og listverk', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Vindu 3-lags energi 120×120', mengde: 1, enhet: 'stk', enhetspris: 6800 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 180 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_dor_inner', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Innerdør standard', beskrivelse: 'Montering innerdør med karm og listverk',
+    arbeidsarter: [{ beskrivelse: 'Montering karm', grunntid: 0.8 }, { beskrivelse: 'Montering dørblad og beslag', grunntid: 0.5 }, { beskrivelse: 'Listverk', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Innerdør komplett m/karm', mengde: 1, enhet: 'stk', enhetspris: 3200 }, { varenavn: 'Listverk sett', mengde: 1, enhet: 'sett', enhetspris: 350 }, { varenavn: 'Skruer og skum', mengde: 1, enhet: 'rs', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_dor_skyve', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Skyvedør innvendig', beskrivelse: 'Montering skyvedør med skinne og karm',
+    arbeidsarter: [{ beskrivelse: 'Montering skinne og karm', grunntid: 1.5 }, { beskrivelse: 'Montering dørblad', grunntid: 0.5 }, { beskrivelse: 'Justering og finish', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Skyvedør komplett m/skinne', mengde: 1, enhet: 'stk', enhetspris: 5500 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 250 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Himling
+  { id: 'tom_him_gips', fag: 'tomrer', kategori: 'Himling', name: 'Himling gipsplater på lekter', beskrivelse: 'Gipshimling på trelekter med sparkling',
+    arbeidsarter: [{ beskrivelse: 'Montering lekter c/c 400', grunntid: 0.20 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.25 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Skruer gips', mengde: 15, enhet: 'stk/m²', enhetspris: 0.8 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_him_panel', fag: 'tomrer', kategori: 'Himling', name: 'Himling trepanel', beskrivelse: 'Trepanelhimling på lekter',
+    arbeidsarter: [{ beskrivelse: 'Montering lekter', grunntid: 0.20 }, { beskrivelse: 'Montering panel', grunntid: 0.30 }],
+    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Trepanel furu 14×120 SPS', mengde: 1.1, enhet: 'm²', enhetspris: 165 }, { varenavn: 'Dykkert og lim', mengde: 1, enhet: 'rs/m²', enhetspris: 10 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_him_nedforet', fag: 'tomrer', kategori: 'Himling', name: 'Nedforet himling med stålprofil', beskrivelse: 'Nedforet himling med stålstendere og gips',
+    arbeidsarter: [{ beskrivelse: 'Montering stålprofil og oppheng', grunntid: 0.25 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.25 }, { beskrivelse: 'Sparkling', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Stålprofil himling komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Trapper
+  { id: 'tom_trapp_rett', fag: 'tomrer', kategori: 'Trapper', name: 'Rett trapp innvendig', beskrivelse: 'Montering ferdig trapp rett løp',
+    arbeidsarter: [{ beskrivelse: 'Montering trapp', grunntid: 8 }, { beskrivelse: 'Montering rekkverk', grunntid: 3 }, { beskrivelse: 'Tilpasning og finish', grunntid: 2 }],
+    materialer: [{ varenavn: 'Trapp ferdig rett løp', mengde: 1, enhet: 'stk', enhetspris: 28000 }, { varenavn: 'Rekkverk komplett', mengde: 1, enhet: 'sett', enhetspris: 8500 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 800 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_trapp_sving', fag: 'tomrer', kategori: 'Trapper', name: 'Svingtrapp innvendig', beskrivelse: 'Montering ferdig svingtrapp med repos',
+    arbeidsarter: [{ beskrivelse: 'Montering trapp', grunntid: 12 }, { beskrivelse: 'Montering rekkverk', grunntid: 4 }, { beskrivelse: 'Tilpasning og finish', grunntid: 3 }],
+    materialer: [{ varenavn: 'Svingtrapp ferdig m/repos', mengde: 1, enhet: 'stk', enhetspris: 45000 }, { varenavn: 'Rekkverk komplett', mengde: 1, enhet: 'sett', enhetspris: 12000 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Terrasse/balkong
+  { id: 'tom_terrasse_tre', fag: 'tomrer', kategori: 'Terrasse/utendørs', name: 'Terrasse trykkimpregnert', beskrivelse: 'Terrasse med bæring, bjelkelag og terrassebord',
+    arbeidsarter: [{ beskrivelse: 'Fundamentering stolper', grunntid: 0.15 }, { beskrivelse: 'Bjelkelag og bæring', grunntid: 0.25 }, { beskrivelse: 'Terrassebord montering', grunntid: 0.30 }],
+    materialer: [{ varenavn: 'Bjelkelag 48×198 trykkimp.', mengde: 2, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Terrassebord 28×120 trykkimp.', mengde: 1.1, enhet: 'm²', enhetspris: 135 }, { varenavn: 'Stolper og beslag', mengde: 1, enhet: 'rs/m²', enhetspris: 45 }, { varenavn: 'Skruer rustfrie', mengde: 25, enhet: 'stk/m²', enhetspris: 1.5 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_terrasse_kompositt', fag: 'tomrer', kategori: 'Terrasse/utendørs', name: 'Terrasse kompositt', beskrivelse: 'Terrasse med komposittbord på aluminiumsbæring',
+    arbeidsarter: [{ beskrivelse: 'Fundamentering', grunntid: 0.15 }, { beskrivelse: 'Bæring aluminium', grunntid: 0.20 }, { beskrivelse: 'Komposittbord montering', grunntid: 0.35 }],
+    materialer: [{ varenavn: 'Aluminiumsbæring komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 120 }, { varenavn: 'Komposittbord', mengde: 1.1, enhet: 'm²', enhetspris: 320 }, { varenavn: 'Clips og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_rekkverk', fag: 'tomrer', kategori: 'Terrasse/utendørs', name: 'Rekkverk terrasse/balkong', beskrivelse: 'Montering rekkverk med stolper, håndlist og spiler',
+    arbeidsarter: [{ beskrivelse: 'Montering stolper', grunntid: 0.30 }, { beskrivelse: 'Montering spiler og håndlist', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Rekkverksstolper', mengde: 2, enhet: 'stk/lm', enhetspris: 180 }, { varenavn: 'Håndlist', mengde: 1.05, enhet: 'lm', enhetspris: 95 }, { varenavn: 'Spiler/fyll', mengde: 10, enhet: 'stk/lm', enhetspris: 25 }, { varenavn: 'Beslag og skruer', mengde: 1, enhet: 'rs/lm', enhetspris: 65 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Garderobe/innredning
+  { id: 'tom_garderobe', fag: 'tomrer', kategori: 'Innredning', name: 'Garderobeskap innebygd', beskrivelse: 'Bygge innebygd garderobe med hyller og stang',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting ramme og sider', grunntid: 3.0 }, { beskrivelse: 'Hyller og stang', grunntid: 2.0 }, { beskrivelse: 'Dører/fronter', grunntid: 2.0 }],
+    materialer: [{ varenavn: 'Sponplate/MDF sider', mengde: 4, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Hyller', mengde: 4, enhet: 'stk', enhetspris: 85 }, { varenavn: 'Klesstang', mengde: 1, enhet: 'stk', enhetspris: 120 }, { varenavn: 'Skyvedører 2 stk', mengde: 1, enhet: 'sett', enhetspris: 4500 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 350 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_kjokken_mont', fag: 'tomrer', kategori: 'Innredning', name: 'Kjøkkenmontering', beskrivelse: 'Montering av kjøkkeninnredning (kunde leverer kjøkken)',
+    arbeidsarter: [{ beskrivelse: 'Montering underskap', grunntid: 0.5 }, { beskrivelse: 'Montering overskap', grunntid: 0.4 }, { beskrivelse: 'Montering benkeplate', grunntid: 1.5 }, { beskrivelse: 'Tilpasning og finish', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Festemateriell og beslag', mengde: 1, enhet: 'rs', enhetspris: 450 }, { varenavn: 'Silikon og tettemasse', mengde: 1, enhet: 'rs', enhetspris: 150 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Kledning
+  { id: 'tom_kledning_staaende', fag: 'tomrer', kategori: 'Kledning', name: 'Stående kledning utvendig', beskrivelse: 'Utvendig stående trekledning på lekter',
+    arbeidsarter: [{ beskrivelse: 'Montering sløyfer og lekter', grunntid: 0.15 }, { beskrivelse: 'Montering stående kledning', grunntid: 0.35 }],
+    materialer: [{ varenavn: 'Sløyfer 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Stående kledning 19×148', mengde: 1.15, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Spiker/skruer rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_kledning_liggende', fag: 'tomrer', kategori: 'Kledning', name: 'Liggende kledning utvendig', beskrivelse: 'Utvendig liggende trekledning med underligger',
+    arbeidsarter: [{ beskrivelse: 'Montering sløyfer og lekter', grunntid: 0.15 }, { beskrivelse: 'Montering liggende kledning', grunntid: 0.40 }],
+    materialer: [{ varenavn: 'Sløyfer 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Underligger 19×98', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Overligger 19×123', mengde: 1.1, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Spiker rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Gulv
+  { id: 'tom_gulv_parkett', fag: 'tomrer', kategori: 'Gulv', name: 'Parkett flytende', beskrivelse: 'Legging av flytende parkett på underlag',
+    arbeidsarter: [{ beskrivelse: 'Klargjøring underlag', grunntid: 0.08 }, { beskrivelse: 'Legging underlagsmatte', grunntid: 0.05 }, { beskrivelse: 'Legging parkett', grunntid: 0.25 }, { beskrivelse: 'Montering fotlister', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Underlagsmatte 2mm', mengde: 1.05, enhet: 'm²', enhetspris: 25 }, { varenavn: 'Parkett 3-stav eik', mengde: 1.08, enhet: 'm²', enhetspris: 350 }, { varenavn: 'Fotlist m/hjørner', mengde: 0.5, enhet: 'lm/m²', enhetspris: 45 }, { varenavn: 'Lim og kiler', mengde: 1, enhet: 'rs/m²', enhetspris: 8 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_gulv_vinyl', fag: 'tomrer', kategori: 'Gulv', name: 'Vinylgulv click', beskrivelse: 'Legging av vinyl click-gulv',
+    arbeidsarter: [{ beskrivelse: 'Klargjøring og avrettning', grunntid: 0.10 }, { beskrivelse: 'Legging vinylgulv', grunntid: 0.20 }, { beskrivelse: 'Fotlister', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Vinylgulv click LVT', mengde: 1.08, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Underlagsmatte', mengde: 1.05, enhet: 'm²', enhetspris: 20 }, { varenavn: 'Fotlist', mengde: 0.5, enhet: 'lm/m²', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Våtrom tømrer
+  { id: 'tom_vatrom_vegg', fag: 'tomrer', kategori: 'Våtrom', name: 'Våtromsvegg med våtromsplater', beskrivelse: 'Oppsetting stenderverk, isolering og våtromsplater',
+    arbeidsarter: [{ beskrivelse: 'Stenderverk og isolering', grunntid: 0.35 }, { beskrivelse: 'Montering våtromsplater', grunntid: 0.30 }, { beskrivelse: 'Tetting og overganger', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Isolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Våtromsplate (type Fibo e.l.)', mengde: 1.08, enhet: 'm²', enhetspris: 320 }, { varenavn: 'Lim og fugemasse', mengde: 1, enhet: 'rs/m²', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_vatrom_gulv', fag: 'tomrer', kategori: 'Våtrom', name: 'Våtromsgulv med fall', beskrivelse: 'Gulvkonstruksjon med fall til sluk, membran og overflate',
+    arbeidsarter: [{ beskrivelse: 'Bygge fall til sluk', grunntid: 0.40 }, { beskrivelse: 'Membran og tetting', grunntid: 0.30 }, { beskrivelse: 'Overflate/flis underlag', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Fallplate EPS', mengde: 1.05, enhet: 'm²', enhetspris: 180 }, { varenavn: 'Sluk komplett', mengde: 0.15, enhet: 'stk/m²', enhetspris: 1200 }, { varenavn: 'Membran våtrom', mengde: 1.1, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Mansjett og hjørner', mengde: 1, enhet: 'rs/m²', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'm²'
+  },
 
   // ═══ MALER ════════════════════════════════════════════════════════════════
   { id: 'mal_vegg_std', fag: 'maler', kategori: 'Vegg', name: 'Maling vegg innvendig 2 strøk', beskrivelse: 'Sparkling, sliping og 2 strøk maling på gipsvegg',
@@ -17577,8 +17679,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 {(bd.materialer||[]).length > 0 && (
                                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead><tr>
-                                      {['Varenavn','Mengde','Enhet','Pris/enh','Kostnad','Med fortj.',''].map((h,i) => (
-                                        <th key={i} style={{ padding:'3px 4px', textAlign:i>=1?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      {['NOBB','Varenavn','Mengde','Enhet','Pris/enh','Kostnad','Med fortj.',''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign:i>=2?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
                                       ))}
                                     </tr></thead>
                                     <tbody>
@@ -17586,6 +17688,19 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         const r = beregnMaterialkostnad(m, fakt)
                                         return (
                                           <tr key={m.id}>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
+                                              // Prisbok-oppslag ved NOBB-nr
+                                              const nobb = e.target.value.trim()
+                                              if (!nobb) return
+                                              try {
+                                                const { data } = await supabase.from('prisbok').select('*').eq('varenummer', nobb).limit(1).single()
+                                                if (data) {
+                                                  updateMaterial(kalk.id,bd.id,m.id,'varenavn',data.varenavn)
+                                                  updateMaterial(kalk.id,bd.id,m.id,'enhetspris',data.pris_per_enhet)
+                                                  if (data.enhet) updateMaterial(kalk.id,bd.id,m.id,'enhet',data.enhet)
+                                                }
+                                              } catch(err) {}
+                                            }} placeholder="NOBB" style={{ ...qInp, width:'70px', fontSize:'11px', padding:'6px 6px', fontFamily:'monospace' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
