@@ -16498,7 +16498,6 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
   const [faktorer, setFaktorer] = useState(initial?.faktorer || {})
   const [bedriftFaktorer, setBedriftFaktorer] = useState(null) // loaded from company_settings
   const [activeKalkyle, setActiveKalkyle] = useState(null)
-  const [showFagPicker, setShowFagPicker] = useState(false)
   const [showFaktorer, setShowFaktorer] = useState(false)
   const [showBibliotekPicker, setShowBibliotekPicker] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -16699,19 +16698,26 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
                 )
               })}
 
-              {/* Add kalkyle */}
-              <div style={{ position:'relative' }}>
-                <button onClick={() => setShowFagPicker(!showFagPicker)} style={{ width:'100%', background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'10px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px', marginTop:'4px' }}>+ Ny fagkalkyle</button>
-                {showFagPicker && (
-                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:10, marginTop:'4px' }}>
-                    {FAGGRUPPER.map(fag => (
-                      <button key={fag.id} onClick={() => addKalkyle(fag.id)}
-                        style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'13px', marginBottom:'2px' }}>
-                        <span>{fag.emoji}</span> {fag.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              {/* Faggruppe-velger: klikk for å legge til/fjerne */}
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'6px', marginTop:'8px' }}>Velg faggrupper</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                {FAGGRUPPER.map(fag => {
+                  const isAdded = kalkyler.some(k => k.fag === fag.id)
+                  return (
+                    <button key={fag.id} onClick={() => {
+                      if (isAdded) {
+                        removeKalkyle(kalkyler.find(k => k.fag === fag.id)?.id)
+                      } else {
+                        addKalkyle(fag.id)
+                      }
+                    }}
+                      style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'8px 10px', borderRadius:'8px', border: isAdded ? '2px solid #059669' : '1px solid #f1f5f9', background: isAdded ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
+                      <span style={{ fontSize:'14px' }}>{fag.emoji}</span>
+                      <span style={{ flex:1, fontWeight: isAdded ? '600' : '400', color: isAdded ? '#059669' : '#475569' }}>{fag.name}</span>
+                      <span style={{ fontSize:'14px', color: isAdded ? '#059669' : '#e2e8f0' }}>{isAdded ? '✓' : '○'}</span>
+                    </button>
+                  )
+                })}
               </div>
 
               {/* Kalkulasjonsfaktorer knapp */}
@@ -16889,7 +16895,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'400px', flexDirection:'column' }}>
                 <div style={{ fontSize:'48px', marginBottom:'16px' }}>🧮</div>
                 <h3 style={{ color:'#0f172a', margin:'0 0 8px' }}>Legg til en fagkalkyle</h3>
-                <p style={{ color:'#94a3b8', fontSize:'14px', margin:0, textAlign:'center', maxWidth:'300px' }}>Klikk "+ Ny fagkalkyle" i sidepanelet for å starte. Du kan legge til flere fag (tømrer, maler, rørlegger osv.) som summeres til en totalkalkulasjon.</p>
+                <p style={{ color:'#94a3b8', fontSize:'14px', margin:0, textAlign:'center', maxWidth:'300px' }}>Velg faggrupper i sidepanelet til venstre. Klikk på en faggruppe for å legge den til — du kan velge flere som summeres til en totalkalkulasjon.</p>
               </div>
             )}
           </div>
