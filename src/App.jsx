@@ -17621,6 +17621,12 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       .limit(1).single().then(({ data }) => setCompanyInfo(data || {}))
   }, [])
 
+  // Enhet formatering
+  const fmtEnhet = (e) => {
+    const map = { 'm²': 'm2', 'm³': 'm3', 'lm': 'LM', 'kg': 'Kg', 'stk': 'Stk', 'rs': 'RS', 'l': 'L', 'liter': 'L', 'sett': 'Sett' }
+    return map[(e||'').toLowerCase()] || map[e] || e || ''
+  }
+
   // Build tilbuds-linjer basert på visningsnivå
   const buildLines = () => {
     if (visning === 'total') return []
@@ -17630,17 +17636,24 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       const kt = beregnKalkyle(kl, fakt)
       const bdLines = (visning === 'bygningsdel' || visning === 'detaljert') ? (kl.bygningsdeler || []).map(bd => {
         const bdt = beregnBygningsdel(bd, fakt)
+        const mengde = parseFloat(bd.mengde) || 1
         const detailLines = visning === 'detaljert' ? [
-          ...(bd.arbeidsarter || []).map(a => ({ type: 'detail', text: `  ⏱ ${a.beskrivelse}`, amount: beregnArbeidskostnad(a, fakt).medFortjeneste * (parseFloat(bd.mengde)||1) })),
-          ...(bd.materialer || []).map(m => ({ type: 'detail', text: `  📦 ${m.varenavn} (${m.mengde} ${m.enhet})`, amount: beregnMaterialkostnad(m, fakt).medFortjeneste * (parseFloat(bd.mengde)||1) })),
+          ...(bd.arbeidsarter || []).map(a => {
+            const r = beregnArbeidskostnad(a, fakt)
+            return { type: 'detail', text: a.beskrivelse, mengde: parseFloat((r.faktiskTid * mengde).toFixed(1)), enhet: 't', amount: r.medFortjeneste * mengde }
+          }),
+          ...(bd.materialer || []).map(m => {
+            const r = beregnMaterialkostnad(m, fakt)
+            return { type: 'detail', text: m.varenavn, mengde: parseFloat(((parseFloat(m.mengde)||0) * mengde).toFixed(1)), enhet: fmtEnhet(m.enhet), amount: r.medFortjeneste * mengde }
+          }),
         ] : []
-        return { type: 'bd', name: `${bd.name || 'Bygningsdel'} (${bd.mengde || 1} ${bd.enhet || 'stk'})`, amount: bdt.totalMedFortjeneste, details: detailLines }
+        return { type: 'bd', name: bd.name || 'Bygningsdel', mengde, enhet: fmtEnhet(bd.enhet), amount: bdt.totalMedFortjeneste, details: detailLines }
       }) : []
       return { fag, name: kl.name, amount: kt.totMedFortjeneste, bdLines }
     })
   }
 
-  // Generate print-ready tilbud HTML
+  // Generate print-ready tilbud HTML with 4 columns
   const generateTilbudHTML = () => {
     const lines = buildLines()
     const ci = companyInfo || {}
@@ -17649,11 +17662,11 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     let tableRows = ''
     if (visning !== 'total') {
       lines.forEach(line => {
-        tableRows += `<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:700;font-size:14px">${line.fag.emoji} ${line.name}</td><td style="padding:10px 14px;text-align:right;font-weight:700;font-size:14px">${Math.round(line.amount).toLocaleString('nb-NO')} kr</td></tr>`
+        tableRows += `<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:700;font-size:14px" colspan="3">${line.fag.emoji} ${line.name}</td><td style="padding:10px 14px;text-align:right;font-weight:700;font-size:14px">${Math.round(line.amount).toLocaleString('nb-NO')} kr</td></tr>`
         line.bdLines.forEach(bd => {
-          tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name}</td><td style="padding:6px 14px;text-align:right;font-size:13px">${Math.round(bd.amount).toLocaleString('nb-NO')} kr</td></tr>`
+          tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name}</td><td style="padding:6px 10px;text-align:right;font-size:13px;color:#374151">${bd.mengde}</td><td style="padding:6px 10px;font-size:13px;color:#64748b">${bd.enhet}</td><td style="padding:6px 14px;text-align:right;font-size:13px;font-weight:600">${Math.round(bd.amount).toLocaleString('nb-NO')} kr</td></tr>`
           bd.details.forEach(d => {
-            tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${d.text}</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(d.amount).toLocaleString('nb-NO')} kr</td></tr>`
+            tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${d.text}</td><td style="padding:3px 10px;text-align:right;font-size:12px;color:#94a3b8">${d.mengde}</td><td style="padding:3px 10px;font-size:12px;color:#94a3b8">${d.enhet}</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(d.amount).toLocaleString('nb-NO')} kr</td></tr>`
           })
         })
       })
@@ -17667,6 +17680,7 @@ h1{font-size:22px;margin:0 0 4px} .ref{font-size:13px;color:#94a3b8;margin-botto
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;font-size:13px}
 .info-box{background:#f8fafc;border-radius:8px;padding:14px} .info-label{font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px}
 table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;text-align:left;font-size:11px;font-weight:700;color:#94a3b8;border-bottom:2px solid #e2e8f0;text-transform:uppercase}
+.col-mengde{width:70px} .col-enhet{width:50px}
 .total-row{border-top:2px solid #0f172a} .total-row td{padding:12px 14px;font-weight:800;font-size:16px}
 .mva-row td{padding:6px 14px;font-size:13px;color:#64748b} .grand-row{background:#f0fdf4} .grand-row td{padding:14px;font-weight:800;font-size:18px;color:#059669}
 .footer{margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8}
@@ -17689,11 +17703,11 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 </div>
 ${message ? `<div class="message">${message}</div>` : ''}
 <table>
-  <thead><tr><th>Beskrivelse</th><th style="text-align:right">Beløp</th></tr></thead>
+  <thead><tr><th>Beskrivelse</th><th class="col-mengde" style="text-align:right">Mengde</th><th class="col-enhet">Enhet</th><th style="text-align:right">Beløp</th></tr></thead>
   <tbody>${tableRows}
-    <tr class="total-row"><td>Sum eks. mva</td><td style="text-align:right">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>
-    <tr class="mva-row"><td>MVA 25%</td><td style="text-align:right">${Math.round(totals.mva).toLocaleString('nb-NO')} kr</td></tr>
-    <tr class="grand-row"><td>Totalsum ink. mva</td><td style="text-align:right">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="total-row"><td colspan="3">Sum eks. mva</td><td style="text-align:right">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="mva-row"><td colspan="3">MVA 25%</td><td style="text-align:right">${Math.round(totals.mva).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="grand-row"><td colspan="3">Totalsum ink. mva</td><td style="text-align:right">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td></tr>
   </tbody>
 </table>
 ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></div>` : ''}
