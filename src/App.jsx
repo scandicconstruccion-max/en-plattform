@@ -17346,7 +17346,6 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     await supabase.from('standardmeldinger').delete().eq('id', id)
     setStdMeldinger(m => m.filter(x => x.id !== id))
   }
-  }, [])
 
   // Enhet formatering
   const fmtEnhet = (e) => {
