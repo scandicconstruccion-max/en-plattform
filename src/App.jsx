@@ -17610,15 +17610,40 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('Vi tillater oss herved å fremme følgende tilbud for ovennevnte prosjekt.')
   const [validUntil, setValidUntil] = useState('')
-  const [visning, setVisning] = useState('faggruppe') // 'total', 'faggruppe', 'bygningsdel', 'detaljert'
+  const [visning, setVisning] = useState('faggruppe')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const [step, setStep] = useState(1) // 1=innstillinger, 2=forhåndsvisning
+  const [step, setStep] = useState(1)
+
+  // Standardmeldinger
+  const [stdMeldinger, setStdMeldinger] = useState([])
+  const [showMeldingPicker, setShowMeldingPicker] = useState(false)
+  const [showNewMelding, setShowNewMelding] = useState(false)
+  const [newMeldingName, setNewMeldingName] = useState('')
 
   const [companyInfo, setCompanyInfo] = useState(null)
   useEffect(() => {
     supabase.from('company_settings').select('name, address, phone, email, org_number, logo_url')
       .limit(1).single().then(({ data }) => setCompanyInfo(data || {}))
+    // Load standardmeldinger
+    supabase.from('standardmeldinger').select('*').order('name')
+      .then(({ data }) => setStdMeldinger(data || []))
+      .catch(() => {})
+  }, [])
+
+  const saveStdMelding = async () => {
+    if (!newMeldingName.trim() || !message.trim()) return
+    const { data, error } = await supabase.from('standardmeldinger').insert({ name: newMeldingName.trim(), tekst: message, user_id: user?.id }).select().single()
+    if (error) { alert('Feil: ' + error.message); return }
+    setStdMeldinger(m => [...m, data])
+    setNewMeldingName('')
+    setShowNewMelding(false)
+  }
+
+  const deleteStdMelding = async (id) => {
+    await supabase.from('standardmeldinger').delete().eq('id', id)
+    setStdMeldinger(m => m.filter(x => x.id !== id))
+  }
   }, [])
 
   // Enhet formatering
@@ -17825,7 +17850,45 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
               </div>
 
               <div>
-                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Melding</label>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                  <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>Melding</label>
+                  <div style={{ position:'relative' }}>
+                    <button onClick={() => setShowMeldingPicker(!showMeldingPicker)}
+                      style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', color:'#64748b', display:'flex', alignItems:'center', gap:'4px' }}>
+                      📝 Standardmeldinger
+                    </button>
+                    {showMeldingPicker && (
+                      <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'8px', zIndex:20, marginTop:'4px', width:'320px' }}>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', padding:'4px 8px', marginBottom:'4px' }}>LAGREDE MELDINGER</div>
+                        {stdMeldinger.length === 0 && <p style={{ fontSize:'12px', color:'#94a3b8', padding:'8px', margin:0 }}>Ingen lagrede meldinger ennå</p>}
+                        {stdMeldinger.map(m => (
+                          <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                            <button onClick={() => { setMessage(m.tekst); setShowMeldingPicker(false) }}
+                              style={{ flex:1, background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'12px', color:'#0f172a' }}>
+                              <div style={{ fontWeight:'600', marginBottom:'2px' }}>{m.name}</div>
+                              <div style={{ color:'#94a3b8', fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.tekst}</div>
+                            </button>
+                            <button onClick={() => deleteStdMelding(m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', padding:'4px', flexShrink:0 }}>×</button>
+                          </div>
+                        ))}
+                        <div style={{ borderTop:'1px solid #f1f5f9', marginTop:'6px', paddingTop:'6px' }}>
+                          {showNewMelding ? (
+                            <div style={{ display:'flex', gap:'4px' }}>
+                              <input value={newMeldingName} onChange={e => setNewMeldingName(e.target.value)} placeholder="Navn på meldingen" style={{ ...qInp, fontSize:'12px', padding:'6px 8px', flex:1 }} />
+                              <button onClick={saveStdMelding} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>Lagre</button>
+                              <button onClick={() => setShowNewMelding(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setShowNewMelding(true)}
+                              style={{ width:'100%', background:'white', border:'1px dashed #e2e8f0', borderRadius:'6px', padding:'6px', cursor:'pointer', fontSize:'12px', color:'#64748b', fontWeight:'600' }}>
+                              + Lagre nåværende melding
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} />
               </div>
 
