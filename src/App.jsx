@@ -524,12 +524,17 @@ function ProsjektModal({ title, initial, onSave, onClose, saving }) {
     <>
       <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
       <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(680px, calc(100vw - 32px))', maxHeight:'90vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', fontFamily:'system-ui, sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>{title}</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'22px', color:'#94a3b8' }}>×</button>
-        </div>
-        <form onSubmit={e => { e.preventDefault(); onSave(form) }} style={{ overflowY:'auto', flex:1 }}>
-          <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <form onSubmit={e => { e.preventDefault(); onSave(form) }} style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
+          {/* Header med lagre-knapp */}
+          <div style={{ padding:'14px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+            <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>{title}</h2>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+              <button type="submit" disabled={saving} style={{ padding:'8px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving ? 'Lagrer...' : 'Lagre'}</button>
+            </div>
+          </div>
+          {/* Scrollbart innhold */}
+          <div style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'20px' }}>
             {sec('Grunnleggende')}
             <div style={g2}>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Prosjektnavn *"><FInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="Skriv inn prosjektnavn" required /></FLabel></div>
@@ -568,10 +573,6 @@ function ProsjektModal({ title, initial, onSave, onClose, saving }) {
             <ContactSection title="" items={form.architects || []} onChange={v => set('architects', v)} />
             {sec('Rådgivere / Konsulenter')}
             <ContactSection title="" items={form.consultants || []} onChange={v => set('consultants', v)} />
-          </div>
-          <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px', flexShrink:0 }}>
-            <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Avbryt</button>
-            <button type="submit" disabled={saving} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>{saving ? 'Lagrer...' : 'Lagre prosjekt'}</button>
           </div>
         </form>
       </div>
