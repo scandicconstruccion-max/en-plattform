@@ -15773,6 +15773,7 @@ function beregnMaterialkostnad(material, faktorer) {
 }
 
 function beregnBygningsdel(bd, faktorer) {
+  const mengde = parseFloat(bd.mengde) || 1
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
@@ -15780,23 +15781,23 @@ function beregnBygningsdel(bd, faktorer) {
 
   ;(bd.arbeidsarter || []).forEach(a => {
     const r = beregnArbeidskostnad(a, faktorer)
-    totalArbeid += r.arbeidskostnad
-    totalArbeidMedFortjeneste += r.medFortjeneste
-    totalTimer += r.faktiskTid
+    totalArbeid += r.arbeidskostnad * mengde
+    totalArbeidMedFortjeneste += r.medFortjeneste * mengde
+    totalTimer += r.faktiskTid * mengde
   })
   ;(bd.materialer || []).forEach(m => {
     const r = beregnMaterialkostnad(m, faktorer)
-    totalMaterial += r.medJustering
-    totalMaterialMedFortjeneste += r.medFortjeneste
+    totalMaterial += r.medJustering * mengde
+    totalMaterialMedFortjeneste += r.medFortjeneste * mengde
   })
   ;(bd.underleverandorer || []).forEach(u => {
     const kost = parseFloat(u.kostnad) || 0
-    totalUE += kost * (1 + fortjenesteInnkjop / 100)
+    totalUE += kost * (1 + fortjenesteInnkjop / 100) * mengde
   })
 
   const selvkost = totalArbeid + totalMaterial
   const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE
-  return { totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste }
+  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
@@ -16135,17 +16136,19 @@ function bibliotekTilBygningsdel(bd, mengde) {
   const m = parseFloat(mengde) || 1
   return {
     id: Date.now() + Math.random() * 1000,
-    name: `${bd.name} (${m} ${bd.enhet || 'stk'})`,
+    name: bd.name,
+    mengde: m,
+    enhet: bd.enhet || 'stk',
     source_bibliotek_id: bd.id,
     arbeidsarter: bd.arbeidsarter.map((a, i) => ({
       id: Date.now() + i + 100,
       beskrivelse: a.beskrivelse,
-      grunntid: parseFloat(((parseFloat(a.grunntid) || 0) * m).toFixed(2)),
+      grunntid: parseFloat(a.grunntid) || 0, // per enhet
     })),
     materialer: bd.materialer.map((mat, i) => ({
       id: Date.now() + i + 200,
       varenavn: mat.varenavn,
-      mengde: parseFloat(((parseFloat(mat.mengde) || 0) * m).toFixed(2)),
+      mengde: parseFloat(mat.mengde) || 0, // per enhet
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
     })),
@@ -16153,7 +16156,7 @@ function bibliotekTilBygningsdel(bd, mengde) {
       id: Date.now() + i + 300,
       navn: u.navn || '',
       beskrivelse: u.beskrivelse || '',
-      kostnad: u.kostnad || 0,
+      kostnad: u.kostnad || 0, // per enhet
     })),
   }
 }
@@ -16958,9 +16961,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     saveProject({ ...k, kalkyler: newKalkyler })
   }
 
-  // Bygningsdel name update
-  const updateBdName = (kalId, bdId, name) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, name } : b) } : kl))
+  // Bygningsdel field update (name, mengde, enhet)
+  const updateBdField = (kalId, bdId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, [field]: value } : b) } : kl))
   }
 
   // Arbeidsart update
@@ -17003,7 +17006,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
   // Add empty bygningsdel
   const addEmptyBd = (kalId) => {
-    const newBd = { id: Date.now(), name: '', arbeidsarter: [{ id: Date.now()+1, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }
+    const newBd = { id: Date.now(), name: '', mengde: 1, enhet: 'm²', arbeidsarter: [{ id: Date.now()+1, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), newBd] } : kl))
   }
 
@@ -17101,10 +17104,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
                             style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', cursor:'pointer', background: isExpanded ? '#f8fafc' : 'white' }}>
                             <div style={{ display:'flex', alignItems:'center', gap:'8px', flex:1, minWidth:0 }}>
                               <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bi+1}</span>
-                              {isExpanded
-                                ? <input value={bd.name||''} onChange={e => { e.stopPropagation(); updateBdName(kalk.id, bd.id, e.target.value) }} onClick={e => e.stopPropagation()} placeholder="Bygningsdel (f.eks. Stue vegg 20m²)" style={{ ...qInp, fontWeight:'600', fontSize:'13px', flex:1 }} />
-                                : <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{bd.name || 'Uten navn'}</span>
-                              }
+                              <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bd.name || 'Uten navn'}</span>
+                              {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
@@ -17113,9 +17114,32 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
                             </div>
                           </div>
 
-                          {/* Expanded: editable details */}
+                          {/* Expanded: mengde + editable details */}
                           {isExpanded && (
                             <div style={{ padding:'12px 14px', borderTop:'1px solid #f1f5f9' }}>
+
+                              {/* Bygningsdel navn + mengde */}
+                              <div style={{ display:'flex', gap:'8px', alignItems:'flex-end', marginBottom:'14px', background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
+                                <div style={{ flex:1 }}>
+                                  <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#94a3b8', marginBottom:'4px' }}>Bygningsdel</label>
+                                  <input value={bd.name||''} onChange={e => updateBdField(kalk.id, bd.id, 'name', e.target.value)} placeholder="F.eks. Yttervegg stue" style={{ ...qInp, fontWeight:'600', fontSize:'13px' }} />
+                                </div>
+                                <div style={{ width:'100px' }}>
+                                  <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#94a3b8', marginBottom:'4px' }}>Mengde</label>
+                                  <input type="number" step="0.1" min="0" value={bd.mengde ?? 1} onChange={e => updateBdField(kalk.id, bd.id, 'mengde', e.target.value)} style={{ ...qInp, textAlign:'right', fontWeight:'700', fontSize:'14px', color:'#059669' }} />
+                                </div>
+                                <div style={{ width:'70px' }}>
+                                  <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#94a3b8', marginBottom:'4px' }}>Enhet</label>
+                                  <select value={bd.enhet || 'm²'} onChange={e => updateBdField(kalk.id, bd.id, 'enhet', e.target.value)} style={{ ...qInp, fontSize:'13px' }}>
+                                    <option value="m²">m²</option>
+                                    <option value="lm">lm</option>
+                                    <option value="stk">stk</option>
+                                    <option value="m³">m³</option>
+                                    <option value="rs">rs</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'12px', marginTop:'-8px', paddingLeft:'12px' }}>Postene nedenfor viser verdier per {bd.enhet || 'enhet'}. Totalen beregnes automatisk: per enhet × {bd.mengde ?? 1} {bd.enhet || ''}</div>
                               {/* Arbeidsarter - editable */}
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
