@@ -5060,6 +5060,7 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
 
 const MODULE_CONFIG = {
   quote:        { label: 'Tilbud',          emoji: '📋', table: 'quotes',           statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
+  calculation:  { label: 'Kalkulasjon',     emoji: '🧮', table: 'calculations',     statusField: 'status', approvedStatus: 'Ferdig',    rejectedStatus: 'Utkast',   notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
   order:        { label: 'Ordre',           emoji: '📦', table: 'orders',           statusField: 'status', approvedStatus: 'Bekreftet', rejectedStatus: 'Avslått',  notifTitle: (r) => `Ordre bekreftet: ${r.title}`, notifTitleReject: (r) => `Ordre avslått: ${r.title}` },
   invoice:      { label: 'Faktura',         emoji: '🧾', table: 'invoices',         statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avvist',   notifTitle: (r) => `Faktura godkjent: ${r.title}`, notifTitleReject: (r) => `Faktura avvist: ${r.title}` },
   change_order: { label: 'Endringsmelding', emoji: '🔄', table: 'change_orders',    statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avslått',  notifTitle: (r) => `Endringsmelding godkjent: ${r.title}`, notifTitleReject: (r) => `Endringsmelding avslått: ${r.title}` },
@@ -17156,8 +17157,17 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [k, setK] = useState(init)
   const [activeKalkId, setActiveKalkId] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
-  const [showBibliotekPicker, setShowBibliotekPicker] = useState(null) // fagId when open
+  const [showBibliotekPicker, setShowBibliotekPicker] = useState(null)
+  const [showSendModal, setShowSendModal] = useState(false)
+  const [hasTilbudModule, setHasTilbudModule] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Check if user has tilbud module
+  useEffect(() => {
+    supabase.from('company_settings').select('active_modules').limit(1).single()
+      .then(({ data }) => setHasTilbudModule((data?.active_modules || []).includes('tilbud')))
+      .catch(() => {})
+  }, [])
 
   const kalkyler = k.kalkyler || []
   const alleFaktorer = k.faktorer || {}
@@ -17341,7 +17351,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
             <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
-            <button onClick={handleCreateQuote} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Lag tilbud →</button>
+            {hasTilbudModule && <button onClick={handleCreateQuote} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Lag tilbud →</button>}
+            <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>
           </div>
         </div>
       </div>
@@ -17586,6 +17597,153 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
         if (!targetKalk) return null
         return <BibliotekPickerModal fagId={targetKalk.fag} onSelect={(bd) => addBdFromBibliotek(showBibliotekPicker, bd)} onClose={() => setShowBibliotekPicker(null)} />
       })()}
+
+      {/* Send til kunde modal */}
+      {showSendModal && <KalkSendModal kalk={k} totals={totals} kalkyler={kalkyler} alleFaktorer={alleFaktorer} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); updateStatus('Tilbud sendt') }} />}
+    </div>
+  )
+}
+
+// ─── SEND KALKULASJON TIL KUNDE MODAL ────────────────────────────────────────
+
+function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, onSent }) {
+  const [email, setEmail] = useState('')
+  const [message, setMessage] = useState('Vi tillater oss herved å fremme følgende tilbud.')
+  const [validUntil, setValidUntil] = useState('')
+  const [showDetails, setShowDetails] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const handleSend = async () => {
+    if (!email) return alert('E-postadresse er påkrevd')
+    setSending(true)
+    try {
+      // Build line items for email
+      const lineItemsHtml = kalkyler.map(kalk => {
+        const fag = getFaggruppe(kalk.fag)
+        const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
+        const kt = beregnKalkyle(kalk, fakt)
+        const bdRows = showDetails ? (kalk.bygningsdeler || []).map(bd => {
+          const bdt = beregnBygningsdel(bd, fakt)
+          return `<tr><td style="padding:6px 12px;font-size:13px;color:#64748b;padding-left:32px">${bd.name || 'Bygningsdel'} (${bd.mengde || 1} ${bd.enhet || 'stk'})</td><td style="padding:6px 12px;text-align:right;font-size:13px;color:#0f172a">${Math.round(bdt.totalMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
+        }).join('') : ''
+        return `<tr style="background:#f8fafc"><td style="padding:8px 12px;font-weight:700;font-size:14px;color:#0f172a">${fag.emoji} ${kalk.name}</td><td style="padding:8px 12px;text-align:right;font-weight:700;font-size:14px;color:#0f172a">${Math.round(kt.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>${bdRows}`
+      }).join('')
+
+      // Create approval token
+      const approvalUrl = await createApprovalToken({ module: 'calculation', recordId: kalk.id, recipientEmail: email, createdBy: user?.id })
+
+      const emailHtml = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <h1 style="color:#0f172a;font-size:22px;margin-bottom:4px">Tilbud: ${kalk.title}</h1>
+          <p style="color:#64748b;font-size:13px;margin-bottom:20px">Ref: ${kalk.kalk_number}</p>
+          ${message ? `<p style="color:#475569;line-height:1.6;margin-bottom:20px">${message}</p>` : ''}
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #f1f5f9;border-radius:8px;overflow:hidden">
+            ${lineItemsHtml}
+            <tr style="border-top:2px solid #e2e8f0">
+              <td style="padding:12px;font-weight:800;font-size:16px;color:#0f172a">Totalsum eks. mva</td>
+              <td style="padding:12px;text-align:right;font-weight:800;font-size:16px;color:#0f172a">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 12px;font-size:13px;color:#64748b">MVA 25%</td>
+              <td style="padding:8px 12px;text-align:right;font-size:13px;color:#64748b">${Math.round(totals.mva).toLocaleString('nb-NO')} kr</td>
+            </tr>
+            <tr style="background:#f0fdf4">
+              <td style="padding:12px;font-weight:800;font-size:16px;color:#16a34a">Totalsum ink. mva</td>
+              <td style="padding:12px;text-align:right;font-weight:800;font-size:16px;color:#16a34a">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td>
+            </tr>
+          </table>
+          ${validUntil ? `<p style="color:#64748b;font-size:13px">Tilbudet er gyldig til: <strong>${validUntil}</strong></p>` : ''}
+          <div style="text-align:center;margin:28px 0">
+            <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
+          </div>
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform</p>
+        </div>
+      `
+
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: email, subject: `Tilbud ${kalk.kalk_number} – ${kalk.title}`, html: emailHtml })
+      })
+      const fnData = await fnRes.json()
+      if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
+
+      setSent(true)
+      setTimeout(() => onSent(), 1500)
+    } catch(e) { alert('Kunne ikke sende: ' + e.message) }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send tilbud til kunde</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Tilbud sendt!</h3>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar en e-post med godkjenningsknapp</p>
+            </div>
+          ) : (
+            <>
+              {/* Sammendrag */}
+              <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0' }}>
+                <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>{kalk.title}</div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginTop:'6px' }}>
+                  <div>
+                    <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{fmt(totals.totMedFortjeneste)}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>eks. mva · ink. mva: {fmt(totals.totInkMva)}</div>
+                  </div>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>{kalkyler.length} fagkalkyle{kalkyler.length !== 1 ? 'r' : ''}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>{totals.totTimer.toFixed(0)} timer</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kundeinfo */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="kunde@epost.no" style={qInp} />
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Melding til kunde</label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} style={{ ...qInp, resize:'none' }} />
+              </div>
+
+              <div style={{ display:'flex', gap:'12px' }}>
+                <div style={{ flex:1 }}>
+                  <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Gyldig til</label>
+                  <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} style={qInp} />
+                </div>
+                <div style={{ flex:1, display:'flex', alignItems:'flex-end' }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px', color:'#374151' }}>
+                    <input type="checkbox" checked={showDetails} onChange={e => setShowDetails(e.target.checked)} />
+                    Vis bygningsdeler i e-post
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e' }}>
+                ⚠️ Kunden mottar en e-post med prisoversikt og en <strong>godkjenningsknapp</strong>. Kun salgspriser vises — din selvkost og fortjeneste er skjult.
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending ? 'Sender...' : '📧 Send tilbud'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
