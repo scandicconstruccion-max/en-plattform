@@ -15843,6 +15843,7 @@ function KalkulasjonPage({ onNavigate }) {
   const [viewKalk, setViewKalk] = useState(null)
   const [showFaktorerPage, setShowFaktorerPage] = useState(false)
   const [showBibliotekPage, setShowBibliotekPage] = useState(false)
+  const [showPrisbokPage, setShowPrisbokPage] = useState(false)
 
   const load = async () => {
     try {
@@ -15884,6 +15885,8 @@ function KalkulasjonPage({ onNavigate }) {
 
   if (showBibliotekPage) return <KalkBibliotekPage onBack={() => setShowBibliotekPage(false)} />
 
+  if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       {/* Header */}
@@ -15894,6 +15897,10 @@ function KalkulasjonPage({ onNavigate }) {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Prosjektkalkulasjon med fagkalkyler, bygningsdeler og fortjenesteberegning</p>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => setShowPrisbokPage(true)}
+              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
+              💰 Prisbok
+            </button>
             <button onClick={() => setShowBibliotekPage(true)}
               style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
               📚 Bibliotek
@@ -16337,6 +16344,233 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
               style={{ marginLeft:'auto', background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
               Legg til bygningsdel →
             </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
+
+function PrisbokPage({ onBack }) {
+  const { user } = useAuth()
+  const [prisbok, setPrisbok] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importStep, setImportStep] = useState(null) // null, 'preview', 'mapping'
+  const [rawRows, setRawRows] = useState([])
+  const [rawHeaders, setRawHeaders] = useState([])
+  const [colMapping, setColMapping] = useState({ varenummer: '', varenavn: '', enhet: '', pris: '', kategori: '' })
+  const [importCount, setImportCount] = useState(0)
+  const fileRef = React.useRef(null)
+
+  useEffect(() => {
+    supabase.from('prisbok').select('*').order('varenavn')
+      .then(({ data }) => { setPrisbok(data || []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  // Parse CSV/TSV content
+  const parseCSV = (text) => {
+    const separator = text.includes('\t') ? '\t' : text.includes(';') ? ';' : ','
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l)
+    const headers = lines[0].split(separator).map(h => h.replace(/^"|"$/g, '').trim())
+    const rows = lines.slice(1).map(l => {
+      const vals = l.split(separator).map(v => v.replace(/^"|"$/g, '').trim())
+      const obj = {}
+      headers.forEach((h, i) => { obj[h] = vals[i] || '' })
+      return obj
+    })
+    return { headers, rows }
+  }
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const ext = file.name.split('.').pop().toLowerCase()
+
+    if (ext === 'csv' || ext === 'txt' || ext === 'tsv') {
+      const text = await file.text()
+      const { headers, rows } = parseCSV(text)
+      setRawHeaders(headers)
+      setRawRows(rows)
+      // Auto-detect column mapping
+      const autoMap = { varenummer: '', varenavn: '', enhet: '', pris: '', kategori: '' }
+      headers.forEach(h => {
+        const hl = h.toLowerCase()
+        if (hl.includes('varenr') || hl.includes('artikkelnr') || hl.includes('art.nr') || hl.includes('produktnr') || hl === 'nr') autoMap.varenummer = h
+        else if (hl.includes('varenavn') || hl.includes('beskrivelse') || hl.includes('produktnavn') || hl.includes('tekst') || hl.includes('artikkelbetegnelse')) autoMap.varenavn = h
+        else if (hl.includes('enhet') || hl.includes('enh') || hl === 'unit') autoMap.enhet = h
+        else if (hl.includes('pris') || hl.includes('netto') || hl.includes('kostpris') || hl.includes('innkjøp') || hl === 'price') autoMap.pris = h
+        else if (hl.includes('kategori') || hl.includes('gruppe') || hl.includes('hovedgruppe') || hl.includes('varegr')) autoMap.kategori = h
+      })
+      setColMapping(autoMap)
+      setImportStep('mapping')
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      alert('Excel-filer støttes snart. Konverter til CSV (semikolon-separert) og prøv igjen.')
+    } else {
+      alert('Ugyldig filformat. Bruk CSV, TXT eller TSV.')
+    }
+    e.target.value = ''
+  }
+
+  const handleImport = async () => {
+    if (!colMapping.varenavn && !colMapping.varenummer) return alert('Du må velge minst varenavn eller varenummer')
+    setImporting(true)
+    try {
+      const items = rawRows.map(row => ({
+        varenummer: row[colMapping.varenummer] || '',
+        varenavn: row[colMapping.varenavn] || row[colMapping.varenummer] || 'Ukjent',
+        enhet: row[colMapping.enhet] || 'stk',
+        pris_per_enhet: parseFloat((row[colMapping.pris] || '0').replace(/\s/g, '').replace(',', '.')) || 0,
+        kategori: row[colMapping.kategori] || 'Generelt',
+        kilde: '5001',
+        user_id: user?.id,
+      })).filter(item => item.varenavn && item.varenavn !== 'Ukjent')
+
+      // Insert in batches of 500
+      let inserted = 0
+      for (let i = 0; i < items.length; i += 500) {
+        const batch = items.slice(i, i + 500)
+        const { error } = await supabase.from('prisbok').insert(batch)
+        if (error) throw error
+        inserted += batch.length
+      }
+      setImportCount(inserted)
+      setImportStep(null)
+      // Reload
+      const { data } = await supabase.from('prisbok').select('*').order('varenavn')
+      setPrisbok(data || [])
+      alert(`✅ ${inserted} varer importert til prisboken!`)
+    } catch(e) { alert('Feil ved import: ' + e.message) }
+    finally { setImporting(false) }
+  }
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm('Er du sikker på at du vil slette hele prisboken?')) return
+    await supabase.from('prisbok').delete().eq('user_id', user?.id)
+    setPrisbok([])
+  }
+
+  const filtered = prisbok.filter(p => {
+    if (!search) return true
+    return [p.varenummer, p.varenavn, p.kategori].some(v => v?.toLowerCase().includes(search.toLowerCase()))
+  })
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>💰 Prisbok</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Importer prisliste fra din byggevareleverandør (5001-format) for oppslag av materialpriser</p>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            {prisbok.length > 0 && <button onClick={handleDeleteAll} style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 18px', fontSize:'13px', fontWeight:'600', cursor:'pointer', color:'#dc2626' }}>🗑️ Slett prisbok</button>}
+            <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
+            <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls" onChange={handleFileUpload} style={{ display:'none' }} />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', maxWidth:'1100px' }}>
+        {/* Import mapping step */}
+        {importStep === 'mapping' && (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'24px', marginBottom:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
+            <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700' }}>Kolonnemapping</h3>
+            <p style={{ color:'#64748b', fontSize:'13px', margin:'0 0 16px' }}>
+              Fant {rawRows.length} rader og {rawHeaders.length} kolonner. Velg hvilken kolonne i filen som tilsvarer hvert felt. Systemet har forsøkt å gjette automatisk.
+            </p>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:'10px', marginBottom:'16px' }}>
+              {[['varenummer','Varenummer'],['varenavn','Varenavn *'],['enhet','Enhet'],['pris','Pris *'],['kategori','Kategori']].map(([key, label]) => (
+                <div key={key}>
+                  {lbl(label)}
+                  <select value={colMapping[key]} onChange={e => setColMapping(m => ({ ...m, [key]: e.target.value }))} style={qInp}>
+                    <option value="">— Velg kolonne —</option>
+                    {rawHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            {/* Preview */}
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>Forhåndsvisning (5 første rader)</div>
+            <div style={{ overflowX:'auto', marginBottom:'16px' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                <thead><tr>
+                  {['Varenr','Varenavn','Enhet','Pris','Kategori'].map((h,i) => (
+                    <th key={i} style={{ padding:'6px 8px', textAlign:'left', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {rawRows.slice(0, 5).map((row, i) => (
+                    <tr key={i}>
+                      <td style={{ padding:'6px 8px', color:'#64748b' }}>{row[colMapping.varenummer] || '—'}</td>
+                      <td style={{ padding:'6px 8px', color:'#0f172a', fontWeight:'500' }}>{row[colMapping.varenavn] || '—'}</td>
+                      <td style={{ padding:'6px 8px', color:'#64748b' }}>{row[colMapping.enhet] || '—'}</td>
+                      <td style={{ padding:'6px 8px', color:'#059669', fontWeight:'600' }}>{row[colMapping.pris] || '—'}</td>
+                      <td style={{ padding:'6px 8px', color:'#64748b' }}>{row[colMapping.kategori] || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+              <button onClick={() => setImportStep(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Avbryt</button>
+              <button onClick={handleImport} disabled={importing} style={{ padding:'10px 24px', background:importing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:importing?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>
+                {importing ? `Importerer...` : `Importer ${rawRows.length} varer`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Search and stats */}
+        <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'16px' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk varenummer, varenavn, kategori..." style={{ ...qInp, maxWidth:'400px', flex:1 }} />
+          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{filtered.length} av {prisbok.length} varer</span>
+        </div>
+
+        {/* Prisbok table */}
+        {loading ? (
+          <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster prisbok...</div>
+        ) : prisbok.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>💰</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen prisbok lastet</h3>
+            <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:'14px' }}>Importer en 5001-prisliste (CSV) fra din byggevareleverandør for å slå opp materialpriser automatisk.</p>
+            <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'12px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
+          </div>
+        ) : (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead>
+                <tr style={{ background:'#f8fafc' }}>
+                  {['Varenr','Varenavn','Kategori','Enhet','Pris'].map((h,i) => (
+                    <th key={i} style={{ padding:'10px 14px', textAlign:i===4?'right':'left', fontSize:'12px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice(0, 100).map((p, i) => (
+                  <tr key={p.id || i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                    <td style={{ padding:'8px 14px', fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{p.varenummer}</td>
+                    <td style={{ padding:'8px 14px', fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{p.varenavn}</td>
+                    <td style={{ padding:'8px 14px', fontSize:'12px', color:'#64748b' }}>{p.kategori}</td>
+                    <td style={{ padding:'8px 14px', fontSize:'12px', color:'#64748b' }}>{p.enhet}</td>
+                    <td style={{ padding:'8px 14px', fontSize:'13px', color:'#059669', fontWeight:'600', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filtered.length > 100 && <div style={{ padding:'12px 14px', fontSize:'12px', color:'#94a3b8', textAlign:'center', borderTop:'1px solid #f1f5f9' }}>Viser 100 av {filtered.length} — bruk søk for å finne spesifikke varer</div>}
           </div>
         )}
       </div>
