@@ -16800,6 +16800,88 @@ const BYGNINGSDEL_BIBLIOTEK = [
     underleverandorer: [], enhet: 'm²'
   },
 
+  // ═══ BLIKKENSLAGER ═════════════════════════════════════════════════════════
+  // Takrenner
+  { id: 'blikk_takrenne_staal', fag: 'blikkenslager', kategori: 'Takrenner', name: 'Takrenne stål/sink halvrundt', beskrivelse: 'Montering halvrundt takrennesystem i forsinket stål — renne, kroker og nedløp',
+    arbeidsarter: [{ beskrivelse: 'Montering rennekroker', grunntid: 0.08 }, { beskrivelse: 'Montering takrenne', grunntid: 0.12 }, { beskrivelse: 'Skjøter og endebunner', grunntid: 0.04 }],
+    materialer: [{ varenavn: 'Takrenne halvrundt 125mm stål', mengde: 1.05, enhet: 'lm', enhetspris: 85 }, { varenavn: 'Rennekroker', mengde: 3, enhet: 'stk/lm', enhetspris: 28 }, { varenavn: 'Skjøter og endebunner', mengde: 0.3, enhet: 'stk/lm', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_takrenne_kobber', fag: 'blikkenslager', kategori: 'Takrenner', name: 'Takrenne kobber halvrundt', beskrivelse: 'Montering kobber takrennesystem — premium kvalitet',
+    arbeidsarter: [{ beskrivelse: 'Montering rennekroker', grunntid: 0.10 }, { beskrivelse: 'Montering takrenne kobber', grunntid: 0.15 }, { beskrivelse: 'Lodding skjøter', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Takrenne kobber 125mm', mengde: 1.05, enhet: 'lm', enhetspris: 280 }, { varenavn: 'Rennekroker kobber', mengde: 3, enhet: 'stk/lm', enhetspris: 65 }, { varenavn: 'Loddemateriell', mengde: 1, enhet: 'rs/lm', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_takrenne_plast', fag: 'blikkenslager', kategori: 'Takrenner', name: 'Takrenne plast (PVC)', beskrivelse: 'Montering plasttakrenne — enkel montering, rimelig',
+    arbeidsarter: [{ beskrivelse: 'Montering rennekroker', grunntid: 0.06 }, { beskrivelse: 'Montering renne og skjøter', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Takrenne PVC 125mm', mengde: 1.05, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Rennekroker plast', mengde: 3, enhet: 'stk/lm', enhetspris: 18 }, { varenavn: 'Skjøter/endebunner/lim', mengde: 1, enhet: 'rs/lm', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Nedløp
+  { id: 'blikk_nedlop_staal', fag: 'blikkenslager', kategori: 'Nedløp', name: 'Nedløpsrør stål/sink Ø75', beskrivelse: 'Montering nedløpsrør med klemmer, bøy og tilkobling',
+    arbeidsarter: [{ beskrivelse: 'Montering nedløp med klemmer', grunntid: 0.15 }, { beskrivelse: 'Bøy og tilkobling', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Nedløpsrør Ø75 stål', mengde: 1.05, enhet: 'lm', enhetspris: 75 }, { varenavn: 'Rørklemmer', mengde: 1, enhet: 'stk/lm', enhetspris: 25 }, { varenavn: 'Bøy og trakt', mengde: 0.5, enhet: 'stk/lm', enhetspris: 65 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_nedlop_komplett', fag: 'blikkenslager', kategori: 'Nedløp', name: 'Nedløp komplett (renne → bakke)', beskrivelse: 'Komplett nedløp inkl. trakt, rør, bøyer og fotbend — per stk',
+    arbeidsarter: [{ beskrivelse: 'Montering trakt', grunntid: 0.5 }, { beskrivelse: 'Montering rør og klemmer', grunntid: 1.0 }, { beskrivelse: 'Bøyer og fotbend', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Nedløpstrakt', mengde: 1, enhet: 'stk', enhetspris: 120 }, { varenavn: 'Nedløpsrør Ø75 (3m snitt)', mengde: 3, enhet: 'lm', enhetspris: 75 }, { varenavn: 'Bøy Ø75', mengde: 2, enhet: 'stk', enhetspris: 55 }, { varenavn: 'Rørklemmer', mengde: 3, enhet: 'stk', enhetspris: 25 }, { varenavn: 'Fotbend', mengde: 1, enhet: 'stk', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Beslag
+  { id: 'blikk_vindusbeslag', fag: 'blikkenslager', kategori: 'Beslag', name: 'Vindusbeslag (vannbrett)', beskrivelse: 'Tilkapping og montering av vannbrett/bunnbeslag under vindu',
+    arbeidsarter: [{ beskrivelse: 'Oppmåling og tilkapping', grunntid: 0.3 }, { beskrivelse: 'Montering og tetting', grunntid: 0.3 }],
+    materialer: [{ varenavn: 'Aluminiumsbeslag tilkappet', mengde: 1.1, enhet: 'lm', enhetspris: 95 }, { varenavn: 'Skruer rustfri', mengde: 4, enhet: 'stk/lm', enhetspris: 2 }, { varenavn: 'Fugemasse', mengde: 0.05, enhet: 'l/lm', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_pipebsl', fag: 'blikkenslager', kategori: 'Beslag', name: 'Pipebeslag komplett', beskrivelse: 'Tilpassing og montering av beslag rundt pipe — overbeslag, sidebeslag og underbeslag',
+    arbeidsarter: [{ beskrivelse: 'Oppmåling og tilkapping', grunntid: 2.0 }, { beskrivelse: 'Montering beslag', grunntid: 2.5 }, { beskrivelse: 'Tetting og silikon', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Beslagsett pipe aluminium', mengde: 1, enhet: 'sett', enhetspris: 2800 }, { varenavn: 'Skruer og klammer', mengde: 1, enhet: 'rs', enhetspris: 180 }, { varenavn: 'Fugemasse/silikon', mengde: 1, enhet: 'rs', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'blikk_veggbeslag', fag: 'blikkenslager', kategori: 'Beslag', name: 'Veggbeslag/overgangsbeslag', beskrivelse: 'Beslag i overgang vegg/tak, vegg/sokkel eller andre overganger',
+    arbeidsarter: [{ beskrivelse: 'Oppmåling og tilkapping', grunntid: 0.15 }, { beskrivelse: 'Montering og tetting', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Aluminiumsbeslag profil', mengde: 1.05, enhet: 'lm', enhetspris: 85 }, { varenavn: 'Skruer rustfri', mengde: 4, enhet: 'stk/lm', enhetspris: 2 }, { varenavn: 'Fugemasse', mengde: 0.03, enhet: 'l/lm', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_murkrone', fag: 'blikkenslager', kategori: 'Beslag', name: 'Murkronebeslag', beskrivelse: 'Beslag på topp av mur/brystning for vannavrenning',
+    arbeidsarter: [{ beskrivelse: 'Oppmåling og tilkapping', grunntid: 0.12 }, { beskrivelse: 'Montering', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Murkronebeslag aluminium', mengde: 1.05, enhet: 'lm', enhetspris: 120 }, { varenavn: 'Skruer og festemidler', mengde: 1, enhet: 'rs/lm', enhetspris: 12 }, { varenavn: 'Fugemasse', mengde: 0.02, enhet: 'l/lm', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Tekking
+  { id: 'blikk_tekking_skraatak', fag: 'blikkenslager', kategori: 'Tekking', name: 'Blikktekking skråtak (falsplater)', beskrivelse: 'Tekking av skråtak med falsede stålplater/blikk',
+    arbeidsarter: [{ beskrivelse: 'Legging underlag/papp', grunntid: 0.08 }, { beskrivelse: 'Montering falsplater', grunntid: 0.35 }, { beskrivelse: 'Falsing og tetting', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Underlagspapp', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'Falsplater stål', mengde: 1.08, enhet: 'm²', enhetspris: 320 }, { varenavn: 'Festemateriell klemmer', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'blikk_tekking_flatt', fag: 'blikkenslager', kategori: 'Tekking', name: 'Membrantekking flatt tak', beskrivelse: 'Tekking av flatt/lavt tak med EPDM eller PVC-membran',
+    arbeidsarter: [{ beskrivelse: 'Klargjøring underlag', grunntid: 0.08 }, { beskrivelse: 'Utlegging membran', grunntid: 0.15 }, { beskrivelse: 'Sveising/liming skjøter', grunntid: 0.12 }, { beskrivelse: 'Oppkant og detaljer', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Takmembran EPDM/PVC', mengde: 1.15, enhet: 'm²', enhetspris: 165 }, { varenavn: 'Festemateriell mekanisk', mengde: 6, enhet: 'stk/m²', enhetspris: 8 }, { varenavn: 'Sveisemiddel/lim', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'blikk_tekking_kobber', fag: 'blikkenslager', kategori: 'Tekking', name: 'Kobbertekking tak', beskrivelse: 'Tekking med kobberplater — premium, lang levetid',
+    arbeidsarter: [{ beskrivelse: 'Underlag og papp', grunntid: 0.08 }, { beskrivelse: 'Tilkapping kobber', grunntid: 0.20 }, { beskrivelse: 'Montering og falsing', grunntid: 0.45 }, { beskrivelse: 'Lodding detaljer', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Underlagspapp', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'Kobberplate 0.6mm', mengde: 1.1, enhet: 'm²', enhetspris: 650 }, { varenavn: 'Kobberstift og klemmer', mengde: 1, enhet: 'rs/m²', enhetspris: 35 }, { varenavn: 'Loddemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Innvendig
+  { id: 'blikk_ventkanal', fag: 'blikkenslager', kategori: 'Ventilasjon/innvendig', name: 'Ventkanal rund Ø125', beskrivelse: 'Montering rund ventilasjonskanal med fester og bend',
+    arbeidsarter: [{ beskrivelse: 'Oppheng og montering kanal', grunntid: 0.12 }, { beskrivelse: 'Skjøter og bend', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Ventkanal rund Ø125 spiro', mengde: 1.05, enhet: 'lm', enhetspris: 65 }, { varenavn: 'Oppheng/bøyler', mengde: 1, enhet: 'stk/lm', enhetspris: 22 }, { varenavn: 'Bend Ø125', mengde: 0.3, enhet: 'stk/lm', enhetspris: 55 }, { varenavn: 'Tape/muffer', mengde: 1, enhet: 'rs/lm', enhetspris: 10 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_ventkanal_rekt', fag: 'blikkenslager', kategori: 'Ventilasjon/innvendig', name: 'Ventkanal rektangulær', beskrivelse: 'Montering rektangulær ventilasjonskanal tilpasset',
+    arbeidsarter: [{ beskrivelse: 'Tilkapping og falsing', grunntid: 0.25 }, { beskrivelse: 'Oppheng og montering', grunntid: 0.15 }, { beskrivelse: 'Skjøter', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Stålplate galv. 0.7mm', mengde: 0.8, enhet: 'm²/lm', enhetspris: 85 }, { varenavn: 'Oppheng', mengde: 1, enhet: 'stk/lm', enhetspris: 28 }, { varenavn: 'Skruer og blindnagler', mengde: 1, enhet: 'rs/lm', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'blikk_avtrekk_hat', fag: 'blikkenslager', kategori: 'Ventilasjon/innvendig', name: 'Avtrekkshat/takgjennomføring', beskrivelse: 'Montering av avtrekkshat på tak med gjennomføring og tetting',
+    arbeidsarter: [{ beskrivelse: 'Utskjæring i tak', grunntid: 1.0 }, { beskrivelse: 'Montering gjennomføring', grunntid: 1.0 }, { beskrivelse: 'Montering hat', grunntid: 0.5 }, { beskrivelse: 'Tetting og beslag', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Avtrekkshat aluminium', mengde: 1, enhet: 'stk', enhetspris: 850 }, { varenavn: 'Gjennomføringsmansjett', mengde: 1, enhet: 'stk', enhetspris: 280 }, { varenavn: 'Beslag og tetting', mengde: 1, enhet: 'rs', enhetspris: 350 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+
   // ═══ GRUNNARBEID ══════════════════════════════════════════════════════════
   { id: 'gru_grav_tomter', fag: 'grunnarbeid', kategori: 'Graving', name: 'Graving og planering tomteareal', beskrivelse: 'Graving, masseflytting og planering for husgrunn',
     arbeidsarter: [{ beskrivelse: 'Graving og masseflytting', grunntid: 0.10 }],
