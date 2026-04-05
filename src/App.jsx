@@ -1009,7 +1009,7 @@ function ProsjektfilerPage() {
       }
       setShowUpload(false)
       setUploadFiles([])
-      setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
+      setUploadForm({ project_id: selectedProject !== 'all' ? selectedProject : '', category: selectedCategory || 'annet', sub: selectedSub || '', description: '', access_level: 'alle' })
       await loadData()
     } catch(e) { alert('Feil ved opplasting: ' + e.message) }
     finally { setUploading(false) }
@@ -1096,7 +1096,7 @@ function ProsjektfilerPage() {
       {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
+        <button onClick={() => { setUploadForm(f => ({ ...f, project_id: selectedProject !== 'all' ? selectedProject : (f.project_id || ''), category: selectedCategory || f.category || 'annet', sub: selectedSub || '' })); setShowUpload(true) }} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
           ⬆️ Last opp fil
         </button>
       </div>
