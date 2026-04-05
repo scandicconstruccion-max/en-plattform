@@ -15710,227 +15710,130 @@ function LockedModulePage({ pageId, onNavigate }) {
 }
 
 // ─── KALKULASJON MODULE ──────────────────────────────────────────────────────
+// Inspirert av Proresult kalkulasjonslogikk + NS 3451/3420 struktur
+// Struktur: Prosjekt → Kalkyler (per fag) → Bygningsdeler → Arbeidsarter + Materialer + UE
 
-// ─── NS 3451 Bygningsdelstabell + NS 3420 Fagdeler ──────────────────────────
-// Kapittelstruktur basert på NS 3451 (bygningsdeler) med NS 3420-referanser (fagkoder)
+// ─── FAGGRUPPER OG KALKULASJONSFAKTORER ──────────────────────────────────────
 
-const NS_CHAPTERS = [
-  // Rigg & drift (NS 3420-A)
-  { id: 'A',  code: 'A',  name: 'Rigg og drift',              emoji: '🏗️', ns3420: 'A',  group: 'Felleskostnader', defaultMarkup: 0, sortOrder: 0 },
-  { id: 'C',  code: 'C',  name: 'Riving og demontering',      emoji: '🔨', ns3420: 'C',  group: 'Felleskostnader', defaultMarkup: 15, sortOrder: 1 },
-  // 2x Bygning (NS 3451)
-  { id: '21', code: '21', name: 'Grunn og fundamenter',        emoji: '🪨', ns3420: 'F/G', group: 'Bygning', defaultMarkup: 20, sortOrder: 10 },
-  { id: '22', code: '22', name: 'Bæresystemer',                emoji: '🏛️', ns3420: 'H/L', group: 'Bygning', defaultMarkup: 20, sortOrder: 11 },
-  { id: '23', code: '23', name: 'Yttervegger',                 emoji: '🧱', ns3420: 'Q/K', group: 'Bygning', defaultMarkup: 20, sortOrder: 12 },
-  { id: '24', code: '24', name: 'Innervegger',                 emoji: '🪟', ns3420: 'Q/K', group: 'Bygning', defaultMarkup: 20, sortOrder: 13 },
-  { id: '25', code: '25', name: 'Dekker',                      emoji: '⬜', ns3420: 'H/J', group: 'Bygning', defaultMarkup: 20, sortOrder: 14 },
-  { id: '26', code: '26', name: 'Yttertak',                    emoji: '🏠', ns3420: 'Q/S', group: 'Bygning', defaultMarkup: 20, sortOrder: 15 },
-  { id: '27', code: '27', name: 'Fast inventar',               emoji: '🚪', ns3420: 'Q/R', group: 'Bygning', defaultMarkup: 20, sortOrder: 16 },
-  { id: '28', code: '28', name: 'Trapper, balkonger m.m.',     emoji: '🪜', ns3420: 'H/L', group: 'Bygning', defaultMarkup: 20, sortOrder: 17 },
-  // 3x VVS (NS 3451)
-  { id: '31', code: '31', name: 'Sanitæranlegg',               emoji: '🚿', ns3420: 'U',   group: 'VVS', defaultMarkup: 15, sortOrder: 20 },
-  { id: '32', code: '32', name: 'Varmeanlegg',                 emoji: '🔥', ns3420: 'U',   group: 'VVS', defaultMarkup: 15, sortOrder: 21 },
-  { id: '33', code: '33', name: 'Brannslukking',               emoji: '🧯', ns3420: 'U',   group: 'VVS', defaultMarkup: 15, sortOrder: 22 },
-  { id: '36', code: '36', name: 'Luftbehandling/ventilasjon',  emoji: '🌬️', ns3420: 'V/W', group: 'VVS', defaultMarkup: 15, sortOrder: 23 },
-  // 4x Elkraft (NS 3451)
-  { id: '41', code: '41', name: 'Elkraft, generell',           emoji: '⚡', ns3420: 'Y',   group: 'Elektro', defaultMarkup: 15, sortOrder: 30 },
-  { id: '43', code: '43', name: 'Elkraft, fordeling',          emoji: '🔌', ns3420: 'Y',   group: 'Elektro', defaultMarkup: 15, sortOrder: 31 },
-  { id: '44', code: '44', name: 'Belysning',                   emoji: '💡', ns3420: 'Y',   group: 'Elektro', defaultMarkup: 15, sortOrder: 32 },
-  // 5x Tele og automatisering
-  { id: '5',  code: '5',  name: 'Tele og automatisering',      emoji: '📡', ns3420: 'Y',   group: 'Tele', defaultMarkup: 15, sortOrder: 40 },
-  // 6x Andre installasjoner
-  { id: '6',  code: '6',  name: 'Andre installasjoner',        emoji: '🔩', ns3420: 'BE',  group: 'Andre', defaultMarkup: 15, sortOrder: 50 },
-  // 7x Utendørs
-  { id: '71', code: '71', name: 'Utendørs, terreng',           emoji: '🌿', ns3420: 'F/G', group: 'Utendørs', defaultMarkup: 15, sortOrder: 60 },
-  { id: '73', code: '73', name: 'Utendørs VVS',               emoji: '🚰', ns3420: 'U',   group: 'Utendørs', defaultMarkup: 15, sortOrder: 61 },
-  { id: '74', code: '74', name: 'Utendørs elkraft',            emoji: '🔦', ns3420: 'Y',   group: 'Utendørs', defaultMarkup: 15, sortOrder: 62 },
-  // Overflatebehandling
-  { id: 'T',  code: 'T',  name: 'Maler- og beleggarbeid',     emoji: '🎨', ns3420: 'T',   group: 'Overflate', defaultMarkup: 20, sortOrder: 70 },
-  { id: 'J',  code: 'J',  name: 'Gulv og belegning',          emoji: '🟫', ns3420: 'J',   group: 'Overflate', defaultMarkup: 20, sortOrder: 71 },
-  // Underleverandører og diverse
-  { id: 'UE', code: 'UE', name: 'Underleverandører',           emoji: '🤝', ns3420: '',    group: 'Diverse', defaultMarkup: 10, sortOrder: 80 },
-  { id: 'DI', code: 'DI', name: 'Diverse / uspesifisert',      emoji: '📦', ns3420: '',    group: 'Diverse', defaultMarkup: 15, sortOrder: 81 },
+const FAGGRUPPER = [
+  { id: 'tomrer',     name: 'Tømrer',           emoji: '🪚', defaultLonn: 380, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'murer',      name: 'Murer',            emoji: '🧱', defaultLonn: 370, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'betong',     name: 'Betongarbeider',   emoji: '🏗️', defaultLonn: 390, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'maler',      name: 'Maler',            emoji: '🎨', defaultLonn: 340, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'rorleger',   name: 'Rørlegger',        emoji: '🔧', defaultLonn: 420, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 25, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'elektriker', name: 'Elektriker',       emoji: '⚡', defaultLonn: 430, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 25, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'blikkenslager', name: 'Blikkenslager', emoji: '🔩', defaultLonn: 380, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'grunnarbeid', name: 'Grunnarbeid',     emoji: '🪨', defaultLonn: 360, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'rigg',       name: 'Rigg og drift',    emoji: '🚧', defaultLonn: 350, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 20, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'ue',         name: 'Underleverandør',  emoji: '🤝', defaultLonn: 0,   defaultSosiale: 0,  defaultFaste: 0,  defaultFortjenestLonn: 0,  defaultFortjenesteInnkjop: 15, defaultMatJustering: 0, defaultGrunntidJustering: 1.0 },
 ]
 
-// Gruppert visning for kapittelvelger
-const NS_CHAPTER_GROUPS = [
-  { title: 'Felleskostnader',  ids: ['A', 'C'] },
-  { title: 'Bygning (2x)',     ids: ['21','22','23','24','25','26','27','28'] },
-  { title: 'VVS (3x)',         ids: ['31','32','33','36'] },
-  { title: 'Elektro (4x)',     ids: ['41','43','44'] },
-  { title: 'Tele & andre (5-6)', ids: ['5','6'] },
-  { title: 'Utendørs (7x)',    ids: ['71','73','74'] },
-  { title: 'Overflate',        ids: ['T','J'] },
-  { title: 'Diverse',          ids: ['UE','DI'] },
-]
+const getFaggruppe = (id) => FAGGRUPPER.find(f => f.id === id) || FAGGRUPPER[0]
 
-// Prosjekttype-maler: forhåndsvelger relevante kapitler
-const PROJECT_TYPE_PRESETS = [
-  {
-    id: 'enkelt_tomrer',
-    name: 'Enkelt tømreroppdrag',
-    desc: 'Bytte dør, vindu, panel o.l.',
-    emoji: '🪚',
-    chapters: ['A', '23', 'T'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg og rydding', qty: 1, unit: 'rs' }],
-      '23': [{ description: '', qty: 1, unit: 'stk' }],
-      'T':  [{ description: 'Overflatebehandling', qty: 1, unit: 'm²' }],
-    }
-  },
-  {
-    id: 'enkelt_vvs',
-    name: 'Enkelt VVS-oppdrag',
-    desc: 'Bytte toalett, servant, blandebatteri o.l.',
-    emoji: '🔧',
-    chapters: ['A', '31'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg og rydding', qty: 1, unit: 'rs' }],
-      '31': [{ description: '', qty: 1, unit: 'stk' }],
-    }
-  },
-  {
-    id: 'bad_renovering',
-    name: 'Baderomsrenovering',
-    desc: 'Komplett renovering av bad',
-    emoji: '🚿',
-    chapters: ['A', 'C', '24', '25', '31', '32', '41', '44', 'J', 'T'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }],
-      'C':  [{ description: 'Riving av eksisterende bad', qty: 1, unit: 'm²' }],
-      '24': [{ description: 'Innervegger, gipsing og flislegging', qty: 1, unit: 'm²' }],
-      '25': [{ description: 'Gulv, membran og flislegging', qty: 1, unit: 'm²' }],
-      '31': [{ description: 'Servant med blandebatteri', qty: 1, unit: 'stk' }, { description: 'Toalett', qty: 1, unit: 'stk' }, { description: 'Dusjarmatur', qty: 1, unit: 'stk' }],
-      '32': [{ description: 'Gulvvarme, vannbåren', qty: 1, unit: 'm²' }],
-      '41': [{ description: 'Elektrisk opplegg bad', qty: 1, unit: 'rs' }],
-      '44': [{ description: 'Belysning bad', qty: 1, unit: 'stk' }],
-      'J':  [{ description: 'Flislegging gulv', qty: 1, unit: 'm²' }],
-      'T':  [{ description: 'Maling himling', qty: 1, unit: 'm²' }],
-    }
-  },
-  {
-    id: 'kjokken_renovering',
-    name: 'Kjøkkenrenovering',
-    desc: 'Komplett renovering av kjøkken',
-    emoji: '🍳',
-    chapters: ['A', 'C', '24', '25', '27', '31', '41', '44', 'J', 'T'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }],
-      'C':  [{ description: 'Riving av eksisterende kjøkken', qty: 1, unit: 'rs' }],
-      '24': [{ description: 'Innervegger', qty: 1, unit: 'm²' }],
-      '25': [{ description: 'Gulvarbeid', qty: 1, unit: 'm²' }],
-      '27': [{ description: 'Kjøkkeninnredning', qty: 1, unit: 'lm' }, { description: 'Benkeplate', qty: 1, unit: 'lm' }],
-      '31': [{ description: 'Røropplegg kjøkken', qty: 1, unit: 'rs' }],
-      '41': [{ description: 'Elektrisk opplegg kjøkken', qty: 1, unit: 'rs' }],
-      '44': [{ description: 'Belysning kjøkken', qty: 1, unit: 'stk' }],
-      'J':  [{ description: 'Gulvbelegg', qty: 1, unit: 'm²' }],
-      'T':  [{ description: 'Maling vegger og himling', qty: 1, unit: 'm²' }],
-    }
-  },
-  {
-    id: 'total_rehab',
-    name: 'Totalrehabilitering',
-    desc: 'Komplett rehabilitering av bolig',
-    emoji: '🏚️',
-    chapters: ['A', 'C', '21', '22', '23', '24', '25', '26', '27', '28', '31', '32', '36', '41', '43', '44', 'T', 'J', 'UE'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }, { description: 'Prosjektledelse', qty: 1, unit: 'rs' }],
-      'C':  [{ description: 'Riving og sanering', qty: 1, unit: 'rs' }],
-    }
-  },
-  {
-    id: 'nybygg_bolig',
-    name: 'Nybygg enebolig',
-    desc: 'Ny enebolig fra grunn',
-    emoji: '🏡',
-    chapters: ['A', '21', '22', '23', '24', '25', '26', '27', '28', '31', '32', '33', '36', '41', '43', '44', '5', '71', 'T', 'J', 'UE'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }, { description: 'Prosjektledelse', qty: 1, unit: 'rs' }, { description: 'Forsikring og gebyrer', qty: 1, unit: 'rs' }],
-      '21': [{ description: 'Graving og masseflytting', qty: 1, unit: 'm³' }, { description: 'Forskaling og støp plate', qty: 1, unit: 'm²' }],
-    }
-  },
-  {
-    id: 'tilbygg',
-    name: 'Tilbygg / påbygg',
-    desc: 'Utvidelse av eksisterende bolig',
-    emoji: '🔲',
-    chapters: ['A', 'C', '21', '22', '23', '24', '25', '26', '27', '31', '32', '41', '44', 'T', 'J', 'UE'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }],
-      'C':  [{ description: 'Tilpasning eksisterende konstruksjon', qty: 1, unit: 'rs' }],
-    }
-  },
-  {
-    id: 'egendefinert',
-    name: 'Egendefinert',
-    desc: 'Velg kapitler selv',
-    emoji: '✏️',
-    chapters: ['A'],
-    defaultLines: {
-      'A':  [{ description: 'Rigg og drift', qty: 1, unit: 'rs' }],
-    }
-  },
-]
+// Default kalkulasjonsfaktorer for en faggruppe
+function getDefaultFaktorer(fagId) {
+  const fag = getFaggruppe(fagId)
+  return {
+    produksjonslonn: fag.defaultLonn,
+    sosiale_prosent: fag.defaultSosiale,
+    faste_prosent: fag.defaultFaste,
+    fortjeneste_lonn_prosent: fag.defaultFortjenestLonn,
+    fortjeneste_innkjop_prosent: fag.defaultFortjenesteInnkjop,
+    mat_justering_prosent: fag.defaultMatJustering,
+    grunntid_justering: fag.defaultGrunntidJustering,
+  }
+}
 
-// Helper: get NS chapter definition by id
-const getNsChapter = (id) => NS_CHAPTERS.find(c => c.id === id) || NS_CHAPTERS[NS_CHAPTERS.length - 1]
+// ─── BEREGNINGSMOTOR ─────────────────────────────────────────────────────────
+// Basert på Proresult-logikk: grunntid × justering = faktisk tid, timekostnad inkl. sosiale/faste
 
-// Helper: create chapters from a project type preset
-function createChaptersFromPreset(preset) {
-  return preset.chapters.map((chId, i) => {
-    const nsCh = getNsChapter(chId)
-    const defaultLines = preset.defaultLines?.[chId] || []
-    const lines = defaultLines.length > 0
-      ? defaultLines.map((dl, li) => ({ id: Date.now() + i * 100 + li, description: dl.description, qty: dl.qty, unit: dl.unit || 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: nsCh.defaultMarkup }))
-      : [{ id: Date.now() + i * 100, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: nsCh.defaultMarkup }]
-    return { id: Date.now() + i, title: `${nsCh.code} ${nsCh.name}`, categoryId: nsCh.id, markup: 0, lines }
+function beregnArbeidskostnad(arbeidsart, faktorer) {
+  const grunntid = parseFloat(arbeidsart.grunntid) || 0
+  const justering = parseFloat(faktorer.grunntid_justering) || 1.0
+  const faktiskTid = grunntid * justering
+  const lonn = parseFloat(faktorer.produksjonslonn) || 0
+  const sosiale = parseFloat(faktorer.sosiale_prosent) || 0
+  const faste = parseFloat(faktorer.faste_prosent) || 0
+  const timekostnad = lonn * (1 + sosiale / 100 + faste / 100)
+  const arbeidskostnad = faktiskTid * timekostnad
+  const fortjenesteProsent = parseFloat(faktorer.fortjeneste_lonn_prosent) || 0
+  const medFortjeneste = arbeidskostnad * (1 + fortjenesteProsent / 100)
+  return { faktiskTid, timekostnad, arbeidskostnad, medFortjeneste }
+}
+
+function beregnMaterialkostnad(material, faktorer) {
+  const mengde = parseFloat(material.mengde) || 0
+  const pris = parseFloat(material.enhetspris) || 0
+  const kostnad = mengde * pris
+  const matJustering = parseFloat(faktorer.mat_justering_prosent) || 0
+  const medJustering = kostnad * (1 + matJustering / 100)
+  const fortjenesteProsent = parseFloat(faktorer.fortjeneste_innkjop_prosent) || 0
+  const medFortjeneste = medJustering * (1 + fortjenesteProsent / 100)
+  return { kostnad, medJustering, medFortjeneste }
+}
+
+function beregnBygningsdel(bd, faktorer) {
+  let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
+  let totalMaterial = 0, totalMaterialMedFortjeneste = 0
+  let totalUE = 0
+  const fortjenesteInnkjop = parseFloat(faktorer.fortjeneste_innkjop_prosent) || 0
+
+  ;(bd.arbeidsarter || []).forEach(a => {
+    const r = beregnArbeidskostnad(a, faktorer)
+    totalArbeid += r.arbeidskostnad
+    totalArbeidMedFortjeneste += r.medFortjeneste
+    totalTimer += r.faktiskTid
   })
+  ;(bd.materialer || []).forEach(m => {
+    const r = beregnMaterialkostnad(m, faktorer)
+    totalMaterial += r.medJustering
+    totalMaterialMedFortjeneste += r.medFortjeneste
+  })
+  ;(bd.underleverandorer || []).forEach(u => {
+    const kost = parseFloat(u.kostnad) || 0
+    totalUE += kost * (1 + fortjenesteInnkjop / 100)
+  })
+
+  const selvkost = totalArbeid + totalMaterial
+  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE
+  return { totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste }
 }
 
-// Keep backward compat alias
-const KALK_CATEGORIES = NS_CHAPTERS
-
-function calcKalkLine(line) {
-  const qty = parseFloat(line.qty) || 0
-  const workPrice = parseFloat(line.unitPriceWork) || 0
-  const matPrice = parseFloat(line.unitPriceMaterial) || 0
-  const cost = qty * (workPrice + matPrice)
-  const markup = parseFloat(line.markup) || 0
-  return { cost, markupAmount: cost * markup / 100, total: cost * (1 + markup / 100) }
+function beregnKalkyle(kalkyle, faktorer) {
+  let totTimer = 0, totArbeid = 0, totMaterial = 0, totUE = 0, totMedFortjeneste = 0, totSelvkost = 0
+  ;(kalkyle.bygningsdeler || []).forEach(bd => {
+    const r = beregnBygningsdel(bd, faktorer)
+    totTimer += r.totalTimer
+    totArbeid += r.totalArbeidMedFortjeneste
+    totMaterial += r.totalMaterialMedFortjeneste
+    totUE += r.totalUE
+    totSelvkost += r.selvkost
+    totMedFortjeneste += r.totalMedFortjeneste
+  })
+  const fortjeneste = totMedFortjeneste - totSelvkost
+  const fortjenesteProsent = totMedFortjeneste > 0 ? (fortjeneste / totMedFortjeneste) * 100 : 0
+  return { totTimer, totArbeid, totMaterial, totUE, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent }
 }
 
-function calcKalkChapter(ch) {
-  const lines = ch.lines || []
-  const lineTotals = lines.reduce((acc, l) => {
-    const { cost, markupAmount, total } = calcKalkLine(l)
-    return { cost: acc.cost + cost, markupAmount: acc.markupAmount + markupAmount, total: acc.total + total }
-  }, { cost: 0, markupAmount: 0, total: 0 })
-  const chapterMarkup = parseFloat(ch.markup) || 0
-  const afterChapterMarkup = lineTotals.total * (1 + chapterMarkup / 100)
-  return { ...lineTotals, chapterMarkupAmount: lineTotals.total * chapterMarkup / 100, grandTotal: afterChapterMarkup }
+function beregnProsjektTotal(kalkyler, alleFaktorer) {
+  let totTimer = 0, totArbeid = 0, totMaterial = 0, totUE = 0, totSelvkost = 0, totMedFortjeneste = 0
+  kalkyler.forEach(k => {
+    const faktorer = alleFaktorer[k.fag] || getDefaultFaktorer(k.fag)
+    const r = beregnKalkyle(k, faktorer)
+    totTimer += r.totTimer; totArbeid += r.totArbeid; totMaterial += r.totMaterial
+    totUE += r.totUE; totSelvkost += r.totSelvkost; totMedFortjeneste += r.totMedFortjeneste
+  })
+  const fortjeneste = totMedFortjeneste - totSelvkost
+  const fortjenesteProsent = totMedFortjeneste > 0 ? (fortjeneste / totMedFortjeneste) * 100 : 0
+  const mva = totMedFortjeneste * 0.25
+  return { totTimer, totArbeid, totMaterial, totUE, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent, mva, totInkMva: totMedFortjeneste + mva }
 }
 
-function calcKalkulation(chapters, globalMarkup, riskMarkup) {
-  const chapterTotals = chapters.reduce((acc, ch) => {
-    const t = calcKalkChapter(ch)
-    return { cost: acc.cost + t.cost, markupAmount: acc.markupAmount + t.markupAmount + t.chapterMarkupAmount, grandTotal: acc.grandTotal + t.grandTotal }
-  }, { cost: 0, markupAmount: 0, grandTotal: 0 })
-  const gm = parseFloat(globalMarkup) || 0
-  const rm = parseFloat(riskMarkup) || 0
-  const afterGlobal = chapterTotals.grandTotal * (1 + gm / 100)
-  const afterRisk = afterGlobal * (1 + rm / 100)
-  const totalExMva = afterRisk
-  const mva = totalExMva * 0.25
-  const totalInkMva = totalExMva + mva
-  const totalMarkup = totalExMva - chapterTotals.cost
-  const profitPercent = totalExMva > 0 ? (totalMarkup / totalExMva) * 100 : 0
-  return { cost: chapterTotals.cost, totalMarkup, totalExMva, mva, totalInkMva, profitPercent }
-}
+// ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
 
 function KalkulasjonPage({ onNavigate }) {
   const { user } = useAuth()
   const [kalks, setKalks] = useState([])
-  const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('alle')
@@ -15940,11 +15843,8 @@ function KalkulasjonPage({ onNavigate }) {
 
   const load = async () => {
     try {
-      const [k, p] = await Promise.all([
-        supabase.from('calculations').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data || [])
-      ])
-      setKalks(k); setProjects(p)
+      const { data } = await supabase.from('calculations').select('*').order('created_at', { ascending: false })
+      setKalks(data || [])
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -15975,7 +15875,7 @@ function KalkulasjonPage({ onNavigate }) {
     </div>
   )
 
-  if (viewKalk) return <KalkulasjonDetaljer kalk={viewKalk} projects={projects} user={user} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setViewKalk(null); setEditKalk(k); setShowEditor(true) }} />
+  if (viewKalk) return <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setViewKalk(null); setEditKalk(k); setShowEditor(true) }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -15984,11 +15884,11 @@ function KalkulasjonPage({ onNavigate }) {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 Kalkulasjon</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Kostnadskalkulasjon med påslag og fortjenesteberegning</p>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Prosjektkalkulasjon med fagkalkyler, bygningsdeler og fortjenesteberegning</p>
           </div>
           <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
             style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
-            + Ny kalkulasjon
+            + Nytt kalkulasjonsprosjekt
           </button>
         </div>
       </div>
@@ -16010,7 +15910,7 @@ function KalkulasjonPage({ onNavigate }) {
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk kalkulasjon, kunde, nummer..." style={{ ...qInp, maxWidth:'300px', flex:1 }} />
           {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
-          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kalkulasjoner</span>
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} prosjekter</span>
         </div>
 
         {/* List */}
@@ -16018,14 +15918,15 @@ function KalkulasjonPage({ onNavigate }) {
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
             <div style={{ fontSize:'40px', marginBottom:'12px' }}>🧮</div>
             <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen kalkulasjoner funnet</h3>
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{kalks.length===0 ? 'Opprett din første kalkulasjon.' : 'Prøv å endre søk eller filter.'}</p>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{kalks.length===0 ? 'Opprett ditt første kalkulasjonsprosjekt.' : 'Prøv å endre søk eller filter.'}</p>
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {filtered.map(k => {
               const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
-              const proj = projects.find(p => p.id === k.project_id)
-              const totals = calcKalkulation(k.chapters || [], k.global_markup, k.risk_markup)
+              const kalkyler = k.kalkyler || []
+              const alleFaktorer = k.faktorer || {}
+              const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
               return (
                 <div key={k.id} onClick={() => setViewKalk(k)}
                   style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
@@ -16039,12 +15940,13 @@ function KalkulasjonPage({ onNavigate }) {
                     </div>
                     <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
                       {k.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {k.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      <span style={{ fontSize:'12px', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626', fontWeight:'600' }}>📊 {totals.profitPercent.toFixed(1)}% margin</span>
+                      <span style={{ fontSize:'12px', color:'#64748b' }}>📋 {kalkyler.length} kalkyle{kalkyler.length !== 1 ? 'r' : ''}</span>
+                      <span style={{ fontSize:'12px', color:'#64748b' }}>⏱️ {totals.totTimer.toFixed(0)} timer</span>
+                      <span style={{ fontSize:'12px', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626', fontWeight:'600' }}>📊 {totals.fortjenesteProsent.toFixed(1)}% margin</span>
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(totals.totalExMva)}</div>
+                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(totals.totMedFortjeneste)}</div>
                     <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
                   </div>
                   <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
@@ -16055,68 +15957,119 @@ function KalkulasjonPage({ onNavigate }) {
         )}
       </div>
 
-      {showEditor && <KalkulasjonEditorModal projects={projects} user={user} initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
+      {showEditor && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
     </div>
   )
 }
 
-// ─── KALKULASJON EDITOR MODAL ────────────────────────────────────────────────
-function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
-  const confirm = useConfirm()
+// ─── PROSJEKT EDITOR (Opprett/rediger kalkulasjonsprosjekt) ──────────────────
+
+function KalkProsjektEditor({ initial, onClose, onSaved }) {
+  const { user } = useAuth()
   const isEdit = !!initial
-  const [step, setStep] = useState(1)
-  const [projectType, setProjectType] = useState(initial?.project_type || null)
   const [form, setForm] = useState({
     title: initial?.title || '',
     kalk_number: initial?.kalk_number || `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
-    project_id: initial?.project_id || '',
     customer_name: initial?.customer_name || '',
     customer_address: initial?.customer_address || '',
-    global_markup: initial?.global_markup ?? 0,
-    risk_markup: initial?.risk_markup ?? 0,
     notes: initial?.notes || '',
   })
-  const [chapters, setChapters] = useState(initial?.chapters || [])
+  const [kalkyler, setKalkyler] = useState(initial?.kalkyler || [])
+  const [faktorer, setFaktorer] = useState(initial?.faktorer || {})
+  const [activeKalkyle, setActiveKalkyle] = useState(null)
+  const [showFagPicker, setShowFagPicker] = useState(false)
+  const [showFaktorer, setShowFaktorer] = useState(false)
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  // When project type is selected (only for new kalkulasjoner)
-  const selectProjectType = (presetId) => {
-    const preset = PROJECT_TYPE_PRESETS.find(p => p.id === presetId)
-    if (!preset) return
-    setProjectType(presetId)
-    if (!isEdit && chapters.length <= 1) {
-      setChapters(createChaptersFromPreset(preset))
+  // Initialize faktorer for a fag if not yet set
+  const ensureFaktorer = (fagId) => {
+    if (!faktorer[fagId]) {
+      setFaktorer(f => ({ ...f, [fagId]: getDefaultFaktorer(fagId) }))
     }
   }
 
-  // Chapter helpers
-  const addChapter = (catId) => {
-    const cat = getNsChapter(catId)
-    setChapters(c => [...c, { id: Date.now(), title: `${cat.code} ${cat.name}`, categoryId: cat.id, markup: 0, lines: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat.defaultMarkup }] }])
+  // Add a new kalkyle (per fag)
+  const addKalkyle = (fagId, name) => {
+    ensureFaktorer(fagId)
+    const fag = getFaggruppe(fagId)
+    const newKalkyle = {
+      id: Date.now(),
+      fag: fagId,
+      name: name || fag.name,
+      description: '',
+      bygningsdeler: [{ id: Date.now()+1, name: '', arbeidsarter: [{ id: Date.now()+2, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }]
+    }
+    setKalkyler(k => [...k, newKalkyle])
+    setActiveKalkyle(newKalkyle.id)
+    setShowFagPicker(false)
   }
-  const removeChapter = (id) => setChapters(c => c.filter(x => x.id !== id))
-  const updateChapter = (id, f, v) => setChapters(c => c.map(x => x.id === id ? { ...x, [f]: v } : x))
-  const addLine = (chId) => {
-    const ch = chapters.find(c => c.id === chId)
-    const cat = getNsChapter(ch?.categoryId)
-    setChapters(c => c.map(x => x.id === chId ? { ...x, lines: [...x.lines, { id: Date.now(), description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat?.defaultMarkup || 20 }] } : x))
+
+  const removeKalkyle = (id) => {
+    setKalkyler(k => k.filter(x => x.id !== id))
+    if (activeKalkyle === id) setActiveKalkyle(null)
   }
-  const removeLine = (chId, lId) => setChapters(c => c.map(x => x.id === chId ? { ...x, lines: x.lines.filter(l => l.id !== lId) } : x))
-  const updateLine = (chId, lId, f, v) => setChapters(c => c.map(x => x.id === chId ? { ...x, lines: x.lines.map(l => l.id === lId ? { ...l, [f]: v } : l) } : x))
+
+  const updateKalkyle = (id, field, value) => setKalkyler(k => k.map(x => x.id === id ? { ...x, [field]: value } : x))
+
+  // Bygningsdel helpers
+  const addBygningsdel = (kalId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: [...x.bygningsdeler, { id: Date.now(), name: '', arbeidsarter: [{ id: Date.now()+1, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }] } : x))
+  }
+  const removeBygningsdel = (kalId, bdId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.filter(b => b.id !== bdId) } : x))
+  }
+  const updateBygningsdel = (kalId, bdId, field, value) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, [field]: value } : b) } : x))
+  }
+
+  // Arbeidsart helpers
+  const addArbeidsart = (kalId, bdId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, arbeidsarter: [...b.arbeidsarter, { id: Date.now(), beskrivelse: '', grunntid: 0 }] } : b) } : x))
+  }
+  const removeArbeidsart = (kalId, bdId, aId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, arbeidsarter: b.arbeidsarter.filter(a => a.id !== aId) } : b) } : x))
+  }
+  const updateArbeidsart = (kalId, bdId, aId, field, value) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, arbeidsarter: b.arbeidsarter.map(a => a.id === aId ? { ...a, [field]: value } : a) } : b) } : x))
+  }
+
+  // Material helpers
+  const addMaterial = (kalId, bdId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: Date.now(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0 }] } : b) } : x))
+  }
+  const removeMaterial = (kalId, bdId, mId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : x))
+  }
+  const updateMaterial = (kalId, bdId, mId, field, value) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(m => m.id === mId ? { ...m, [field]: value } : m) } : b) } : x))
+  }
+
+  // UE helpers
+  const addUE = (kalId, bdId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: Date.now(), navn: '', beskrivelse: '', kostnad: 0 }] } : b) } : x))
+  }
+  const removeUE = (kalId, bdId, uId) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : x))
+  }
+  const updateUE = (kalId, bdId, uId, field, value) => {
+    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).map(u => u.id === uId ? { ...u, [field]: value } : u) } : b) } : x))
+  }
+
+  const updateFaktor = (fagId, field, value) => {
+    setFaktorer(f => ({ ...f, [fagId]: { ...(f[fagId] || getDefaultFaktorer(fagId)), [field]: value } }))
+  }
 
   const handleSave = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const totals = calcKalkulation(chapters, form.global_markup, form.risk_markup)
-      const payload = { ...form, chapters, project_type: projectType, total_cost: totals.cost, total_ex_mva: totals.totalExMva, profit_percent: totals.profitPercent, updated_at: new Date().toISOString(), project_id: form.project_id || null }
+      const totals = beregnProsjektTotal(kalkyler, faktorer)
+      const payload = { ...form, kalkyler, faktorer, total_cost: totals.totSelvkost, total_ex_mva: totals.totMedFortjeneste, profit_percent: totals.fortjenesteProsent, updated_at: new Date().toISOString() }
       if (isEdit) {
-        const { error } = await supabase.from('calculations').update(payload).eq('id', initial.id)
-        if (error) throw error
+        await supabase.from('calculations').update(payload).eq('id', initial.id)
       } else {
-        const { error } = await supabase.from('calculations').insert({ ...payload, status: 'Utkast', created_by: user?.id })
-        if (error) throw error
+        await supabase.from('calculations').insert({ ...payload, status: 'Utkast', created_by: user?.id })
       }
       onSaved()
     } catch(e) { alert('Feil: ' + e.message) }
@@ -16124,279 +16077,270 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
   }
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
-  const totals = calcKalkulation(chapters, form.global_markup, form.risk_markup)
-
-  const [showCatPicker, setShowCatPicker] = useState(false)
+  const totals = beregnProsjektTotal(kalkyler, faktorer)
+  const activeKalk = kalkyler.find(k => k.id === activeKalkyle)
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1000px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'relative', margin:'auto', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1200px', maxHeight:'96vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+
         {/* Header */}
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger' : 'Ny'} kalkulasjon</h2>
-            <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Prosjektinfo'],['2','Kostnader'],['3','Sammendrag']].map(([n, label]) => (
-                <button key={n} onClick={() => setStep(+n)}
-                  style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize:'13px', cursor:'pointer' }}>
-                  {n}. {label}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div style={{ padding:'16px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger' : 'Nytt'} kalkulasjonsprosjekt</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
             <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:'11px', color:'#94a3b8' }}>Salgspris eks. mva</div>
-              <div style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>{fmt(totals.totalExMva)}</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8' }}>Total eks. mva</div>
+              <div style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>{fmt(totals.totMedFortjeneste)}</div>
             </div>
-            <div style={{ width:'1px', height:'32px', background:'#f1f5f9' }} />
             <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:'11px', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>Margin</div>
-              <div style={{ fontSize:'16px', fontWeight:'800', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>{totals.profitPercent.toFixed(1)}%</div>
+              <div style={{ fontSize:'11px', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : '#ca8a04' }}>Margin</div>
+              <div style={{ fontSize:'16px', fontWeight:'800', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }}>{totals.fortjenesteProsent.toFixed(1)}%</div>
             </div>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
-          {/* STEP 1 - Info */}
-          {step === 1 && (
-            <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
-              {/* Project type selection */}
-              {!isEdit && (
-                <div>
-                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>Velg prosjekttype</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'8px' }}>
-                    {PROJECT_TYPE_PRESETS.map(preset => (
-                      <button key={preset.id} onClick={() => selectProjectType(preset.id)}
-                        style={{ background: projectType === preset.id ? '#f0fdf4' : 'white', border: `2px solid ${projectType === preset.id ? '#059669' : '#f1f5f9'}`, borderRadius:'12px', padding:'14px 10px', cursor:'pointer', textAlign:'center', transition:'all 0.15s' }}>
-                        <div style={{ fontSize:'24px', marginBottom:'6px' }}>{preset.emoji}</div>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color: projectType === preset.id ? '#059669' : '#0f172a', marginBottom:'2px' }}>{preset.name}</div>
-                        <div style={{ fontSize:'11px', color:'#94a3b8', lineHeight:1.3 }}>{preset.desc}</div>
-                        {projectType === preset.id && <div style={{ fontSize:'11px', color:'#059669', fontWeight:'600', marginTop:'6px' }}>✓ {preset.chapters.length} kapitler</div>}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {/* Body - sidebar + main */}
+        <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
 
-              {/* Project info form */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px', maxWidth:'700px' }}>
-                <div style={{ gridColumn:'1/-1' }}>{lbl('Kalkulasjons-tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Baderomsrenovering Strandveien 12" style={qInp} /></div>
-                <div>{lbl('Kalkulasjonsnummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
-                <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-                <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
-                <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Prosjektadresse" style={qInp} /></div>
-                <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater om prosjektet..." style={{ ...qInp, resize:'none' }} /></div>
+          {/* LEFT SIDEBAR - Prosjektinfo + Kalkyler */}
+          <div style={{ width:'260px', borderRight:'1px solid #f1f5f9', display:'flex', flexDirection:'column', flexShrink:0 }}>
+            <div style={{ padding:'16px', overflowY:'auto', flex:1 }}>
+              {/* Prosjektinfo */}
+              <div style={{ marginBottom:'16px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Prosjektinfo</div>
+                {lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Prosjektnavn" style={{ ...qInp, marginBottom:'8px' }} />
+                {lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={{ ...qInp, marginBottom:'8px' }} />
+                {lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={{ ...qInp, marginBottom:'8px' }} />
+                {lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Prosjektadresse" style={{ ...qInp, marginBottom:'8px' }} />
               </div>
-            </div>
-          )}
 
-          {/* STEP 2 - Chapters & lines */}
-          {step === 2 && (
-            <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-              {chapters.map((ch, ci) => {
-                const cat = KALK_CATEGORIES.find(c => c.id === ch.categoryId)
-                const chTotals = calcKalkChapter(ch)
+              {/* Kalkyler (fag-tabs) */}
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Fagkalkyler</div>
+              {kalkyler.map(k => {
+                const fag = getFaggruppe(k.fag)
+                const fakt = faktorer[k.fag] || getDefaultFaktorer(k.fag)
+                const kTotals = beregnKalkyle(k, fakt)
+                const isActive = activeKalkyle === k.id
                 return (
-                  <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
-                    {/* Chapter header */}
-                    <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <span style={{ fontSize:'16px', flexShrink:0 }}>{cat?.emoji || '📦'}</span>
-                      {cat?.ns3420 && <span style={{ background:'#eff6ff', color:'#2563eb', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', flexShrink:0, border:'1px solid #bfdbfe' }}>NS {cat.ns3420}</span>}
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
-                      <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
-                        <span style={{ fontSize:'11px', color:'#94a3b8' }}>Kap.påslag</span>
-                        <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...qInp, width:'70px', textAlign:'right' }} />
-                        <span style={{ fontSize:'12px', color:'#94a3b8' }}>%</span>
-                      </div>
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap', minWidth:'100px', textAlign:'right' }}>{fmt(chTotals.grandTotal)}</span>
-                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                  <div key={k.id} onClick={() => setActiveKalkyle(k.id)}
+                    style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 12px', borderRadius:'10px', border: isActive ? '2px solid #059669' : '1px solid #f1f5f9', background: isActive ? '#f0fdf4' : 'white', cursor:'pointer', marginBottom:'4px' }}>
+                    <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{k.name}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{kTotals.totTimer.toFixed(1)}t · {fmt(kTotals.totMedFortjeneste)}</div>
                     </div>
-                    {/* Lines table */}
-                    <div style={{ padding:'14px 18px', overflowX:'auto' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'800px' }}>
-                        <thead>
-                          <tr>
-                            {['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Påslag %','Kostnad','Ink. påslag',''].map((h,i) => (
-                              <th key={i} style={{ padding:'6px 8px', textAlign:i>=3?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(ch.lines||[]).map(l => {
-                            const lt = calcKalkLine(l)
-                            return (
-                              <tr key={l.id}>
-                                <td style={{ padding:'6px 4px' }}><input value={l.description} onChange={e=>updateLine(ch.id,l.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...qInp, minWidth:'160px' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.qty} onChange={e=>updateLine(ch.id,l.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input value={l.unit} onChange={e=>updateLine(ch.id,l.id,'unit',e.target.value)} style={{ ...qInp, width:'55px' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.unitPriceWork} onChange={e=>updateLine(ch.id,l.id,'unitPriceWork',e.target.value)} style={{ ...qInp, width:'100px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.unitPriceMaterial} onChange={e=>updateLine(ch.id,l.id,'unitPriceMaterial',e.target.value)} style={{ ...qInp, width:'100px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.markup} onChange={e=>updateLine(ch.id,l.id,'markup',e.target.value)} min="0" max="200" style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 8px', textAlign:'right', color:'#64748b', whiteSpace:'nowrap', fontSize:'13px' }}>{fmt(lt.cost)}</td>
-                                <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap', fontSize:'13px' }}>{fmt(lt.total)}</td>
-                                <td style={{ padding:'6px 4px' }}>{(ch.lines||[]).length>1&&<button onClick={()=>removeLine(ch.id,l.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'10px' }}>
-                        <button onClick={()=>addLine(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
-                        <div style={{ fontSize:'13px', color:'#64748b' }}>
-                          Kostnad: <strong>{fmt(chTotals.cost)}</strong>
-                          {' → '}
-                          Ink. påslag: <strong style={{ color:'#059669' }}>{fmt(chTotals.grandTotal)}</strong>
-                        </div>
-                      </div>
-                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); removeKalkyle(k.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
                   </div>
                 )
               })}
 
-              {/* Add chapter picker - NS grouped */}
+              {/* Add kalkyle */}
               <div style={{ position:'relative' }}>
-                <button onClick={() => setShowCatPicker(!showCatPicker)} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel (NS 3451)</button>
-                {showCatPicker && (
-                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'12px', zIndex:10, marginTop:'4px', maxHeight:'400px', overflowY:'auto' }}>
-                    {NS_CHAPTER_GROUPS.map(group => {
-                      const usedIds = chapters.map(c => c.categoryId)
-                      const availableInGroup = group.ids.filter(id => !usedIds.includes(id))
-                      if (availableInGroup.length === 0) return null
-                      return (
-                        <div key={group.title} style={{ marginBottom:'8px' }}>
-                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', padding:'4px 8px', marginBottom:'4px' }}>{group.title}</div>
-                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px' }}>
-                            {availableInGroup.map(catId => {
-                              const cat = getNsChapter(catId)
-                              return (
-                                <button key={cat.id} onClick={() => { addChapter(cat.id); setShowCatPicker(false) }}
-                                  style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
-                                  <span>{cat.emoji}</span>
-                                  <span><strong style={{ color:'#0f172a' }}>{cat.code}</strong> <span style={{ color:'#64748b' }}>{cat.name}</span></span>
-                                  {cat.ns3420 && <span style={{ fontSize:'10px', color:'#94a3b8', marginLeft:'auto', flexShrink:0 }}>NS {cat.ns3420}</span>}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
+                <button onClick={() => setShowFagPicker(!showFagPicker)} style={{ width:'100%', background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'10px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px', marginTop:'4px' }}>+ Ny fagkalkyle</button>
+                {showFagPicker && (
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:10, marginTop:'4px' }}>
+                    {FAGGRUPPER.map(fag => (
+                      <button key={fag.id} onClick={() => addKalkyle(fag.id)}
+                        style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'13px', marginBottom:'2px' }}>
+                        <span>{fag.emoji}</span> {fag.name}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
 
-              {/* Global markups */}
-              <div style={{ background:'#f8fafc', borderRadius:'14px', padding:'18px 24px', border:'1px solid #f1f5f9' }}>
-                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>Generelle påslag</div>
-                <div style={{ display:'flex', gap:'20px', flexWrap:'wrap' }}>
-                  <div>
-                    {lbl('Generelt påslag %')}
-                    <input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} min="0" max="100" style={{ ...qInp, width:'120px' }} />
-                  </div>
-                  <div>
-                    {lbl('Risikopåslag %')}
-                    <input type="number" value={form.risk_markup} onChange={e=>set('risk_markup',e.target.value)} min="0" max="50" style={{ ...qInp, width:'120px' }} />
-                  </div>
-                </div>
+              {/* Kalkulasjonsfaktorer knapp */}
+              <button onClick={() => setShowFaktorer(!showFaktorer)} style={{ width:'100%', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px', cursor:'pointer', color:'#64748b', fontWeight:'600', fontSize:'12px', marginTop:'12px', textAlign:'left' }}>
+                ⚙️ Kalkulasjonsfaktorer
+              </button>
+            </div>
+
+            {/* Prosjektsammendrag */}
+            <div style={{ padding:'12px 16px', borderTop:'1px solid #f1f5f9', background:'#f0fdf4' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                <span style={{ color:'#64748b' }}>Timer</span><span style={{ fontWeight:'700' }}>{totals.totTimer.toFixed(0)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                <span style={{ color:'#64748b' }}>Arbeid</span><span style={{ fontWeight:'600' }}>{fmt(totals.totArbeid)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                <span style={{ color:'#64748b' }}>Materiale</span><span style={{ fontWeight:'600' }}>{fmt(totals.totMaterial)}</span>
+              </div>
+              {totals.totUE > 0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                <span style={{ color:'#64748b' }}>UE</span><span style={{ fontWeight:'600' }}>{fmt(totals.totUE)}</span>
+              </div>}
+              <div style={{ height:'1px', background:'#bbf7d0', margin:'6px 0' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px' }}>
+                <span style={{ fontWeight:'700', color:'#059669' }}>Total eks. mva</span><span style={{ fontWeight:'800', color:'#059669' }}>{fmt(totals.totMedFortjeneste)}</span>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 3 - Summary */}
-          {step === 3 && (
-            <div style={{ maxWidth:'600px', margin:'0 auto' }}>
-              <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
-                <div style={{ background:'#f8fafc', padding:'16px 24px', borderBottom:'1px solid #f1f5f9' }}>
-                  <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📊 Kalkulasjonssammendrag</h3>
-                  {form.title && <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{form.title}</p>}
+          {/* MAIN CONTENT - Active kalkyle or faktorer */}
+          <div style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
+            {showFaktorer ? (
+              /* Kalkulasjonsfaktorer-editor */
+              <div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+                  <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>⚙️ Kalkulasjonsfaktorer per faggruppe</h3>
+                  <button onClick={() => setShowFaktorer(false)} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
                 </div>
-                <div style={{ padding:'20px 24px' }}>
-                  {/* Per chapter breakdown */}
-                  {chapters.map((ch, ci) => {
-                    const cat = KALK_CATEGORIES.find(c => c.id === ch.categoryId)
-                    const ct = calcKalkChapter(ch)
-                    return (
-                      <div key={ch.id} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
-                        <span style={{ fontSize:'14px', color:'#374151' }}>{cat?.emoji || '📦'} {ch.title}</span>
-                        <span style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{fmt(ct.grandTotal)}</span>
+                <p style={{ color:'#64748b', fontSize:'13px', marginBottom:'16px', marginTop:0 }}>Disse faktorene brukes som multiplikatorer når systemet beregner kostnader. Tilpass til din bedrifts produktivitet og kostnadsstruktur.</p>
+                {kalkyler.map(k => {
+                  const fag = getFaggruppe(k.fag)
+                  const fakt = faktorer[k.fag] || getDefaultFaktorer(k.fag)
+                  return (
+                    <div key={k.fag} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', marginBottom:'12px' }}>
+                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>{fag.emoji} {fag.name}</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+                        <div>{lbl('Prod.lønn kr/t')}<input type="number" value={fakt.produksjonslonn} onChange={e=>updateFaktor(k.fag,'produksjonslonn',e.target.value)} style={qInp} /></div>
+                        <div>{lbl('Sosiale %')}<input type="number" value={fakt.sosiale_prosent} onChange={e=>updateFaktor(k.fag,'sosiale_prosent',e.target.value)} style={qInp} /></div>
+                        <div>{lbl('Faste kost. %')}<input type="number" value={fakt.faste_prosent} onChange={e=>updateFaktor(k.fag,'faste_prosent',e.target.value)} style={qInp} /></div>
+                        <div>{lbl('Grunntid-just.')}<input type="number" step="0.1" value={fakt.grunntid_justering} onChange={e=>updateFaktor(k.fag,'grunntid_justering',e.target.value)} style={qInp} /></div>
+                        <div>{lbl('Fortj. lønn %')}<input type="number" value={fakt.fortjeneste_lonn_prosent} onChange={e=>updateFaktor(k.fag,'fortjeneste_lonn_prosent',e.target.value)} style={qInp} /></div>
+                        <div>{lbl('Fortj. innkjøp %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateFaktor(k.fag,'fortjeneste_innkjop_prosent',e.target.value)} style={qInp} /></div>
+                        <div>{lbl('Mat.just. %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateFaktor(k.fag,'mat_justering_prosent',e.target.value)} style={qInp} /></div>
                       </div>
-                    )
-                  })}
-
-                  <div style={{ height:'1px', background:'#e2e8f0', margin:'12px 0' }} />
-
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                    <span style={{ fontSize:'14px', color:'#64748b' }}>Totalkostnad (selvkost)</span>
-                    <span style={{ fontSize:'14px', color:'#0f172a' }}>{fmt(totals.cost)}</span>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                    <span style={{ fontSize:'14px', color:'#64748b' }}>Totalt påslag</span>
-                    <span style={{ fontSize:'14px', color:'#059669' }}>+ {fmt(totals.totalMarkup)}</span>
-                  </div>
-
-                  <div style={{ height:'1px', background:'#e2e8f0', margin:'12px 0' }} />
-
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0' }}>
-                    <span style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Salgspris eks. mva</span>
-                    <span style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>{fmt(totals.totalExMva)}</span>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                    <span style={{ fontSize:'14px', color:'#64748b' }}>MVA (25%)</span>
-                    <span style={{ fontSize:'14px', color:'#64748b' }}>{fmt(totals.mva)}</span>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', background:'#f0fdf4', borderRadius:'10px', margin:'8px -8px', paddingLeft:'8px', paddingRight:'8px' }}>
-                    <span style={{ fontSize:'16px', fontWeight:'700', color:'#16a34a' }}>Salgspris ink. mva</span>
-                    <span style={{ fontSize:'16px', fontWeight:'800', color:'#16a34a' }}>{fmt(totals.totalInkMva)}</span>
-                  </div>
-
-                  <div style={{ height:'1px', background:'#e2e8f0', margin:'16px 0' }} />
-
-                  {/* Profitability gauge */}
-                  <div style={{ textAlign:'center', padding:'12px 0' }}>
-                    <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'8px' }}>Fortjenestemargin</div>
-                    <div style={{ fontSize:'36px', fontWeight:'800', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>
-                      {totals.profitPercent.toFixed(1)}%
                     </div>
-                    <div style={{ width:'100%', height:'8px', background:'#f1f5f9', borderRadius:'4px', marginTop:'12px', overflow:'hidden' }}>
-                      <div style={{ width: `${Math.min(totals.profitPercent, 50) * 2}%`, height:'100%', borderRadius:'4px', background: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626', transition:'width 0.3s' }} />
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
-                      <span>0%</span><span>10%</span><span>20%</span><span>30%+</span>
-                    </div>
-                  </div>
-                </div>
+                  )
+                })}
+                {kalkyler.length === 0 && <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px' }}>Legg til en fagkalkyle først for å sette faktorer.</p>}
               </div>
-            </div>
-          )}
+            ) : activeKalk ? (
+              /* Active kalkyle editor */
+              <div>
+                <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
+                  <span style={{ fontSize:'20px' }}>{getFaggruppe(activeKalk.fag).emoji}</span>
+                  <input value={activeKalk.name} onChange={e => updateKalkyle(activeKalk.id, 'name', e.target.value)} style={{ ...qInp, fontSize:'16px', fontWeight:'700', flex:1 }} />
+                </div>
+
+                {/* Bygningsdeler */}
+                {(activeKalk.bygningsdeler || []).map((bd, bi) => {
+                  const fakt = faktorer[activeKalk.fag] || getDefaultFaktorer(activeKalk.fag)
+                  const bdTotals = beregnBygningsdel(bd, fakt)
+                  return (
+                    <div key={bd.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', marginBottom:'12px', overflow:'hidden' }}>
+                      {/* Bygningsdel header */}
+                      <div style={{ background:'#f8fafc', padding:'12px 16px', display:'flex', alignItems:'center', gap:'10px', borderBottom:'1px solid #f1f5f9' }}>
+                        <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>{bi+1}</span>
+                        <input value={bd.name} onChange={e => updateBygningsdel(activeKalk.id, bd.id, 'name', e.target.value)} placeholder="Bygningsdel (f.eks. Stue vegg 20m²)" style={{ ...qInp, flex:1, fontWeight:'600', background:'transparent' }} />
+                        <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap' }}>{fmt(bdTotals.totalMedFortjeneste)}</span>
+                        {(activeKalk.bygningsdeler||[]).length > 1 && <button onClick={() => removeBygningsdel(activeKalk.id, bd.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}
+                      </div>
+
+                      <div style={{ padding:'12px 16px' }}>
+                        {/* Arbeidsarter */}
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'6px' }}>⏱️ Arbeidsarter</div>
+                          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                            <thead><tr>
+                              {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.',''].map((h,i) => (
+                                <th key={i} style={{ padding:'4px 6px', textAlign:i>=1?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {(bd.arbeidsarter||[]).map(a => {
+                                const r = beregnArbeidskostnad(a, fakt)
+                                return (
+                                  <tr key={a.id}>
+                                    <td style={{ padding:'4px 4px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(activeKalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Arbeidsbeskrivelse" style={{ ...qInp, minWidth:'140px' }} /></td>
+                                    <td style={{ padding:'4px 4px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(activeKalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'75px', textAlign:'right' }} /></td>
+                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#64748b' }}>{r.faktiskTid.toFixed(1)} t</td>
+                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#64748b' }}>{fmt(r.timekostnad)}/t</td>
+                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#0f172a' }}>{fmt(r.arbeidskostnad)}</td>
+                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
+                                    <td style={{ padding:'4px 2px' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(activeKalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button>}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                          <button onClick={() => addArbeidsart(activeKalk.id, bd.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Arbeidsart</button>
+                        </div>
+
+                        {/* Materialer */}
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'6px' }}>📦 Materialer</div>
+                          {(bd.materialer||[]).length > 0 && (
+                            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                              <thead><tr>
+                                {['Varenavn','Mengde','Enhet','Pris/enh','Kostnad','Med fortj.',''].map((h,i) => (
+                                  <th key={i} style={{ padding:'4px 6px', textAlign:i>=1?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                ))}
+                              </tr></thead>
+                              <tbody>
+                                {(bd.materialer||[]).map(m => {
+                                  const r = beregnMaterialkostnad(m, fakt)
+                                  return (
+                                    <tr key={m.id}>
+                                      <td style={{ padding:'4px 4px' }}><input value={m.varenavn} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, minWidth:'120px' }} /></td>
+                                      <td style={{ padding:'4px 4px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'65px', textAlign:'right' }} /></td>
+                                      <td style={{ padding:'4px 4px' }}><input value={m.enhet} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'50px' }} /></td>
+                                      <td style={{ padding:'4px 4px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'85px', textAlign:'right' }} /></td>
+                                      <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#0f172a' }}>{fmt(r.kostnad)}</td>
+                                      <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
+                                      <td style={{ padding:'4px 2px' }}><button onClick={()=>removeMaterial(activeKalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button></td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                          <button onClick={() => addMaterial(activeKalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
+                        </div>
+
+                        {/* Underleverandører */}
+                        <div>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'6px' }}>🤝 Underleverandører</div>
+                          {(bd.underleverandorer||[]).map(u => (
+                            <div key={u.id} style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'4px' }}>
+                              <input value={u.navn} onChange={e=>updateUE(activeKalk.id,bd.id,u.id,'navn',e.target.value)} placeholder="UE navn" style={{ ...qInp, flex:1 }} />
+                              <input value={u.beskrivelse} onChange={e=>updateUE(activeKalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, flex:1 }} />
+                              <input type="number" value={u.kostnad} onChange={e=>updateUE(activeKalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Kostnad" style={{ ...qInp, width:'100px', textAlign:'right' }} />
+                              <button onClick={()=>removeUE(activeKalk.id,bd.id,u.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button>
+                            </div>
+                          ))}
+                          <button onClick={() => addUE(activeKalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                <button onClick={() => addBygningsdel(activeKalk.id)} style={{ width:'100%', background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'14px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Legg til bygningsdel</button>
+              </div>
+            ) : (
+              /* No kalkyle selected */
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'400px', flexDirection:'column' }}>
+                <div style={{ fontSize:'48px', marginBottom:'16px' }}>🧮</div>
+                <h3 style={{ color:'#0f172a', margin:'0 0 8px' }}>Legg til en fagkalkyle</h3>
+                <p style={{ color:'#94a3b8', fontSize:'14px', margin:0, textAlign:'center', maxWidth:'300px' }}>Klikk "+ Ny fagkalkyle" i sidepanelet for å starte. Du kan legge til flere fag (tømrer, maler, rørlegger osv.) som summeres til en totalkalkulasjon.</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <div style={{ display:'flex', gap:'8px' }}>
-            {step > 1 && <button onClick={()=>setStep(step-1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>← Tilbake</button>}
-          </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step < 3 && <button onClick={()=>setStep(step+1)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste →</button>}
-            {step === 3 && <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett kalkulasjon'}</button>}
-          </div>
+        <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett kalkulasjon'}</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── KALKULASJON DETALJER ────────────────────────────────────────────────────
-function KalkulasjonDetaljer({ kalk: init, projects, user, onBack, onEdit }) {
+// ─── PROSJEKT VISNING (Read-only detaljer) ───────────────────────────────────
+
+function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const confirm = useConfirm()
+  const { user } = useAuth()
   const [k, setK] = useState(init)
-  const proj = projects.find(p => p.id === k.project_id)
-  const totals = calcKalkulation(k.chapters || [], k.global_markup, k.risk_markup)
+  const kalkyler = k.kalkyler || []
+  const alleFaktorer = k.faktorer || {}
+  const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
 
   const KALK_STATUS_CFG = {
     'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
@@ -16417,56 +16361,18 @@ function KalkulasjonDetaljer({ kalk: init, projects, user, onBack, onEdit }) {
   }
 
   const handleDelete = async () => {
-    const ok = await confirm('Slett kalkulasjon', 'Er du sikker på at du vil slette denne kalkulasjonen permanent?')
+    const ok = await confirm('Slett kalkulasjon', 'Er du sikker?')
     if (!ok) return
     await supabase.from('calculations').delete().eq('id', k.id)
     onBack()
   }
 
   const handleDuplicate = async () => {
-    const newKalk = { ...k, id: undefined, kalk_number: `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`, title: k.title + ' (kopi)', status: 'Utkast', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-    delete newKalk.id
-    const { error } = await supabase.from('calculations').insert(newKalk)
+    const newK = { ...k, kalk_number: `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`, title: k.title + ' (kopi)', status: 'Utkast', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    delete newK.id
+    const { error } = await supabase.from('calculations').insert(newK)
     if (error) alert('Feil: ' + error.message)
     else { alert('✅ Kalkulasjon duplisert!'); onBack() }
-  }
-
-  const handleCreateQuote = async () => {
-    // Create a quote from this calculation by reusing the chapter structure
-    const quoteChapters = (k.chapters || []).map(ch => ({
-      id: ch.id,
-      title: ch.title,
-      markup: ch.markup || 0,
-      description: '',
-      posts: (ch.lines || []).map(l => ({
-        id: l.id,
-        description: l.description,
-        qty: l.qty,
-        unit: l.unit,
-        unitPriceWork: l.unitPriceWork,
-        unitPriceMaterial: l.unitPriceMaterial,
-      }))
-    }))
-    const quotePayload = {
-      title: k.title,
-      quote_number: `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
-      project_id: k.project_id || null,
-      customer_name: k.customer_name || '',
-      customer_address: k.customer_address || '',
-      global_markup: k.global_markup || 0,
-      chapters: quoteChapters,
-      status: 'Utkast',
-      created_by: user?.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      source_calculation_id: k.id,
-    }
-    const { error } = await supabase.from('quotes').insert(quotePayload)
-    if (error) alert('Feil: ' + error.message)
-    else {
-      await updateStatus('Tilbud sendt')
-      alert('✅ Tilbud opprettet fra kalkulasjon! Gå til Tilbud-modulen for å fullføre og sende.')
-    }
   }
 
   return (
@@ -16474,149 +16380,114 @@ function KalkulasjonDetaljer({ kalk: init, projects, user, onBack, onEdit }) {
       {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
-          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b', fontWeight:'500' }}>← Tilbake</button>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
           <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
           <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
-            <div style={{ display:'flex', gap:'16px', marginTop:'6px', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:'16px', marginTop:'6px' }}>
               {k.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
-              {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
               {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>✏️ Rediger</button>
-            <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>📋 Dupliser</button>
-            <button onClick={handleCreateQuote} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Lag tilbud →</button>
+            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger</button>
+            <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
           </div>
         </div>
       </div>
 
       <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
-        {/* Main content - chapter breakdown */}
+        {/* Main - per kalkyle */}
         <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
-          {(k.chapters || []).map((ch, ci) => {
-            const cat = KALK_CATEGORIES.find(c => c.id === ch.categoryId)
-            const ct = calcKalkChapter(ch)
+          {kalkyler.map(kalk => {
+            const fag = getFaggruppe(kalk.fag)
+            const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
+            const kTotals = beregnKalkyle(kalk, fakt)
             return (
-              <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-                <div style={{ background:'#f8fafc', padding:'12px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div key={kalk.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+                <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #f1f5f9' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                    <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>{ci+1}</span>
-                    <span style={{ fontSize:'14px' }}>{cat?.emoji || '📦'}</span>
-                    <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{ch.title}</span>
-                    {cat?.ns3420 && <span style={{ background:'#eff6ff', color:'#2563eb', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', border:'1px solid #bfdbfe' }}>NS {cat.ns3420}</span>}
-                    {parseFloat(ch.markup) > 0 && <span style={{ fontSize:'11px', color:'#94a3b8' }}>+{ch.markup}% kap.påslag</span>}
+                    <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
+                    <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{kalk.name}</span>
+                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>{kTotals.totTimer.toFixed(1)} timer</span>
                   </div>
-                  <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(ct.grandTotal)}</span>
+                  <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(kTotals.totMedFortjeneste)}</span>
                 </div>
-                <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead>
-                    <tr>
-                      {['Beskrivelse','Mengde','Enhet','Arbeid','Material','Påslag','Sum'].map((h,i) => (
-                        <th key={i} style={{ padding:'8px 12px', textAlign:i>=3?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(ch.lines || []).map(l => {
-                      const lt = calcKalkLine(l)
-                      return (
-                        <tr key={l.id}>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151' }}>{l.description || '—'}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151', textAlign:'right' }}>{l.qty}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#94a3b8' }}>{l.unit}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151', textAlign:'right' }}>{fmt(l.unitPriceWork)}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151', textAlign:'right' }}>{fmt(l.unitPriceMaterial)}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#64748b', textAlign:'right' }}>{l.markup}%</td>
-                          <td style={{ padding:'8px 12px', fontSize:'13px', fontWeight:'600', color:'#0f172a', textAlign:'right' }}>{fmt(lt.total)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                {(kalk.bygningsdeler||[]).map(bd => {
+                  const bdT = beregnBygningsdel(bd, fakt)
+                  return (
+                    <div key={bd.id} style={{ padding:'10px 18px', borderBottom:'1px solid #f8fafc' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{bd.name || 'Uten navn'}</span>
+                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
+                      </div>
+                      <div style={{ fontSize:'12px', color:'#94a3b8' }}>
+                        {bdT.totalTimer.toFixed(1)}t arbeid · {fmt(bdT.totalArbeidMedFortjeneste)} · Mat: {fmt(bdT.totalMaterialMedFortjeneste)}
+                        {bdT.totalUE > 0 ? ` · UE: ${fmt(bdT.totalUE)}` : ''}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
+          {kalkyler.length === 0 && <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'40px', textAlign:'center', color:'#94a3b8' }}>Ingen fagkalkyler ennå</div>}
         </div>
 
-        {/* Sidebar summary */}
+        {/* Sidebar */}
         <div style={{ flex:1, minWidth:'280px', display:'flex', flexDirection:'column', gap:'16px' }}>
-          {/* Totals card */}
+          {/* Totaler */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
             <div style={{ background:'#f8fafc', padding:'12px 18px', borderBottom:'1px solid #f1f5f9' }}>
-              <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>📊 Økonomisk sammendrag</div>
+              <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>📊 Prosjektsammendrag</div>
             </div>
-            <div style={{ padding:'16px 18px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                <span style={{ color:'#64748b', fontSize:'13px' }}>Selvkost</span>
-                <span style={{ color:'#0f172a', fontWeight:'600', fontSize:'13px' }}>{fmt(totals.cost)}</span>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                <span style={{ color:'#64748b', fontSize:'13px' }}>Påslag</span>
-                <span style={{ color:'#059669', fontWeight:'600', fontSize:'13px' }}>+{fmt(totals.totalMarkup)}</span>
-              </div>
+            <div style={{ padding:'14px 18px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600' }}>{totals.totTimer.toFixed(0)} t</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Arbeid</span><span style={{ fontWeight:'600' }}>{fmt(totals.totArbeid)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Materiale</span><span style={{ fontWeight:'600' }}>{fmt(totals.totMaterial)}</span></div>
+              {totals.totUE > 0 && <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Underlev.</span><span style={{ fontWeight:'600' }}>{fmt(totals.totUE)}</span></div>}
               <div style={{ height:'1px', background:'#f1f5f9', margin:'8px 0' }} />
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                <span style={{ color:'#0f172a', fontWeight:'700', fontSize:'14px' }}>Eks. mva</span>
-                <span style={{ color:'#0f172a', fontWeight:'800', fontSize:'14px' }}>{fmt(totals.totalExMva)}</span>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-                <span style={{ color:'#64748b', fontSize:'13px' }}>MVA 25%</span>
-                <span style={{ color:'#64748b', fontSize:'13px' }}>{fmt(totals.mva)}</span>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', background:'#f0fdf4', borderRadius:'8px', margin:'8px -6px 0', padding:'10px 6px' }}>
-                <span style={{ color:'#16a34a', fontWeight:'700', fontSize:'14px' }}>Ink. mva</span>
-                <span style={{ color:'#16a34a', fontWeight:'800', fontSize:'14px' }}>{fmt(totals.totalInkMva)}</span>
-              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Selvkost</span><span>{fmt(totals.totSelvkost)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#059669' }}>Fortjeneste</span><span style={{ color:'#059669', fontWeight:'600' }}>+{fmt(totals.fortjeneste)}</span></div>
+              <div style={{ height:'1px', background:'#f1f5f9', margin:'8px 0' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'14px' }}><span style={{ fontWeight:'700' }}>Eks. mva</span><span style={{ fontWeight:'800' }}>{fmt(totals.totMedFortjeneste)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px', color:'#64748b' }}><span>MVA 25%</span><span>{fmt(totals.mva)}</span></div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', background:'#f0fdf4', borderRadius:'8px', margin:'6px -6px 0', paddingLeft:'6px', paddingRight:'6px' }}><span style={{ fontWeight:'700', color:'#16a34a', fontSize:'14px' }}>Ink. mva</span><span style={{ fontWeight:'800', color:'#16a34a', fontSize:'14px' }}>{fmt(totals.totInkMva)}</span></div>
             </div>
           </div>
 
-          {/* Profit gauge */}
+          {/* Margin */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px 18px', textAlign:'center' }}>
-            <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Fortjenestemargin</div>
-            <div style={{ fontSize:'32px', fontWeight:'800', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>
-              {totals.profitPercent.toFixed(1)}%
+            <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'6px' }}>Fortjenestemargin</div>
+            <div style={{ fontSize:'32px', fontWeight:'800', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }}>
+              {totals.fortjenesteProsent.toFixed(1)}%
             </div>
             <div style={{ width:'100%', height:'6px', background:'#f1f5f9', borderRadius:'3px', marginTop:'10px', overflow:'hidden' }}>
-              <div style={{ width: `${Math.min(totals.profitPercent, 50) * 2}%`, height:'100%', borderRadius:'3px', background: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }} />
+              <div style={{ width: `${Math.min(totals.fortjenesteProsent, 50) * 2}%`, height:'100%', borderRadius:'3px', background: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }} />
             </div>
           </div>
 
-          {/* Status actions */}
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 18px' }}>
-            <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', marginBottom:'10px' }}>Endre status</div>
+          {/* Status */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px' }}>
+            <div style={{ fontWeight:'700', fontSize:'13px', marginBottom:'8px' }}>Endre status</div>
             {Object.keys(KALK_STATUS_CFG).map(s => (
               <button key={s} onClick={() => updateStatus(s)}
-                style={{ display:'block', width:'100%', padding:'9px 14px', borderRadius:'10px', border:`1px solid ${k.status===s ? KALK_STATUS_CFG[s].border : '#e2e8f0'}`, background: k.status===s ? KALK_STATUS_CFG[s].bg : 'white', color: k.status===s ? KALK_STATUS_CFG[s].color : '#475569', fontWeight: k.status===s ? '700':'400', fontSize:'13px', cursor: k.status===s ? 'default':'pointer', textAlign:'left', marginBottom:'4px' }}>
+                style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:`1px solid ${k.status===s ? KALK_STATUS_CFG[s].border : '#e2e8f0'}`, background: k.status===s ? KALK_STATUS_CFG[s].bg : 'white', color: k.status===s ? KALK_STATUS_CFG[s].color : '#475569', fontWeight: k.status===s ? '700':'400', fontSize:'13px', cursor:'pointer', textAlign:'left', marginBottom:'3px' }}>
                 {k.status===s ? '✓ ':''}{KALK_STATUS_CFG[s].emoji} {s}
               </button>
             ))}
           </div>
 
-          {/* Delete */}
-          <button onClick={handleDelete}
-            style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', width:'100%' }}>
-            🗑️ Slett kalkulasjon
-          </button>
+          <button onClick={handleDelete} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🗑️ Slett kalkulasjon</button>
         </div>
       </div>
-
-      {/* Notes */}
-      {k.notes && (
-        <div style={{ padding:'0 32px 24px' }}>
-          <div style={{ background:'#fffbeb', borderRadius:'14px', border:'1px solid #fef08a', padding:'16px 20px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>📝 Notater</div>
-            <p style={{ margin:0, fontSize:'13px', color:'#78350f', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{k.notes}</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
+
 // ─── END KALKULASJON MODULE ──────────────────────────────────────────────────
 
 function ComingSoon({ title }) {
