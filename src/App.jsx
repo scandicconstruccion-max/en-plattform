@@ -15841,6 +15841,7 @@ function KalkulasjonPage({ onNavigate }) {
   const [editKalk, setEditKalk] = useState(null)
   const [viewKalk, setViewKalk] = useState(null)
   const [showFaktorerPage, setShowFaktorerPage] = useState(false)
+  const [showBibliotekPage, setShowBibliotekPage] = useState(false)
 
   const load = async () => {
     try {
@@ -15880,6 +15881,8 @@ function KalkulasjonPage({ onNavigate }) {
 
   if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
 
+  if (showBibliotekPage) return <KalkBibliotekPage onBack={() => setShowBibliotekPage(false)} />
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       {/* Header */}
@@ -15890,9 +15893,13 @@ function KalkulasjonPage({ onNavigate }) {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Prosjektkalkulasjon med fagkalkyler, bygningsdeler og fortjenesteberegning</p>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => setShowBibliotekPage(true)}
+              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
+              📚 Bibliotek
+            </button>
             <button onClick={() => setShowFaktorerPage(true)}
               style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
-              ⚙️ Kalkulasjonsfaktorer
+              ⚙️ Faktorer
             </button>
             <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
@@ -15967,6 +15974,369 @@ function KalkulasjonPage({ onNavigate }) {
       </div>
 
       {showEditor && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
+    </div>
+  )
+}
+
+// ─── BYGNINGSDEL-BIBLIOTEK ───────────────────────────────────────────────────
+// Ferdige bygningsdeler med arbeidsarter og materialer, organisert per faggruppe → type
+
+const BYGNINGSDEL_BIBLIOTEK = [
+  // ═══ TØMRER ═══════════════════════════════════════════════════════════════
+  // Yttervegger
+  { id: 'tom_yv_bind_48', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg bindingsverk 48×148', beskrivelse: 'Standard yttervegg med 148mm bindingsverk, vindsperre, utlekting og kledning',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.45 }, { beskrivelse: 'Isolering yttervegg 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_yv_bind_36', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg bindingsverk 36×198', beskrivelse: 'Yttervegg med 198mm bindingsverk for økt isolasjon',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 198mm', grunntid: 0.50 }, { beskrivelse: 'Isolering yttervegg 200mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Stenderverk 36×198 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 110 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Innervegger
+  { id: 'tom_iv_bind_70', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg bindingsverk 70mm', beskrivelse: 'Standard innervegg 70mm med gips begge sider',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.30 }, { beskrivelse: 'Isolering 70mm (lyd)', grunntid: 0.08 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.40 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_iv_bind_98', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg bindingsverk 98mm', beskrivelse: 'Innervegg 98mm for VVS-rør eller bedre lydisolering',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 98mm', grunntid: 0.32 }, { beskrivelse: 'Isolering 100mm (lyd)', grunntid: 0.10 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.40 }],
+    materialer: [{ varenavn: 'Stenderverk 36×98 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Lydisolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gipsplate 13mm', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Yttertak
+  { id: 'tom_tak_salt', fag: 'tomrer', kategori: 'Yttertak', name: 'Salttak med sperrer', beskrivelse: 'Salttak med taksperrer, isolasjon, undertak og takstein',
+    arbeidsarter: [{ beskrivelse: 'Montering taksperrer', grunntid: 0.50 }, { beskrivelse: 'Isolering tak 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak/vindsperre', grunntid: 0.12 }, { beskrivelse: 'Lekting og sløyfer', grunntid: 0.20 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198 c/c 900', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak/vindsperre', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Gulv
+  { id: 'tom_gulv_tre', fag: 'tomrer', kategori: 'Gulv', name: 'Tregulv på strø', beskrivelse: 'Tregulv med strø, isolasjon og heltre gulvbord',
+    arbeidsarter: [{ beskrivelse: 'Legging av strø og isolering', grunntid: 0.30 }, { beskrivelse: 'Legging av gulvbord', grunntid: 0.40 }],
+    materialer: [{ varenavn: 'Strø 48×98 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm (gulv)', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gulvbord furu 22×120', mengde: 1.1, enhet: 'm²', enhetspris: 185 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Dører og vinduer
+  { id: 'tom_dor_ytter', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør standard', beskrivelse: 'Montering av standard ytterdør inkl. karm, foring og listverk',
+    arbeidsarter: [{ beskrivelse: 'Demontering gammel dør', grunntid: 0.5 }, { beskrivelse: 'Montering ny ytterdør', grunntid: 2.5 }, { beskrivelse: 'Foring og listverk', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Ytterdør m/karm', mengde: 1, enhet: 'stk', enhetspris: 8500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 250 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_vindu_std', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 2-lags', beskrivelse: 'Montering vindu med foring og listverk',
+    arbeidsarter: [{ beskrivelse: 'Demontering gammelt vindu', grunntid: 0.5 }, { beskrivelse: 'Montering nytt vindu', grunntid: 1.5 }, { beskrivelse: 'Foring og listverk', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Vindu 2-lags 120×120', mengde: 1, enhet: 'stk', enhetspris: 4200 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 180 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+
+  // ═══ MALER ════════════════════════════════════════════════════════════════
+  { id: 'mal_vegg_std', fag: 'maler', kategori: 'Vegg', name: 'Maling vegg innvendig 2 strøk', beskrivelse: 'Sparkling, sliping og 2 strøk maling på gipsvegg',
+    arbeidsarter: [{ beskrivelse: 'Sparkling og sliping', grunntid: 0.15 }, { beskrivelse: 'Grunding', grunntid: 0.05 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.18 }],
+    materialer: [{ varenavn: 'Sparkelmasse finsparkle', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Grunning', mengde: 0.1, enhet: 'l/m²', enhetspris: 65 }, { varenavn: 'Veggmaling innvendig', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_him_std', fag: 'maler', kategori: 'Himling', name: 'Maling himling 2 strøk', beskrivelse: 'Sparkling og 2 strøk maling på himling',
+    arbeidsarter: [{ beskrivelse: 'Sparkling himling', grunntid: 0.18 }, { beskrivelse: 'Maling himling 2 strøk', grunntid: 0.22 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Himlingsmaling', mengde: 0.2, enhet: 'l/m²', enhetspris: 75 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_fas_std', fag: 'maler', kategori: 'Fasade', name: 'Maling fasade 2 strøk', beskrivelse: 'Vask, skraping og 2 strøk utvendig maling',
+    arbeidsarter: [{ beskrivelse: 'Vask og skraping', grunntid: 0.15 }, { beskrivelse: 'Grunding', grunntid: 0.06 }, { beskrivelse: 'Maling 2 strøk utvendig', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Grunning utvendig', mengde: 0.12, enhet: 'l/m²', enhetspris: 75 }, { varenavn: 'Fasademaling', mengde: 0.25, enhet: 'l/m²', enhetspris: 110 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+
+  // ═══ MURER ════════════════════════════════════════════════════════════════
+  { id: 'mur_flis_vegg', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging vegg bad', beskrivelse: 'Flislegging vegg med membran, lim og fugemasse',
+    arbeidsarter: [{ beskrivelse: 'Membranarbeid', grunntid: 0.25 }, { beskrivelse: 'Flislegging vegg', grunntid: 0.65 }],
+    materialer: [{ varenavn: 'Membran våtrom', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Flislim', mengde: 3, enhet: 'kg/m²', enhetspris: 12 }, { varenavn: 'Veggflis 20×25', mengde: 1.08, enhet: 'm²', enhetspris: 220 }, { varenavn: 'Fugemasse', mengde: 0.5, enhet: 'kg/m²', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_flis_gulv', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging gulv bad', beskrivelse: 'Flislegging gulv med membran, fall og sluk',
+    arbeidsarter: [{ beskrivelse: 'Membran gulv med fall', grunntid: 0.35 }, { beskrivelse: 'Flislegging gulv', grunntid: 0.70 }],
+    materialer: [{ varenavn: 'Membran gulv', mengde: 1.1, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Avrettingsmasse m/fall', mengde: 5, enhet: 'kg/m²', enhetspris: 8 }, { varenavn: 'Flislim', mengde: 3, enhet: 'kg/m²', enhetspris: 12 }, { varenavn: 'Gulvflis 30×30', mengde: 1.08, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Fugemasse', mengde: 0.5, enhet: 'kg/m²', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+
+  // ═══ RØRLEGGER ════════════════════════════════════════════════════════════
+  { id: 'ror_bad_servant', fag: 'rorleger', kategori: 'Sanitær', name: 'Servant komplett', beskrivelse: 'Montering servant med blandebatteri og avløp',
+    arbeidsarter: [{ beskrivelse: 'Montering servant', grunntid: 2.0 }, { beskrivelse: 'Montering batteri og avløp', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Servant m/konsoll', mengde: 1, enhet: 'stk', enhetspris: 3200 }, { varenavn: 'Blandebatteri', mengde: 1, enhet: 'stk', enhetspris: 2100 }, { varenavn: 'Avløpssett og vannlås', mengde: 1, enhet: 'sett', enhetspris: 450 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_bad_toalett', fag: 'rorleger', kategori: 'Sanitær', name: 'Toalett vegghengt', beskrivelse: 'Montering vegghengt toalett med sisterne',
+    arbeidsarter: [{ beskrivelse: 'Montering sisterne/fixtur', grunntid: 2.5 }, { beskrivelse: 'Montering toalett', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Vegghengt toalett', mengde: 1, enhet: 'stk', enhetspris: 4800 }, { varenavn: 'Innbyggingssisterne', mengde: 1, enhet: 'stk', enhetspris: 3200 }, { varenavn: 'Betjeningsplate', mengde: 1, enhet: 'stk', enhetspris: 850 }, { varenavn: 'Tilkobling og tettemidler', mengde: 1, enhet: 'rs', enhetspris: 350 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_bad_dusj', fag: 'rorleger', kategori: 'Sanitær', name: 'Dusjarmatur med stang', beskrivelse: 'Montering dusjarmatur med stang og hånddusj',
+    arbeidsarter: [{ beskrivelse: 'Montering dusjarmatur', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Dusjbatteri termostat', mengde: 1, enhet: 'stk', enhetspris: 3500 }, { varenavn: 'Dusjstang komplett', mengde: 1, enhet: 'sett', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_gulvvarme', fag: 'rorleger', kategori: 'Varme', name: 'Gulvvarme vannbåren', beskrivelse: 'Vannbåren gulvvarme i bad/kjøkken',
+    arbeidsarter: [{ beskrivelse: 'Legging av gulvvarmerør', grunntid: 0.35 }, { beskrivelse: 'Tilkobling og trykkprøving', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Gulvvarmerør PEX', mengde: 5, enhet: 'lm/m²', enhetspris: 18 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+
+  // ═══ ELEKTRIKER ═══════════════════════════════════════════════════════════
+  { id: 'el_stikk_std', fag: 'elektriker', kategori: 'Stikkontakter', name: 'Stikkontakt enkel', beskrivelse: 'Montering stikkontakt med kabling fra fordeling',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Stikkontakt m/ramme', mengde: 1, enhet: 'stk', enhetspris: 185 }, { varenavn: 'Kabel PN 3G2.5', mengde: 8, enhet: 'lm', enhetspris: 18 }, { varenavn: 'Koblingsboks og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 65 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_lys_down', fag: 'elektriker', kategori: 'Belysning', name: 'Downlight LED', beskrivelse: 'Montering downlight inkl. kabling og dimmbart',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 0.8 }],
+    materialer: [{ varenavn: 'Downlight LED dimbar', mengde: 1, enhet: 'stk', enhetspris: 350 }, { varenavn: 'Kabel og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_sikring_kurs', fag: 'elektriker', kategori: 'Sikringsskap', name: 'Ny kurs i skap', beskrivelse: 'Opprettelse av ny kurs i sikringsskap',
+    arbeidsarter: [{ beskrivelse: 'Montering automatsikring og kabling', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Automatsikring', mengde: 1, enhet: 'stk', enhetspris: 220 }, { varenavn: 'Kabel til skap', mengde: 1, enhet: 'rs', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+
+  // ═══ BETONG ═══════════════════════════════════════════════════════════════
+  { id: 'bet_plate_grunn', fag: 'betong', kategori: 'Grunnarbeid', name: 'Betongplate på grunn', beskrivelse: 'Forskaling, armering og støp av gulvplate',
+    arbeidsarter: [{ beskrivelse: 'Forskaling', grunntid: 0.30 }, { beskrivelse: 'Armering og støp', grunntid: 0.45 }],
+    materialer: [{ varenavn: 'Forskalingsmateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 45 }, { varenavn: 'Armering K500', mengde: 8, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Membran under plate', mengde: 1.05, enhet: 'm²', enhetspris: 22 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+
+  // ═══ GRUNNARBEID ══════════════════════════════════════════════════════════
+  { id: 'gru_grav_tomter', fag: 'grunnarbeid', kategori: 'Graving', name: 'Graving og planering tomteareal', beskrivelse: 'Graving, masseflytting og planering for husgrunn',
+    arbeidsarter: [{ beskrivelse: 'Graving og masseflytting', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Pukk/grus tilbakefylling', mengde: 0.3, enhet: 'm³/m²', enhetspris: 280 }, { varenavn: 'Fiberduk', mengde: 1.1, enhet: 'm²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+
+  // ═══ RIGG OG DRIFT ════════════════════════════════════════════════════════
+  { id: 'rigg_standard', fag: 'rigg', kategori: 'Rigg', name: 'Standard rigg og drift', beskrivelse: 'Opprigging, drift og nedrigging for mindre prosjekt',
+    arbeidsarter: [{ beskrivelse: 'Opprigging og tilrigging', grunntid: 8 }, { beskrivelse: 'Nedrigging og opprydding', grunntid: 4 }],
+    materialer: [{ varenavn: 'Containerhyre', mengde: 1, enhet: 'rs', enhetspris: 3500 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs', enhetspris: 4500 }, { varenavn: 'Strøm og vann', mengde: 1, enhet: 'rs', enhetspris: 2000 }],
+    underleverandorer: [], enhet: 'rs'
+  },
+]
+
+// Gruppert oversikt over bibliotek per faggruppe
+function getBibliotekByFag() {
+  const grouped = {}
+  BYGNINGSDEL_BIBLIOTEK.forEach(bd => {
+    if (!grouped[bd.fag]) grouped[bd.fag] = {}
+    if (!grouped[bd.fag][bd.kategori]) grouped[bd.fag][bd.kategori] = []
+    grouped[bd.fag][bd.kategori].push(bd)
+  })
+  return grouped
+}
+
+// Convert a bibliotek-bygningsdel to the runtime format used in kalkyler
+function bibliotekTilBygningsdel(bd, mengde) {
+  const m = parseFloat(mengde) || 1
+  return {
+    id: Date.now() + Math.random() * 1000,
+    name: `${bd.name} (${m} ${bd.enhet || 'stk'})`,
+    source_bibliotek_id: bd.id,
+    arbeidsarter: bd.arbeidsarter.map((a, i) => ({
+      id: Date.now() + i + 100,
+      beskrivelse: a.beskrivelse,
+      grunntid: parseFloat(((parseFloat(a.grunntid) || 0) * m).toFixed(2)),
+    })),
+    materialer: bd.materialer.map((mat, i) => ({
+      id: Date.now() + i + 200,
+      varenavn: mat.varenavn,
+      mengde: parseFloat(((parseFloat(mat.mengde) || 0) * m).toFixed(2)),
+      enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
+      enhetspris: mat.enhetspris,
+    })),
+    underleverandorer: (bd.underleverandorer || []).map((u, i) => ({
+      id: Date.now() + i + 300,
+      navn: u.navn || '',
+      beskrivelse: u.beskrivelse || '',
+      kostnad: u.kostnad || 0,
+    })),
+  }
+}
+
+// ─── BIBLIOTEK-SIDE ──────────────────────────────────────────────────────────
+
+function KalkBibliotekPage({ onBack }) {
+  const { user } = useAuth()
+  const [egneBd, setEgneBd] = useState([])
+  const [loadingEgne, setLoadingEgne] = useState(true)
+  const [activeFag, setActiveFag] = useState('tomrer')
+  const [expandedKat, setExpandedKat] = useState(null)
+  const [expandedBd, setExpandedBd] = useState(null)
+
+  useEffect(() => {
+    supabase.from('bygningsdel_bibliotek').select('*').order('created_at', { ascending: false })
+      .then(({ data }) => { setEgneBd(data || []); setLoadingEgne(false) })
+      .catch(() => setLoadingEgne(false))
+  }, [])
+
+  const standardBibliotek = getBibliotekByFag()
+  const egneBdGrouped = {}
+  egneBd.forEach(bd => {
+    if (!egneBdGrouped[bd.fag]) egneBdGrouped[bd.fag] = {}
+    if (!egneBdGrouped[bd.fag][bd.kategori || 'Egne']) egneBdGrouped[bd.fag][bd.kategori || 'Egne'] = []
+    egneBdGrouped[bd.fag][bd.kategori || 'Egne'].push(bd)
+  })
+
+  const handleDelete = async (id) => {
+    await supabase.from('bygningsdel_bibliotek').delete().eq('id', id)
+    setEgneBd(e => e.filter(b => b.id !== id))
+  }
+
+  const fagData = { ...(standardBibliotek[activeFag] || {}), ...(egneBdGrouped[activeFag] || {}) }
+  const fag = getFaggruppe(activeFag)
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
+        </div>
+        <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📚 Bygningsdel-bibliotek</h1>
+        <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ferdige bygningsdeler med arbeidsarter og materialer. Velg faggruppe for å se tilgjengelige konstruksjoner.</p>
+      </div>
+
+      <div style={{ display:'flex', minHeight:'calc(100vh - 200px)' }}>
+        {/* Fag sidebar */}
+        <div style={{ width:'200px', borderRight:'1px solid #f1f5f9', padding:'16px 8px', background:'#f8fafc' }}>
+          {FAGGRUPPER.filter(f => f.id !== 'ue').map(f => (
+            <button key={f.id} onClick={() => { setActiveFag(f.id); setExpandedKat(null); setExpandedBd(null) }}
+              style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 12px', borderRadius:'10px', border:'none', cursor:'pointer', background: activeFag === f.id ? '#ecfdf5' : 'transparent', color: activeFag === f.id ? '#059669' : '#475569', fontWeight: activeFag === f.id ? '600' : '400', fontSize:'13px', marginBottom:'2px', textAlign:'left' }}>
+              <span>{f.emoji}</span> {f.name}
+              {(standardBibliotek[f.id] || egneBdGrouped[f.id]) && <span style={{ marginLeft:'auto', fontSize:'11px', color:'#94a3b8' }}>{Object.values(standardBibliotek[f.id] || {}).flat().length + Object.values(egneBdGrouped[f.id] || {}).flat().length}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex:1, padding:'20px 28px' }}>
+          <h2 style={{ fontSize:'18px', fontWeight:'700', color:'#0f172a', margin:'0 0 16px' }}>{fag.emoji} {fag.name}</h2>
+
+          {Object.keys(fagData).length === 0 ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
+              <div style={{ fontSize:'36px', marginBottom:'8px' }}>📦</div>
+              <p>Ingen bygningsdeler i biblioteket for {fag.name} ennå.</p>
+            </div>
+          ) : (
+            Object.entries(fagData).map(([kat, items]) => (
+              <div key={kat} style={{ marginBottom:'12px' }}>
+                <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
+                  style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'12px 16px', borderRadius:'12px', border:'1px solid #f1f5f9', background: expandedKat === kat ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>
+                  <span style={{ color:'#059669' }}>{expandedKat === kat ? '▼' : '▶'}</span>
+                  {kat}
+                  <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400' }}>{items.length} bygningsdel{items.length !== 1 ? 'er' : ''}</span>
+                </button>
+
+                {expandedKat === kat && (
+                  <div style={{ paddingLeft:'16px', marginTop:'6px' }}>
+                    {items.map(bd => (
+                      <div key={bd.id} style={{ background:'white', borderRadius:'10px', border:'1px solid #f1f5f9', marginBottom:'6px', overflow:'hidden' }}>
+                        <button onClick={() => setExpandedBd(expandedBd === bd.id ? null : bd.id)}
+                          style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
+                          <span style={{ color:'#64748b' }}>{expandedBd === bd.id ? '▼' : '▶'}</span>
+                          <span style={{ fontWeight:'600', color:'#0f172a' }}>{bd.name}</span>
+                          {bd.source_user && <span style={{ background:'#fefce8', color:'#ca8a04', fontSize:'10px', fontWeight:'600', padding:'1px 6px', borderRadius:'4px' }}>Egen</span>}
+                          <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8' }}>per {bd.enhet || 'stk'}</span>
+                        </button>
+
+                        {expandedBd === bd.id && (
+                          <div style={{ padding:'10px 14px 14px', borderTop:'1px solid #f8fafc' }}>
+                            <p style={{ color:'#64748b', fontSize:'12px', margin:'0 0 10px', lineHeight:1.5 }}>{bd.beskrivelse}</p>
+                            {(bd.arbeidsarter||[]).length > 0 && (
+                              <div style={{ marginBottom:'8px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>ARBEIDSARTER</div>
+                                {bd.arbeidsarter.map((a, i) => (
+                                  <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'2px 0' }}>⏱️ {a.beskrivelse} — <strong>{a.grunntid}t</strong> per {bd.enhet || 'stk'}</div>
+                                ))}
+                              </div>
+                            )}
+                            {(bd.materialer||[]).length > 0 && (
+                              <div style={{ marginBottom:'8px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>MATERIALER</div>
+                                {bd.materialer.map((m, i) => (
+                                  <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'2px 0' }}>📦 {m.varenavn} — {m.mengde} {m.enhet} × {m.enhetspris} kr</div>
+                                ))}
+                              </div>
+                            )}
+                            {bd.source_user && (
+                              <button onClick={() => handleDelete(bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', cursor:'pointer', marginTop:'4px' }}>🗑️ Slett</button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BIBLIOTEK PICKER MODAL (brukes inne i KalkProsjektEditor) ───────────────
+
+function BibliotekPickerModal({ fagId, onSelect, onClose }) {
+  const [mengde, setMengde] = useState(1)
+  const [selectedBd, setSelectedBd] = useState(null)
+  const [expandedKat, setExpandedKat] = useState(null)
+
+  const bibliotek = getBibliotekByFag()
+  const fagBibliotek = bibliotek[fagId] || {}
+  const fag = getFaggruppe(fagId)
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'700px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div>
+            <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700' }}>📚 Velg bygningsdel fra bibliotek</h3>
+            <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{fag.emoji} {fag.name}</p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
+          {Object.entries(fagBibliotek).map(([kat, items]) => (
+            <div key={kat} style={{ marginBottom:'8px' }}>
+              <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
+                style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background: expandedKat === kat ? '#f0fdf4' : '#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>
+                <span style={{ color:'#059669' }}>{expandedKat === kat ? '▼' : '▶'}</span> {kat}
+                <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400' }}>{items.length}</span>
+              </button>
+              {expandedKat === kat && items.map(bd => (
+                <div key={bd.id} onClick={() => setSelectedBd(selectedBd?.id === bd.id ? null : bd)}
+                  style={{ margin:'4px 0 4px 16px', padding:'10px 14px', borderRadius:'10px', border: selectedBd?.id === bd.id ? '2px solid #059669' : '1px solid #f1f5f9', background: selectedBd?.id === bd.id ? '#f0fdf4' : 'white', cursor:'pointer' }}>
+                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px' }}>{bd.name}</div>
+                  <div style={{ fontSize:'12px', color:'#64748b' }}>{bd.beskrivelse}</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>{bd.arbeidsarter.length} arbeidsarter · {bd.materialer.length} materialer · per {bd.enhet}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+          {Object.keys(fagBibliotek).length === 0 && (
+            <p style={{ textAlign:'center', color:'#94a3b8', padding:'20px' }}>Ingen bygningsdeler i biblioteket for {fag.name}.</p>
+          )}
+        </div>
+
+        {selectedBd && (
+          <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
+            <span style={{ fontSize:'13px', color:'#374151', fontWeight:'600' }}>Mengde ({selectedBd.enhet}):</span>
+            <input type="number" value={mengde} onChange={e => setMengde(e.target.value)} min="0.1" step="0.1" style={{ ...qInp, width:'100px', textAlign:'right' }} />
+            <button onClick={() => { onSelect(bibliotekTilBygningsdel(selectedBd, mengde)); onClose() }}
+              style={{ marginLeft:'auto', background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+              Legg til bygningsdel →
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -16130,6 +16500,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
   const [activeKalkyle, setActiveKalkyle] = useState(null)
   const [showFagPicker, setShowFagPicker] = useState(false)
   const [showFaktorer, setShowFaktorer] = useState(false)
+  const [showBibliotekPicker, setShowBibliotekPicker] = useState(false)
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -16225,6 +16596,31 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
 
   const updateFaktor = (fagId, field, value) => {
     setFaktorer(f => ({ ...f, [fagId]: { ...(f[fagId] || getDefaultFaktorer(fagId)), [field]: value } }))
+  }
+
+  // Insert a bygningsdel from bibliotek into the active kalkyle
+  const insertFromBibliotek = (bygningsdel) => {
+    if (!activeKalkyle) return
+    setKalkyler(k => k.map(x => x.id === activeKalkyle ? { ...x, bygningsdeler: [...x.bygningsdeler, bygningsdel] } : x))
+  }
+
+  // Save a bygningsdel to user's own library
+  const saveToLibrary = async (bd, fagId) => {
+    const payload = {
+      fag: fagId,
+      kategori: 'Egne',
+      name: bd.name,
+      beskrivelse: 'Lagret fra kalkulasjon',
+      arbeidsarter: bd.arbeidsarter || [],
+      materialer: bd.materialer || [],
+      underleverandorer: bd.underleverandorer || [],
+      enhet: 'stk',
+      source_user: user?.id,
+      created_at: new Date().toISOString(),
+    }
+    const { error } = await supabase.from('bygningsdel_bibliotek').insert(payload)
+    if (error) alert('Feil: ' + error.message)
+    else alert('✅ Bygningsdel lagret i biblioteket!')
   }
 
   const handleSave = async () => {
@@ -16398,6 +16794,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
                         <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>{bi+1}</span>
                         <input value={bd.name} onChange={e => updateBygningsdel(activeKalk.id, bd.id, 'name', e.target.value)} placeholder="Bygningsdel (f.eks. Stue vegg 20m²)" style={{ ...qInp, flex:1, fontWeight:'600', background:'transparent' }} />
                         <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap' }}>{fmt(bdTotals.totalMedFortjeneste)}</span>
+                        <button onClick={() => saveToLibrary(bd, activeKalk.fag)} title="Lagre i bibliotek" style={{ background:'#eff6ff', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#2563eb', fontSize:'12px' }}>📚</button>
                         {(activeKalk.bygningsdeler||[]).length > 1 && <button onClick={() => removeBygningsdel(activeKalk.id, bd.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}
                       </div>
 
@@ -16480,7 +16877,12 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
                   )
                 })}
 
-                <button onClick={() => addBygningsdel(activeKalk.id)} style={{ width:'100%', background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'14px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Legg til bygningsdel</button>
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button onClick={() => setShowBibliotekPicker(true)} style={{ flex:1, background:'#eff6ff', border:'2px dashed #bfdbfe', borderRadius:'14px', padding:'14px', cursor:'pointer', color:'#2563eb', fontWeight:'600', fontSize:'13px' }}>📚 Hent fra bibliotek</button>
+                  <button onClick={() => addBygningsdel(activeKalk.id)} style={{ flex:1, background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'14px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Ny tom bygningsdel</button>
+                </div>
+
+                {showBibliotekPicker && <BibliotekPickerModal fagId={activeKalk.fag} onSelect={insertFromBibliotek} onClose={() => setShowBibliotekPicker(false)} />}
               </div>
             ) : (
               /* No kalkyle selected */
