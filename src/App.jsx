@@ -7274,7 +7274,9 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'960px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
             <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
@@ -7353,10 +7355,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
 
           <div>{lbl('Merknader / Betalingsinformasjon')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Eventuelle merknader til fakturaen..." style={{ ...iInp, resize:'none' }} /></div>
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'12px', flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett faktura'}</button>
-        </div>
+
       </div>
     </div>
   )
@@ -8213,7 +8212,11 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>👷 {isEdit?'Rediger':'Ny'} ansatt</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Registrer ansatt'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           {sec('👤 Personopplysninger')}
@@ -8243,10 +8246,7 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
 
           <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>{lbl('Notater / Interne merknader')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...eInp, resize:'none' }} placeholder="Interne notater om den ansatte..." /></div>
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'12px', flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Registrer ansatt'}</button>
-        </div>
+
       </div>
     </div>
   )
@@ -11080,7 +11080,11 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'580px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>{isEdit?'Rediger':'Ny'} hendelse</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett hendelse'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
 
@@ -11150,12 +11154,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
             </div>
           )}
         </div>
-        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
-            {saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett hendelse'}
-          </button>
-        </div>
+
       </div>
     </div>
   )
@@ -11838,7 +11837,11 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>💬 Ny kanal</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving||!form.name.trim()} style={{ padding:'8px 20px', background:saving||!form.name.trim()?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Oppretter...':'Opprett kanal'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
           <div>
@@ -11888,12 +11891,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
             </div>
           </div>
         </div>
-        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving||!form.name.trim()} style={{ padding:'10px 24px',background:saving||!form.name.trim()?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>
-            {saving?'Oppretter...':'Opprett kanal'}
-          </button>
-        </div>
+
       </div>
     </div>
   )
@@ -12376,7 +12374,11 @@ function KundeModal({ user, initial, onClose, onSaved }) {
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'600px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏢 {isEdit ? 'Rediger kunde' : 'Ny kunde'}</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett kunde'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <form onSubmit={handleSave} style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'14px', overflowY:'auto' }}>
           {/* Kundetype */}
@@ -12404,12 +12406,7 @@ function KundeModal({ user, initial, onClose, onSaved }) {
             <div>{lbl('By / Sted')}<input value={form.city} onChange={e => set('city', e.target.value)} placeholder="Oslo" style={kundeInp} /></div>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Merknad / notat')}<textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Interne merknader om kunden..." style={{ ...kundeInp, resize:'none' }} /></div>
           </div>
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button type="submit" disabled={saving} style={{ padding:'10px 24px', background: saving ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
-              {saving ? 'Lagrer...' : isEdit ? 'Lagre endringer' : 'Opprett kunde'}
-            </button>
-          </div>
+
         </form>
       </div>
     </div>
@@ -12448,12 +12445,7 @@ function KontaktpersonModal({ customerId, onClose, onSaved }) {
           <div>{lbl('Stilling / Rolle')}<input value={form.title} onChange={e => set('title', e.target.value)} placeholder="F.eks. Prosjektleder" style={kundeInp} /></div>
           <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="navn@bedrift.no" style={kundeInp} /></div>
           <div>{lbl('Telefon')}<input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+47 000 00 000" style={kundeInp} /></div>
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Avbryt</button>
-            <button type="submit" disabled={saving} style={{ padding:'10px 24px', background: saving ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
-              {saving ? 'Lagrer...' : 'Legg til'}
-            </button>
-          </div>
+
         </form>
       </div>
     </div>
@@ -13113,7 +13105,11 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'640px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🤝 {isEdit?'Rediger':'Ny'} kunde / lead</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}>
@@ -13139,10 +13135,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
         </div>
-        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett'}</button>
-        </div>
+
       </div>
     </div>
   )
@@ -13240,7 +13233,11 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'500px',maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Hent tilbud til {customer.name}</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={()=>selected&&onLink(relevant.find(x=>x.id===selected))} disabled={!selected} style={{ padding:'8px 20px', background:selected?'#059669':'#94a3b8', color:'white', border:'none', borderRadius:'10px', cursor:selected?'pointer':'not-allowed', fontSize:'14px', fontWeight:'700' }}>Koble til og logg aktivitet</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'16px 22px',display:'flex',flexDirection:'column',gap:'8px' }}>
           <p style={{ margin:'0 0 8px',fontSize:'13px',color:'#64748b' }}>Velg et tilbud fra tilbudsmodulen for å koble det til denne kunden og logge det som aktivitet.</p>
@@ -13259,13 +13256,7 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
           })}
           {relevant.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen aktive tilbud funnet</p>}
         </div>
-        <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'10px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={()=>selected&&onLink(relevant.find(x=>x.id===selected))} disabled={!selected}
-            style={{ padding:'10px 22px',background:selected?'#059669':'#94a3b8',color:'white',border:'none',borderRadius:'10px',cursor:selected?'pointer':'not-allowed',fontSize:'14px',fontWeight:'700' }}>
-            Koble til og logg aktivitet
-          </button>
-        </div>
+
       </div>
     </div>
   )
@@ -13688,7 +13679,11 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔍 {isEdit?'Rediger':'Ny'} befaring</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett befaring'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
           {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
@@ -13708,10 +13703,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notater</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...bInp,resize:'none' }} placeholder="Generelle notater fra befaringen..." /></div>
         </div>
-        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett befaring'}</button>
-        </div>
+
       </div>
     </div>
   )
@@ -14255,7 +14247,11 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'620px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔩 {isEdit?'Rediger':'Ny'} komponent</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Legg til'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
@@ -14270,10 +14266,7 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
           <div>{lbl('Serviceintervall (mnd)')}<input type="number" value={form.service_interval_months} onChange={e=>set('service_interval_months',e.target.value)} placeholder="12" style={fInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...fInp,resize:'none' }} /></div>
         </div>
-        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Legg til'}</button>
-        </div>
+
       </div>
     </div>
   )
@@ -14311,7 +14304,11 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📎 Last opp FDV-dokument</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Laster opp...':'Last opp'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+          </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
           {[['Tittel *','title','text','F.eks. Brukermanual ventilasjon']].map(([l,k,t,ph])=>(
@@ -14333,10 +14330,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
             <input type="file" onChange={e=>setFile(e.target.files?.[0]||null)} accept=".pdf,.doc,.docx,.dwg,.png,.jpg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',boxSizing:'border-box' }} />
           </div>
         </div>
-        <div style={{ padding:'16px 24px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'flex-end',gap:'12px',flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Laster opp...':'Last opp'}</button>
-        </div>
+
       </div>
     </div>
   )
