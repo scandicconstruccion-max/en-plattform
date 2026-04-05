@@ -17608,57 +17608,135 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
 function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, onSent }) {
   const [email, setEmail] = useState('')
-  const [message, setMessage] = useState('Vi tillater oss herved å fremme følgende tilbud.')
+  const [message, setMessage] = useState('Vi tillater oss herved å fremme følgende tilbud for ovennevnte prosjekt.')
   const [validUntil, setValidUntil] = useState('')
-  const [showDetails, setShowDetails] = useState(true)
+  const [visning, setVisning] = useState('faggruppe') // 'total', 'faggruppe', 'bygningsdel', 'detaljert'
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [step, setStep] = useState(1) // 1=innstillinger, 2=forhåndsvisning
+
+  const [companyInfo, setCompanyInfo] = useState(null)
+  useEffect(() => {
+    supabase.from('company_settings').select('name, address, phone, email, org_number, logo_url')
+      .limit(1).single().then(({ data }) => setCompanyInfo(data || {}))
+  }, [])
+
+  // Build tilbuds-linjer basert på visningsnivå
+  const buildLines = () => {
+    if (visning === 'total') return []
+    return kalkyler.map(kl => {
+      const fag = getFaggruppe(kl.fag)
+      const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+      const kt = beregnKalkyle(kl, fakt)
+      const bdLines = (visning === 'bygningsdel' || visning === 'detaljert') ? (kl.bygningsdeler || []).map(bd => {
+        const bdt = beregnBygningsdel(bd, fakt)
+        const detailLines = visning === 'detaljert' ? [
+          ...(bd.arbeidsarter || []).map(a => ({ type: 'detail', text: `  ⏱ ${a.beskrivelse}`, amount: beregnArbeidskostnad(a, fakt).medFortjeneste * (parseFloat(bd.mengde)||1) })),
+          ...(bd.materialer || []).map(m => ({ type: 'detail', text: `  📦 ${m.varenavn} (${m.mengde} ${m.enhet})`, amount: beregnMaterialkostnad(m, fakt).medFortjeneste * (parseFloat(bd.mengde)||1) })),
+        ] : []
+        return { type: 'bd', name: `${bd.name || 'Bygningsdel'} (${bd.mengde || 1} ${bd.enhet || 'stk'})`, amount: bdt.totalMedFortjeneste, details: detailLines }
+      }) : []
+      return { fag, name: kl.name, amount: kt.totMedFortjeneste, bdLines }
+    })
+  }
+
+  // Generate print-ready tilbud HTML
+  const generateTilbudHTML = () => {
+    const lines = buildLines()
+    const ci = companyInfo || {}
+    const dato = new Date().toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })
+
+    let tableRows = ''
+    if (visning !== 'total') {
+      lines.forEach(line => {
+        tableRows += `<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:700;font-size:14px">${line.fag.emoji} ${line.name}</td><td style="padding:10px 14px;text-align:right;font-weight:700;font-size:14px">${Math.round(line.amount).toLocaleString('nb-NO')} kr</td></tr>`
+        line.bdLines.forEach(bd => {
+          tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name}</td><td style="padding:6px 14px;text-align:right;font-size:13px">${Math.round(bd.amount).toLocaleString('nb-NO')} kr</td></tr>`
+          bd.details.forEach(d => {
+            tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${d.text}</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(d.amount).toLocaleString('nb-NO')} kr</td></tr>`
+          })
+        })
+      })
+    }
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tilbud ${kalk.kalk_number}</title>
+<style>@media print{body{margin:0}@page{margin:20mm 15mm}} body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:40px 32px;color:#0f172a;font-size:14px;line-height:1.6}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid #059669}
+.logo{max-height:60px;max-width:180px} .company{text-align:right;font-size:12px;color:#64748b}
+h1{font-size:22px;margin:0 0 4px} .ref{font-size:13px;color:#94a3b8;margin-bottom:20px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;font-size:13px}
+.info-box{background:#f8fafc;border-radius:8px;padding:14px} .info-label{font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;text-align:left;font-size:11px;font-weight:700;color:#94a3b8;border-bottom:2px solid #e2e8f0;text-transform:uppercase}
+.total-row{border-top:2px solid #0f172a} .total-row td{padding:12px 14px;font-weight:800;font-size:16px}
+.mva-row td{padding:6px 14px;font-size:13px;color:#64748b} .grand-row{background:#f0fdf4} .grand-row td{padding:14px;font-weight:800;font-size:18px;color:#059669}
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8}
+.message{margin:20px 0;padding:16px;background:#f8fafc;border-radius:8px;font-size:13px;line-height:1.7}
+.validity{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400e;margin:16px 0}
+@media print{.no-print{display:none!important}}</style></head><body>
+<div class="no-print" style="background:#059669;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+  <span>Forhåndsvisning av tilbud</span>
+  <button onclick="window.print()" style="background:white;color:#059669;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">🖨️ Skriv ut / Lagre som PDF</button>
+</div>
+<div class="header">
+  <div>${ci.logo_url ? `<img src="${ci.logo_url}" class="logo" />` : ''}<h1>${ci.name || 'Bedriftsnavn'}</h1></div>
+  <div class="company">${ci.address || ''}<br>${ci.phone || ''}<br>${ci.email || ''}<br>${ci.org_number ? `Org.nr: ${ci.org_number}` : ''}</div>
+</div>
+<h1>Tilbud</h1>
+<div class="ref">${kalk.kalk_number} · ${dato}</div>
+<div class="info-grid">
+  <div class="info-box"><div class="info-label">Kunde</div>${kalk.customer_name || '—'}<br>${kalk.customer_address || ''}</div>
+  <div class="info-box"><div class="info-label">Prosjekt</div>${kalk.title}<br>${kalk.customer_address || ''}</div>
+</div>
+${message ? `<div class="message">${message}</div>` : ''}
+<table>
+  <thead><tr><th>Beskrivelse</th><th style="text-align:right">Beløp</th></tr></thead>
+  <tbody>${tableRows}
+    <tr class="total-row"><td>Sum eks. mva</td><td style="text-align:right">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="mva-row"><td>MVA 25%</td><td style="text-align:right">${Math.round(totals.mva).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="grand-row"><td>Totalsum ink. mva</td><td style="text-align:right">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td></tr>
+  </tbody>
+</table>
+${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></div>` : ''}
+<div class="footer">
+  <p>Tilbud generert fra En Plattform · ${dato}</p>
+</div>
+</body></html>`
+  }
+
+  const openPreview = () => {
+    const html = generateTilbudHTML()
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
+  }
 
   const handleSend = async () => {
     if (!email) return alert('E-postadresse er påkrevd')
     setSending(true)
     try {
-      // Build line items for email
-      const lineItemsHtml = kalkyler.map(kalk => {
-        const fag = getFaggruppe(kalk.fag)
-        const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
-        const kt = beregnKalkyle(kalk, fakt)
-        const bdRows = showDetails ? (kalk.bygningsdeler || []).map(bd => {
-          const bdt = beregnBygningsdel(bd, fakt)
-          return `<tr><td style="padding:6px 12px;font-size:13px;color:#64748b;padding-left:32px">${bd.name || 'Bygningsdel'} (${bd.mengde || 1} ${bd.enhet || 'stk'})</td><td style="padding:6px 12px;text-align:right;font-size:13px;color:#0f172a">${Math.round(bdt.totalMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
-        }).join('') : ''
-        return `<tr style="background:#f8fafc"><td style="padding:8px 12px;font-weight:700;font-size:14px;color:#0f172a">${fag.emoji} ${kalk.name}</td><td style="padding:8px 12px;text-align:right;font-weight:700;font-size:14px;color:#0f172a">${Math.round(kt.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>${bdRows}`
-      }).join('')
-
-      // Create approval token
       const approvalUrl = await createApprovalToken({ module: 'calculation', recordId: kalk.id, recipientEmail: email, createdBy: user?.id })
+      const ci = companyInfo || {}
+      const dato = new Date().toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })
 
+      // Kort, profesjonell e-post — ikke detaljert prisoversikt
       const emailHtml = `
         <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-          <h1 style="color:#0f172a;font-size:22px;margin-bottom:4px">Tilbud: ${kalk.title}</h1>
-          <p style="color:#64748b;font-size:13px;margin-bottom:20px">Ref: ${kalk.kalk_number}</p>
+          ${ci.logo_url ? `<img src="${ci.logo_url}" style="max-height:50px;margin-bottom:16px" />` : ''}
+          <h1 style="color:#0f172a;font-size:20px;margin:0 0 8px">Tilbud: ${kalk.title}</h1>
+          <p style="color:#64748b;font-size:13px;margin:0 0 20px">Ref: ${kalk.kalk_number} · ${dato}</p>
           ${message ? `<p style="color:#475569;line-height:1.6;margin-bottom:20px">${message}</p>` : ''}
-          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #f1f5f9;border-radius:8px;overflow:hidden">
-            ${lineItemsHtml}
-            <tr style="border-top:2px solid #e2e8f0">
-              <td style="padding:12px;font-weight:800;font-size:16px;color:#0f172a">Totalsum eks. mva</td>
-              <td style="padding:12px;text-align:right;font-weight:800;font-size:16px;color:#0f172a">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr</td>
-            </tr>
-            <tr>
-              <td style="padding:8px 12px;font-size:13px;color:#64748b">MVA 25%</td>
-              <td style="padding:8px 12px;text-align:right;font-size:13px;color:#64748b">${Math.round(totals.mva).toLocaleString('nb-NO')} kr</td>
-            </tr>
-            <tr style="background:#f0fdf4">
-              <td style="padding:12px;font-weight:800;font-size:16px;color:#16a34a">Totalsum ink. mva</td>
-              <td style="padding:12px;text-align:right;font-weight:800;font-size:16px;color:#16a34a">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td>
-            </tr>
-          </table>
-          ${validUntil ? `<p style="color:#64748b;font-size:13px">Tilbudet er gyldig til: <strong>${validUntil}</strong></p>` : ''}
+          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0;text-align:center">
+            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM</div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr <span style="font-size:14px;color:#64748b;font-weight:400">eks. mva</span></div>
+            <div style="font-size:14px;color:#64748b;margin-top:4px">Ink. mva: ${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</div>
+          </div>
+          ${validUntil ? `<p style="color:#92400e;font-size:13px;background:#fffbeb;padding:10px 14px;border-radius:8px;border:1px solid #fde68a">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></p>` : ''}
+          <p style="color:#64748b;font-size:13px;margin-top:16px">Detaljert tilbudsspesifikasjon er vedlagt som PDF.</p>
           <div style="text-align:center;margin:28px 0">
             <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
           </div>
           <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform</p>
+          <p style="color:#94a3b8;font-size:12px">${ci.name || 'Bedrift'} · ${ci.phone || ''} · ${ci.email || ''}</p>
         </div>
       `
 
@@ -17676,20 +17754,27 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     finally { setSending(false) }
   }
 
+  const VISNING_OPTIONS = [
+    { id: 'total', name: 'Kun totalsum', desc: 'Bare total eks/ink mva', emoji: '💰' },
+    { id: 'faggruppe', name: 'Per faggruppe', desc: 'Tømrer, maler, rørlegger osv.', emoji: '👷' },
+    { id: 'bygningsdel', name: 'Per bygningsdel', desc: 'Yttervegg, innervegg, tak osv.', emoji: '🧱' },
+    { id: 'detaljert', name: 'Detaljert', desc: 'Alle arbeidsarter og materialer', emoji: '📋' },
+  ]
+
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'580px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden', maxHeight:'94vh', display:'flex', flexDirection:'column' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send tilbud til kunde</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px', overflowY:'auto' }}>
           {sent ? (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
               <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
               <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Tilbud sendt!</h3>
-              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar en e-post med godkjenningsknapp</p>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar en kort e-post med totalsum og godkjenningsknapp</p>
             </div>
           ) : (
             <>
@@ -17701,44 +17786,50 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
                     <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{fmt(totals.totMedFortjeneste)}</div>
                     <div style={{ fontSize:'12px', color:'#64748b' }}>eks. mva · ink. mva: {fmt(totals.totInkMva)}</div>
                   </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:'12px', color:'#64748b' }}>{kalkyler.length} fagkalkyle{kalkyler.length !== 1 ? 'r' : ''}</div>
-                    <div style={{ fontSize:'12px', color:'#64748b' }}>{totals.totTimer.toFixed(0)} timer</div>
-                  </div>
+                  <div style={{ fontSize:'12px', color:'#64748b', textAlign:'right' }}>{kalkyler.length} fag · {totals.totTimer.toFixed(0)}t</div>
                 </div>
               </div>
 
-              {/* Kundeinfo */}
+              {/* Visningsnivå */}
               <div>
-                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Detaljnivå i tilbud-PDF</label>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
+                  {VISNING_OPTIONS.map(v => (
+                    <button key={v.id} onClick={() => setVisning(v.id)}
+                      style={{ padding:'10px 12px', borderRadius:'10px', border: visning === v.id ? '2px solid #059669' : '1px solid #f1f5f9', background: visning === v.id ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left' }}>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color: visning === v.id ? '#059669' : '#0f172a' }}>{v.emoji} {v.name}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>{v.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* E-post */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-post til kunde *</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="kunde@epost.no" style={qInp} />
               </div>
 
               <div>
-                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Melding til kunde</label>
-                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} style={{ ...qInp, resize:'none' }} />
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Melding</label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} />
               </div>
 
-              <div style={{ display:'flex', gap:'12px' }}>
-                <div style={{ flex:1 }}>
-                  <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Gyldig til</label>
-                  <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} style={qInp} />
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tilbudsfrist</label>
+                <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} style={{ ...qInp, maxWidth:'200px' }} />
+              </div>
+
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#64748b' }}>
+                📧 Kunden mottar en <strong>kort e-post</strong> med totalsum, tilbudsfrist og godkjenningsknapp. Detaljene sendes som PDF-vedlegg.
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={openPreview} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>👁️ Forhåndsvis PDF</button>
+                <div style={{ display:'flex', gap:'10px' }}>
+                  <button onClick={onClose} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                  <button onClick={handleSend} disabled={sending} style={{ padding:'10px 22px', background:sending?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'13px', fontWeight:'700' }}>{sending ? 'Sender...' : '📧 Send tilbud'}</button>
                 </div>
-                <div style={{ flex:1, display:'flex', alignItems:'flex-end' }}>
-                  <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px', color:'#374151' }}>
-                    <input type="checkbox" checked={showDetails} onChange={e => setShowDetails(e.target.checked)} />
-                    Vis bygningsdeler i e-post
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e' }}>
-                ⚠️ Kunden mottar en e-post med prisoversikt og en <strong>godkjenningsknapp</strong>. Kun salgspriser vises — din selvkost og fortjeneste er skjult.
-              </div>
-
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending ? 'Sender...' : '📧 Send tilbud'}</button>
               </div>
             </>
           )}
