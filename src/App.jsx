@@ -16188,6 +16188,37 @@ function KalkulasjonPage({ onNavigate }) {
 
 const BYGNINGSDEL_BIBLIOTEK = [
   // ═══ TØMRER ═══════════════════════════════════════════════════════════════
+  // Etasjeskille
+  { id: 'tom_etasje_tre_200', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille trebjelkelag 200mm', beskrivelse: 'Standard trebjelkelag 48×198 c/c 600 med isolasjon, undergulv og himling under',
+    arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 198mm', grunntid: 0.35 }, { beskrivelse: 'Isolering 200mm (lyd/brann)', grunntid: 0.15 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.15 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling himling', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5 gulv', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_etasje_tre_250', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille trebjelkelag 250mm', beskrivelse: 'Forsterket trebjelkelag 48×248 for større spenn eller tyngre belastning',
+    arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 248mm', grunntid: 0.40 }, { beskrivelse: 'Isolering 250mm', grunntid: 0.18 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.15 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling himling', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Bjelker 48×248 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Lydisolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Sponplate 22mm P5 gulv', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_etasje_i_bjelke', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille I-bjelker (konstruksjonsvirke)', beskrivelse: 'Etasjeskille med I-bjelker for lange spenn, lett og stivt',
+    arbeidsarter: [{ beskrivelse: 'Montering I-bjelker', grunntid: 0.30 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.18 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.15 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'I-bjelker 300mm c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 95 }, { varenavn: 'Lydisolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 135 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_etasje_lim_tre', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille limtrebjelker', beskrivelse: 'Limtrebjelker for synlig konstruksjon eller ekstra lange spenn',
+    arbeidsarter: [{ beskrivelse: 'Montering limtrebjelker', grunntid: 0.35 }, { beskrivelse: 'Isolering mellom bjelker', grunntid: 0.15 }, { beskrivelse: 'Undergulv', grunntid: 0.15 }, { beskrivelse: 'Himling/synlig bjelkelag finish', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Limtrebjelker 66×270 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 145 }, { varenavn: 'Isolasjon mellom bjelker', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Bjelkesko og beslag', mengde: 2, enhet: 'stk/m²', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_etasje_dobbel_gips', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille m/lydkrav (dobbel gips)', beskrivelse: 'Etasjeskille som tilfredsstiller lydkrav mellom boenheter — dobbel gips under og lydbånd',
+    arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 198mm', grunntid: 0.35 }, { beskrivelse: 'Lydbånd og isolering 200mm', grunntid: 0.20 }, { beskrivelse: 'Undergulv m/flytende sjikt', grunntid: 0.20 }, { beskrivelse: 'Dobbel gips himling', grunntid: 0.35 }, { beskrivelse: 'Sparkling', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydbånd for bjelker', mengde: 2, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Trinnlyddempende matte', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm (dobbel)', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'tom_etasje_betong_pabygg', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille over betong (påbygg)', beskrivelse: 'Trebjelkelag oppå eksisterende betongdekke — typisk ved påbygg/rehabilitering',
+    arbeidsarter: [{ beskrivelse: 'Montering svill og bjelkelag', grunntid: 0.30 }, { beskrivelse: 'Isolering 100mm', grunntid: 0.10 }, { beskrivelse: 'Undergulv sponplate', grunntid: 0.15 }, { beskrivelse: 'Fuktsperre mot betong', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Fuktsperre 0.2mm', mengde: 1.1, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Svillebjelker 48×98', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Festemateriell betong', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'm²'
+  },
   // Yttervegger
   { id: 'tom_yv_148_kled', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/trekledning', beskrivelse: 'Standard bindingsverk 48×148, isolasjon 150mm, vindsperre, utlekting og stående trekledning',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.45 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.08 }],
