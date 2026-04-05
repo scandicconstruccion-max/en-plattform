@@ -16861,6 +16861,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [expandedBd, setExpandedBd] = useState(null)
   const [showBibliotekPicker, setShowBibliotekPicker] = useState(null)
   const [showSendModal, setShowSendModal] = useState(false)
+  const [showPreviewMenu, setShowPreviewMenu] = useState(false)
+  const [showTilbudPopup, setShowTilbudPopup] = useState(null) // null, 'no-module', 'created'
   const [hasTilbudModule, setHasTilbudModule] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -17001,48 +17003,108 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
   // Generer tilbud fra kalkulasjon → Tilbudsmodulen
   const handleCreateQuote = async () => {
-    // Konverter kalkyler til tilbuds-kapitler (chapters) som Tilbudsmodulen forstår
     const quoteChapters = kalkyler.map(kalk => {
       const fag = getFaggruppe(kalk.fag)
       const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
-      // Samle alle bygningsdeler som poster i ett kapittel per fag
       const posts = (kalk.bygningsdeler || []).map(bd => {
         const bdT = beregnBygningsdel(bd, fakt)
-        return {
-          id: bd.id,
-          description: bd.name || 'Bygningsdel',
-          qty: parseFloat(bd.mengde) || 1,
-          unit: bd.enhet || 'stk',
+        return { id: bd.id, description: bd.name || 'Bygningsdel', qty: parseFloat(bd.mengde) || 1, unit: bd.enhet || 'stk',
           unitPriceWork: bdT.totalTimer > 0 ? Math.round(bdT.totalArbeidMedFortjeneste / (parseFloat(bd.mengde) || 1)) : 0,
-          unitPriceMaterial: Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / (parseFloat(bd.mengde) || 1)),
-        }
+          unitPriceMaterial: Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / (parseFloat(bd.mengde) || 1)) }
       })
       return { id: kalk.id, title: `${fag.emoji} ${kalk.name}`, description: '', markup: 0, posts }
     })
-
-    const quotePayload = {
-      title: k.title,
-      quote_number: `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
-      project_id: null,
-      customer_name: k.customer_name || '',
-      customer_email: '',
-      customer_address: k.customer_address || '',
-      global_markup: 0,
-      chapters: quoteChapters,
-      status: 'Utkast',
-      created_by: user?.id,
-      source_calculation_id: k.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-
+    const quotePayload = { title: k.title, quote_number: `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`, project_id: null, customer_name: k.customer_name || '', customer_email: '', customer_address: k.customer_address || '', global_markup: 0, chapters: quoteChapters, status: 'Utkast', created_by: user?.id, source_calculation_id: k.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     const { error } = await supabase.from('quotes').insert(quotePayload)
-    if (error) {
-      alert('Feil: ' + error.message)
-    } else {
-      await updateStatus('Tilbud sendt')
-      alert('✅ Tilbud opprettet! Gå til Tilbud-modulen for å sende det til kunden via e-post.')
+    if (error) { alert('Feil: ' + error.message) }
+    else { await updateStatus('Tilbud sendt'); setShowTilbudPopup('created') }
+  }
+
+  const handleTilbudClick = () => {
+    if (hasTilbudModule) { handleCreateQuote() }
+    else { setShowTilbudPopup('no-module') }
+  }
+
+  // Forhåndsvisning PDF
+  const fmtEnhetPreview = (e) => {
+    const map = { 'm²': 'm2', 'm³': 'm3', 'lm': 'LM', 'kg': 'Kg', 'stk': 'Stk', 'rs': 'RS', 'l': 'L', 'sett': 'Sett' }
+    return map[(e||'').toLowerCase()] || map[e] || e || ''
+  }
+
+  const openPreview = async (visning) => {
+    setShowPreviewMenu(false)
+    let ci = {}
+    try { const { data } = await supabase.from('company_settings').select('name, address, phone, email, org_number, logo_url').limit(1).single(); ci = data || {} } catch(e) {}
+    const dato = new Date().toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })
+
+    let tableRows = ''
+    if (visning !== 'total') {
+      kalkyler.forEach(kl => {
+        const fag = getFaggruppe(kl.fag)
+        const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+        const kt = beregnKalkyle(kl, fakt)
+        tableRows += `<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:700;font-size:14px" colspan="3">${fag.emoji} ${kl.name}</td><td style="padding:10px 14px;text-align:right;font-weight:700;font-size:14px">${Math.round(kt.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
+        if (visning === 'bygningsdel' || visning === 'detaljert') {
+          ;(kl.bygningsdeler || []).forEach(bd => {
+            const bdt = beregnBygningsdel(bd, fakt)
+            const mengde = parseFloat(bd.mengde) || 1
+            tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name || 'Bygningsdel'}</td><td style="padding:6px 10px;text-align:right;font-size:13px">${mengde}</td><td style="padding:6px 10px;font-size:13px;color:#64748b">${fmtEnhetPreview(bd.enhet)}</td><td style="padding:6px 14px;text-align:right;font-size:13px;font-weight:600">${Math.round(bdt.totalMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
+            if (visning === 'detaljert') {
+              ;(bd.arbeidsarter || []).forEach(a => {
+                const r = beregnArbeidskostnad(a, fakt)
+                tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${a.beskrivelse}</td><td style="padding:3px 10px;text-align:right;font-size:12px;color:#94a3b8">${(r.faktiskTid*mengde).toFixed(1)}</td><td style="padding:3px 10px;font-size:12px;color:#94a3b8">t</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(r.medFortjeneste*mengde).toLocaleString('nb-NO')} kr</td></tr>`
+              })
+              ;(bd.materialer || []).forEach(m => {
+                const r = beregnMaterialkostnad(m, fakt)
+                tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${m.varenavn}</td><td style="padding:3px 10px;text-align:right;font-size:12px;color:#94a3b8">${((parseFloat(m.mengde)||0)*mengde).toFixed(1)}</td><td style="padding:3px 10px;font-size:12px;color:#94a3b8">${fmtEnhetPreview(m.enhet)}</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(r.medFortjeneste*mengde).toLocaleString('nb-NO')} kr</td></tr>`
+              })
+            }
+          })
+        }
+      })
     }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tilbud ${k.kalk_number}</title>
+<style>@media print{body{margin:0}@page{margin:20mm 15mm}} body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:40px 32px;color:#0f172a;font-size:14px;line-height:1.6}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid #059669}
+.logo{max-height:60px;max-width:180px} .company{text-align:right;font-size:12px;color:#64748b}
+h1{font-size:22px;margin:0 0 4px} .ref{font-size:13px;color:#94a3b8;margin-bottom:20px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;font-size:13px}
+.info-box{background:#f8fafc;border-radius:8px;padding:14px} .info-label{font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;text-align:left;font-size:11px;font-weight:700;color:#94a3b8;border-bottom:2px solid #e2e8f0;text-transform:uppercase}
+.col-mengde{width:70px} .col-enhet{width:50px}
+.total-row{border-top:2px solid #0f172a} .total-row td{padding:12px 14px;font-weight:800;font-size:16px}
+.mva-row td{padding:6px 14px;font-size:13px;color:#64748b} .grand-row{background:#f0fdf4} .grand-row td{padding:14px;font-weight:800;font-size:18px;color:#059669}
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8}
+@media print{.no-print{display:none!important}}</style></head><body>
+<div class="no-print" style="background:#059669;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+  <span>Forhåndsvisning — ${visning === 'total' ? 'Kun totalsum' : visning === 'faggruppe' ? 'Per faggruppe' : visning === 'bygningsdel' ? 'Per bygningsdel' : 'Detaljert'}</span>
+  <button onclick="window.print()" style="background:white;color:#059669;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">🖨️ Skriv ut / Lagre som PDF</button>
+</div>
+<div class="header">
+  <div>${ci.logo_url ? `<img src="${ci.logo_url}" class="logo" />` : ''}<h1>${ci.name || 'Bedriftsnavn'}</h1></div>
+  <div class="company">${ci.address || ''}<br>${ci.phone || ''}<br>${ci.email || ''}<br>${ci.org_number ? `Org.nr: ${ci.org_number}` : ''}</div>
+</div>
+<h1>Tilbud</h1>
+<div class="ref">${k.kalk_number} · ${dato}</div>
+<div class="info-grid">
+  <div class="info-box"><div class="info-label">Kunde</div>${k.customer_name || '—'}<br>${k.customer_address || ''}</div>
+  <div class="info-box"><div class="info-label">Prosjekt</div>${k.title}<br>${k.customer_address || ''}</div>
+</div>
+<table>
+  <thead><tr><th>Beskrivelse</th><th class="col-mengde" style="text-align:right">Mengde</th><th class="col-enhet">Enhet</th><th style="text-align:right">Beløp</th></tr></thead>
+  <tbody>${tableRows}
+    <tr class="total-row"><td colspan="3">Sum eks. mva</td><td style="text-align:right">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="mva-row"><td colspan="3">MVA 25%</td><td style="text-align:right">${Math.round(totals.mva).toLocaleString('nb-NO')} kr</td></tr>
+    <tr class="grand-row"><td colspan="3">Totalsum ink. mva</td><td style="text-align:right">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td></tr>
+  </tbody>
+</table>
+<div class="footer"><p>Tilbud generert fra En Plattform · ${dato}</p></div>
+</body></html>`
+
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
   }
 
   return (
@@ -17063,10 +17125,34 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
               {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
             <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
-            {hasTilbudModule && <button onClick={handleCreateQuote} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Lag tilbud →</button>}
+
+            {/* Forhåndsvis PDF dropdown */}
+            <div style={{ position:'relative' }}>
+              <button onClick={() => setShowPreviewMenu(!showPreviewMenu)}
+                style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                👁️ Forhåndsvis ▾
+              </button>
+              {showPreviewMenu && (
+                <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'220px' }}>
+                  {[['total','💰 Kun totalsum'],['faggruppe','👷 Per faggruppe'],['bygningsdel','🧱 Per bygningsdel'],['detaljert','📋 Detaljert']].map(([id, label]) => (
+                    <button key={id} onClick={() => openPreview(id)}
+                      style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a', marginBottom:'2px', fontWeight:'500' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Send til tilbudsmodul */}
+            <button onClick={handleTilbudClick}
+              style={{ background: hasTilbudModule ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', opacity: hasTilbudModule ? 1 : 0.6 }}>
+              📋 Send til tilbudsmodul
+            </button>
+
             <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>
           </div>
         </div>
@@ -17322,6 +17408,35 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
       {/* Send til kunde modal */}
       {showSendModal && <KalkSendModal kalk={k} totals={totals} kalkyler={kalkyler} alleFaktorer={alleFaktorer} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); updateStatus('Tilbud sendt') }} />}
+
+      {/* Tilbud popup */}
+      {showTilbudPopup && (
+        <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setShowTilbudPopup(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+            <div style={{ padding:'28px 24px', textAlign:'center' }}>
+              {showTilbudPopup === 'created' ? (
+                <>
+                  <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>✅</div>
+                  <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tilbud opprettet!</h3>
+                  <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.6 }}>Tilbudet er lagt inn i Tilbudsmodulen og er klart for gjennomgang og sending til kunden.</p>
+                  <button onClick={() => setShowTilbudPopup(null)}
+                    style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'12px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#fefce8', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>🔒</div>
+                  <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tilbudsmodulen er ikke aktivert</h3>
+                  <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.6 }}>For å sende tilbud via Tilbudsmodulen må du først aktivere den under Min Bedrift → Moduler og priser.</p>
+                  <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'13px' }}>Du kan fortsatt sende tilbud direkte til kunden via den grønne «Send til kunde»-knappen.</p>
+                  <button onClick={() => setShowTilbudPopup(null)}
+                    style={{ background:'#0f172a', color:'white', border:'none', borderRadius:'10px', padding:'12px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Forstått</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
