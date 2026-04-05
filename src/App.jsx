@@ -16911,6 +16911,11 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const confirm = useConfirm()
   const { user } = useAuth()
   const [k, setK] = useState(init)
+  const [activeKalkId, setActiveKalkId] = useState(null)
+  const [expandedBd, setExpandedBd] = useState(null)
+  const [showBibliotekPicker, setShowBibliotekPicker] = useState(null) // fagId when open
+  const [saving, setSaving] = useState(false)
+
   const kalkyler = k.kalkyler || []
   const alleFaktorer = k.faktorer || {}
   const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
@@ -16922,6 +16927,34 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
+
+  // Auto-save helper
+  const saveProject = async (updated) => {
+    setSaving(true)
+    const newTotals = beregnProsjektTotal(updated.kalkyler || [], updated.faktorer || {})
+    try {
+      await supabase.from('calculations').update({
+        kalkyler: updated.kalkyler, faktorer: updated.faktorer,
+        total_cost: newTotals.totSelvkost, total_ex_mva: newTotals.totMedFortjeneste,
+        profit_percent: newTotals.fortjenesteProsent, updated_at: new Date().toISOString()
+      }).eq('id', k.id)
+    } catch(e) { console.error(e) }
+    finally { setSaving(false) }
+  }
+
+  // Add bygningsdel from library to a specific kalkyle
+  const addBdFromBibliotek = (kalId, bd) => {
+    const updated = { ...k, kalkyler: kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), bd] } : kl) }
+    setK(updated)
+    saveProject(updated)
+  }
+
+  // Remove bygningsdel
+  const removeBd = async (kalId, bdId) => {
+    const updated = { ...k, kalkyler: kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl) }
+    setK(updated)
+    saveProject(updated)
+  }
 
   const refresh = async () => {
     const { data } = await supabase.from('calculations').select('*').eq('id', k.id).single()
@@ -16956,6 +16989,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
           <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
           <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
           <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+          {saving && <span style={{ fontSize:'12px', color:'#94a3b8' }}>Lagrer...</span>}
         </div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
@@ -16966,48 +17000,117 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger</button>
+            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
             <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
           </div>
         </div>
       </div>
 
       <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
-        {/* Main - per kalkyle */}
+        {/* Main - per kalkyle with interactive bygningsdeler */}
         <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
           {kalkyler.map(kalk => {
             const fag = getFaggruppe(kalk.fag)
             const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
             const kTotals = beregnKalkyle(kalk, fakt)
+            const isActive = activeKalkId === kalk.id
             return (
-              <div key={kalk.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-                <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #f1f5f9' }}>
+              <div key={kalk.id} style={{ background:'white', borderRadius:'14px', border: isActive ? '2px solid #059669' : '1px solid #f1f5f9', overflow:'hidden' }}>
+                {/* Kalkyle header - clickable */}
+                <div onClick={() => setActiveKalkId(isActive ? null : kalk.id)}
+                  style={{ background: isActive ? '#f0fdf4' : '#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #f1f5f9', cursor:'pointer' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                    <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
-                    <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{kalk.name}</span>
-                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>{kTotals.totTimer.toFixed(1)} timer</span>
-                  </div>
-                  <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(kTotals.totMedFortjeneste)}</span>
-                </div>
-                {(kalk.bygningsdeler||[]).map(bd => {
-                  const bdT = beregnBygningsdel(bd, fakt)
-                  return (
-                    <div key={bd.id} style={{ padding:'10px 18px', borderBottom:'1px solid #f8fafc' }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{bd.name || 'Uten navn'}</span>
-                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
-                      </div>
-                      <div style={{ fontSize:'12px', color:'#94a3b8' }}>
-                        {bdT.totalTimer.toFixed(1)}t arbeid · {fmt(bdT.totalArbeidMedFortjeneste)} · Mat: {fmt(bdT.totalMaterialMedFortjeneste)}
-                        {bdT.totalUE > 0 ? ` · UE: ${fmt(bdT.totalUE)}` : ''}
-                      </div>
+                    <span style={{ fontSize:'18px' }}>{fag.emoji}</span>
+                    <div>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{kalk.name}</span>
+                      <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{kTotals.totTimer.toFixed(1)} timer · {(kalk.bygningsdeler||[]).length} bygningsdel{(kalk.bygningsdeler||[]).length !== 1 ? 'er' : ''}</div>
                     </div>
-                  )
-                })}
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                    <span style={{ fontWeight:'700', color:'#059669', fontSize:'16px' }}>{fmt(kTotals.totMedFortjeneste)}</span>
+                    <span style={{ color:'#94a3b8', fontSize:'16px', transform: isActive ? 'rotate(180deg)' : 'none', transition:'transform 0.2s' }}>▼</span>
+                  </div>
+                </div>
+
+                {/* Expanded: bygningsdeler + add buttons */}
+                {isActive && (
+                  <div style={{ padding:'14px 18px' }}>
+                    {(kalk.bygningsdeler||[]).map((bd, bi) => {
+                      const bdT = beregnBygningsdel(bd, fakt)
+                      const isExpanded = expandedBd === bd.id
+                      return (
+                        <div key={bd.id} style={{ border:'1px solid #f1f5f9', borderRadius:'10px', marginBottom:'8px', overflow:'hidden' }}>
+                          {/* Bygningsdel header */}
+                          <div onClick={() => setExpandedBd(isExpanded ? null : bd.id)}
+                            style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', cursor:'pointer', background: isExpanded ? '#f8fafc' : 'white' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                              <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>{bi+1}</span>
+                              <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{bd.name || 'Uten navn'}</span>
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                              <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
+                              <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
+                              <button onClick={(e) => { e.stopPropagation(); removeBd(kalk.id, bd.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
+                            </div>
+                          </div>
+
+                          {/* Expanded: detaljer */}
+                          {isExpanded && (
+                            <div style={{ padding:'10px 14px', borderTop:'1px solid #f1f5f9', fontSize:'12px' }}>
+                              {(bd.arbeidsarter||[]).length > 0 && (
+                                <div style={{ marginBottom:'8px' }}>
+                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>ARBEIDSARTER</div>
+                                  {bd.arbeidsarter.map((a, i) => {
+                                    const r = beregnArbeidskostnad(a, fakt)
+                                    return <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0', color:'#374151' }}>
+                                      <span>⏱️ {a.beskrivelse} ({r.faktiskTid.toFixed(1)}t)</span>
+                                      <span style={{ fontWeight:'600' }}>{fmt(r.medFortjeneste)}</span>
+                                    </div>
+                                  })}
+                                </div>
+                              )}
+                              {(bd.materialer||[]).length > 0 && (
+                                <div style={{ marginBottom:'8px' }}>
+                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>MATERIALER</div>
+                                  {bd.materialer.map((m, i) => {
+                                    const r = beregnMaterialkostnad(m, fakt)
+                                    return <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0', color:'#374151' }}>
+                                      <span>📦 {m.varenavn} — {m.mengde} {m.enhet} × {m.enhetspris} kr</span>
+                                      <span style={{ fontWeight:'600' }}>{fmt(r.medFortjeneste)}</span>
+                                    </div>
+                                  })}
+                                </div>
+                              )}
+                              {(bd.underleverandorer||[]).length > 0 && (
+                                <div>
+                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>UNDERLEVERANDØRER</div>
+                                  {bd.underleverandorer.map((u, i) => (
+                                    <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0', color:'#374151' }}>
+                                      <span>🤝 {u.navn} — {u.beskrivelse}</span>
+                                      <span style={{ fontWeight:'600' }}>{fmt(u.kostnad)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {/* Add bygningsdel buttons */}
+                    <div style={{ display:'flex', gap:'8px', marginTop:'4px' }}>
+                      <button onClick={() => setShowBibliotekPicker(kalk.id)}
+                        style={{ flex:1, background:'#eff6ff', border:'2px dashed #bfdbfe', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#2563eb', fontWeight:'600', fontSize:'13px' }}>
+                        📚 Hent fra bibliotek
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
-          {kalkyler.length === 0 && <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'40px', textAlign:'center', color:'#94a3b8' }}>Ingen fagkalkyler ennå</div>}
+          {kalkyler.length === 0 && <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'40px', textAlign:'center', color:'#94a3b8' }}>Ingen fagkalkyler — klikk "Rediger prosjektinfo" for å legge til fag.</div>}
         </div>
 
         {/* Sidebar */}
@@ -17032,14 +17135,27 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
             </div>
           </div>
 
+          {/* Per fag breakdown */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px' }}>
+            <div style={{ fontWeight:'700', fontSize:'13px', marginBottom:'8px' }}>Per faggruppe</div>
+            {kalkyler.map(kl => {
+              const fag = getFaggruppe(kl.fag)
+              const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+              const kt = beregnKalkyle(kl, fakt)
+              return (
+                <div key={kl.id} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}>
+                  <span style={{ color:'#374151' }}>{fag.emoji} {kl.name}</span>
+                  <span style={{ fontWeight:'600' }}>{fmt(kt.totMedFortjeneste)}</span>
+                </div>
+              )
+            })}
+          </div>
+
           {/* Margin */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px 18px', textAlign:'center' }}>
             <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'6px' }}>Fortjenestemargin</div>
             <div style={{ fontSize:'32px', fontWeight:'800', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }}>
               {totals.fortjenesteProsent.toFixed(1)}%
-            </div>
-            <div style={{ width:'100%', height:'6px', background:'#f1f5f9', borderRadius:'3px', marginTop:'10px', overflow:'hidden' }}>
-              <div style={{ width: `${Math.min(totals.fortjenesteProsent, 50) * 2}%`, height:'100%', borderRadius:'3px', background: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }} />
             </div>
           </div>
 
@@ -17057,6 +17173,13 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
           <button onClick={handleDelete} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🗑️ Slett kalkulasjon</button>
         </div>
       </div>
+
+      {/* Bibliotek picker modal */}
+      {showBibliotekPicker && (() => {
+        const targetKalk = kalkyler.find(kl => kl.id === showBibliotekPicker)
+        if (!targetKalk) return null
+        return <BibliotekPickerModal fagId={targetKalk.fag} onSelect={(bd) => addBdFromBibliotek(showBibliotekPicker, bd)} onClose={() => setShowBibliotekPicker(null)} />
+      })()}
     </div>
   )
 }
