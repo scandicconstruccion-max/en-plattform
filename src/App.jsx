@@ -16622,9 +16622,90 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
 
   // ═══ BETONG ═══════════════════════════════════════════════════════════════
-  { id: 'bet_plate_grunn', fag: 'betong', kategori: 'Grunnarbeid', name: 'Betongplate på grunn', beskrivelse: 'Forskaling, armering og støp av gulvplate',
-    arbeidsarter: [{ beskrivelse: 'Forskaling', grunntid: 0.30 }, { beskrivelse: 'Armering og støp', grunntid: 0.45 }],
-    materialer: [{ varenavn: 'Forskalingsmateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 45 }, { varenavn: 'Armering K500', mengde: 8, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Membran under plate', mengde: 1.05, enhet: 'm²', enhetspris: 22 }],
+  // Gulvplate/såle
+  { id: 'bet_plate_100', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate på grunn 100mm', beskrivelse: 'Plate på mark — radonmembran, isolasjon, armering (nett) og støp 100mm',
+    arbeidsarter: [{ beskrivelse: 'Legging radonmembran', grunntid: 0.05 }, { beskrivelse: 'Legging isolasjon', grunntid: 0.08 }, { beskrivelse: 'Forskaling kant', grunntid: 0.12 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Støp og avretting', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett K500 Ø8 150×150', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser og diverse', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'bet_plate_150', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate på grunn 150mm', beskrivelse: 'Plate på mark — forsterket 150mm for garasje/næringsbygg',
+    arbeidsarter: [{ beskrivelse: 'Legging radonmembran', grunntid: 0.05 }, { beskrivelse: 'Legging isolasjon', grunntid: 0.08 }, { beskrivelse: 'Forskaling', grunntid: 0.15 }, { beskrivelse: 'Armering dobbelt nett', grunntid: 0.15 }, { beskrivelse: 'Støp og avretting', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8 150×150 (dobbelt)', mengde: 2.2, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (150mm)', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'bet_plate_varme', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate m/gulvvarme', beskrivelse: 'Plate på mark med innstøpt vannbåren gulvvarme',
+    arbeidsarter: [{ beskrivelse: 'Legging radonmembran og isolasjon', grunntid: 0.12 }, { beskrivelse: 'Forskaling', grunntid: 0.12 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Legging varmeslanger', grunntid: 0.15 }, { beskrivelse: 'Støp og avretting', grunntid: 0.22 }],
+    materialer: [{ varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }],
+    underleverandorer: [{ navn: 'Rørlegger', beskrivelse: 'Legging varmeslanger', kostnad: 180 }], enhet: 'm²'
+  },
+  // Fundamenter
+  { id: 'bet_stfund_400', fag: 'betong', kategori: 'Fundament', name: 'Stripefundament 400×200mm', beskrivelse: 'Stripefundament med graving, forskaling, armering og støp',
+    arbeidsarter: [{ beskrivelse: 'Graving grøft', grunntid: 0.08 }, { beskrivelse: 'Forskaling', grunntid: 0.25 }, { beskrivelse: 'Armering', grunntid: 0.15 }, { beskrivelse: 'Støp', grunntid: 0.12 }, { beskrivelse: 'Riving forskaling', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Forskalingsmateriell', mengde: 2, enhet: 'lm/lm', enhetspris: 45 }, { varenavn: 'Armering Ø12mm', mengde: 6, enhet: 'kg/lm', enhetspris: 14 }, { varenavn: 'Betong B30 (0.08m³/lm)', mengde: 0.08, enhet: 'm³/lm', enhetspris: 1400 }, { varenavn: 'Bindtråd og distanser', mengde: 1, enhet: 'rs/lm', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bet_stfund_600', fag: 'betong', kategori: 'Fundament', name: 'Stripefundament 600×300mm', beskrivelse: 'Forsterket stripefundament for tyngre konstruksjoner',
+    arbeidsarter: [{ beskrivelse: 'Graving grøft', grunntid: 0.10 }, { beskrivelse: 'Forskaling', grunntid: 0.30 }, { beskrivelse: 'Armering', grunntid: 0.20 }, { beskrivelse: 'Støp', grunntid: 0.15 }, { beskrivelse: 'Riving forskaling', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Forskalingsmateriell', mengde: 2, enhet: 'lm/lm', enhetspris: 55 }, { varenavn: 'Armering Ø12mm bøyle + lengde', mengde: 12, enhet: 'kg/lm', enhetspris: 14 }, { varenavn: 'Betong B30 (0.18m³/lm)', mengde: 0.18, enhet: 'm³/lm', enhetspris: 1400 }, { varenavn: 'Bindtråd og distanser', mengde: 1, enhet: 'rs/lm', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bet_punktfund', fag: 'betong', kategori: 'Fundament', name: 'Punktfundament 400×400mm', beskrivelse: 'Enkeltstående punktfundament for søyler, terrasse e.l.',
+    arbeidsarter: [{ beskrivelse: 'Graving', grunntid: 0.5 }, { beskrivelse: 'Forskaling', grunntid: 1.0 }, { beskrivelse: 'Armering', grunntid: 0.5 }, { beskrivelse: 'Støp', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Forskalingsrør/form', mengde: 1, enhet: 'stk', enhetspris: 120 }, { varenavn: 'Armering', mengde: 5, enhet: 'kg', enhetspris: 14 }, { varenavn: 'Betong B30', mengde: 0.05, enhet: 'm³', enhetspris: 1400 }, { varenavn: 'Innstøpningsgods/bolt', mengde: 1, enhet: 'stk', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bet_ringmur', fag: 'betong', kategori: 'Fundament', name: 'Ringmur/grunnmur (støpt)', beskrivelse: 'Støpt grunnmur fra fundament til ferdig golv — inkl. forskaling, armering og støp',
+    arbeidsarter: [{ beskrivelse: 'Forskaling begge sider', grunntid: 0.50 }, { beskrivelse: 'Armering vegg', grunntid: 0.20 }, { beskrivelse: 'Støp vegg', grunntid: 0.15 }, { beskrivelse: 'Riving forskaling', grunntid: 0.15 }, { beskrivelse: 'Fuktsperre/isolering', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Systemforskaling (leie)', mengde: 2, enhet: 'm²/m²', enhetspris: 85 }, { varenavn: 'Armering Ø10+Ø12', mengde: 15, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30 (200mm vegg)', mengde: 0.20, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Fuktsperre/asfaltmembran', mengde: 1.1, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Isolasjon XPS grunn 50mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Betongvegger
+  { id: 'bet_vegg_plasstopt_200', fag: 'betong', kategori: 'Betongvegg', name: 'Plasstøpt betongvegg 200mm', beskrivelse: 'Plasstøpt vegg med systemforskaling, armering og støp',
+    arbeidsarter: [{ beskrivelse: 'Oppstilling forskaling', grunntid: 0.45 }, { beskrivelse: 'Armering', grunntid: 0.25 }, { beskrivelse: 'Støp', grunntid: 0.12 }, { beskrivelse: 'Riving forskaling', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Systemforskaling (leie)', mengde: 2, enhet: 'm²/m²', enhetspris: 85 }, { varenavn: 'Armering Ø10 c/c 200 begge sider', mengde: 18, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30 (200mm)', mengde: 0.20, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindtråd, distanser, konus', mengde: 1, enhet: 'rs/m²', enhetspris: 22 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'bet_vegg_250', fag: 'betong', kategori: 'Betongvegg', name: 'Plasstøpt betongvegg 250mm', beskrivelse: 'Forsterket plasstøpt vegg 250mm — kjeller, bærevegg',
+    arbeidsarter: [{ beskrivelse: 'Oppstilling forskaling', grunntid: 0.50 }, { beskrivelse: 'Armering', grunntid: 0.30 }, { beskrivelse: 'Støp', grunntid: 0.15 }, { beskrivelse: 'Riving forskaling', grunntid: 0.18 }],
+    materialer: [{ varenavn: 'Systemforskaling (leie)', mengde: 2, enhet: 'm²/m²', enhetspris: 85 }, { varenavn: 'Armering Ø12 c/c 200', mengde: 24, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30 (250mm)', mengde: 0.25, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindtråd, distanser, konus', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'bet_vegg_stoettemur', fag: 'betong', kategori: 'Betongvegg', name: 'Støttemur/L-vegg støpt', beskrivelse: 'Plasstøpt støttemur med såle — terrengstøtte',
+    arbeidsarter: [{ beskrivelse: 'Graving og klargjøring', grunntid: 0.15 }, { beskrivelse: 'Forskaling såle og vegg', grunntid: 0.55 }, { beskrivelse: 'Armering', grunntid: 0.30 }, { beskrivelse: 'Støp', grunntid: 0.18 }, { beskrivelse: 'Riving og tilbakefylling', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Forskalingsmateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 120 }, { varenavn: 'Armering Ø12', mengde: 22, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30', mengde: 0.30, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Drensrør og filterduk', mengde: 1, enhet: 'rs/m²', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Betongdekke
+  { id: 'bet_dekke_200', fag: 'betong', kategori: 'Betongdekke', name: 'Plasstøpt dekke 200mm', beskrivelse: 'Plasstøpt betongdekke med understøtting, forskaling, armering og støp',
+    arbeidsarter: [{ beskrivelse: 'Understøtting og forskaling', grunntid: 0.55 }, { beskrivelse: 'Armering', grunntid: 0.25 }, { beskrivelse: 'Støp og vibrering', grunntid: 0.18 }, { beskrivelse: 'Riving understøtting', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Dekkforskaling (leie)', mengde: 1, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Understøtting/stendere (leie)', mengde: 1, enhet: 'rs/m²', enhetspris: 55 }, { varenavn: 'Armering Ø10+Ø12 toveis', mengde: 22, enhet: 'kg/m²', enhetspris: 14 }, { varenavn: 'Betong B30 (200mm)', mengde: 0.20, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Distanser og bindtråd', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'bet_dekke_hullpl', fag: 'betong', kategori: 'Betongdekke', name: 'Hulldekke-element', beskrivelse: 'Montering prefab hulldekke-elementer med kran',
+    arbeidsarter: [{ beskrivelse: 'Montering hulldekke m/kran', grunntid: 0.08 }, { beskrivelse: 'Fugstøp mellom elementer', grunntid: 0.10 }, { beskrivelse: 'Påstøp/avretting', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Hulldekke-element 265mm', mengde: 1, enhet: 'm²', enhetspris: 850 }, { varenavn: 'Fugbetong', mengde: 0.01, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Avrettingsmasse påstøp', mengde: 10, enhet: 'kg/m²', enhetspris: 5 }],
+    underleverandorer: [{ navn: 'Kranbil', beskrivelse: 'Kran for montering', kostnad: 25 }], enhet: 'm²'
+  },
+  // Trapper
+  { id: 'bet_trapp_rett', fag: 'betong', kategori: 'Betongtrapp', name: 'Betongtrapp rett løp', beskrivelse: 'Plasstøpt betongtrapp rett løp — forskaling, armering og støp',
+    arbeidsarter: [{ beskrivelse: 'Forskaling trapp', grunntid: 4.0 }, { beskrivelse: 'Armering', grunntid: 1.5 }, { beskrivelse: 'Støp og finish', grunntid: 1.5 }, { beskrivelse: 'Riving forskaling', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Forskalingsmateriell trapp', mengde: 1, enhet: 'rs', enhetspris: 2500 }, { varenavn: 'Armering Ø10+Ø12', mengde: 120, enhet: 'kg', enhetspris: 14 }, { varenavn: 'Betong B30', mengde: 0.8, enhet: 'm³', enhetspris: 1400 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bet_trapp_prefab', fag: 'betong', kategori: 'Betongtrapp', name: 'Prefab betongtrapp', beskrivelse: 'Montering av prefabrikkert betongtrapp med kran',
+    arbeidsarter: [{ beskrivelse: 'Montering m/kran', grunntid: 3.0 }, { beskrivelse: 'Innstøpning og tetting', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Prefab betongtrapp', mengde: 1, enhet: 'stk', enhetspris: 35000 }, { varenavn: 'Innstøpningsmørtel', mengde: 1, enhet: 'rs', enhetspris: 500 }],
+    underleverandorer: [{ navn: 'Kranbil', beskrivelse: 'Kran for montering', kostnad: 4500 }], enhet: 'stk'
+  },
+  // Utendørs betong
+  { id: 'bet_mur_plass', fag: 'betong', kategori: 'Utendørs', name: 'Betongplatting/oppkjørsel', beskrivelse: 'Støpt betongplatting utvendig med armering og overflatebehandling',
+    arbeidsarter: [{ beskrivelse: 'Klargjøring underlag', grunntid: 0.10 }, { beskrivelse: 'Forskaling', grunntid: 0.15 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Støp og avretting', grunntid: 0.20 }, { beskrivelse: 'Overflatebehandling', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Pukk/grus underlag', mengde: 0.15, enhet: 'm³/m²', enhetspris: 280 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 45 }, { varenavn: 'Armeringsnett Ø8', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'bet_sokkel_puss', fag: 'betong', kategori: 'Utendørs', name: 'Sokkelpuss/sparkling', beskrivelse: 'Pussing og sparkling av grunnmur/sokkel utvendig',
+    arbeidsarter: [{ beskrivelse: 'Primer og heft', grunntid: 0.05 }, { beskrivelse: 'Grovpuss', grunntid: 0.25 }, { beskrivelse: 'Finpuss/sparkling', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Primer sokkel', mengde: 0.15, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Sokkelpuss/mørtel', mengde: 12, enhet: 'kg/m²', enhetspris: 6 }, { varenavn: 'Armeringsnett', mengde: 1.05, enhet: 'm²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
 
