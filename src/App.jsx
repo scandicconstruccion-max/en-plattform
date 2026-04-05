@@ -17211,24 +17211,28 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   // Sjekk om UE har svart
   const checkUESvar = async () => {
     try {
-      const { data } = await supabase.from('ue_foresporsler').select('*').eq('calculation_id', k.id).eq('status', 'mottatt')
+      const { data } = await supabase.from('ue_foresporsler').select('*').eq('calculation_id', k.id)
       if (!data || data.length === 0) return
+      const mottatte = data.filter(f => f.status === 'mottatt' || f.status === 'godkjent')
+      if (mottatte.length === 0) return
       let updated = false
       const newKalkyler = kalkyler.map(kl => {
-        // Check kalkyle-level UE forespørsel
-        let newUf = kl.ue_foresporsel
-        if (newUf && newUf.foresporsel_id && newUf.status === 'sendt') {
-          const match = data.find(f => f.id === newUf.foresporsel_id)
-          if (match) { newUf = { ...newUf, status: 'mottatt', svar_pris: match.svar_pris, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan }; updated = true }
+        let newUf = kl.ue_foresporsel ? { ...kl.ue_foresporsel } : null
+        if (newUf && newUf.foresporsel_id && (newUf.status === 'sendt')) {
+          const match = mottatte.find(f => f.id === newUf.foresporsel_id)
+          if (match) {
+            newUf = { ...newUf, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold }
+            updated = true
+          }
         }
         return { ...kl, ue_foresporsel: newUf, bygningsdeler: (kl.bygningsdeler||[]).map(bd => ({ ...bd, underleverandorer: (bd.underleverandorer||[]).map(u => {
-          const match = data.find(f => f.id === u.foresporsel_id)
-          if (match && u.status === 'sendt') { updated = true; return { ...u, status: 'mottatt', svar_pris: match.svar_pris, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan } }
+          const match = mottatte.find(f => f.id === u.foresporsel_id)
+          if (match && u.status === 'sendt') { updated = true; return { ...u, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold } }
           return u
         }) })) }
       })
       if (updated) saveProject({ ...k, kalkyler: newKalkyler })
-    } catch(e) {}
+    } catch(e) { console.error('checkUESvar error:', e) }
   }
   useEffect(() => { checkUESvar() }, [])
 
@@ -17775,14 +17779,29 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             </div>
                             {/* Mottatt svar */}
                             {uf.status === 'mottatt' && uf.svar_pris && (
-                              <div style={{ marginTop:'8px', background:'#eff6ff', borderRadius:'8px', padding:'10px', border:'1px solid #bfdbfe' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'4px' }}>📨 TILBUD MOTTATT</div>
-                                <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>{fmt(uf.svar_pris)}</div>
-                                {uf.svar_beskrivelse && <div style={{ fontSize:'12px', color:'#475569', marginTop:'4px' }}>{uf.svar_beskrivelse}</div>}
-                                {uf.svar_tidsplan && <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>📅 {uf.svar_tidsplan}</div>}
+                              <div style={{ marginTop:'8px', background:'#eff6ff', borderRadius:'8px', padding:'12px', border:'1px solid #bfdbfe' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'8px' }}>📨 TILBUD MOTTATT FRA {(uf.navn||'').toUpperCase()}</div>
+                                {/* Postvis priser */}
+                                {(uf.svar_poster||[]).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'8px', fontSize:'12px' }}>
+                                    {uf.svar_poster.filter(p => p.pris > 0).map((p,i) => (
+                                      <tr key={i} style={{ borderBottom:'1px solid #e2e8f0' }}>
+                                        <td style={{ padding:'4px 0', color:'#374151' }}>{p.name}</td>
+                                        <td style={{ padding:'4px 0', textAlign:'right', fontWeight:'600', color:'#0f172a' }}>{fmt(p.pris)}</td>
+                                      </tr>
+                                    ))}
+                                    <tr style={{ borderTop:'2px solid #0f172a' }}>
+                                      <td style={{ padding:'6px 0', fontWeight:'800', fontSize:'13px' }}>TOTALT</td>
+                                      <td style={{ padding:'6px 0', textAlign:'right', fontWeight:'800', fontSize:'14px', color:'#059669' }}>{fmt(uf.svar_pris)}</td>
+                                    </tr>
+                                  </table>
+                                )}
+                                {!(uf.svar_poster||[]).length && <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'6px' }}>{fmt(uf.svar_pris)}</div>}
+                                {uf.svar_tidsplan && <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>📅 {uf.svar_tidsplan}</div>}
+                                {uf.svar_forbehold && <div style={{ fontSize:'12px', color:'#92400e', background:'#fefce8', padding:'6px 8px', borderRadius:'6px', marginTop:'4px', marginBottom:'4px' }}>⚠️ Forbehold: {uf.svar_forbehold}</div>}
                                 <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
-                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'godkjent' } } : kl))} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>✅ Godkjenn</button>
-                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'utkast', svar_pris: null } } : kl))} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', cursor:'pointer', color:'#64748b' }}>Avslå</button>
+                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'godkjent' } } : kl))} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>✅ Godkjenn tilbud</button>
+                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'utkast', svar_pris: null, svar_poster: null } } : kl))} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', cursor:'pointer', color:'#64748b' }}>Avslå</button>
                                 </div>
                               </div>
                             )}
