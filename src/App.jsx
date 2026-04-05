@@ -17145,6 +17145,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
   // Send tilbudsforespørsel til UE
   const [showUESuccess, setShowUESuccess] = useState(null)
+  const [showUEExtraPoster, setShowUEExtraPoster] = useState(null) // { kalkId, poster: [{name, pris}], paaslag, callback }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -17788,11 +17789,66 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 </div>
                                 <button onClick={() => {
                                   const paaslag = parseFloat(uf.paaslag ?? 15)
-                                  const utPris = uf.svar_pris * (1 + paaslag / 100)
-                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl,
-                                    valgt_ue: { navn: uf.navn, innkjop: uf.svar_pris, paaslag, ut_pris: utPris, foresporsel_id: uf.foresporsel_id, svar_poster: uf.svar_poster },
-                                    ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, status: 'valgt' } : u.status === 'valgt' ? { ...u, status: 'mottatt' } : u)
-                                  } : kl))
+                                  const svarPoster = uf.svar_poster || []
+                                  const currentBds = kalk.bygningsdeler || []
+
+                                  // Match UE-poster til eksisterende bygningsdeler
+                                  const matchedPoster = []
+                                  const extraPoster = []
+                                  svarPoster.forEach(sp => {
+                                    if (sp.pris <= 0) return
+                                    const matchBd = currentBds.find(bd => String(bd.id) === String(sp.id))
+                                    if (matchBd) {
+                                      matchedPoster.push({ bdId: matchBd.id, name: sp.name, pris: sp.pris })
+                                    } else {
+                                      extraPoster.push({ name: sp.name, pris: sp.pris })
+                                    }
+                                  })
+
+                                  // Funksjon som faktisk legger inn prisene
+                                  const applyUEPrices = (includeExtra) => {
+                                    updateKalkyler(kalkyler.map(kl => {
+                                      if (kl.id !== kalk.id) return kl
+                                      let newBds = (kl.bygningsdeler||[]).map(bd => {
+                                        const match = matchedPoster.find(mp => mp.bdId === bd.id)
+                                        if (!match) return bd
+                                        // Legg til eller oppdater UE-post i denne bygningsdelen
+                                        const ueKostnad = match.pris
+                                        const existingUE = (bd.underleverandorer||[]).find(u => u.source === 'ue_foresporsel')
+                                        if (existingUE) {
+                                          return { ...bd, underleverandorer: bd.underleverandorer.map(u => u.source === 'ue_foresporsel' ? { ...u, kostnad: ueKostnad, navn: uf.navn } : u) }
+                                        } else {
+                                          return { ...bd, underleverandorer: [...(bd.underleverandorer||[]), { id: Date.now() + Math.random()*1000, navn: uf.navn, beskrivelse: match.name, kostnad: ueKostnad, source: 'ue_foresporsel' }] }
+                                        }
+                                      })
+                                      // Legg til ekstra poster som nye bygningsdeler med UE-kostnad
+                                      if (includeExtra) {
+                                        extraPoster.forEach((ep, i) => {
+                                          newBds.push({
+                                            id: Date.now() + i + 500,
+                                            name: ep.name,
+                                            mengde: 1, enhet: 'RS',
+                                            arbeidsarter: [],
+                                            materialer: [],
+                                            underleverandorer: [{ id: Date.now() + i + 600, navn: uf.navn, beskrivelse: ep.name, kostnad: ep.pris, source: 'ue_foresporsel' }]
+                                          })
+                                        })
+                                      }
+                                      const utPris = uf.svar_pris * (1 + paaslag / 100)
+                                      return { ...kl,
+                                        bygningsdeler: newBds,
+                                        valgt_ue: { navn: uf.navn, innkjop: uf.svar_pris, paaslag, ut_pris: utPris, foresporsel_id: uf.foresporsel_id, svar_poster: uf.svar_poster },
+                                        ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, status: 'valgt' } : u.status === 'valgt' ? { ...u, status: 'mottatt' } : u)
+                                      }
+                                    }))
+                                  }
+
+                                  // Hvis det er ekstra poster, spør brukeren
+                                  if (extraPoster.length > 0) {
+                                    setShowUEExtraPoster({ kalkId: kalk.id, extraPoster, matchCount: matchedPoster.length, ueNavn: uf.navn, paaslag, apply: applyUEPrices })
+                                  } else {
+                                    applyUEPrices(false)
+                                  }
                                 }} style={{ width:'100%', background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'8px', fontSize:'13px', fontWeight:'700', cursor:'pointer', marginTop:'6px' }}>
                                   📥 Bruk dette tilbudet i kalkylen — {fmt(uf.svar_pris * (1 + (parseFloat(uf.paaslag ?? 15) / 100)))} ut til kunde
                                 </button>
@@ -17895,6 +17951,43 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'13px' }}>Ref: {showUESuccess.nr} · Svarfrist: 7 dager</p>
               <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'13px' }}>Når UE svarer, oppdateres kalkylen automatisk og du får et varsel.</p>
               <button onClick={() => setShowUESuccess(null)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'12px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UE ekstra poster confirmation */}
+      {showUEExtraPoster && (
+        <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={() => setShowUEExtraPoster(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+            <div style={{ padding:'24px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
+                <div style={{ width:'48px', height:'48px', borderRadius:'50%', background:'#fefce8', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>📋</div>
+                <div>
+                  <h3 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Ytterligere poster fra {showUEExtraPoster.ueNavn}</h3>
+                  <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{showUEExtraPoster.matchCount} poster ble matchet. UE har i tillegg priset følgende:</p>
+                </div>
+              </div>
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', marginBottom:'16px' }}>
+                {showUEExtraPoster.extraPoster.map((ep, i) => (
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: i < showUEExtraPoster.extraPoster.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                    <span style={{ fontSize:'13px', color:'#374151' }}>{ep.name}</span>
+                    <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{fmt(ep.pris)}</span>
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize:'13px', color:'#64748b', margin:'0 0 16px' }}>Vil du legge til disse postene i kalkylen som nye bygningsdeler med UE-kostnad?</p>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={() => { showUEExtraPoster.apply(false); setShowUEExtraPoster(null) }}
+                  style={{ flex:1, padding:'10px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>
+                  Nei, kun matchede poster
+                </button>
+                <button onClick={() => { showUEExtraPoster.apply(true); setShowUEExtraPoster(null) }}
+                  style={{ flex:1, padding:'10px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+                  Ja, legg til alle
+                </button>
+              </div>
             </div>
           </div>
         </div>
