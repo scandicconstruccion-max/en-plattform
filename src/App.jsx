@@ -5331,10 +5331,9 @@ function UESvarPage() {
   const [foresp, setForesp] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [pris, setPris] = useState('')
-  const [beskrivelse, setBeskrivelse] = useState('')
+  const [posterPriser, setPosterPriser] = useState({}) // {postId: pris}
   const [tidsplan, setTidsplan] = useState('')
-  const [betingelser, setBetingelser] = useState('')
+  const [forbehold, setForbehold] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -5342,65 +5341,60 @@ function UESvarPage() {
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token')
     if (!token) { setError('Ugyldig lenke'); setLoading(false); return }
-
     supabase.from('ue_foresporsler').select('*').eq('svar_token', token).single()
       .then(({ data, error: e }) => {
         if (e || !data) { setError('Forespørselen ble ikke funnet eller er utløpt'); setLoading(false); return }
         setForesp(data)
-        if (data.status === 'mottatt' || data.status === 'godkjent') {
-          setPris(data.svar_pris || '')
-          setBeskrivelse(data.svar_beskrivelse || '')
-          setTidsplan(data.svar_tidsplan || '')
+        if (data.svar_poster && data.svar_poster.length > 0) {
+          const priser = {}
+          data.svar_poster.forEach(p => { priser[p.id] = p.pris })
+          setPosterPriser(priser)
         }
+        if (data.svar_tidsplan) setTidsplan(data.svar_tidsplan)
+        if (data.svar_forbehold) setForbehold(data.svar_forbehold)
         setLoading(false)
       })
   }, [])
 
+  const totalPris = Object.values(posterPriser).reduce((s, p) => s + (parseFloat(p) || 0), 0)
+
   const handleSubmit = async () => {
-    if (!pris || parseFloat(pris) <= 0) return alert('Vennligst oppgi en pris')
+    const poster = (foresp.poster || [])
+    const prisedPoster = poster.filter(p => parseFloat(posterPriser[p.id]) > 0)
+    if (prisedPoster.length === 0) return alert('Vennligst pris minst én post')
     setSending(true)
     try {
+      const svarPoster = poster.map(p => ({ id: p.id, name: p.name, pris: parseFloat(posterPriser[p.id]) || 0 }))
       const { error: e } = await supabase.from('ue_foresporsler').update({
-        svar_pris: parseFloat(pris),
-        svar_beskrivelse: beskrivelse,
-        svar_tidsplan: tidsplan,
-        svar_betingelser: betingelser,
-        svar_dato: new Date().toISOString(),
-        status: 'mottatt',
-        updated_at: new Date().toISOString(),
+        svar_pris: totalPris, svar_poster: svarPoster, svar_tidsplan: tidsplan,
+        svar_forbehold: forbehold, svar_dato: new Date().toISOString(),
+        status: 'mottatt', updated_at: new Date().toISOString(),
       }).eq('id', foresp.id)
       if (e) throw e
 
-      // Opprett varsel i systemet for TE
+      // Varsel + e-post til TE
       await supabase.from('notifications').insert({
         user_id: foresp.user_id,
         title: `🤝 Nytt UE-tilbud mottatt fra ${foresp.ue_navn}`,
-        message: `${foresp.ue_navn} har levert tilbud på ${fmt(parseFloat(pris))} for "${foresp.oppgave_navn}" i prosjekt ${foresp.prosjekt_navn}. Ref: ${foresp.foresporsel_nr}`,
-        type: 'info',
-        link_page: 'kalkulator'
+        message: `${foresp.ue_navn} har levert tilbud på ${Math.round(totalPris).toLocaleString('nb-NO')} kr for "${foresp.oppgave_navn}" i prosjekt ${foresp.prosjekt_navn}. Ref: ${foresp.foresporsel_nr}`,
+        type: 'info', link_page: 'kalkulator'
       })
-
-      // Send e-post til TE
       try {
         const { data: teUser } = await supabase.from('profiles').select('email').eq('id', foresp.user_id).single()
         if (teUser?.email) {
+          const posterTable = svarPoster.filter(p => p.pris > 0).map(p => `<tr><td style="padding:6px 12px;font-size:13px">${p.name}</td><td style="padding:6px 12px;text-align:right;font-weight:600">${Math.round(p.pris).toLocaleString('nb-NO')} kr</td></tr>`).join('')
           const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
             <h1 style="color:#0f172a;font-size:20px;margin:0 0 8px">🤝 Nytt tilbud mottatt</h1>
-            <p style="color:#64748b;font-size:13px;margin:0 0 20px">Ref: ${foresp.foresporsel_nr}</p>
+            <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Ref: ${foresp.foresporsel_nr}</p>
             <div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe">
               <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:6px">TILBUD FRA ${foresp.ue_navn.toUpperCase()}</div>
-              <div style="font-size:24px;font-weight:800;color:#0f172a;margin-bottom:4px">${Math.round(parseFloat(pris)).toLocaleString('nb-NO')} kr</div>
-              <div style="font-size:13px;color:#64748b">Oppgave: ${foresp.oppgave_navn}</div>
-              <div style="font-size:13px;color:#64748b">Prosjekt: ${foresp.prosjekt_navn}</div>
-              ${tidsplan ? `<div style="font-size:13px;color:#64748b;margin-top:4px">📅 ${tidsplan}</div>` : ''}
+              <table style="width:100%;border-collapse:collapse">${posterTable}
+                <tr style="border-top:2px solid #0f172a"><td style="padding:10px 12px;font-weight:800;font-size:15px">TOTALT</td><td style="padding:10px 12px;text-align:right;font-weight:800;font-size:15px">${Math.round(totalPris).toLocaleString('nb-NO')} kr</td></tr>
+              </table>
+              ${tidsplan ? `<div style="font-size:13px;color:#64748b;margin-top:8px">📅 ${tidsplan}</div>` : ''}
+              ${forbehold ? `<div style="font-size:13px;color:#92400e;margin-top:4px">⚠️ Forbehold: ${forbehold}</div>` : ''}
             </div>
-            ${foresp.estimert_kostnad > 0 ? `<div style="background:#f8fafc;border-radius:10px;padding:12px;font-size:13px;margin-bottom:16px">
-              <div>Ditt estimat: ${Math.round(foresp.estimert_kostnad).toLocaleString('nb-NO')} kr</div>
-              <div style="color:${parseFloat(pris) <= foresp.estimert_kostnad ? '#16a34a' : '#dc2626'};font-weight:600">Differanse: ${parseFloat(pris) <= foresp.estimert_kostnad ? '' : '+'}${Math.round(parseFloat(pris) - foresp.estimert_kostnad).toLocaleString('nb-NO')} kr</div>
-            </div>` : ''}
             <p style="color:#475569;font-size:14px">Logg inn i En Plattform for å godkjenne eller avslå tilbudet.</p>
-            <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
-            <p style="color:#94a3b8;font-size:12px">Varsling fra En Plattform</p>
           </div>`
           await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
             method: 'POST',
@@ -5408,47 +5402,22 @@ function UESvarPage() {
             body: JSON.stringify({ to: teUser.email, subject: `Nytt UE-tilbud fra ${foresp.ue_navn} – ${foresp.prosjekt_navn}`, html: emailHtml })
           })
         }
-      } catch(emailErr) { /* E-post-feil skal ikke stoppe prosessen */ }
-
+      } catch(ee) {}
       setSent(true)
     } catch(e) { alert('Feil: ' + e.message) }
     finally { setSending(false) }
   }
 
-  if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ textAlign:'center' }}>
-        <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #2563eb', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
-        <p style={{ color:'#94a3b8' }}>Laster forespørsel...</p>
-      </div>
-    </div>
-  )
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #2563eb', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} /><p style={{ color:'#94a3b8' }}>Laster forespørsel...</p></div></div>
+  if (error) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center', maxWidth:'400px', padding:'40px' }}><div style={{ fontSize:'48px', marginBottom:'12px' }}>⚠️</div><h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>{error}</h2><p style={{ color:'#64748b', fontSize:'14px' }}>Kontakt oppdragsgiveren for en ny lenke.</p></div></div>
+  if (sent) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center', maxWidth:'440px', padding:'40px', background:'white', borderRadius:'20px', boxShadow:'0 4px 24px rgba(0,0,0,0.08)' }}><div style={{ width:'64px', height:'64px', borderRadius:'50%', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'32px' }}>✅</div><h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>Tilbud sendt!</h2><p style={{ color:'#64748b', fontSize:'14px', lineHeight:1.6 }}>Takk for ditt tilbud på <strong>{Math.round(totalPris).toLocaleString('nb-NO')} kr</strong>. Oppdragsgiveren mottar svaret ditt og tar kontakt.</p></div></div>
 
-  if (error) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ textAlign:'center', maxWidth:'400px', padding:'40px' }}>
-        <div style={{ fontSize:'48px', marginBottom:'12px' }}>⚠️</div>
-        <h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>{error}</h2>
-        <p style={{ color:'#64748b', fontSize:'14px' }}>Kontakt oppdragsgiveren for en ny lenke.</p>
-      </div>
-    </div>
-  )
-
-  if (sent) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ textAlign:'center', maxWidth:'440px', padding:'40px', background:'white', borderRadius:'20px', boxShadow:'0 4px 24px rgba(0,0,0,0.08)' }}>
-        <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'32px' }}>✅</div>
-        <h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>Tilbud sendt!</h2>
-        <p style={{ color:'#64748b', fontSize:'14px', lineHeight:1.6 }}>Takk for ditt tilbud på <strong>{fmt(parseFloat(pris))}</strong>. Oppdragsgiveren mottar svaret ditt automatisk og tar kontakt.</p>
-      </div>
-    </div>
-  )
-
+  const poster = foresp.poster || []
   const alreadyAnswered = foresp.status === 'mottatt' || foresp.status === 'godkjent'
 
   return (
     <div style={{ minHeight:'100vh', background:'#f8fafc', fontFamily:'system-ui,sans-serif', padding:'20px' }}>
-      <div style={{ maxWidth:'560px', margin:'0 auto' }}>
+      <div style={{ maxWidth:'640px', margin:'0 auto' }}>
         {/* Header */}
         <div style={{ background:'white', borderRadius:'16px', padding:'24px', marginBottom:'16px', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px' }}>
@@ -5458,8 +5427,7 @@ function UESvarPage() {
               <span style={{ fontSize:'12px', color:'#94a3b8' }}>{foresp.foresporsel_nr}</span>
             </div>
           </div>
-
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
             <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>PROSJEKT</div>
               <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{foresp.prosjekt_navn}</div>
@@ -5471,55 +5439,82 @@ function UESvarPage() {
               {foresp.oppgave_beskrivelse && <div style={{ fontSize:'12px', color:'#64748b' }}>{foresp.oppgave_beskrivelse}</div>}
             </div>
           </div>
-
-          {foresp.estimert_kostnad > 0 && (
-            <div style={{ fontSize:'13px', color:'#64748b', background:'#fefce8', padding:'8px 12px', borderRadius:'8px', border:'1px solid #fde68a' }}>
-              Estimert budsjett: <strong>{fmt(foresp.estimert_kostnad)}</strong>
+          {/* Vedlegg */}
+          {(foresp.vedlegg||[]).length > 0 && (
+            <div style={{ marginTop:'12px', background:'#fefce8', borderRadius:'8px', padding:'10px 12px', border:'1px solid #fde68a' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#92400e', marginBottom:'4px' }}>📎 VEDLAGTE TEGNINGER / DOKUMENTER</div>
+              {foresp.vedlegg.map((v, i) => (
+                <a key={i} href={v.url} target="_blank" rel="noopener" style={{ display:'block', fontSize:'13px', color:'#2563eb', textDecoration:'underline', marginBottom:'2px' }}>{v.name}</a>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Svar-skjema */}
+        {/* Postvis prising */}
         <div style={{ background:'white', borderRadius:'16px', padding:'24px', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
-          <h2 style={{ margin:'0 0 16px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>{alreadyAnswered ? '✅ Ditt tilbud er innsendt' : 'Legg inn ditt tilbud'}</h2>
+          <h2 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>{alreadyAnswered ? '✅ Ditt tilbud er innsendt' : 'Pris per post'}</h2>
+          <p style={{ margin:'0 0 16px', fontSize:'13px', color:'#64748b' }}>Legg inn din pris for hver post nedenfor.</p>
 
-          <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
-            <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Din pris (kr) *</label>
-              <input type="number" value={pris} onChange={e => setPris(e.target.value)} placeholder="0" disabled={alreadyAnswered}
-                style={{ width:'100%', padding:'12px 14px', border:'2px solid #e2e8f0', borderRadius:'10px', fontSize:'18px', fontWeight:'700', outline:'none', boxSizing:'border-box', textAlign:'right', color:'#0f172a', background: alreadyAnswered ? '#f8fafc' : 'white' }} />
-            </div>
-            <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beskrivelse av arbeidet</label>
-              <textarea value={beskrivelse} onChange={e => setBeskrivelse(e.target.value)} rows={3} placeholder="Hva inkluderer tilbudet?" disabled={alreadyAnswered}
-                style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none', fontFamily:'system-ui,sans-serif' }} />
-            </div>
-            <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tidsplan</label>
-              <input value={tidsplan} onChange={e => setTidsplan(e.target.value)} placeholder="F.eks. Kan starte uke 20, ferdig innen 5 dager" disabled={alreadyAnswered}
-                style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
-            </div>
-            <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Betingelser</label>
-              <input value={betingelser} onChange={e => setBetingelser(e.target.value)} placeholder="F.eks. Betaling 14 dager netto" disabled={alreadyAnswered}
-                style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
-            </div>
-
-            {!alreadyAnswered && (
-              <button onClick={handleSubmit} disabled={sending}
-                style={{ width:'100%', padding:'14px', background:sending?'#93c5fd':'#2563eb', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor:sending?'not-allowed':'pointer', marginTop:'8px' }}>
-                {sending ? 'Sender...' : '📋 Send tilbud'}
-              </button>
-            )}
-
-            {alreadyAnswered && (
-              <div style={{ textAlign:'center', padding:'12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0', fontSize:'14px', color:'#16a34a', fontWeight:'600' }}>
-                {foresp.status === 'godkjent' ? '✅ Ditt tilbud er godkjent!' : '📨 Tilbudet er mottatt — venter på svar fra oppdragsgiver'}
-              </div>
-            )}
+          {/* Poster-tabell */}
+          <div style={{ border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden', marginBottom:'16px' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead><tr style={{ background:'#f8fafc' }}>
+                <th style={{ padding:'8px 14px', textAlign:'left', fontSize:'12px', fontWeight:'600', color:'#94a3b8' }}>Post</th>
+                <th style={{ padding:'8px 10px', textAlign:'right', fontSize:'12px', fontWeight:'600', color:'#94a3b8', width:'70px' }}>Mengde</th>
+                <th style={{ padding:'8px 10px', fontSize:'12px', fontWeight:'600', color:'#94a3b8', width:'50px' }}>Enh.</th>
+                <th style={{ padding:'8px 14px', textAlign:'right', fontSize:'12px', fontWeight:'600', color:'#94a3b8', width:'130px' }}>Din pris (kr)</th>
+              </tr></thead>
+              <tbody>
+                {poster.map(p => (
+                  <tr key={p.id} style={{ borderTop:'1px solid #f1f5f9' }}>
+                    <td style={{ padding:'10px 14px' }}>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.name}</div>
+                      {p.beskrivelse && <div style={{ fontSize:'11px', color:'#94a3b8' }}>{p.beskrivelse}</div>}
+                    </td>
+                    <td style={{ padding:'10px 10px', textAlign:'right', fontSize:'13px', color:'#64748b' }}>{p.mengde}</td>
+                    <td style={{ padding:'10px 10px', fontSize:'13px', color:'#64748b' }}>{p.enhet}</td>
+                    <td style={{ padding:'6px 10px' }}>
+                      <input type="number" value={posterPriser[p.id]||''} onChange={e => setPosterPriser(pp => ({ ...pp, [p.id]: e.target.value }))}
+                        placeholder="0" disabled={alreadyAnswered}
+                        style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'14px', fontWeight:'600', textAlign:'right', outline:'none', boxSizing:'border-box', background: alreadyAnswered ? '#f8fafc' : 'white' }} />
+                    </td>
+                  </tr>
+                ))}
+                {/* Total row */}
+                <tr style={{ borderTop:'2px solid #0f172a', background:'#f0fdf4' }}>
+                  <td colSpan="3" style={{ padding:'12px 14px', fontWeight:'800', fontSize:'14px', color:'#0f172a' }}>TOTALSUM</td>
+                  <td style={{ padding:'12px 14px', textAlign:'right', fontWeight:'800', fontSize:'16px', color:'#059669' }}>{Math.round(totalPris).toLocaleString('nb-NO')} kr</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
 
+          {/* Tidsplan */}
+          <div style={{ marginBottom:'12px' }}>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tidsplan</label>
+            <input value={tidsplan} onChange={e => setTidsplan(e.target.value)} placeholder="F.eks. Kan starte uke 20, ferdig innen 5 dager" disabled={alreadyAnswered}
+              style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
+          </div>
+
+          {/* Forbehold */}
+          <div style={{ marginBottom:'16px' }}>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Eventuelle forbehold</label>
+            <textarea value={forbehold} onChange={e => setForbehold(e.target.value)} rows={3} placeholder="F.eks. Forutsetter tilgang til byggstrøm, tørt arbeidsunderlag etc." disabled={alreadyAnswered}
+              style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none', fontFamily:'system-ui,sans-serif' }} />
+          </div>
+
+          {!alreadyAnswered && (
+            <button onClick={handleSubmit} disabled={sending}
+              style={{ width:'100%', padding:'14px', background:sending?'#93c5fd':'#2563eb', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor:sending?'not-allowed':'pointer' }}>
+              {sending ? 'Sender...' : `📋 Send tilbud — ${Math.round(totalPris).toLocaleString('nb-NO')} kr`}
+            </button>
+          )}
+          {alreadyAnswered && (
+            <div style={{ textAlign:'center', padding:'12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0', fontSize:'14px', color:'#16a34a', fontWeight:'600' }}>
+              {foresp.status === 'godkjent' ? '✅ Ditt tilbud er godkjent!' : '📨 Tilbudet er mottatt — venter på svar fra oppdragsgiver'}
+            </div>
+          )}
+        </div>
         <p style={{ textAlign:'center', color:'#94a3b8', fontSize:'12px', marginTop:'20px' }}>Tilbudsforespørsel via En Plattform</p>
       </div>
     </div>
@@ -17690,31 +17685,63 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               <input value={uf.email||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, email: e.target.value } } : kl))} placeholder="ue@firma.no" type="email" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
                               <input value={uf.telefon||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, telefon: e.target.value } } : kl))} placeholder="Telefon" style={{ ...qInp, width:'100px', fontSize:'12px', padding:'6px 8px' }} />
                             </div>
+                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
+                              <input value={uf.beskrivelse||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, beskrivelse: e.target.value } } : kl))} placeholder="Generell beskrivelse (valgfritt)" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                            </div>
+                            {/* Vedlegg/tegninger */}
+                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px' }}>
+                              <span style={{ fontSize:'12px', color:'#64748b' }}>📎 Vedlegg/tegninger:</span>
+                              {(uf.vedlegg||[]).map((v, vi) => (
+                                <span key={vi} style={{ background:'#f1f5f9', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', color:'#475569' }}>
+                                  {v.name} <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, vedlegg: (kl.ue_foresporsel.vedlegg||[]).filter((_,i)=>i!==vi) } } : kl))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px' }}>×</button>
+                                </span>
+                              ))}
+                              <label style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', cursor:'pointer', color:'#64748b' }}>
+                                + Last opp
+                                <input type="file" style={{ display:'none' }} onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  const path = `ue-vedlegg/${Date.now()}_${file.name}`
+                                  const { error } = await supabase.storage.from('project-files').upload(path, file)
+                                  if (error) { alert('Feil ved opplasting: ' + error.message); return }
+                                  const { data: { publicUrl } } = supabase.storage.from('project-files').getPublicUrl(path)
+                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, vedlegg: [...(kl.ue_foresporsel.vedlegg||[]), { name: file.name, url: publicUrl }] } } : kl))
+                                  e.target.value = ''
+                                }} />
+                              </label>
+                            </div>
                             <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                              <input value={uf.beskrivelse||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, beskrivelse: e.target.value } } : kl))} placeholder="Beskrivelse av arbeidet" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
-                              {uf.status === 'utkast' && <button onClick={async () => {
+                              {uf.status === 'utkast' && (kalk.bygningsdeler||[]).length === 0 && <span style={{ fontSize:'11px', color:'#dc2626' }}>Legg til bygningsdeler først</span>}
+                              {uf.status === 'utkast' && (kalk.bygningsdeler||[]).length > 0 && <button onClick={async () => {
                                 if (!uf.email || !uf.navn) return alert('Fyll inn UE-navn og e-post')
                                 try {
                                   const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
                                   const fag = getFaggruppe(kalk.fag)
-                                  const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
-                                  const kt = beregnKalkyle(kalk, fakt)
-                                  // Bygg liste over bygningsdeler for beskrivelsen
-                                  const bdListe = (kalk.bygningsdeler||[]).map(bd => `• ${bd.name || 'Bygningsdel'} (${bd.mengde||1} ${bd.enhet||'stk'})`).join('\n')
+                                  // Build poster fra bygningsdeler + standard "Annet/tillegg" post
+                                  const poster = [
+                                    ...(kalk.bygningsdeler||[]).map(bd => ({ id: bd.id, name: bd.name || 'Bygningsdel', mengde: bd.mengde || 1, enhet: bd.enhet || 'stk', beskrivelse: '' })),
+                                    { id: 'annet', name: 'Annet / tillegg', mengde: 1, enhet: 'RS', beskrivelse: 'Øvrige kostnader som er nødvendig for å utføre arbeidet' }
+                                  ]
+                                  const vedleggUrls = (uf.vedlegg||[]).map(v => ({ name: v.name, url: v.url }))
 
                                   const { data: foresp, error } = await supabase.from('ue_foresporsler').insert({
                                     user_id: user?.id, calculation_id: k.id, kalkyle_fag: kalk.fag, bygningsdel_id: null, ue_post_id: null,
                                     foresporsel_nr: nr, prosjekt_navn: k.title, prosjekt_adresse: k.customer_address || '',
                                     ue_navn: uf.navn, ue_email: uf.email, ue_telefon: uf.telefon || '',
                                     oppgave_navn: `${fag.name} — komplett`,
-                                    oppgave_beskrivelse: uf.beskrivelse || `Komplett ${fag.name.toLowerCase()}-arbeid:\n${bdListe}`,
-                                    estimert_kostnad: kt.totMedFortjeneste,
+                                    oppgave_beskrivelse: uf.beskrivelse || '',
+                                    estimert_kostnad: 0,
+                                    poster: poster,
+                                    vedlegg: vedleggUrls,
                                     status: 'sendt',
                                     frist_dato: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
                                   }).select().single()
                                   if (error) throw error
 
                                   const svarUrl = `${window.location.origin}/ue-svar?token=${foresp.svar_token}`
+                                  const posterHtml = poster.map(p => `<tr><td style="padding:6px 12px;font-size:13px;color:#374151">${p.name}</td><td style="padding:6px 12px;text-align:right;font-size:13px;color:#64748b">${p.mengde} ${p.enhet}</td></tr>`).join('')
+                                  const vedleggHtml = vedleggUrls.length > 0 ? `<div style="margin-top:12px;font-size:13px;color:#64748b"><strong>📎 Vedlagte tegninger/dokumenter:</strong><br>${vedleggUrls.map(v => `<a href="${v.url}" style="color:#2563eb">${v.name}</a>`).join('<br>')}</div>` : ''
+
                                   const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
                                     <h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Tilbudsforespørsel</h1>
                                     <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Ref: ${nr}</p>
@@ -17724,11 +17751,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                       ${k.customer_address ? `<div style="font-size:13px;color:#64748b">${k.customer_address}</div>` : ''}
                                     </div>
                                     <div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe">
-                                      <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:6px">${fag.emoji} ${fag.name.toUpperCase()} — KOMPLETT</div>
+                                      <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:8px">${fag.emoji} ${fag.name.toUpperCase()}</div>
                                       ${uf.beskrivelse ? `<div style="font-size:13px;color:#374151;margin-bottom:8px">${uf.beskrivelse}</div>` : ''}
-                                      <div style="font-size:13px;color:#64748b;white-space:pre-line">${bdListe}</div>
+                                      <table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #e2e8f0">Post</th><th style="text-align:right;padding:4px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #e2e8f0">Mengde</th></tr></thead><tbody>${posterHtml}</tbody></table>
                                     </div>
-                                    <p style="color:#475569;font-size:14px;line-height:1.6">Vi ber om ditt tilbud på komplett ${fag.name.toLowerCase()}-arbeid for ovennevnte prosjekt.</p>
+                                    ${vedleggHtml}
+                                    <p style="color:#475569;font-size:14px;line-height:1.6">Vennligst pris hver post via knappen nedenfor.</p>
                                     <div style="text-align:center;margin:28px 0">
                                       <a href="${svarUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📋 Legg inn tilbud</a>
                                     </div>
@@ -17743,6 +17771,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   setShowUESuccess({ navn: uf.navn, nr })
                                 } catch(e) { alert('Feil: ' + e.message) }
                               }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>📧 Send forespørsel</button>}
+                              {uf.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
+                            </div>
                               {uf.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
                             </div>
                             {/* Mottatt svar */}
