@@ -109,6 +109,7 @@ const navGroups = [
   {
     title: 'ØKONOMI & KONTRAKT',
     items: [
+      { id: 'kalkulator', label: 'Kalkulasjon', emoji: '🧮' },
       { id: 'tilbud',      label: 'Tilbud',       emoji: '📋' },
       { id: 'anbudsmodul', label: 'Anbudsmodul',  emoji: '⚖️' },
       { id: 'ordre',       label: 'Ordre',         emoji: '📝' },
@@ -153,6 +154,7 @@ const moduleCards = [
   { id: 'hms', name: 'HMS & Risiko', desc: 'Helse, miljø og sikkerhet', emoji: '🛡️', color: '#fef2f2' },
   { id: 'maskiner', name: 'Maskiner', desc: 'Maskin- og utstyrsregister', emoji: '🚜', color: '#fff7ed' },
   { id: 'tilbud', name: 'Tilbud', desc: 'Tilbudsadministrasjon', emoji: '📋', color: '#ecfeff' },
+  { id: 'kalkulator', name: 'Kalkulasjon', desc: 'Kostnadskalkulasjon og fortjeneste', emoji: '🧮', color: '#fef9c3' },
   { id: 'anbudsmodul', name: 'Anbudsportal', desc: 'Leverandøranbud', emoji: '⚖️', color: '#fff7ed' },
   { id: 'ordre', name: 'Ordre', desc: 'Arbeidsordre', emoji: '📝', color: '#eef2ff' },
   { id: 'faktura', name: 'Faktura', desc: 'Fakturering', emoji: '🧾', color: '#f0fdf4' },
@@ -179,7 +181,7 @@ const moduleSections = [
   },
   {
     title: '💰 ØKONOMI & KONTRAKT',
-    modules: ['tilbud', 'anbudsmodul', 'ordre', 'faktura'],
+    modules: ['kalkulator', 'tilbud', 'anbudsmodul', 'ordre', 'faktura'],
   },
   {
     title: '👷 PERSONELL & RESSURSER',
@@ -1009,7 +1011,7 @@ function ProsjektfilerPage() {
       }
       setShowUpload(false)
       setUploadFiles([])
-      setUploadForm({ project_id: selectedProject !== 'all' ? selectedProject : '', category: selectedCategory || 'annet', sub: selectedSub || '', description: '', access_level: 'alle' })
+      setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
       await loadData()
     } catch(e) { alert('Feil ved opplasting: ' + e.message) }
     finally { setUploading(false) }
@@ -1096,7 +1098,7 @@ function ProsjektfilerPage() {
       {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-        <button onClick={() => { setUploadForm(f => ({ ...f, project_id: selectedProject !== 'all' ? selectedProject : (f.project_id || ''), category: selectedCategory || f.category || 'annet', sub: selectedSub || '' })); setShowUpload(true) }} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
+        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
           ⬆️ Last opp fil
         </button>
       </div>
@@ -14409,8 +14411,17 @@ const MODULE_CATALOG = [
     desc: 'Dashboard, Prosjekter, Sjekklister, Avvik, HMS & Risiko og Maskiner',
     emoji: '🔹',
     pricePerUser: 139,
-    required: true,
+    required: false,
     includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner'],
+  },
+  {
+    id: 'kalkulator',
+    name: 'Kalkulasjon',
+    desc: 'Kostnadskalkulasjon med påslag, fortjeneste og tilbudsgenerering',
+    emoji: '🧮',
+    price: 99,
+    navId: 'kalkulator',
+    standalone: true, // Can be purchased without grunnpakke
   },
   {
     id: 'tilbud',
@@ -14918,6 +14929,7 @@ const ALL_MODULES_LIST = [
   { id:'hms',          label:'HMS & Risiko',       emoji:'🛡️' },
   { id:'maskiner',     label:'Maskiner',           emoji:'🚜' },
   { id:'tilbud',       label:'Tilbud',             emoji:'📋' },
+  { id:'kalkulator',   label:'Kalkulasjon',        emoji:'🧮' },
   { id:'anbudsmodul',  label:'Anbudsmodul',        emoji:'⚖️' },
   { id:'ordre',        label:'Ordre',              emoji:'📝' },
   { id:'faktura',      label:'Faktura',            emoji:'🧾' },
@@ -15627,6 +15639,770 @@ function VarslerPage() {
 }
 
 // ─── END VARSLER PAGE ─────────────────────────────────────────────────────────
+
+// ─── LOCKED MODULE UPSELL PAGE ───────────────────────────────────────────────
+function LockedModulePage({ pageId, onNavigate }) {
+  const navItem = navItems.find(n => n?.id === pageId)
+  const modDef = MODULE_CATALOG.find(m => m.navId === pageId || m.id === pageId)
+  const emoji = navItem?.emoji || modDef?.emoji || '🔒'
+  const label = navItem?.label || modDef?.name || pageId
+  const desc = modDef?.desc || ''
+  const price = modDef?.price || modDef?.pricePerUser || 0
+
+  // Features preview for common modules
+  const featurePreviews = {
+    kalkulator: ['Kostnadskalkulasjon med kapitler og poster', 'Automatisk påslag og fortjenesteberegning', 'Generer tilbud direkte fra kalkulasjon', 'Maler for rask gjenbruk', 'Budsjett vs. faktisk oppfølging', 'Rapporter og statistikk'],
+    tilbud: ['Profesjonelle tilbud med PDF-generering', 'Send tilbud direkte til kunder', 'Kundeportal med digital godkjenning', 'Tilbudshistorikk og statusoppfølging'],
+    faktura: ['Fakturering med EHF-støtte', 'Automatisk purring', 'Betalingsoversikt', 'Integrasjon med regnskap'],
+    timelister: ['Timeføring per prosjekt', 'Godkjenningsflyt', 'Overtidsberegning', 'Eksport til lønnssystem'],
+    ansatte: ['Personalregister', 'Kompetanseoversikt', 'Sertifikat-varsler', 'Organisasjonskart'],
+    crm: ['Salgspipeline', 'Kundeoppfølging', 'Aktivitetslogg', 'Rapport og innsikt'],
+  }
+  const features = featurePreviews[pageId] || [desc]
+
+  return (
+    <div style={{ fontFamily: 'system-ui, sans-serif', minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px' }}>
+      <div style={{ maxWidth: '560px', width: '100%', textAlign: 'center' }}>
+        {/* Lock icon */}
+        <div style={{ width: '80px', height: '80px', borderRadius: '24px', background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '36px' }}>
+          🔒
+        </div>
+
+        <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a', margin: '0 0 8px' }}>{emoji} {label}</h1>
+        <p style={{ color: '#64748b', fontSize: '15px', margin: '0 0 32px', lineHeight: 1.6 }}>
+          Denne modulen er ikke inkludert i ditt nåværende abonnement. Aktiver den for å få tilgang til alle funksjonene.
+        </p>
+
+        {/* Feature list */}
+        <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '24px', textAlign: 'left', marginBottom: '24px', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Hva du får tilgang til:</div>
+          {features.map((f, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+              <span style={{ color: '#059669', fontSize: '16px', flexShrink: 0, marginTop: '1px' }}>✓</span>
+              <span style={{ color: '#374151', fontSize: '14px', lineHeight: 1.5 }}>{f}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Price */}
+        {price > 0 && (
+          <div style={{ background: 'linear-gradient(135deg, #059669, #0891b2)', borderRadius: '16px', padding: '20px 28px', color: 'white', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: '13px', opacity: 0.9 }}>Fra kun</div>
+              <div style={{ fontSize: '28px', fontWeight: '800' }}>{price} kr<span style={{ fontSize: '14px', fontWeight: '400', opacity: 0.8 }}>/mnd</span></div>
+            </div>
+            <div style={{ fontSize: '12px', opacity: 0.85, textAlign: 'right', lineHeight: 1.6 }}>Ubegrenset<br/>brukere</div>
+          </div>
+        )}
+
+        {/* CTA */}
+        <button onClick={() => onNavigate('minbedrift')}
+          style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '12px', padding: '14px 32px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', width: '100%', marginBottom: '12px', boxShadow: '0 4px 14px rgba(5,150,105,0.3)' }}>
+          Aktiver {label} →
+        </button>
+        <button onClick={() => onNavigate('dashboard')}
+          style={{ background: 'transparent', color: '#64748b', border: 'none', fontSize: '13px', cursor: 'pointer', padding: '8px' }}>
+          ← Tilbake til dashboard
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── KALKULASJON MODULE ──────────────────────────────────────────────────────
+
+const KALK_CATEGORIES = [
+  { id: 'rigg',         name: 'Rigg & drift',          emoji: '🏗️', defaultMarkup: 15 },
+  { id: 'grunn',        name: 'Grunn & fundamenter',   emoji: '🪨', defaultMarkup: 20 },
+  { id: 'baresystem',   name: 'Bæresystem',            emoji: '🏛️', defaultMarkup: 20 },
+  { id: 'utvendig',     name: 'Utvendig',              emoji: '🧱', defaultMarkup: 20 },
+  { id: 'innvendig',    name: 'Innvendig',             emoji: '🪟', defaultMarkup: 20 },
+  { id: 'vvs',          name: 'VVS',                   emoji: '🔧', defaultMarkup: 15 },
+  { id: 'elektro',      name: 'Elektro',               emoji: '⚡', defaultMarkup: 15 },
+  { id: 'underleverandor', name: 'Underleverandør',    emoji: '🤝', defaultMarkup: 10 },
+  { id: 'diverse',      name: 'Diverse',               emoji: '📦', defaultMarkup: 15 },
+]
+
+function calcKalkLine(line) {
+  const qty = parseFloat(line.qty) || 0
+  const workPrice = parseFloat(line.unitPriceWork) || 0
+  const matPrice = parseFloat(line.unitPriceMaterial) || 0
+  const cost = qty * (workPrice + matPrice)
+  const markup = parseFloat(line.markup) || 0
+  return { cost, markupAmount: cost * markup / 100, total: cost * (1 + markup / 100) }
+}
+
+function calcKalkChapter(ch) {
+  const lines = ch.lines || []
+  const lineTotals = lines.reduce((acc, l) => {
+    const { cost, markupAmount, total } = calcKalkLine(l)
+    return { cost: acc.cost + cost, markupAmount: acc.markupAmount + markupAmount, total: acc.total + total }
+  }, { cost: 0, markupAmount: 0, total: 0 })
+  const chapterMarkup = parseFloat(ch.markup) || 0
+  const afterChapterMarkup = lineTotals.total * (1 + chapterMarkup / 100)
+  return { ...lineTotals, chapterMarkupAmount: lineTotals.total * chapterMarkup / 100, grandTotal: afterChapterMarkup }
+}
+
+function calcKalkulation(chapters, globalMarkup, riskMarkup) {
+  const chapterTotals = chapters.reduce((acc, ch) => {
+    const t = calcKalkChapter(ch)
+    return { cost: acc.cost + t.cost, markupAmount: acc.markupAmount + t.markupAmount + t.chapterMarkupAmount, grandTotal: acc.grandTotal + t.grandTotal }
+  }, { cost: 0, markupAmount: 0, grandTotal: 0 })
+  const gm = parseFloat(globalMarkup) || 0
+  const rm = parseFloat(riskMarkup) || 0
+  const afterGlobal = chapterTotals.grandTotal * (1 + gm / 100)
+  const afterRisk = afterGlobal * (1 + rm / 100)
+  const totalExMva = afterRisk
+  const mva = totalExMva * 0.25
+  const totalInkMva = totalExMva + mva
+  const totalMarkup = totalExMva - chapterTotals.cost
+  const profitPercent = totalExMva > 0 ? (totalMarkup / totalExMva) * 100 : 0
+  return { cost: chapterTotals.cost, totalMarkup, totalExMva, mva, totalInkMva, profitPercent }
+}
+
+function KalkulasjonPage({ onNavigate }) {
+  const { user } = useAuth()
+  const [kalks, setKalks] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [showEditor, setShowEditor] = useState(false)
+  const [editKalk, setEditKalk] = useState(null)
+  const [viewKalk, setViewKalk] = useState(null)
+
+  const load = async () => {
+    try {
+      const [k, p] = await Promise.all([
+        supabase.from('calculations').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        supabase.from('projects').select('id,name').order('name').then(r => r.data || [])
+      ])
+      setKalks(k); setProjects(p)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = kalks.filter(k => {
+    if (filterStatus !== 'alle' && k.status !== filterStatus) return false
+    if (search && ![k.title, k.customer_name, k.kalk_number].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Ferdig': 0 }
+  kalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
+
+  const KALK_STATUS_CFG = {
+    'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+    'Aktiv':       { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
+    'Tilbud sendt':{ bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
+    'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+  }
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
+        <p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster kalkulasjoner...</p>
+      </div>
+    </div>
+  )
+
+  if (viewKalk) return <KalkulasjonDetaljer kalk={viewKalk} projects={projects} user={user} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setViewKalk(null); setEditKalk(k); setShowEditor(true) }} />
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 Kalkulasjon</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Kostnadskalkulasjon med påslag og fortjenesteberegning</p>
+          </div>
+          <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+            + Ny kalkulasjon
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        {/* Status cards */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+          {Object.entries(KALK_STATUS_CFG).map(([s, cfg]) => (
+            <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
+              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+              <div style={{ fontSize:'20px', marginBottom:'8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{statusCounts[s]||0}</div>
+              <div style={{ fontSize:'11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk kalkulasjon, kunde, nummer..." style={{ ...qInp, maxWidth:'300px', flex:1 }} />
+          {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kalkulasjoner</span>
+        </div>
+
+        {/* List */}
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🧮</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen kalkulasjoner funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{kalks.length===0 ? 'Opprett din første kalkulasjon.' : 'Prøv å endre søk eller filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(k => {
+              const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
+              const proj = projects.find(p => p.id === k.project_id)
+              const totals = calcKalkulation(k.chapters || [], k.global_markup, k.risk_markup)
+              return (
+                <div key={k.id} onClick={() => setViewKalk(k)}
+                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{k.title}</span>
+                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
+                      <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {k.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {k.customer_name}</span>}
+                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      <span style={{ fontSize:'12px', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626', fontWeight:'600' }}>📊 {totals.profitPercent.toFixed(1)}% margin</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(totals.totalExMva)}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                  </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showEditor && <KalkulasjonEditorModal projects={projects} user={user} initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
+    </div>
+  )
+}
+
+// ─── KALKULASJON EDITOR MODAL ────────────────────────────────────────────────
+function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const confirm = useConfirm()
+  const isEdit = !!initial
+  const [step, setStep] = useState(1)
+  const [form, setForm] = useState({
+    title: initial?.title || '',
+    kalk_number: initial?.kalk_number || `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    project_id: initial?.project_id || '',
+    customer_name: initial?.customer_name || '',
+    customer_address: initial?.customer_address || '',
+    global_markup: initial?.global_markup ?? 0,
+    risk_markup: initial?.risk_markup ?? 0,
+    notes: initial?.notes || '',
+  })
+  const [chapters, setChapters] = useState(initial?.chapters || [
+    { id: Date.now(), title: 'Generelt', categoryId: 'diverse', markup: 0, lines: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: 20 }] }
+  ])
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Chapter helpers
+  const addChapter = (catId) => {
+    const cat = KALK_CATEGORIES.find(c => c.id === catId) || KALK_CATEGORIES[KALK_CATEGORIES.length-1]
+    setChapters(c => [...c, { id: Date.now(), title: cat.name, categoryId: cat.id, markup: 0, lines: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat.defaultMarkup }] }])
+  }
+  const removeChapter = (id) => setChapters(c => c.filter(x => x.id !== id))
+  const updateChapter = (id, f, v) => setChapters(c => c.map(x => x.id === id ? { ...x, [f]: v } : x))
+  const addLine = (chId) => {
+    const ch = chapters.find(c => c.id === chId)
+    const cat = KALK_CATEGORIES.find(c => c.id === ch?.categoryId)
+    setChapters(c => c.map(x => x.id === chId ? { ...x, lines: [...x.lines, { id: Date.now(), description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat?.defaultMarkup || 20 }] } : x))
+  }
+  const removeLine = (chId, lId) => setChapters(c => c.map(x => x.id === chId ? { ...x, lines: x.lines.filter(l => l.id !== lId) } : x))
+  const updateLine = (chId, lId, f, v) => setChapters(c => c.map(x => x.id === chId ? { ...x, lines: x.lines.map(l => l.id === lId ? { ...l, [f]: v } : l) } : x))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    setSaving(true)
+    try {
+      const totals = calcKalkulation(chapters, form.global_markup, form.risk_markup)
+      const payload = { ...form, chapters, total_cost: totals.cost, total_ex_mva: totals.totalExMva, profit_percent: totals.profitPercent, updated_at: new Date().toISOString(), project_id: form.project_id || null }
+      if (isEdit) {
+        const { error } = await supabase.from('calculations').update(payload).eq('id', initial.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('calculations').insert({ ...payload, status: 'Utkast', created_by: user?.id })
+        if (error) throw error
+      }
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+  const totals = calcKalkulation(chapters, form.global_markup, form.risk_markup)
+
+  const [showCatPicker, setShowCatPicker] = useState(false)
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1000px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        {/* Header */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger' : 'Ny'} kalkulasjon</h2>
+            <div style={{ display:'flex', gap:'4px' }}>
+              {[['1','Prosjektinfo'],['2','Kostnader'],['3','Sammendrag']].map(([n, label]) => (
+                <button key={n} onClick={() => setStep(+n)}
+                  style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize:'13px', cursor:'pointer' }}>
+                  {n}. {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'11px', color:'#94a3b8' }}>Salgspris eks. mva</div>
+              <div style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>{fmt(totals.totalExMva)}</div>
+            </div>
+            <div style={{ width:'1px', height:'32px', background:'#f1f5f9' }} />
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'11px', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>Margin</div>
+              <div style={{ fontSize:'16px', fontWeight:'800', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>{totals.profitPercent.toFixed(1)}%</div>
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+          {/* STEP 1 - Info */}
+          {step === 1 && (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px', maxWidth:'700px' }}>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Kalkulasjons-tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Baderomsrenovering Strandveien 12" style={qInp} /></div>
+              <div>{lbl('Kalkulasjonsnummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
+              <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Prosjektadresse" style={qInp} /></div>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater om prosjektet..." style={{ ...qInp, resize:'none' }} /></div>
+            </div>
+          )}
+
+          {/* STEP 2 - Chapters & lines */}
+          {step === 2 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+              {chapters.map((ch, ci) => {
+                const cat = KALK_CATEGORIES.find(c => c.id === ch.categoryId)
+                const chTotals = calcKalkChapter(ch)
+                return (
+                  <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+                    {/* Chapter header */}
+                    <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
+                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <span style={{ fontSize:'16px', flexShrink:0 }}>{cat?.emoji || '📦'}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
+                      <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                        <span style={{ fontSize:'11px', color:'#94a3b8' }}>Kap.påslag</span>
+                        <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...qInp, width:'70px', textAlign:'right' }} />
+                        <span style={{ fontSize:'12px', color:'#94a3b8' }}>%</span>
+                      </div>
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap', minWidth:'100px', textAlign:'right' }}>{fmt(chTotals.grandTotal)}</span>
+                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                    </div>
+                    {/* Lines table */}
+                    <div style={{ padding:'14px 18px', overflowX:'auto' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'800px' }}>
+                        <thead>
+                          <tr>
+                            {['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Påslag %','Kostnad','Ink. påslag',''].map((h,i) => (
+                              <th key={i} style={{ padding:'6px 8px', textAlign:i>=3?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(ch.lines||[]).map(l => {
+                            const lt = calcKalkLine(l)
+                            return (
+                              <tr key={l.id}>
+                                <td style={{ padding:'6px 4px' }}><input value={l.description} onChange={e=>updateLine(ch.id,l.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...qInp, minWidth:'160px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.qty} onChange={e=>updateLine(ch.id,l.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input value={l.unit} onChange={e=>updateLine(ch.id,l.id,'unit',e.target.value)} style={{ ...qInp, width:'55px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.unitPriceWork} onChange={e=>updateLine(ch.id,l.id,'unitPriceWork',e.target.value)} style={{ ...qInp, width:'100px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.unitPriceMaterial} onChange={e=>updateLine(ch.id,l.id,'unitPriceMaterial',e.target.value)} style={{ ...qInp, width:'100px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={l.markup} onChange={e=>updateLine(ch.id,l.id,'markup',e.target.value)} min="0" max="200" style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 8px', textAlign:'right', color:'#64748b', whiteSpace:'nowrap', fontSize:'13px' }}>{fmt(lt.cost)}</td>
+                                <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap', fontSize:'13px' }}>{fmt(lt.total)}</td>
+                                <td style={{ padding:'6px 4px' }}>{(ch.lines||[]).length>1&&<button onClick={()=>removeLine(ch.id,l.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'10px' }}>
+                        <button onClick={()=>addLine(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
+                        <div style={{ fontSize:'13px', color:'#64748b' }}>
+                          Kostnad: <strong>{fmt(chTotals.cost)}</strong>
+                          {' → '}
+                          Ink. påslag: <strong style={{ color:'#059669' }}>{fmt(chTotals.grandTotal)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Add chapter picker */}
+              <div style={{ position:'relative' }}>
+                <button onClick={() => setShowCatPicker(!showCatPicker)} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
+                {showCatPicker && (
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'8px', zIndex:10, marginTop:'4px', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px' }}>
+                    {KALK_CATEGORIES.map(cat => (
+                      <button key={cat.id} onClick={() => { addChapter(cat.id); setShowCatPicker(false) }}
+                        style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 12px', cursor:'pointer', textAlign:'left', fontSize:'13px', display:'flex', alignItems:'center', gap:'8px' }}>
+                        <span>{cat.emoji}</span> {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Global markups */}
+              <div style={{ background:'#f8fafc', borderRadius:'14px', padding:'18px 24px', border:'1px solid #f1f5f9' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>Generelle påslag</div>
+                <div style={{ display:'flex', gap:'20px', flexWrap:'wrap' }}>
+                  <div>
+                    {lbl('Generelt påslag %')}
+                    <input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} min="0" max="100" style={{ ...qInp, width:'120px' }} />
+                  </div>
+                  <div>
+                    {lbl('Risikopåslag %')}
+                    <input type="number" value={form.risk_markup} onChange={e=>set('risk_markup',e.target.value)} min="0" max="50" style={{ ...qInp, width:'120px' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3 - Summary */}
+          {step === 3 && (
+            <div style={{ maxWidth:'600px', margin:'0 auto' }}>
+              <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
+                <div style={{ background:'#f8fafc', padding:'16px 24px', borderBottom:'1px solid #f1f5f9' }}>
+                  <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📊 Kalkulasjonssammendrag</h3>
+                  {form.title && <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{form.title}</p>}
+                </div>
+                <div style={{ padding:'20px 24px' }}>
+                  {/* Per chapter breakdown */}
+                  {chapters.map((ch, ci) => {
+                    const cat = KALK_CATEGORIES.find(c => c.id === ch.categoryId)
+                    const ct = calcKalkChapter(ch)
+                    return (
+                      <div key={ch.id} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
+                        <span style={{ fontSize:'14px', color:'#374151' }}>{cat?.emoji || '📦'} {ch.title}</span>
+                        <span style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{fmt(ct.grandTotal)}</span>
+                      </div>
+                    )
+                  })}
+
+                  <div style={{ height:'1px', background:'#e2e8f0', margin:'12px 0' }} />
+
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                    <span style={{ fontSize:'14px', color:'#64748b' }}>Totalkostnad (selvkost)</span>
+                    <span style={{ fontSize:'14px', color:'#0f172a' }}>{fmt(totals.cost)}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                    <span style={{ fontSize:'14px', color:'#64748b' }}>Totalt påslag</span>
+                    <span style={{ fontSize:'14px', color:'#059669' }}>+ {fmt(totals.totalMarkup)}</span>
+                  </div>
+
+                  <div style={{ height:'1px', background:'#e2e8f0', margin:'12px 0' }} />
+
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0' }}>
+                    <span style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Salgspris eks. mva</span>
+                    <span style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>{fmt(totals.totalExMva)}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                    <span style={{ fontSize:'14px', color:'#64748b' }}>MVA (25%)</span>
+                    <span style={{ fontSize:'14px', color:'#64748b' }}>{fmt(totals.mva)}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', background:'#f0fdf4', borderRadius:'10px', margin:'8px -8px', paddingLeft:'8px', paddingRight:'8px' }}>
+                    <span style={{ fontSize:'16px', fontWeight:'700', color:'#16a34a' }}>Salgspris ink. mva</span>
+                    <span style={{ fontSize:'16px', fontWeight:'800', color:'#16a34a' }}>{fmt(totals.totalInkMva)}</span>
+                  </div>
+
+                  <div style={{ height:'1px', background:'#e2e8f0', margin:'16px 0' }} />
+
+                  {/* Profitability gauge */}
+                  <div style={{ textAlign:'center', padding:'12px 0' }}>
+                    <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'8px' }}>Fortjenestemargin</div>
+                    <div style={{ fontSize:'36px', fontWeight:'800', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>
+                      {totals.profitPercent.toFixed(1)}%
+                    </div>
+                    <div style={{ width:'100%', height:'8px', background:'#f1f5f9', borderRadius:'4px', marginTop:'12px', overflow:'hidden' }}>
+                      <div style={{ width: `${Math.min(totals.profitPercent, 50) * 2}%`, height:'100%', borderRadius:'4px', background: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626', transition:'width 0.3s' }} />
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
+                      <span>0%</span><span>10%</span><span>20%</span><span>30%+</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div style={{ display:'flex', gap:'8px' }}>
+            {step > 1 && <button onClick={()=>setStep(step-1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>← Tilbake</button>}
+          </div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            {step < 3 && <button onClick={()=>setStep(step+1)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste →</button>}
+            {step === 3 && <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett kalkulasjon'}</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── KALKULASJON DETALJER ────────────────────────────────────────────────────
+function KalkulasjonDetaljer({ kalk: init, projects, user, onBack, onEdit }) {
+  const confirm = useConfirm()
+  const [k, setK] = useState(init)
+  const proj = projects.find(p => p.id === k.project_id)
+  const totals = calcKalkulation(k.chapters || [], k.global_markup, k.risk_markup)
+
+  const KALK_STATUS_CFG = {
+    'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+    'Aktiv':       { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
+    'Tilbud sendt':{ bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
+    'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+  }
+  const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
+
+  const refresh = async () => {
+    const { data } = await supabase.from('calculations').select('*').eq('id', k.id).single()
+    if (data) setK(data)
+  }
+
+  const updateStatus = async (status) => {
+    await supabase.from('calculations').update({ status, updated_at: new Date().toISOString() }).eq('id', k.id)
+    refresh()
+  }
+
+  const handleDelete = async () => {
+    const ok = await confirm('Slett kalkulasjon', 'Er du sikker på at du vil slette denne kalkulasjonen permanent?')
+    if (!ok) return
+    await supabase.from('calculations').delete().eq('id', k.id)
+    onBack()
+  }
+
+  const handleDuplicate = async () => {
+    const newKalk = { ...k, id: undefined, kalk_number: `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`, title: k.title + ' (kopi)', status: 'Utkast', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    delete newKalk.id
+    const { error } = await supabase.from('calculations').insert(newKalk)
+    if (error) alert('Feil: ' + error.message)
+    else { alert('✅ Kalkulasjon duplisert!'); onBack() }
+  }
+
+  const handleCreateQuote = async () => {
+    // Create a quote from this calculation by reusing the chapter structure
+    const quoteChapters = (k.chapters || []).map(ch => ({
+      id: ch.id,
+      title: ch.title,
+      markup: ch.markup || 0,
+      description: '',
+      posts: (ch.lines || []).map(l => ({
+        id: l.id,
+        description: l.description,
+        qty: l.qty,
+        unit: l.unit,
+        unitPriceWork: l.unitPriceWork,
+        unitPriceMaterial: l.unitPriceMaterial,
+      }))
+    }))
+    const quotePayload = {
+      title: k.title,
+      quote_number: `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+      project_id: k.project_id || null,
+      customer_name: k.customer_name || '',
+      customer_address: k.customer_address || '',
+      global_markup: k.global_markup || 0,
+      chapters: quoteChapters,
+      status: 'Utkast',
+      created_by: user?.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      source_calculation_id: k.id,
+    }
+    const { error } = await supabase.from('quotes').insert(quotePayload)
+    if (error) alert('Feil: ' + error.message)
+    else {
+      await updateStatus('Tilbud sendt')
+      alert('✅ Tilbud opprettet fra kalkulasjon! Gå til Tilbud-modulen for å fullføre og sende.')
+    }
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b', fontWeight:'500' }}>← Tilbake</button>
+          <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
+          <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
+            <div style={{ display:'flex', gap:'16px', marginTop:'6px', flexWrap:'wrap' }}>
+              {k.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
+              {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>✏️ Rediger</button>
+            <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>📋 Dupliser</button>
+            <button onClick={handleCreateQuote} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Lag tilbud →</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
+        {/* Main content - chapter breakdown */}
+        <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {(k.chapters || []).map((ch, ci) => {
+            const cat = KALK_CATEGORIES.find(c => c.id === ch.categoryId)
+            const ct = calcKalkChapter(ch)
+            return (
+              <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+                <div style={{ background:'#f8fafc', padding:'12px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                    <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>{ci+1}</span>
+                    <span style={{ fontSize:'14px' }}>{cat?.emoji || '📦'}</span>
+                    <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{ch.title}</span>
+                    {parseFloat(ch.markup) > 0 && <span style={{ fontSize:'11px', color:'#94a3b8' }}>+{ch.markup}% kap.påslag</span>}
+                  </div>
+                  <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(ct.grandTotal)}</span>
+                </div>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr>
+                      {['Beskrivelse','Mengde','Enhet','Arbeid','Material','Påslag','Sum'].map((h,i) => (
+                        <th key={i} style={{ padding:'8px 12px', textAlign:i>=3?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ch.lines || []).map(l => {
+                      const lt = calcKalkLine(l)
+                      return (
+                        <tr key={l.id}>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151' }}>{l.description || '—'}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151', textAlign:'right' }}>{l.qty}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#94a3b8' }}>{l.unit}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151', textAlign:'right' }}>{fmt(l.unitPriceWork)}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#374151', textAlign:'right' }}>{fmt(l.unitPriceMaterial)}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', color:'#64748b', textAlign:'right' }}>{l.markup}%</td>
+                          <td style={{ padding:'8px 12px', fontSize:'13px', fontWeight:'600', color:'#0f172a', textAlign:'right' }}>{fmt(lt.total)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Sidebar summary */}
+        <div style={{ flex:1, minWidth:'280px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Totals card */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+            <div style={{ background:'#f8fafc', padding:'12px 18px', borderBottom:'1px solid #f1f5f9' }}>
+              <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>📊 Økonomisk sammendrag</div>
+            </div>
+            <div style={{ padding:'16px 18px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                <span style={{ color:'#64748b', fontSize:'13px' }}>Selvkost</span>
+                <span style={{ color:'#0f172a', fontWeight:'600', fontSize:'13px' }}>{fmt(totals.cost)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                <span style={{ color:'#64748b', fontSize:'13px' }}>Påslag</span>
+                <span style={{ color:'#059669', fontWeight:'600', fontSize:'13px' }}>+{fmt(totals.totalMarkup)}</span>
+              </div>
+              <div style={{ height:'1px', background:'#f1f5f9', margin:'8px 0' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                <span style={{ color:'#0f172a', fontWeight:'700', fontSize:'14px' }}>Eks. mva</span>
+                <span style={{ color:'#0f172a', fontWeight:'800', fontSize:'14px' }}>{fmt(totals.totalExMva)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
+                <span style={{ color:'#64748b', fontSize:'13px' }}>MVA 25%</span>
+                <span style={{ color:'#64748b', fontSize:'13px' }}>{fmt(totals.mva)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', background:'#f0fdf4', borderRadius:'8px', margin:'8px -6px 0', padding:'10px 6px' }}>
+                <span style={{ color:'#16a34a', fontWeight:'700', fontSize:'14px' }}>Ink. mva</span>
+                <span style={{ color:'#16a34a', fontWeight:'800', fontSize:'14px' }}>{fmt(totals.totalInkMva)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Profit gauge */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px 18px', textAlign:'center' }}>
+            <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Fortjenestemargin</div>
+            <div style={{ fontSize:'32px', fontWeight:'800', color: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }}>
+              {totals.profitPercent.toFixed(1)}%
+            </div>
+            <div style={{ width:'100%', height:'6px', background:'#f1f5f9', borderRadius:'3px', marginTop:'10px', overflow:'hidden' }}>
+              <div style={{ width: `${Math.min(totals.profitPercent, 50) * 2}%`, height:'100%', borderRadius:'3px', background: totals.profitPercent >= 20 ? '#16a34a' : totals.profitPercent >= 10 ? '#ca8a04' : '#dc2626' }} />
+            </div>
+          </div>
+
+          {/* Status actions */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 18px' }}>
+            <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', marginBottom:'10px' }}>Endre status</div>
+            {Object.keys(KALK_STATUS_CFG).map(s => (
+              <button key={s} onClick={() => updateStatus(s)}
+                style={{ display:'block', width:'100%', padding:'9px 14px', borderRadius:'10px', border:`1px solid ${k.status===s ? KALK_STATUS_CFG[s].border : '#e2e8f0'}`, background: k.status===s ? KALK_STATUS_CFG[s].bg : 'white', color: k.status===s ? KALK_STATUS_CFG[s].color : '#475569', fontWeight: k.status===s ? '700':'400', fontSize:'13px', cursor: k.status===s ? 'default':'pointer', textAlign:'left', marginBottom:'4px' }}>
+                {k.status===s ? '✓ ':''}{KALK_STATUS_CFG[s].emoji} {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Delete */}
+          <button onClick={handleDelete}
+            style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', width:'100%' }}>
+            🗑️ Slett kalkulasjon
+          </button>
+        </div>
+      </div>
+
+      {/* Notes */}
+      {k.notes && (
+        <div style={{ padding:'0 32px 24px' }}>
+          <div style={{ background:'#fffbeb', borderRadius:'14px', border:'1px solid #fef08a', padding:'16px 20px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>📝 Notater</div>
+            <p style={{ margin:0, fontSize:'13px', color:'#78350f', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{k.notes}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+// ─── END KALKULASJON MODULE ──────────────────────────────────────────────────
+
 function ComingSoon({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
@@ -15642,6 +16418,34 @@ function AppContent() {
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
+  const [activeModules, setActiveModules] = useState(null) // null = loading
+
+  // Load active modules from company_settings
+  React.useEffect(() => {
+    if (!user) return
+    supabase.from('company_settings').select('active_modules').limit(1).single()
+      .then(({ data }) => setActiveModules(data?.active_modules || ['grunnpakke']))
+      .catch(() => setActiveModules(['grunnpakke']))
+  }, [user])
+
+  // Map nav item IDs to module IDs they require
+  const navToModule = {
+    dashboard: null, // always accessible
+    prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke', sjekklister: 'grunnpakke',
+    avvik: 'grunnpakke', hms: 'grunnpakke', maskiner: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
+    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', ordre: 'ordre', faktura: 'faktura',
+    ansatte: 'ansatte', timelister: 'timelister', ressursplan: 'ressursplan',
+    kalender: 'kalender', chat: 'chat',
+    befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
+    minbedrift: null, brukeradmin: null, // admin always accessible
+  }
+
+  const isModuleActive = (navId) => {
+    if (!activeModules) return true // still loading, show as active
+    const requiredModule = navToModule[navId]
+    if (!requiredModule) return true // always accessible
+    return activeModules.includes(requiredModule)
+  }
 
   // ── Browser history navigation ────────────────────────────────────────────
   const getPageFromHash = () => {
@@ -15658,6 +16462,9 @@ function AppContent() {
     setPage(p)
     setProjectId(null)
   }
+
+  // Check if current page is a locked module
+  const isPageLocked = !isModuleActive(page)
 
   const openProject = (id) => {
     window.history.pushState({ page: 'prosjekt_detaljer', projectId: id }, '', '#prosjekt_detaljer')
@@ -15730,11 +16537,13 @@ function AppContent() {
               {collapsed && gi > 0 && <div style={{ height: '1px', background: '#f1f5f9', margin: '6px 0' }} />}
               {group.items.map(item => {
                 const isActive = activePage === item.id
+                const locked = !isModuleActive(item.id)
                 return (
-                  <button key={item.id} onClick={() => navigate(item.id)} title={collapsed ? item.label : undefined}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px' }}>
-                    <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
-                    {!collapsed && item.label}
+                  <button key={item.id} onClick={() => navigate(item.id)} title={collapsed ? (item.label + (locked ? ' (låst)' : '')) : undefined}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#cbd5e1' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.7 : 1 }}>
+                    <span style={{ fontSize: '16px', flexShrink: 0 }}>{locked ? '🔒' : item.emoji}</span>
+                    {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
+                    {!collapsed && locked && <span style={{ fontSize: '10px', color: '#94a3b8', flexShrink: 0 }}>PRO</span>}
                   </button>
                 )
               })}
@@ -15774,6 +16583,9 @@ function AppContent() {
             <button onClick={() => supabase.auth.signOut()} title="Logg ut" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', padding: '2px', lineHeight: 1 }}>⏻</button>
           </div>
         </div>
+        {isPageLocked ? (
+          <LockedModulePage pageId={page} onNavigate={navigate} />
+        ) : (<>
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
@@ -15783,6 +16595,7 @@ function AppContent() {
         {page === 'avvik' && <AvvikPage />}
         {page === 'hms' && <HmsPage />}
         {page === 'maskiner' && <MaskinPage />}
+        {page === 'kalkulator' && <KalkulasjonPage onNavigate={navigate} />}
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
         {page === 'ordre' && <OrdrePage />}
@@ -15800,9 +16613,10 @@ function AppContent() {
         {page === 'varsler' && <VarslerPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'varsler' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'varsler' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
+        </>)}
       </main>
     </div>
   )
