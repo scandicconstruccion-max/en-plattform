@@ -17274,6 +17274,52 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     else { alert('✅ Kalkulasjon duplisert!'); onBack() }
   }
 
+  // Generer tilbud fra kalkulasjon → Tilbudsmodulen
+  const handleCreateQuote = async () => {
+    // Konverter kalkyler til tilbuds-kapitler (chapters) som Tilbudsmodulen forstår
+    const quoteChapters = kalkyler.map(kalk => {
+      const fag = getFaggruppe(kalk.fag)
+      const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
+      // Samle alle bygningsdeler som poster i ett kapittel per fag
+      const posts = (kalk.bygningsdeler || []).map(bd => {
+        const bdT = beregnBygningsdel(bd, fakt)
+        return {
+          id: bd.id,
+          description: bd.name || 'Bygningsdel',
+          qty: parseFloat(bd.mengde) || 1,
+          unit: bd.enhet || 'stk',
+          unitPriceWork: bdT.totalTimer > 0 ? Math.round(bdT.totalArbeidMedFortjeneste / (parseFloat(bd.mengde) || 1)) : 0,
+          unitPriceMaterial: Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / (parseFloat(bd.mengde) || 1)),
+        }
+      })
+      return { id: kalk.id, title: `${fag.emoji} ${kalk.name}`, description: '', markup: 0, posts }
+    })
+
+    const quotePayload = {
+      title: k.title,
+      quote_number: `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+      project_id: null,
+      customer_name: k.customer_name || '',
+      customer_email: '',
+      customer_address: k.customer_address || '',
+      global_markup: 0,
+      chapters: quoteChapters,
+      status: 'Utkast',
+      created_by: user?.id,
+      source_calculation_id: k.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error } = await supabase.from('quotes').insert(quotePayload)
+    if (error) {
+      alert('Feil: ' + error.message)
+    } else {
+      await updateStatus('Tilbud sendt')
+      alert('✅ Tilbud opprettet! Gå til Tilbud-modulen for å sende det til kunden via e-post.')
+    }
+  }
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       {/* Header */}
@@ -17295,6 +17341,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
             <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
+            <button onClick={handleCreateQuote} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Lag tilbud →</button>
           </div>
         </div>
       </div>
