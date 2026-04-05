@@ -16465,15 +16465,121 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
 
   // ═══ MURER ════════════════════════════════════════════════════════════════
-  { id: 'mur_flis_vegg', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging vegg bad', beskrivelse: 'Flislegging vegg med membran, lim og fugemasse',
+  // Oppmuring
+  { id: 'mur_leca_vegg', fag: 'murer', kategori: 'Oppmuring', name: 'Lecablokk vegg 25cm', beskrivelse: 'Oppmuring med Leca blokk 25cm, armering og mørtel',
+    arbeidsarter: [{ beskrivelse: 'Oppmuring Leca 25cm', grunntid: 0.80 }, { beskrivelse: 'Armering horisontal', grunntid: 0.10 }, { beskrivelse: 'Utstøping kjerne/armering', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Lecablokk 25cm', mengde: 12.5, enhet: 'stk/m²', enhetspris: 35 }, { varenavn: 'Murmørtel/lim', mengde: 3, enhet: 'kg/m²', enhetspris: 8 }, { varenavn: 'Armering Ø8mm', mengde: 0.5, enhet: 'lm/m²', enhetspris: 18 }, { varenavn: 'Betong kjernefyll', mengde: 0.01, enhet: 'm³/m²', enhetspris: 1400 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_leca_vegg_20', fag: 'murer', kategori: 'Oppmuring', name: 'Lecablokk vegg 20cm', beskrivelse: 'Oppmuring med Leca blokk 20cm for lettere konstruksjoner',
+    arbeidsarter: [{ beskrivelse: 'Oppmuring Leca 20cm', grunntid: 0.70 }, { beskrivelse: 'Armering', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Lecablokk 20cm', mengde: 12.5, enhet: 'stk/m²', enhetspris: 28 }, { varenavn: 'Murmørtel/lim', mengde: 3, enhet: 'kg/m²', enhetspris: 8 }, { varenavn: 'Armering Ø8mm', mengde: 0.5, enhet: 'lm/m²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_isoblokk', fag: 'murer', kategori: 'Oppmuring', name: 'Isoblokk yttervegg', beskrivelse: 'Oppmuring med Isoblokk (EPS-forskaling) med armering og betongfyll — komplett yttervegg',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting Isoblokk', grunntid: 0.50 }, { beskrivelse: 'Armering vertikal og horisontal', grunntid: 0.20 }, { beskrivelse: 'Utstøping betong', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Isoblokk 25cm (EPS)', mengde: 4, enhet: 'stk/m²', enhetspris: 95 }, { varenavn: 'Armering Ø10mm', mengde: 4, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Betong B30', mengde: 0.06, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindeledd og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_isoblokk_30', fag: 'murer', kategori: 'Oppmuring', name: 'Isoblokk yttervegg 30cm (passivhus)', beskrivelse: 'Tykkere Isoblokk for økte isolasjonskrav, passivhusnivå',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting Isoblokk 30cm', grunntid: 0.55 }, { beskrivelse: 'Armering', grunntid: 0.22 }, { beskrivelse: 'Utstøping betong', grunntid: 0.18 }],
+    materialer: [{ varenavn: 'Isoblokk 30cm (EPS)', mengde: 4, enhet: 'stk/m²', enhetspris: 125 }, { varenavn: 'Armering Ø10mm', mengde: 4, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Betong B30', mengde: 0.07, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindeledd', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_tegl_halv', fag: 'murer', kategori: 'Oppmuring', name: 'Teglsteinvegg ½-steins (forblending)', beskrivelse: 'Forblendingsmur i teglstein ½-steins tykkelse med mørtel',
+    arbeidsarter: [{ beskrivelse: 'Oppmuring tegl ½-stein', grunntid: 1.10 }, { beskrivelse: 'Fuging', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Teglstein standard', mengde: 65, enhet: 'stk/m²', enhetspris: 5.5 }, { varenavn: 'Murmørtel', mengde: 30, enhet: 'kg/m²', enhetspris: 3 }, { varenavn: 'Murpinner/anker', mengde: 5, enhet: 'stk/m²', enhetspris: 8 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_lettklinker', fag: 'murer', kategori: 'Oppmuring', name: 'Lettklinkerblokk innervegg', beskrivelse: 'Oppmuring innervegg med lettklinkerblokk 10cm — kjeller/garasje',
+    arbeidsarter: [{ beskrivelse: 'Oppmuring lettklinker 10cm', grunntid: 0.55 }, { beskrivelse: 'Armering', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Lettklinkerblokk 10cm', mengde: 12.5, enhet: 'stk/m²', enhetspris: 20 }, { varenavn: 'Murmørtel', mengde: 3, enhet: 'kg/m²', enhetspris: 8 }, { varenavn: 'Armering', mengde: 0.3, enhet: 'lm/m²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Pussing
+  { id: 'mur_puss_grov', fag: 'murer', kategori: 'Pussing', name: 'Grovpuss vegg innvendig', beskrivelse: 'Grovpuss/rappning på mur eller betongvegg — underlag for flis eller finpuss',
+    arbeidsarter: [{ beskrivelse: 'Primer/heft', grunntid: 0.05 }, { beskrivelse: 'Påføring grovpuss', grunntid: 0.40 }, { beskrivelse: 'Avrettning og jevning', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Primer/heftbrunn', mengde: 0.15, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Grovpuss/rappmørtel', mengde: 15, enhet: 'kg/m²', enhetspris: 5 }, { varenavn: 'Armerings-/pussnet', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_puss_finn', fag: 'murer', kategori: 'Pussing', name: 'Finpuss vegg innvendig', beskrivelse: 'Finpuss/glattmørtel for malingsklar overflate',
+    arbeidsarter: [{ beskrivelse: 'Påføring finpuss', grunntid: 0.30 }, { beskrivelse: 'Sliping og finish', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Finpuss/glattmørtel', mengde: 5, enhet: 'kg/m²', enhetspris: 8 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_puss_system_utv', fag: 'murer', kategori: 'Pussing', name: 'Systempuss fasade (utvendig)', beskrivelse: 'Komplett fasadepuss-system med grunnpuss, armering, nett og topppuss',
+    arbeidsarter: [{ beskrivelse: 'Grunnpuss påføring', grunntid: 0.35 }, { beskrivelse: 'Armering og nett', grunntid: 0.20 }, { beskrivelse: 'Topppuss/filtspuss', grunntid: 0.30 }],
+    materialer: [{ varenavn: 'Grunnpuss utvendig', mengde: 10, enhet: 'kg/m²', enhetspris: 6 }, { varenavn: 'Armeringsnett alkaliebestandig', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'Topppuss/filtspuss', mengde: 4, enhet: 'kg/m²', enhetspris: 12 }, { varenavn: 'Primer', mengde: 0.15, enhet: 'l/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_puss_isolasjon', fag: 'murer', kategori: 'Pussing', name: 'Isolasjonspuss fasade (ETICS)', beskrivelse: 'Utvendig etterisolering med EPS-plater og puss-system (ETICS/fasadeisolering)',
+    arbeidsarter: [{ beskrivelse: 'Liming EPS-plater', grunntid: 0.25 }, { beskrivelse: 'Plugging', grunntid: 0.10 }, { beskrivelse: 'Grunnpuss og armering', grunntid: 0.35 }, { beskrivelse: 'Topppuss', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'EPS-plater 100mm fasade', mengde: 1.05, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Fasadelim', mengde: 5, enhet: 'kg/m²', enhetspris: 8 }, { varenavn: 'Fasadeplugg', mengde: 6, enhet: 'stk/m²', enhetspris: 5 }, { varenavn: 'Armeringsnett', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'Topppuss silikonharpiks', mengde: 3, enhet: 'kg/m²', enhetspris: 18 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Gulvavrettning
+  { id: 'mur_avrett_tynn', fag: 'murer', kategori: 'Gulvavrettning', name: 'Avrettning gulv 0-10mm', beskrivelse: 'Tynn avrettning med selvutjevnende masse for flislegging eller gulvbelegg',
+    arbeidsarter: [{ beskrivelse: 'Primer', grunntid: 0.05 }, { beskrivelse: 'Blanding og utlegging', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Primer gulv', mengde: 0.15, enhet: 'l/m²', enhetspris: 75 }, { varenavn: 'Avrettingsmasse fin (0-10mm)', mengde: 8, enhet: 'kg/m²', enhetspris: 6 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_avrett_tykk', fag: 'murer', kategori: 'Gulvavrettning', name: 'Avrettning gulv 10-50mm', beskrivelse: 'Tykkere avrettning for ujevne gulv, kombinasjon grov + fin masse',
+    arbeidsarter: [{ beskrivelse: 'Primer', grunntid: 0.05 }, { beskrivelse: 'Grovavretting', grunntid: 0.25 }, { beskrivelse: 'Finavrettning', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Primer gulv', mengde: 0.15, enhet: 'l/m²', enhetspris: 75 }, { varenavn: 'Grov avrettingsmasse (10-50mm)', mengde: 25, enhet: 'kg/m²', enhetspris: 4 }, { varenavn: 'Fin avrettingsmasse topp', mengde: 5, enhet: 'kg/m²', enhetspris: 6 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_avrett_fall', fag: 'murer', kategori: 'Gulvavrettning', name: 'Avrettning m/fall til sluk', beskrivelse: 'Avrettning med fall til sluk i våtrom',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting av fall', grunntid: 0.35 }, { beskrivelse: 'Avrettning med fall', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Avrettingsmasse m/fiber', mengde: 20, enhet: 'kg/m²', enhetspris: 5 }, { varenavn: 'Fallkiler EPS', mengde: 1, enhet: 'rs/m²', enhetspris: 65 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Flislegging
+  { id: 'mur_flis_vegg', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging vegg bad standard', beskrivelse: 'Flislegging vegg med membran, lim og fugemasse — standard flis',
     arbeidsarter: [{ beskrivelse: 'Membranarbeid', grunntid: 0.25 }, { beskrivelse: 'Flislegging vegg', grunntid: 0.65 }],
     materialer: [{ varenavn: 'Membran våtrom', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Flislim', mengde: 3, enhet: 'kg/m²', enhetspris: 12 }, { varenavn: 'Veggflis 20×25', mengde: 1.08, enhet: 'm²', enhetspris: 220 }, { varenavn: 'Fugemasse', mengde: 0.5, enhet: 'kg/m²', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_flis_vegg_stor', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging vegg storformat 60×120', beskrivelse: 'Storformatflis vegg — krever planere underlag og spesiallim',
+    arbeidsarter: [{ beskrivelse: 'Membranarbeid', grunntid: 0.25 }, { beskrivelse: 'Flislegging storformat', grunntid: 0.85 }],
+    materialer: [{ varenavn: 'Membran våtrom', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Flislim flex storformat', mengde: 4, enhet: 'kg/m²', enhetspris: 15 }, { varenavn: 'Storformat flis 60×120', mengde: 1.08, enhet: 'm²', enhetspris: 450 }, { varenavn: 'Fugemasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 40 }, { varenavn: 'Kilesystem storformat', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'mur_flis_gulv', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging gulv bad', beskrivelse: 'Flislegging gulv med membran, fall og sluk',
     arbeidsarter: [{ beskrivelse: 'Membran gulv med fall', grunntid: 0.35 }, { beskrivelse: 'Flislegging gulv', grunntid: 0.70 }],
     materialer: [{ varenavn: 'Membran gulv', mengde: 1.1, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Avrettingsmasse m/fall', mengde: 5, enhet: 'kg/m²', enhetspris: 8 }, { varenavn: 'Flislim', mengde: 3, enhet: 'kg/m²', enhetspris: 12 }, { varenavn: 'Gulvflis 30×30', mengde: 1.08, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Fugemasse', mengde: 0.5, enhet: 'kg/m²', enhetspris: 35 }],
     underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_flis_gulv_60', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging gulv 60×60', beskrivelse: 'Større gulvflis 60×60 — gang, stue, kjøkken',
+    arbeidsarter: [{ beskrivelse: 'Primer og klargjøring', grunntid: 0.08 }, { beskrivelse: 'Flislegging 60×60', grunntid: 0.55 }],
+    materialer: [{ varenavn: 'Primer gulv', mengde: 0.15, enhet: 'l/m²', enhetspris: 75 }, { varenavn: 'Flislim flex', mengde: 4, enhet: 'kg/m²', enhetspris: 12 }, { varenavn: 'Gulvflis 60×60', mengde: 1.06, enhet: 'm²', enhetspris: 380 }, { varenavn: 'Fugemasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 35 }, { varenavn: 'Kilesystem', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_flis_trapp', fag: 'murer', kategori: 'Flislegging', name: 'Flislegging trapp/trinn', beskrivelse: 'Flislegging av trappetrinnog opptrinn',
+    arbeidsarter: [{ beskrivelse: 'Tilkapping og tilpasning', grunntid: 0.40 }, { beskrivelse: 'Liming og legging', grunntid: 0.60 }],
+    materialer: [{ varenavn: 'Flislim flex', mengde: 3, enhet: 'kg/lm', enhetspris: 12 }, { varenavn: 'Trinnflis m/nese', mengde: 1.1, enhet: 'lm', enhetspris: 320 }, { varenavn: 'Opptrinnflis', mengde: 0.2, enhet: 'm²/lm', enhetspris: 280 }, { varenavn: 'Fugemasse', mengde: 0.3, enhet: 'kg/lm', enhetspris: 35 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Membran
+  { id: 'mur_membran_vegg', fag: 'murer', kategori: 'Membran', name: 'Membran vegg våtrom', beskrivelse: 'Komplett membranarbeid vegg med mansjetter, hjørner og tetting',
+    arbeidsarter: [{ beskrivelse: 'Primer vegg', grunntid: 0.05 }, { beskrivelse: 'Membran 2 strøk', grunntid: 0.25 }, { beskrivelse: 'Mansjetter og hjørner', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Primer våtrom', mengde: 0.15, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Membran flytende 2 strøk', mengde: 1.5, enhet: 'kg/m²', enhetspris: 75 }, { varenavn: 'Mansjetter rør', mengde: 0.5, enhet: 'stk/m²', enhetspris: 45 }, { varenavn: 'Hjørneforsterkning', mengde: 0.3, enhet: 'lm/m²', enhetspris: 35 }, { varenavn: 'Armeringsbånd', mengde: 0.5, enhet: 'lm/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_membran_gulv', fag: 'murer', kategori: 'Membran', name: 'Membran gulv våtrom m/sluk', beskrivelse: 'Komplett membranarbeid gulv med slukmontering og tetting',
+    arbeidsarter: [{ beskrivelse: 'Primer gulv', grunntid: 0.05 }, { beskrivelse: 'Slukmontering og tetting', grunntid: 0.50 }, { beskrivelse: 'Membran 2 strøk', grunntid: 0.30 }, { beskrivelse: 'Mansjetter og oppkant', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Primer våtrom', mengde: 0.15, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Sluk komplett (Purus e.l.)', mengde: 0.15, enhet: 'stk/m²', enhetspris: 1800 }, { varenavn: 'Membran flytende 2 strøk', mengde: 1.5, enhet: 'kg/m²', enhetspris: 75 }, { varenavn: 'Mansjetter og klemring', mengde: 1, enhet: 'rs/m²', enhetspris: 55 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Rehabilitering
+  { id: 'mur_riving_flis', fag: 'murer', kategori: 'Rehabilitering', name: 'Riving av flis vegg/gulv', beskrivelse: 'Riving av eksisterende flis og lim — klargjøring for ny flislegging',
+    arbeidsarter: [{ beskrivelse: 'Riving flis og lim', grunntid: 0.35 }, { beskrivelse: 'Rengjøring og klargjøring', grunntid: 0.10 }, { beskrivelse: 'Bortkjøring avfall', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 35 }, { varenavn: 'Støvtetting/tildekking', mengde: 1, enhet: 'rs/m²', enhetspris: 10 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mur_peis_pipe', fag: 'murer', kategori: 'Rehabilitering', name: 'Piperehab./påmuring', beskrivelse: 'Rehabilitering av pipe over tak — ny påmuring og beslag',
+    arbeidsarter: [{ beskrivelse: 'Riving gammel påmuring', grunntid: 2.0 }, { beskrivelse: 'Ny oppmuring', grunntid: 3.0 }, { beskrivelse: 'Pussing og tetting', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Murstein/Leca pipehode', mengde: 1, enhet: 'rs', enhetspris: 2500 }, { varenavn: 'Murmørtel', mengde: 1, enhet: 'rs', enhetspris: 350 }, { varenavn: 'Beslag pipe', mengde: 1, enhet: 'sett', enhetspris: 2800 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs', enhetspris: 500 }],
+    underleverandorer: [], enhet: 'stk'
   },
 
   // ═══ RØRLEGGER ════════════════════════════════════════════════════════════
