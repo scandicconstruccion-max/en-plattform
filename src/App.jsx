@@ -15711,17 +15711,184 @@ function LockedModulePage({ pageId, onNavigate }) {
 
 // ─── KALKULASJON MODULE ──────────────────────────────────────────────────────
 
-const KALK_CATEGORIES = [
-  { id: 'rigg',         name: 'Rigg & drift',          emoji: '🏗️', defaultMarkup: 15 },
-  { id: 'grunn',        name: 'Grunn & fundamenter',   emoji: '🪨', defaultMarkup: 20 },
-  { id: 'baresystem',   name: 'Bæresystem',            emoji: '🏛️', defaultMarkup: 20 },
-  { id: 'utvendig',     name: 'Utvendig',              emoji: '🧱', defaultMarkup: 20 },
-  { id: 'innvendig',    name: 'Innvendig',             emoji: '🪟', defaultMarkup: 20 },
-  { id: 'vvs',          name: 'VVS',                   emoji: '🔧', defaultMarkup: 15 },
-  { id: 'elektro',      name: 'Elektro',               emoji: '⚡', defaultMarkup: 15 },
-  { id: 'underleverandor', name: 'Underleverandør',    emoji: '🤝', defaultMarkup: 10 },
-  { id: 'diverse',      name: 'Diverse',               emoji: '📦', defaultMarkup: 15 },
+// ─── NS 3451 Bygningsdelstabell + NS 3420 Fagdeler ──────────────────────────
+// Kapittelstruktur basert på NS 3451 (bygningsdeler) med NS 3420-referanser (fagkoder)
+
+const NS_CHAPTERS = [
+  // Rigg & drift (NS 3420-A)
+  { id: 'A',  code: 'A',  name: 'Rigg og drift',              emoji: '🏗️', ns3420: 'A',  group: 'Felleskostnader', defaultMarkup: 0, sortOrder: 0 },
+  { id: 'C',  code: 'C',  name: 'Riving og demontering',      emoji: '🔨', ns3420: 'C',  group: 'Felleskostnader', defaultMarkup: 15, sortOrder: 1 },
+  // 2x Bygning (NS 3451)
+  { id: '21', code: '21', name: 'Grunn og fundamenter',        emoji: '🪨', ns3420: 'F/G', group: 'Bygning', defaultMarkup: 20, sortOrder: 10 },
+  { id: '22', code: '22', name: 'Bæresystemer',                emoji: '🏛️', ns3420: 'H/L', group: 'Bygning', defaultMarkup: 20, sortOrder: 11 },
+  { id: '23', code: '23', name: 'Yttervegger',                 emoji: '🧱', ns3420: 'Q/K', group: 'Bygning', defaultMarkup: 20, sortOrder: 12 },
+  { id: '24', code: '24', name: 'Innervegger',                 emoji: '🪟', ns3420: 'Q/K', group: 'Bygning', defaultMarkup: 20, sortOrder: 13 },
+  { id: '25', code: '25', name: 'Dekker',                      emoji: '⬜', ns3420: 'H/J', group: 'Bygning', defaultMarkup: 20, sortOrder: 14 },
+  { id: '26', code: '26', name: 'Yttertak',                    emoji: '🏠', ns3420: 'Q/S', group: 'Bygning', defaultMarkup: 20, sortOrder: 15 },
+  { id: '27', code: '27', name: 'Fast inventar',               emoji: '🚪', ns3420: 'Q/R', group: 'Bygning', defaultMarkup: 20, sortOrder: 16 },
+  { id: '28', code: '28', name: 'Trapper, balkonger m.m.',     emoji: '🪜', ns3420: 'H/L', group: 'Bygning', defaultMarkup: 20, sortOrder: 17 },
+  // 3x VVS (NS 3451)
+  { id: '31', code: '31', name: 'Sanitæranlegg',               emoji: '🚿', ns3420: 'U',   group: 'VVS', defaultMarkup: 15, sortOrder: 20 },
+  { id: '32', code: '32', name: 'Varmeanlegg',                 emoji: '🔥', ns3420: 'U',   group: 'VVS', defaultMarkup: 15, sortOrder: 21 },
+  { id: '33', code: '33', name: 'Brannslukking',               emoji: '🧯', ns3420: 'U',   group: 'VVS', defaultMarkup: 15, sortOrder: 22 },
+  { id: '36', code: '36', name: 'Luftbehandling/ventilasjon',  emoji: '🌬️', ns3420: 'V/W', group: 'VVS', defaultMarkup: 15, sortOrder: 23 },
+  // 4x Elkraft (NS 3451)
+  { id: '41', code: '41', name: 'Elkraft, generell',           emoji: '⚡', ns3420: 'Y',   group: 'Elektro', defaultMarkup: 15, sortOrder: 30 },
+  { id: '43', code: '43', name: 'Elkraft, fordeling',          emoji: '🔌', ns3420: 'Y',   group: 'Elektro', defaultMarkup: 15, sortOrder: 31 },
+  { id: '44', code: '44', name: 'Belysning',                   emoji: '💡', ns3420: 'Y',   group: 'Elektro', defaultMarkup: 15, sortOrder: 32 },
+  // 5x Tele og automatisering
+  { id: '5',  code: '5',  name: 'Tele og automatisering',      emoji: '📡', ns3420: 'Y',   group: 'Tele', defaultMarkup: 15, sortOrder: 40 },
+  // 6x Andre installasjoner
+  { id: '6',  code: '6',  name: 'Andre installasjoner',        emoji: '🔩', ns3420: 'BE',  group: 'Andre', defaultMarkup: 15, sortOrder: 50 },
+  // 7x Utendørs
+  { id: '71', code: '71', name: 'Utendørs, terreng',           emoji: '🌿', ns3420: 'F/G', group: 'Utendørs', defaultMarkup: 15, sortOrder: 60 },
+  { id: '73', code: '73', name: 'Utendørs VVS',               emoji: '🚰', ns3420: 'U',   group: 'Utendørs', defaultMarkup: 15, sortOrder: 61 },
+  { id: '74', code: '74', name: 'Utendørs elkraft',            emoji: '🔦', ns3420: 'Y',   group: 'Utendørs', defaultMarkup: 15, sortOrder: 62 },
+  // Overflatebehandling
+  { id: 'T',  code: 'T',  name: 'Maler- og beleggarbeid',     emoji: '🎨', ns3420: 'T',   group: 'Overflate', defaultMarkup: 20, sortOrder: 70 },
+  { id: 'J',  code: 'J',  name: 'Gulv og belegning',          emoji: '🟫', ns3420: 'J',   group: 'Overflate', defaultMarkup: 20, sortOrder: 71 },
+  // Underleverandører og diverse
+  { id: 'UE', code: 'UE', name: 'Underleverandører',           emoji: '🤝', ns3420: '',    group: 'Diverse', defaultMarkup: 10, sortOrder: 80 },
+  { id: 'DI', code: 'DI', name: 'Diverse / uspesifisert',      emoji: '📦', ns3420: '',    group: 'Diverse', defaultMarkup: 15, sortOrder: 81 },
 ]
+
+// Gruppert visning for kapittelvelger
+const NS_CHAPTER_GROUPS = [
+  { title: 'Felleskostnader',  ids: ['A', 'C'] },
+  { title: 'Bygning (2x)',     ids: ['21','22','23','24','25','26','27','28'] },
+  { title: 'VVS (3x)',         ids: ['31','32','33','36'] },
+  { title: 'Elektro (4x)',     ids: ['41','43','44'] },
+  { title: 'Tele & andre (5-6)', ids: ['5','6'] },
+  { title: 'Utendørs (7x)',    ids: ['71','73','74'] },
+  { title: 'Overflate',        ids: ['T','J'] },
+  { title: 'Diverse',          ids: ['UE','DI'] },
+]
+
+// Prosjekttype-maler: forhåndsvelger relevante kapitler
+const PROJECT_TYPE_PRESETS = [
+  {
+    id: 'enkelt_tomrer',
+    name: 'Enkelt tømreroppdrag',
+    desc: 'Bytte dør, vindu, panel o.l.',
+    emoji: '🪚',
+    chapters: ['A', '23', 'T'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg og rydding', qty: 1, unit: 'rs' }],
+      '23': [{ description: '', qty: 1, unit: 'stk' }],
+      'T':  [{ description: 'Overflatebehandling', qty: 1, unit: 'm²' }],
+    }
+  },
+  {
+    id: 'enkelt_vvs',
+    name: 'Enkelt VVS-oppdrag',
+    desc: 'Bytte toalett, servant, blandebatteri o.l.',
+    emoji: '🔧',
+    chapters: ['A', '31'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg og rydding', qty: 1, unit: 'rs' }],
+      '31': [{ description: '', qty: 1, unit: 'stk' }],
+    }
+  },
+  {
+    id: 'bad_renovering',
+    name: 'Baderomsrenovering',
+    desc: 'Komplett renovering av bad',
+    emoji: '🚿',
+    chapters: ['A', 'C', '24', '25', '31', '32', '41', '44', 'J', 'T'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }],
+      'C':  [{ description: 'Riving av eksisterende bad', qty: 1, unit: 'm²' }],
+      '24': [{ description: 'Innervegger, gipsing og flislegging', qty: 1, unit: 'm²' }],
+      '25': [{ description: 'Gulv, membran og flislegging', qty: 1, unit: 'm²' }],
+      '31': [{ description: 'Servant med blandebatteri', qty: 1, unit: 'stk' }, { description: 'Toalett', qty: 1, unit: 'stk' }, { description: 'Dusjarmatur', qty: 1, unit: 'stk' }],
+      '32': [{ description: 'Gulvvarme, vannbåren', qty: 1, unit: 'm²' }],
+      '41': [{ description: 'Elektrisk opplegg bad', qty: 1, unit: 'rs' }],
+      '44': [{ description: 'Belysning bad', qty: 1, unit: 'stk' }],
+      'J':  [{ description: 'Flislegging gulv', qty: 1, unit: 'm²' }],
+      'T':  [{ description: 'Maling himling', qty: 1, unit: 'm²' }],
+    }
+  },
+  {
+    id: 'kjokken_renovering',
+    name: 'Kjøkkenrenovering',
+    desc: 'Komplett renovering av kjøkken',
+    emoji: '🍳',
+    chapters: ['A', 'C', '24', '25', '27', '31', '41', '44', 'J', 'T'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }],
+      'C':  [{ description: 'Riving av eksisterende kjøkken', qty: 1, unit: 'rs' }],
+      '24': [{ description: 'Innervegger', qty: 1, unit: 'm²' }],
+      '25': [{ description: 'Gulvarbeid', qty: 1, unit: 'm²' }],
+      '27': [{ description: 'Kjøkkeninnredning', qty: 1, unit: 'lm' }, { description: 'Benkeplate', qty: 1, unit: 'lm' }],
+      '31': [{ description: 'Røropplegg kjøkken', qty: 1, unit: 'rs' }],
+      '41': [{ description: 'Elektrisk opplegg kjøkken', qty: 1, unit: 'rs' }],
+      '44': [{ description: 'Belysning kjøkken', qty: 1, unit: 'stk' }],
+      'J':  [{ description: 'Gulvbelegg', qty: 1, unit: 'm²' }],
+      'T':  [{ description: 'Maling vegger og himling', qty: 1, unit: 'm²' }],
+    }
+  },
+  {
+    id: 'total_rehab',
+    name: 'Totalrehabilitering',
+    desc: 'Komplett rehabilitering av bolig',
+    emoji: '🏚️',
+    chapters: ['A', 'C', '21', '22', '23', '24', '25', '26', '27', '28', '31', '32', '36', '41', '43', '44', 'T', 'J', 'UE'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }, { description: 'Prosjektledelse', qty: 1, unit: 'rs' }],
+      'C':  [{ description: 'Riving og sanering', qty: 1, unit: 'rs' }],
+    }
+  },
+  {
+    id: 'nybygg_bolig',
+    name: 'Nybygg enebolig',
+    desc: 'Ny enebolig fra grunn',
+    emoji: '🏡',
+    chapters: ['A', '21', '22', '23', '24', '25', '26', '27', '28', '31', '32', '33', '36', '41', '43', '44', '5', '71', 'T', 'J', 'UE'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }, { description: 'Prosjektledelse', qty: 1, unit: 'rs' }, { description: 'Forsikring og gebyrer', qty: 1, unit: 'rs' }],
+      '21': [{ description: 'Graving og masseflytting', qty: 1, unit: 'm³' }, { description: 'Forskaling og støp plate', qty: 1, unit: 'm²' }],
+    }
+  },
+  {
+    id: 'tilbygg',
+    name: 'Tilbygg / påbygg',
+    desc: 'Utvidelse av eksisterende bolig',
+    emoji: '🔲',
+    chapters: ['A', 'C', '21', '22', '23', '24', '25', '26', '27', '31', '32', '41', '44', 'T', 'J', 'UE'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg, drift og nedrigg', qty: 1, unit: 'rs' }],
+      'C':  [{ description: 'Tilpasning eksisterende konstruksjon', qty: 1, unit: 'rs' }],
+    }
+  },
+  {
+    id: 'egendefinert',
+    name: 'Egendefinert',
+    desc: 'Velg kapitler selv',
+    emoji: '✏️',
+    chapters: ['A'],
+    defaultLines: {
+      'A':  [{ description: 'Rigg og drift', qty: 1, unit: 'rs' }],
+    }
+  },
+]
+
+// Helper: get NS chapter definition by id
+const getNsChapter = (id) => NS_CHAPTERS.find(c => c.id === id) || NS_CHAPTERS[NS_CHAPTERS.length - 1]
+
+// Helper: create chapters from a project type preset
+function createChaptersFromPreset(preset) {
+  return preset.chapters.map((chId, i) => {
+    const nsCh = getNsChapter(chId)
+    const defaultLines = preset.defaultLines?.[chId] || []
+    const lines = defaultLines.length > 0
+      ? defaultLines.map((dl, li) => ({ id: Date.now() + i * 100 + li, description: dl.description, qty: dl.qty, unit: dl.unit || 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: nsCh.defaultMarkup }))
+      : [{ id: Date.now() + i * 100, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: nsCh.defaultMarkup }]
+    return { id: Date.now() + i, title: `${nsCh.code} ${nsCh.name}`, categoryId: nsCh.id, markup: 0, lines }
+  })
+}
+
+// Keep backward compat alias
+const KALK_CATEGORIES = NS_CHAPTERS
 
 function calcKalkLine(line) {
   const qty = parseFloat(line.qty) || 0
@@ -15898,6 +16065,7 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
   const confirm = useConfirm()
   const isEdit = !!initial
   const [step, setStep] = useState(1)
+  const [projectType, setProjectType] = useState(initial?.project_type || null)
   const [form, setForm] = useState({
     title: initial?.title || '',
     kalk_number: initial?.kalk_number || `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
@@ -15908,22 +16076,30 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
     risk_markup: initial?.risk_markup ?? 0,
     notes: initial?.notes || '',
   })
-  const [chapters, setChapters] = useState(initial?.chapters || [
-    { id: Date.now(), title: 'Generelt', categoryId: 'diverse', markup: 0, lines: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: 20 }] }
-  ])
+  const [chapters, setChapters] = useState(initial?.chapters || [])
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  // When project type is selected (only for new kalkulasjoner)
+  const selectProjectType = (presetId) => {
+    const preset = PROJECT_TYPE_PRESETS.find(p => p.id === presetId)
+    if (!preset) return
+    setProjectType(presetId)
+    if (!isEdit && chapters.length <= 1) {
+      setChapters(createChaptersFromPreset(preset))
+    }
+  }
+
   // Chapter helpers
   const addChapter = (catId) => {
-    const cat = KALK_CATEGORIES.find(c => c.id === catId) || KALK_CATEGORIES[KALK_CATEGORIES.length-1]
-    setChapters(c => [...c, { id: Date.now(), title: cat.name, categoryId: cat.id, markup: 0, lines: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat.defaultMarkup }] }])
+    const cat = getNsChapter(catId)
+    setChapters(c => [...c, { id: Date.now(), title: `${cat.code} ${cat.name}`, categoryId: cat.id, markup: 0, lines: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat.defaultMarkup }] }])
   }
   const removeChapter = (id) => setChapters(c => c.filter(x => x.id !== id))
   const updateChapter = (id, f, v) => setChapters(c => c.map(x => x.id === id ? { ...x, [f]: v } : x))
   const addLine = (chId) => {
     const ch = chapters.find(c => c.id === chId)
-    const cat = KALK_CATEGORIES.find(c => c.id === ch?.categoryId)
+    const cat = getNsChapter(ch?.categoryId)
     setChapters(c => c.map(x => x.id === chId ? { ...x, lines: [...x.lines, { id: Date.now(), description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0, markup: cat?.defaultMarkup || 20 }] } : x))
   }
   const removeLine = (chId, lId) => setChapters(c => c.map(x => x.id === chId ? { ...x, lines: x.lines.filter(l => l.id !== lId) } : x))
@@ -15934,7 +16110,7 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
     setSaving(true)
     try {
       const totals = calcKalkulation(chapters, form.global_markup, form.risk_markup)
-      const payload = { ...form, chapters, total_cost: totals.cost, total_ex_mva: totals.totalExMva, profit_percent: totals.profitPercent, updated_at: new Date().toISOString(), project_id: form.project_id || null }
+      const payload = { ...form, chapters, project_type: projectType, total_cost: totals.cost, total_ex_mva: totals.totalExMva, profit_percent: totals.profitPercent, updated_at: new Date().toISOString(), project_id: form.project_id || null }
       if (isEdit) {
         const { error } = await supabase.from('calculations').update(payload).eq('id', initial.id)
         if (error) throw error
@@ -15987,13 +16163,34 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
         <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
           {/* STEP 1 - Info */}
           {step === 1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px', maxWidth:'700px' }}>
-              <div style={{ gridColumn:'1/-1' }}>{lbl('Kalkulasjons-tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Baderomsrenovering Strandveien 12" style={qInp} /></div>
-              <div>{lbl('Kalkulasjonsnummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-              <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
-              <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Prosjektadresse" style={qInp} /></div>
-              <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater om prosjektet..." style={{ ...qInp, resize:'none' }} /></div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+              {/* Project type selection */}
+              {!isEdit && (
+                <div>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>Velg prosjekttype</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'8px' }}>
+                    {PROJECT_TYPE_PRESETS.map(preset => (
+                      <button key={preset.id} onClick={() => selectProjectType(preset.id)}
+                        style={{ background: projectType === preset.id ? '#f0fdf4' : 'white', border: `2px solid ${projectType === preset.id ? '#059669' : '#f1f5f9'}`, borderRadius:'12px', padding:'14px 10px', cursor:'pointer', textAlign:'center', transition:'all 0.15s' }}>
+                        <div style={{ fontSize:'24px', marginBottom:'6px' }}>{preset.emoji}</div>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color: projectType === preset.id ? '#059669' : '#0f172a', marginBottom:'2px' }}>{preset.name}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8', lineHeight:1.3 }}>{preset.desc}</div>
+                        {projectType === preset.id && <div style={{ fontSize:'11px', color:'#059669', fontWeight:'600', marginTop:'6px' }}>✓ {preset.chapters.length} kapitler</div>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Project info form */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px', maxWidth:'700px' }}>
+                <div style={{ gridColumn:'1/-1' }}>{lbl('Kalkulasjons-tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Baderomsrenovering Strandveien 12" style={qInp} /></div>
+                <div>{lbl('Kalkulasjonsnummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
+                <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Prosjektadresse" style={qInp} /></div>
+                <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater om prosjektet..." style={{ ...qInp, resize:'none' }} /></div>
+              </div>
             </div>
           )}
 
@@ -16009,7 +16206,8 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
                     <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
                       <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
                       <span style={{ fontSize:'16px', flexShrink:0 }}>{cat?.emoji || '📦'}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
+                      {cat?.ns3420 && <span style={{ background:'#eff6ff', color:'#2563eb', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', flexShrink:0, border:'1px solid #bfdbfe' }}>NS {cat.ns3420}</span>}
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
                       <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
                         <span style={{ fontSize:'11px', color:'#94a3b8' }}>Kap.påslag</span>
                         <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...qInp, width:'70px', textAlign:'right' }} />
@@ -16060,17 +16258,34 @@ function KalkulasjonEditorModal({ projects, user, initial, onClose, onSaved }) {
                 )
               })}
 
-              {/* Add chapter picker */}
+              {/* Add chapter picker - NS grouped */}
               <div style={{ position:'relative' }}>
-                <button onClick={() => setShowCatPicker(!showCatPicker)} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
+                <button onClick={() => setShowCatPicker(!showCatPicker)} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel (NS 3451)</button>
                 {showCatPicker && (
-                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'8px', zIndex:10, marginTop:'4px', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px' }}>
-                    {KALK_CATEGORIES.map(cat => (
-                      <button key={cat.id} onClick={() => { addChapter(cat.id); setShowCatPicker(false) }}
-                        style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 12px', cursor:'pointer', textAlign:'left', fontSize:'13px', display:'flex', alignItems:'center', gap:'8px' }}>
-                        <span>{cat.emoji}</span> {cat.name}
-                      </button>
-                    ))}
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'12px', zIndex:10, marginTop:'4px', maxHeight:'400px', overflowY:'auto' }}>
+                    {NS_CHAPTER_GROUPS.map(group => {
+                      const usedIds = chapters.map(c => c.categoryId)
+                      const availableInGroup = group.ids.filter(id => !usedIds.includes(id))
+                      if (availableInGroup.length === 0) return null
+                      return (
+                        <div key={group.title} style={{ marginBottom:'8px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', padding:'4px 8px', marginBottom:'4px' }}>{group.title}</div>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px' }}>
+                            {availableInGroup.map(catId => {
+                              const cat = getNsChapter(catId)
+                              return (
+                                <button key={cat.id} onClick={() => { addChapter(cat.id); setShowCatPicker(false) }}
+                                  style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
+                                  <span>{cat.emoji}</span>
+                                  <span><strong style={{ color:'#0f172a' }}>{cat.code}</strong> <span style={{ color:'#64748b' }}>{cat.name}</span></span>
+                                  {cat.ns3420 && <span style={{ fontSize:'10px', color:'#94a3b8', marginLeft:'auto', flexShrink:0 }}>NS {cat.ns3420}</span>}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -16293,6 +16508,7 @@ function KalkulasjonDetaljer({ kalk: init, projects, user, onBack, onEdit }) {
                     <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>{ci+1}</span>
                     <span style={{ fontSize:'14px' }}>{cat?.emoji || '📦'}</span>
                     <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{ch.title}</span>
+                    {cat?.ns3420 && <span style={{ background:'#eff6ff', color:'#2563eb', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', border:'1px solid #bfdbfe' }}>NS {cat.ns3420}</span>}
                     {parseFloat(ch.markup) > 0 && <span style={{ fontSize:'11px', color:'#94a3b8' }}>+{ch.markup}% kap.påslag</span>}
                   </div>
                   <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(ct.grandTotal)}</span>
