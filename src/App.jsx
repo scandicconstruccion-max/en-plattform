@@ -16928,32 +16928,82 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
 
-  // Auto-save helper
-  const saveProject = async (updated) => {
-    setSaving(true)
-    const newTotals = beregnProsjektTotal(updated.kalkyler || [], updated.faktorer || {})
-    try {
-      await supabase.from('calculations').update({
-        kalkyler: updated.kalkyler, faktorer: updated.faktorer,
-        total_cost: newTotals.totSelvkost, total_ex_mva: newTotals.totMedFortjeneste,
-        profit_percent: newTotals.fortjenesteProsent, updated_at: new Date().toISOString()
-      }).eq('id', k.id)
-    } catch(e) { console.error(e) }
-    finally { setSaving(false) }
+  // Auto-save helper with debounce
+  const saveTimerRef = React.useRef(null)
+  const saveProject = (updated) => {
+    setK(updated)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      setSaving(true)
+      const newTotals = beregnProsjektTotal(updated.kalkyler || [], updated.faktorer || {})
+      try {
+        await supabase.from('calculations').update({
+          kalkyler: updated.kalkyler, faktorer: updated.faktorer,
+          total_cost: newTotals.totSelvkost, total_ex_mva: newTotals.totMedFortjeneste,
+          profit_percent: newTotals.fortjenesteProsent, updated_at: new Date().toISOString()
+        }).eq('id', k.id)
+      } catch(e) { console.error(e) }
+      finally { setSaving(false) }
+    }, 800)
+  }
+
+  // Deep update helper: update a field anywhere in the kalkyler tree
+  const updateKalkyler = (newKalkyler) => {
+    saveProject({ ...k, kalkyler: newKalkyler })
+  }
+
+  // Bygningsdel name update
+  const updateBdName = (kalId, bdId, name) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, name } : b) } : kl))
+  }
+
+  // Arbeidsart update
+  const updateArbeidsart = (kalId, bdId, aId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: (b.arbeidsarter||[]).map(a => a.id === aId ? { ...a, [field]: value } : a) } : b) } : kl))
+  }
+  const addArbeidsart = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: [...(b.arbeidsarter||[]), { id: Date.now(), beskrivelse: '', grunntid: 0 }] } : b) } : kl))
+  }
+  const removeArbeidsart = (kalId, bdId, aId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: (b.arbeidsarter||[]).filter(a => a.id !== aId) } : b) } : kl))
+  }
+
+  // Material update
+  const updateMaterial = (kalId, bdId, mId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(m => m.id === mId ? { ...m, [field]: value } : m) } : b) } : kl))
+  }
+  const addMaterial = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: Date.now(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0 }] } : b) } : kl))
+  }
+  const removeMaterial = (kalId, bdId, mId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : kl))
+  }
+
+  // UE update
+  const updateUE = (kalId, bdId, uId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).map(u => u.id === uId ? { ...u, [field]: value } : u) } : b) } : kl))
+  }
+  const addUE = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: Date.now(), navn: '', beskrivelse: '', kostnad: 0 }] } : b) } : kl))
+  }
+  const removeUE = (kalId, bdId, uId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : kl))
   }
 
   // Add bygningsdel from library to a specific kalkyle
   const addBdFromBibliotek = (kalId, bd) => {
-    const updated = { ...k, kalkyler: kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), bd] } : kl) }
-    setK(updated)
-    saveProject(updated)
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), bd] } : kl))
+  }
+
+  // Add empty bygningsdel
+  const addEmptyBd = (kalId) => {
+    const newBd = { id: Date.now(), name: '', arbeidsarter: [{ id: Date.now()+1, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), newBd] } : kl))
   }
 
   // Remove bygningsdel
-  const removeBd = async (kalId, bdId) => {
-    const updated = { ...k, kalkyler: kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl) }
-    setK(updated)
-    saveProject(updated)
+  const removeBd = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl))
   }
 
   const refresh = async () => {
@@ -17043,55 +17093,96 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
                           {/* Bygningsdel header */}
                           <div onClick={() => setExpandedBd(isExpanded ? null : bd.id)}
                             style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', cursor:'pointer', background: isExpanded ? '#f8fafc' : 'white' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                              <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>{bi+1}</span>
-                              <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{bd.name || 'Uten navn'}</span>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', flex:1, minWidth:0 }}>
+                              <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bi+1}</span>
+                              {isExpanded
+                                ? <input value={bd.name||''} onChange={e => { e.stopPropagation(); updateBdName(kalk.id, bd.id, e.target.value) }} onClick={e => e.stopPropagation()} placeholder="Bygningsdel (f.eks. Stue vegg 20m²)" style={{ ...qInp, fontWeight:'600', fontSize:'13px', flex:1 }} />
+                                : <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{bd.name || 'Uten navn'}</span>
+                              }
                             </div>
-                            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <button onClick={(e) => { e.stopPropagation(); removeBd(kalk.id, bd.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
                             </div>
                           </div>
 
-                          {/* Expanded: detaljer */}
+                          {/* Expanded: editable details */}
                           {isExpanded && (
-                            <div style={{ padding:'10px 14px', borderTop:'1px solid #f1f5f9', fontSize:'12px' }}>
-                              {(bd.arbeidsarter||[]).length > 0 && (
-                                <div style={{ marginBottom:'8px' }}>
-                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>ARBEIDSARTER</div>
-                                  {bd.arbeidsarter.map((a, i) => {
-                                    const r = beregnArbeidskostnad(a, fakt)
-                                    return <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0', color:'#374151' }}>
-                                      <span>⏱️ {a.beskrivelse} ({r.faktiskTid.toFixed(1)}t)</span>
-                                      <span style={{ fontWeight:'600' }}>{fmt(r.medFortjeneste)}</span>
-                                    </div>
-                                  })}
-                                </div>
-                              )}
-                              {(bd.materialer||[]).length > 0 && (
-                                <div style={{ marginBottom:'8px' }}>
-                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>MATERIALER</div>
-                                  {bd.materialer.map((m, i) => {
-                                    const r = beregnMaterialkostnad(m, fakt)
-                                    return <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0', color:'#374151' }}>
-                                      <span>📦 {m.varenavn} — {m.mengde} {m.enhet} × {m.enhetspris} kr</span>
-                                      <span style={{ fontWeight:'600' }}>{fmt(r.medFortjeneste)}</span>
-                                    </div>
-                                  })}
-                                </div>
-                              )}
-                              {(bd.underleverandorer||[]).length > 0 && (
-                                <div>
-                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>UNDERLEVERANDØRER</div>
-                                  {bd.underleverandorer.map((u, i) => (
-                                    <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0', color:'#374151' }}>
-                                      <span>🤝 {u.navn} — {u.beskrivelse}</span>
-                                      <span style={{ fontWeight:'600' }}>{fmt(u.kostnad)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                            <div style={{ padding:'12px 14px', borderTop:'1px solid #f1f5f9' }}>
+                              {/* Arbeidsarter - editable */}
+                              <div style={{ marginBottom:'12px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
+                                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                  <thead><tr>
+                                    {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.',''].map((h,i) => (
+                                      <th key={i} style={{ padding:'3px 4px', textAlign:i>=1?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                    ))}
+                                  </tr></thead>
+                                  <tbody>
+                                    {(bd.arbeidsarter||[]).map(a => {
+                                      const r = beregnArbeidskostnad(a, fakt)
+                                      return (
+                                        <tr key={a.id}>
+                                          <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                          <td style={{ padding:'3px 2px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'65px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{r.faktiskTid.toFixed(1)} t</td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{Math.round(r.timekostnad)}</td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#0f172a' }}>{fmt(r.arbeidskostnad)}</td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
+                                          <td style={{ padding:'3px 2px' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(kalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>}</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                                <button onClick={() => addArbeidsart(kalk.id, bd.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Arbeidsart</button>
+                              </div>
+
+                              {/* Materialer - editable */}
+                              <div style={{ marginBottom:'12px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
+                                {(bd.materialer||[]).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                    <thead><tr>
+                                      {['Varenavn','Mengde','Enhet','Pris/enh','Kostnad','Med fortj.',''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign:i>=1?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {(bd.materialer||[]).map(m => {
+                                        const r = beregnMaterialkostnad(m, fakt)
+                                        return (
+                                          <tr key={m.id}>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#0f172a' }}>{fmt(r.kostnad)}</td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
+                                            <td style={{ padding:'3px 2px' }}><button onClick={()=>removeMaterial(kalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                                <button onClick={() => addMaterial(kalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
+                              </div>
+
+                              {/* Underleverandører - editable */}
+                              <div>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>🤝 UNDERLEVERANDØRER</div>
+                                {(bd.underleverandorer||[]).map(u => (
+                                  <div key={u.id} style={{ display:'flex', gap:'4px', alignItems:'center', marginBottom:'3px' }}>
+                                    <input value={u.navn} onChange={e=>updateUE(kalk.id,bd.id,u.id,'navn',e.target.value)} placeholder="Navn" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                                    <input value={u.beskrivelse} onChange={e=>updateUE(kalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                                    <input type="number" value={u.kostnad} onChange={e=>updateUE(kalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Kr" style={{ ...qInp, width:'80px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
+                                    <button onClick={()=>removeUE(kalk.id,bd.id,u.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>
+                                  </div>
+                                ))}
+                                <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -17103,6 +17194,10 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
                       <button onClick={() => setShowBibliotekPicker(kalk.id)}
                         style={{ flex:1, background:'#eff6ff', border:'2px dashed #bfdbfe', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#2563eb', fontWeight:'600', fontSize:'13px' }}>
                         📚 Hent fra bibliotek
+                      </button>
+                      <button onClick={() => addEmptyBd(kalk.id)}
+                        style={{ flex:1, background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>
+                        + Ny tom bygningsdel
                       </button>
                     </div>
                   </div>
