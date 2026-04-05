@@ -17773,8 +17773,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>📧 Send forespørsel</button>}
                               {uf.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
                             </div>
-                              {uf.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
-                            </div>
                             {/* Mottatt svar */}
                             {uf.status === 'mottatt' && uf.svar_pris && (
                               <div style={{ marginTop:'8px', background:'#eff6ff', borderRadius:'8px', padding:'10px', border:'1px solid #bfdbfe' }}>
