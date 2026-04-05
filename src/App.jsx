@@ -16961,6 +16961,19 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl))
   }
 
+  // Move kalkyle up/down
+  const moveKalkyle = (kalId, direction) => {
+    const idx = kalkyler.findIndex(k => k.id === kalId)
+    if (idx < 0) return
+    const newIdx = idx + direction
+    if (newIdx < 0 || newIdx >= kalkyler.length) return
+    const newKalkyler = [...kalkyler]
+    const temp = newKalkyler[idx]
+    newKalkyler[idx] = newKalkyler[newIdx]
+    newKalkyler[newIdx] = temp
+    saveProject({ ...k, kalkyler: newKalkyler })
+  }
+
   const refresh = async () => {
     const { data } = await supabase.from('calculations').select('*').eq('id', k.id).single()
     if (data) setK(data)
@@ -17073,6 +17086,13 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
                 <div onClick={() => setActiveKalkId(isActive ? null : kalk.id)}
                   style={{ background: isActive ? '#f0fdf4' : '#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #f1f5f9', cursor:'pointer' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                    {/* Move handle */}
+                    <div onClick={e => e.stopPropagation()} style={{ display:'flex', flexDirection:'column', gap:'1px', marginRight:'2px', flexShrink:0 }}>
+                      <button onClick={() => moveKalkyle(kalk.id, -1)} disabled={kalkyler.indexOf(kalk) === 0}
+                        style={{ background:'none', border:'none', cursor: kalkyler.indexOf(kalk) === 0 ? 'default' : 'pointer', padding:'1px 4px', fontSize:'11px', color: kalkyler.indexOf(kalk) === 0 ? '#e2e8f0' : '#94a3b8', lineHeight:1 }}>▲</button>
+                      <button onClick={() => moveKalkyle(kalk.id, 1)} disabled={kalkyler.indexOf(kalk) === kalkyler.length - 1}
+                        style={{ background:'none', border:'none', cursor: kalkyler.indexOf(kalk) === kalkyler.length - 1 ? 'default' : 'pointer', padding:'1px 4px', fontSize:'11px', color: kalkyler.indexOf(kalk) === kalkyler.length - 1 ? '#e2e8f0' : '#94a3b8', lineHeight:1 }}>▼</button>
+                    </div>
                     <span style={{ fontSize:'18px' }}>{fag.emoji}</span>
                     <div>
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{kalk.name}</span>
