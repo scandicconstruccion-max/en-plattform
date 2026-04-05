@@ -17217,15 +17217,21 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       if (mottatte.length === 0) return
       let updated = false
       const newKalkyler = kalkyler.map(kl => {
-        let newUf = kl.ue_foresporsel ? { ...kl.ue_foresporsel } : null
-        if (newUf && newUf.foresporsel_id && (newUf.status === 'sendt')) {
-          const match = mottatte.find(f => f.id === newUf.foresporsel_id)
-          if (match) {
-            newUf = { ...newUf, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold }
-            updated = true
+        // Check kalkyle-level UE forespørsler (array)
+        const newUFs = (kl.ue_foresporsler || []).map(uf => {
+          if (uf.foresporsel_id && uf.status === 'sendt') {
+            const match = mottatte.find(f => f.id === uf.foresporsel_id)
+            if (match) { updated = true; return { ...uf, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold } }
           }
+          return uf
+        })
+        // Also check legacy single ue_foresporsel
+        let newUf = kl.ue_foresporsel ? { ...kl.ue_foresporsel } : null
+        if (newUf && newUf.foresporsel_id && newUf.status === 'sendt') {
+          const match = mottatte.find(f => f.id === newUf.foresporsel_id)
+          if (match) { newUf = { ...newUf, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold }; updated = true }
         }
-        return { ...kl, ue_foresporsel: newUf, bygningsdeler: (kl.bygningsdeler||[]).map(bd => ({ ...bd, underleverandorer: (bd.underleverandorer||[]).map(u => {
+        return { ...kl, ue_foresporsel: newUf, ue_foresporsler: newUFs, bygningsdeler: (kl.bygningsdeler||[]).map(bd => ({ ...bd, underleverandorer: (bd.underleverandorer||[]).map(u => {
           const match = mottatte.find(f => f.id === u.foresporsel_id)
           if (match && u.status === 'sendt') { updated = true; return { ...u, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold } }
           return u
@@ -17666,149 +17672,138 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       </button>
                     </div>
 
-                    {/* UE-forespørsel på fagkalkyle-nivå */}
+                    {/* UE-forespørsler på fagkalkyle-nivå — støtter flere UE */}
                     <div style={{ marginTop:'12px', background:'#fefce8', borderRadius:'10px', border:'1px solid #fde68a', padding:'12px 14px' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: kalk.ue_foresporsel ? '8px' : '0' }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e' }}>🤝 Innhent UE-tilbud for hele {kalk.name}</div>
-                        {!kalk.ue_foresporsel && <button onClick={() => {
-                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { navn: '', email: '', telefon: '', beskrivelse: '', estimat: 0, status: 'utkast' } } : kl))
-                        }} style={{ background:'#ca8a04', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til UE</button>}
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e' }}>🤝 UE-tilbud for {kalk.name}</div>
+                        <button onClick={() => {
+                          const foresporsler = kalk.ue_foresporsler || []
+                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: [...foresporsler, { id: Date.now(), navn: '', email: '', telefon: '', beskrivelse: '', status: 'utkast', vedlegg: [], paaslag: 15 }] } : kl))
+                        }} style={{ background:'#ca8a04', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny forespørsel</button>
                       </div>
-                      {kalk.ue_foresporsel && (() => {
-                        const uf = kalk.ue_foresporsel
-                        const UF_STATUS = { utkast: { bg:'#f8fafc', color:'#64748b', label:'Utkast' }, sendt: { bg:'#fefce8', color:'#ca8a04', label:'Sendt' }, mottatt: { bg:'#eff6ff', color:'#2563eb', label:'Tilbud mottatt' }, godkjent: { bg:'#f0fdf4', color:'#16a34a', label:'Godkjent' } }
+
+                      {/* Valgt UE indikator */}
+                      {kalk.valgt_ue && <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'8px 12px', marginBottom:'8px', fontSize:'12px' }}>
+                        <span style={{ color:'#16a34a', fontWeight:'700' }}>✅ Valgt UE: {kalk.valgt_ue.navn}</span>
+                        <span style={{ color:'#64748b', marginLeft:'8px' }}>Innkjøp: {fmt(kalk.valgt_ue.innkjop)} · Påslag {kalk.valgt_ue.paaslag}% · Ut til kunde: {fmt(kalk.valgt_ue.ut_pris)}</span>
+                        <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, valgt_ue: null } : kl))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'12px', marginLeft:'8px' }}>Fjern</button>
+                      </div>}
+
+                      {(kalk.ue_foresporsler || []).map((uf, ufi) => {
+                        const UF_STATUS = { utkast: { bg:'#f8fafc', color:'#64748b', label:'Utkast' }, sendt: { bg:'#fefce8', color:'#ca8a04', label:'Sendt' }, mottatt: { bg:'#eff6ff', color:'#2563eb', label:'Tilbud mottatt' }, valgt: { bg:'#f0fdf4', color:'#16a34a', label:'Valgt' } }
                         const st = UF_STATUS[uf.status] || UF_STATUS.utkast
+                        const updateUF = (field, value) => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, [field]: value } : u) } : kl))
+                        const removeUF = () => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: (kl.ue_foresporsler||[]).filter(u => u.id !== uf.id) } : kl))
+
                         return (
-                          <div style={{ background:'white', borderRadius:'8px', padding:'10px', border:'1px solid #fde68a' }}>
+                          <div key={uf.id} style={{ background:'white', borderRadius:'8px', padding:'10px', border: uf.status === 'mottatt' ? '2px solid #bfdbfe' : '1px solid #fde68a', marginBottom:'6px' }}>
+                            {/* Rad 1: Navn + status */}
                             <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
-                              <input value={uf.navn||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, navn: e.target.value } } : kl))} placeholder="UE-firma" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px', fontWeight:'600' }} />
+                              <input value={uf.navn||''} onChange={e => updateUF('navn', e.target.value)} placeholder="UE-firma" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px', fontWeight:'600' }} />
                               <span style={{ background:st.bg, color:st.color, padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>{st.label}</span>
-                              <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: null } : kl))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>
+                              <button onClick={removeUF} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', flexShrink:0 }}>×</button>
                             </div>
+                            {/* Rad 2: E-post + telefon */}
                             <div style={{ display:'flex', gap:'6px', marginBottom:'6px' }}>
-                              <input value={uf.email||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, email: e.target.value } } : kl))} placeholder="ue@firma.no" type="email" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
-                              <input value={uf.telefon||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, telefon: e.target.value } } : kl))} placeholder="Telefon" style={{ ...qInp, width:'100px', fontSize:'12px', padding:'6px 8px' }} />
+                              <input value={uf.email||''} onChange={e => updateUF('email', e.target.value)} placeholder="ue@firma.no" type="email" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                              <input value={uf.telefon||''} onChange={e => updateUF('telefon', e.target.value)} placeholder="Telefon" style={{ ...qInp, width:'100px', fontSize:'12px', padding:'6px 8px' }} />
                             </div>
+                            {/* Rad 3: Beskrivelse */}
                             <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
-                              <input value={uf.beskrivelse||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, beskrivelse: e.target.value } } : kl))} placeholder="Generell beskrivelse (valgfritt)" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                              <input value={uf.beskrivelse||''} onChange={e => updateUF('beskrivelse', e.target.value)} placeholder="Arbeidsbeskrivelse (valgfritt)" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
                             </div>
-                            {/* Vedlegg/tegninger */}
-                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px' }}>
-                              <span style={{ fontSize:'12px', color:'#64748b' }}>📎 Vedlegg/tegninger:</span>
+                            {/* Vedlegg */}
+                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px', flexWrap:'wrap' }}>
+                              <span style={{ fontSize:'11px', color:'#64748b' }}>📎</span>
                               {(uf.vedlegg||[]).map((v, vi) => (
                                 <span key={vi} style={{ background:'#f1f5f9', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', color:'#475569' }}>
-                                  {v.name} <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, vedlegg: (kl.ue_foresporsel.vedlegg||[]).filter((_,i)=>i!==vi) } } : kl))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px' }}>×</button>
+                                  {v.name} <button onClick={() => updateUF('vedlegg', (uf.vedlegg||[]).filter((_,i) => i !== vi))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'10px' }}>×</button>
                                 </span>
                               ))}
-                              <label style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', cursor:'pointer', color:'#64748b' }}>
-                                + Last opp
+                              <label style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', cursor:'pointer', color:'#64748b' }}>
+                                + Vedlegg
                                 <input type="file" style={{ display:'none' }} onChange={async (e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
+                                  const file = e.target.files?.[0]; if (!file) return
                                   const path = `ue-vedlegg/${Date.now()}_${file.name}`
                                   const { error } = await supabase.storage.from('project-files').upload(path, file)
-                                  if (error) { alert('Feil ved opplasting: ' + error.message); return }
+                                  if (error) { alert('Feil: ' + error.message); return }
                                   const { data: { publicUrl } } = supabase.storage.from('project-files').getPublicUrl(path)
-                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, vedlegg: [...(kl.ue_foresporsel.vedlegg||[]), { name: file.name, url: publicUrl }] } } : kl))
+                                  updateUF('vedlegg', [...(uf.vedlegg||[]), { name: file.name, url: publicUrl }])
                                   e.target.value = ''
                                 }} />
                               </label>
                             </div>
-                            <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                              {uf.status === 'utkast' && (kalk.bygningsdeler||[]).length === 0 && <span style={{ fontSize:'11px', color:'#dc2626' }}>Legg til bygningsdeler først</span>}
-                              {uf.status === 'utkast' && (kalk.bygningsdeler||[]).length > 0 && <button onClick={async () => {
+                            {/* Send-knapp */}
+                            {uf.status === 'utkast' && (
+                              <button onClick={async () => {
                                 if (!uf.email || !uf.navn) return alert('Fyll inn UE-navn og e-post')
+                                if ((kalk.bygningsdeler||[]).length === 0) return alert('Legg til bygningsdeler først')
                                 try {
                                   const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
                                   const fag = getFaggruppe(kalk.fag)
-                                  // Build poster fra bygningsdeler + standard "Annet/tillegg" post
-                                  const poster = [
-                                    ...(kalk.bygningsdeler||[]).map(bd => ({ id: bd.id, name: bd.name || 'Bygningsdel', mengde: bd.mengde || 1, enhet: bd.enhet || 'stk', beskrivelse: '' })),
-                                    { id: 'annet', name: 'Annet / tillegg', mengde: 1, enhet: 'RS', beskrivelse: 'Øvrige kostnader som er nødvendig for å utføre arbeidet' }
-                                  ]
+                                  const poster = [...(kalk.bygningsdeler||[]).map(bd => ({ id: bd.id, name: bd.name || 'Bygningsdel', mengde: bd.mengde || 1, enhet: bd.enhet || 'stk', beskrivelse: '' })), { id: 'annet', name: 'Annet / tillegg', mengde: 1, enhet: 'RS', beskrivelse: 'Øvrige kostnader nødvendig for utførelsen' }]
                                   const vedleggUrls = (uf.vedlegg||[]).map(v => ({ name: v.name, url: v.url }))
-
                                   const { data: foresp, error } = await supabase.from('ue_foresporsler').insert({
-                                    user_id: user?.id, calculation_id: k.id, kalkyle_fag: kalk.fag, bygningsdel_id: null, ue_post_id: null,
+                                    user_id: user?.id, calculation_id: k.id, kalkyle_fag: kalk.fag,
                                     foresporsel_nr: nr, prosjekt_navn: k.title, prosjekt_adresse: k.customer_address || '',
                                     ue_navn: uf.navn, ue_email: uf.email, ue_telefon: uf.telefon || '',
-                                    oppgave_navn: `${fag.name} — komplett`,
-                                    oppgave_beskrivelse: uf.beskrivelse || '',
-                                    estimert_kostnad: 0,
-                                    poster: poster,
-                                    vedlegg: vedleggUrls,
-                                    status: 'sendt',
-                                    frist_dato: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+                                    oppgave_navn: `${fag.name} — komplett`, oppgave_beskrivelse: uf.beskrivelse || '',
+                                    estimert_kostnad: 0, poster, vedlegg: vedleggUrls,
+                                    status: 'sendt', frist_dato: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
                                   }).select().single()
                                   if (error) throw error
-
                                   const svarUrl = `${window.location.origin}/ue-svar?token=${foresp.svar_token}`
-                                  const posterHtml = poster.map(p => `<tr><td style="padding:6px 12px;font-size:13px;color:#374151">${p.name}</td><td style="padding:6px 12px;text-align:right;font-size:13px;color:#64748b">${p.mengde} ${p.enhet}</td></tr>`).join('')
-                                  const vedleggHtml = vedleggUrls.length > 0 ? `<div style="margin-top:12px;font-size:13px;color:#64748b"><strong>📎 Vedlagte tegninger/dokumenter:</strong><br>${vedleggUrls.map(v => `<a href="${v.url}" style="color:#2563eb">${v.name}</a>`).join('<br>')}</div>` : ''
-
-                                  const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-                                    <h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Tilbudsforespørsel</h1>
-                                    <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Ref: ${nr}</p>
-                                    <div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">
-                                      <div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>
-                                      <div style="font-weight:700;color:#0f172a">${k.title}</div>
-                                      ${k.customer_address ? `<div style="font-size:13px;color:#64748b">${k.customer_address}</div>` : ''}
-                                    </div>
-                                    <div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe">
-                                      <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:8px">${fag.emoji} ${fag.name.toUpperCase()}</div>
-                                      ${uf.beskrivelse ? `<div style="font-size:13px;color:#374151;margin-bottom:8px">${uf.beskrivelse}</div>` : ''}
-                                      <table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #e2e8f0">Post</th><th style="text-align:right;padding:4px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #e2e8f0">Mengde</th></tr></thead><tbody>${posterHtml}</tbody></table>
-                                    </div>
-                                    ${vedleggHtml}
-                                    <p style="color:#475569;font-size:14px;line-height:1.6">Vennligst pris hver post via knappen nedenfor.</p>
-                                    <div style="text-align:center;margin:28px 0">
-                                      <a href="${svarUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📋 Legg inn tilbud</a>
-                                    </div>
-                                    <p style="color:#94a3b8;font-size:12px">Svarfrist: 7 dager</p>
-                                  </div>`
-                                  await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-                                    body: JSON.stringify({ to: uf.email, subject: `Tilbudsforespørsel ${nr} – ${fag.name} – ${k.title}`, html: emailHtml })
-                                  })
-                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'sendt', foresporsel_id: foresp.id, nr } } : kl))
+                                  const posterHtml = poster.map(p => `<tr><td style="padding:6px 12px;font-size:13px">${p.name}</td><td style="padding:6px 12px;text-align:right;font-size:13px;color:#64748b">${p.mengde} ${p.enhet}</td></tr>`).join('')
+                                  const vedleggHtml = vedleggUrls.length > 0 ? `<div style="margin:12px 0;font-size:13px"><strong>📎 Vedlegg:</strong><br>${vedleggUrls.map(v => `<a href="${v.url}" style="color:#2563eb">${v.name}</a>`).join('<br>')}</div>` : ''
+                                  const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px"><h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Tilbudsforespørsel</h1><p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Ref: ${nr}</p><div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px"><div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div><div style="font-weight:700;color:#0f172a">${k.title}</div>${k.customer_address ? `<div style="font-size:13px;color:#64748b">${k.customer_address}</div>` : ''}</div><div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe"><div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:8px">${fag.emoji} ${fag.name.toUpperCase()}</div>${uf.beskrivelse ? `<div style="font-size:13px;color:#374151;margin-bottom:8px">${uf.beskrivelse}</div>` : ''}<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #e2e8f0">Post</th><th style="text-align:right;padding:4px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #e2e8f0">Mengde</th></tr></thead><tbody>${posterHtml}</tbody></table></div>${vedleggHtml}<p style="color:#475569;font-size:14px">Vennligst pris hver post via knappen nedenfor.</p><div style="text-align:center;margin:28px 0"><a href="${svarUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📋 Legg inn tilbud</a></div><p style="color:#94a3b8;font-size:12px">Svarfrist: 7 dager</p></div>`
+                                  await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: uf.email, subject: `Tilbudsforespørsel ${nr} – ${fag.name} – ${k.title}`, html: emailHtml }) })
+                                  updateUF('status', 'sendt')
+                                  updateUF('foresporsel_id', foresp.id)
+                                  updateUF('nr', nr)
                                   setShowUESuccess({ navn: uf.navn, nr })
                                 } catch(e) { alert('Feil: ' + e.message) }
-                              }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>📧 Send forespørsel</button>}
-                              {uf.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
-                            </div>
-                            {/* Mottatt svar */}
+                              }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', width:'100%' }}>📧 Send forespørsel til {uf.navn || 'UE'}</button>
+                            )}
+                            {uf.status === 'sendt' && <div style={{ fontSize:'12px', color:'#ca8a04', textAlign:'center', padding:'4px' }}>⏳ Venter på svar fra {uf.navn}</div>}
+
+                            {/* Mottatt tilbud */}
                             {uf.status === 'mottatt' && uf.svar_pris && (
-                              <div style={{ marginTop:'8px', background:'#eff6ff', borderRadius:'8px', padding:'12px', border:'1px solid #bfdbfe' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'8px' }}>📨 TILBUD MOTTATT FRA {(uf.navn||'').toUpperCase()}</div>
-                                {/* Postvis priser */}
-                                {(uf.svar_poster||[]).length > 0 && (
-                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'8px', fontSize:'12px' }}>
+                              <div style={{ marginTop:'6px', background:'#eff6ff', borderRadius:'8px', padding:'10px', border:'1px solid #bfdbfe' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'6px' }}>📨 TILBUD FRA {(uf.navn||'').toUpperCase()}</div>
+                                {(uf.svar_poster||[]).filter(p => p.pris > 0).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'6px', fontSize:'12px' }}>
                                     {uf.svar_poster.filter(p => p.pris > 0).map((p,i) => (
-                                      <tr key={i} style={{ borderBottom:'1px solid #e2e8f0' }}>
-                                        <td style={{ padding:'4px 0', color:'#374151' }}>{p.name}</td>
-                                        <td style={{ padding:'4px 0', textAlign:'right', fontWeight:'600', color:'#0f172a' }}>{fmt(p.pris)}</td>
-                                      </tr>
+                                      <tr key={i} style={{ borderBottom:'1px solid #e2e8f0' }}><td style={{ padding:'3px 0', color:'#374151' }}>{p.name}</td><td style={{ padding:'3px 0', textAlign:'right', fontWeight:'600' }}>{fmt(p.pris)}</td></tr>
                                     ))}
-                                    <tr style={{ borderTop:'2px solid #0f172a' }}>
-                                      <td style={{ padding:'6px 0', fontWeight:'800', fontSize:'13px' }}>TOTALT</td>
-                                      <td style={{ padding:'6px 0', textAlign:'right', fontWeight:'800', fontSize:'14px', color:'#059669' }}>{fmt(uf.svar_pris)}</td>
-                                    </tr>
+                                    <tr style={{ borderTop:'2px solid #0f172a' }}><td style={{ padding:'4px 0', fontWeight:'800', fontSize:'13px' }}>Innkjøpspris</td><td style={{ padding:'4px 0', textAlign:'right', fontWeight:'800', fontSize:'13px' }}>{fmt(uf.svar_pris)}</td></tr>
                                   </table>
                                 )}
-                                {!(uf.svar_poster||[]).length && <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'6px' }}>{fmt(uf.svar_pris)}</div>}
-                                {uf.svar_tidsplan && <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>📅 {uf.svar_tidsplan}</div>}
-                                {uf.svar_forbehold && <div style={{ fontSize:'12px', color:'#92400e', background:'#fefce8', padding:'6px 8px', borderRadius:'6px', marginTop:'4px', marginBottom:'4px' }}>⚠️ Forbehold: {uf.svar_forbehold}</div>}
-                                <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
-                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'godkjent' } } : kl))} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>✅ Godkjenn tilbud</button>
-                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'utkast', svar_pris: null, svar_poster: null } } : kl))} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', cursor:'pointer', color:'#64748b' }}>Avslå</button>
+                                {uf.svar_tidsplan && <div style={{ fontSize:'11px', color:'#64748b' }}>📅 {uf.svar_tidsplan}</div>}
+                                {uf.svar_forbehold && <div style={{ fontSize:'11px', color:'#92400e', background:'#fefce8', padding:'4px 6px', borderRadius:'4px', marginTop:'4px' }}>⚠️ {uf.svar_forbehold}</div>}
+                                {/* Påslag og bruk i kalkyle */}
+                                <div style={{ marginTop:'8px', background:'#f8fafc', borderRadius:'6px', padding:'8px', display:'flex', gap:'8px', alignItems:'center' }}>
+                                  <span style={{ fontSize:'12px', color:'#64748b', whiteSpace:'nowrap' }}>Påslag:</span>
+                                  <input type="number" value={uf.paaslag ?? 15} onChange={e => updateUF('paaslag', e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'4px 6px' }} />
+                                  <span style={{ fontSize:'12px', color:'#64748b' }}>%</span>
+                                  <span style={{ fontSize:'12px', color:'#0f172a', fontWeight:'600', marginLeft:'auto' }}>Ut: {fmt(uf.svar_pris * (1 + (parseFloat(uf.paaslag ?? 15) / 100)))}</span>
                                 </div>
+                                <button onClick={() => {
+                                  const paaslag = parseFloat(uf.paaslag ?? 15)
+                                  const utPris = uf.svar_pris * (1 + paaslag / 100)
+                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl,
+                                    valgt_ue: { navn: uf.navn, innkjop: uf.svar_pris, paaslag, ut_pris: utPris, foresporsel_id: uf.foresporsel_id, svar_poster: uf.svar_poster },
+                                    ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, status: 'valgt' } : u.status === 'valgt' ? { ...u, status: 'mottatt' } : u)
+                                  } : kl))
+                                }} style={{ width:'100%', background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'8px', fontSize:'13px', fontWeight:'700', cursor:'pointer', marginTop:'6px' }}>
+                                  📥 Bruk dette tilbudet i kalkylen — {fmt(uf.svar_pris * (1 + (parseFloat(uf.paaslag ?? 15) / 100)))} ut til kunde
+                                </button>
                               </div>
                             )}
-                            {uf.status === 'godkjent' && <div style={{ marginTop:'6px', fontSize:'12px', color:'#16a34a', fontWeight:'600' }}>✅ Godkjent — {uf.svar_pris ? fmt(uf.svar_pris) : ''}</div>}
+                            {uf.status === 'valgt' && <div style={{ marginTop:'4px', fontSize:'12px', color:'#16a34a', fontWeight:'600', textAlign:'center' }}>✅ Valgt — brukes i kalkylen</div>}
                           </div>
                         )
-                      })()}
+                      })}
+                      {(kalk.ue_foresporsler||[]).length === 0 && <p style={{ fontSize:'12px', color:'#94a3b8', margin:'4px 0 0', textAlign:'center' }}>Klikk "+ Ny forespørsel" for å innhente UE-tilbud</p>}
                     </div>
                   </div>
                 )}
