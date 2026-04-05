@@ -17219,14 +17219,19 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       const { data } = await supabase.from('ue_foresporsler').select('*').eq('calculation_id', k.id).eq('status', 'mottatt')
       if (!data || data.length === 0) return
       let updated = false
-      const newKalkyler = kalkyler.map(kl => ({ ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(bd => ({ ...bd, underleverandorer: (bd.underleverandorer||[]).map(u => {
-        const match = data.find(f => f.id === u.foresporsel_id)
-        if (match && u.status === 'sendt') {
-          updated = true
-          return { ...u, status: 'mottatt', svar_pris: match.svar_pris, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan }
+      const newKalkyler = kalkyler.map(kl => {
+        // Check kalkyle-level UE forespørsel
+        let newUf = kl.ue_foresporsel
+        if (newUf && newUf.foresporsel_id && newUf.status === 'sendt') {
+          const match = data.find(f => f.id === newUf.foresporsel_id)
+          if (match) { newUf = { ...newUf, status: 'mottatt', svar_pris: match.svar_pris, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan }; updated = true }
         }
-        return u
-      }) })) }))
+        return { ...kl, ue_foresporsel: newUf, bygningsdeler: (kl.bygningsdeler||[]).map(bd => ({ ...bd, underleverandorer: (bd.underleverandorer||[]).map(u => {
+          const match = data.find(f => f.id === u.foresporsel_id)
+          if (match && u.status === 'sendt') { updated = true; return { ...u, status: 'mottatt', svar_pris: match.svar_pris, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan } }
+          return u
+        }) })) }
+      })
       if (updated) saveProject({ ...k, kalkyler: newKalkyler })
     } catch(e) {}
   }
@@ -17660,6 +17665,103 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         style={{ flex:1, background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>
                         + Ny tom bygningsdel
                       </button>
+                    </div>
+
+                    {/* UE-forespørsel på fagkalkyle-nivå */}
+                    <div style={{ marginTop:'12px', background:'#fefce8', borderRadius:'10px', border:'1px solid #fde68a', padding:'12px 14px' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: kalk.ue_foresporsel ? '8px' : '0' }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e' }}>🤝 Innhent UE-tilbud for hele {kalk.name}</div>
+                        {!kalk.ue_foresporsel && <button onClick={() => {
+                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { navn: '', email: '', telefon: '', beskrivelse: '', estimat: 0, status: 'utkast' } } : kl))
+                        }} style={{ background:'#ca8a04', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til UE</button>}
+                      </div>
+                      {kalk.ue_foresporsel && (() => {
+                        const uf = kalk.ue_foresporsel
+                        const UF_STATUS = { utkast: { bg:'#f8fafc', color:'#64748b', label:'Utkast' }, sendt: { bg:'#fefce8', color:'#ca8a04', label:'Sendt' }, mottatt: { bg:'#eff6ff', color:'#2563eb', label:'Tilbud mottatt' }, godkjent: { bg:'#f0fdf4', color:'#16a34a', label:'Godkjent' } }
+                        const st = UF_STATUS[uf.status] || UF_STATUS.utkast
+                        return (
+                          <div style={{ background:'white', borderRadius:'8px', padding:'10px', border:'1px solid #fde68a' }}>
+                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
+                              <input value={uf.navn||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, navn: e.target.value } } : kl))} placeholder="UE-firma" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px', fontWeight:'600' }} />
+                              <span style={{ background:st.bg, color:st.color, padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>{st.label}</span>
+                              <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: null } : kl))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>
+                            </div>
+                            <div style={{ display:'flex', gap:'6px', marginBottom:'6px' }}>
+                              <input value={uf.email||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, email: e.target.value } } : kl))} placeholder="ue@firma.no" type="email" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                              <input value={uf.telefon||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, telefon: e.target.value } } : kl))} placeholder="Telefon" style={{ ...qInp, width:'100px', fontSize:'12px', padding:'6px 8px' }} />
+                            </div>
+                            <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                              <input value={uf.beskrivelse||''} onChange={e => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, beskrivelse: e.target.value } } : kl))} placeholder="Beskrivelse av arbeidet" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                              {uf.status === 'utkast' && <button onClick={async () => {
+                                if (!uf.email || !uf.navn) return alert('Fyll inn UE-navn og e-post')
+                                try {
+                                  const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
+                                  const fag = getFaggruppe(kalk.fag)
+                                  const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
+                                  const kt = beregnKalkyle(kalk, fakt)
+                                  // Bygg liste over bygningsdeler for beskrivelsen
+                                  const bdListe = (kalk.bygningsdeler||[]).map(bd => `• ${bd.name || 'Bygningsdel'} (${bd.mengde||1} ${bd.enhet||'stk'})`).join('\n')
+
+                                  const { data: foresp, error } = await supabase.from('ue_foresporsler').insert({
+                                    user_id: user?.id, calculation_id: k.id, kalkyle_fag: kalk.fag, bygningsdel_id: null, ue_post_id: null,
+                                    foresporsel_nr: nr, prosjekt_navn: k.title, prosjekt_adresse: k.customer_address || '',
+                                    ue_navn: uf.navn, ue_email: uf.email, ue_telefon: uf.telefon || '',
+                                    oppgave_navn: `${fag.name} — komplett`,
+                                    oppgave_beskrivelse: uf.beskrivelse || `Komplett ${fag.name.toLowerCase()}-arbeid:\n${bdListe}`,
+                                    estimert_kostnad: kt.totMedFortjeneste,
+                                    status: 'sendt',
+                                    frist_dato: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+                                  }).select().single()
+                                  if (error) throw error
+
+                                  const svarUrl = `${window.location.origin}/ue-svar?token=${foresp.svar_token}`
+                                  const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+                                    <h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Tilbudsforespørsel</h1>
+                                    <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Ref: ${nr}</p>
+                                    <div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">
+                                      <div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>
+                                      <div style="font-weight:700;color:#0f172a">${k.title}</div>
+                                      ${k.customer_address ? `<div style="font-size:13px;color:#64748b">${k.customer_address}</div>` : ''}
+                                    </div>
+                                    <div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe">
+                                      <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:6px">${fag.emoji} ${fag.name.toUpperCase()} — KOMPLETT</div>
+                                      ${uf.beskrivelse ? `<div style="font-size:13px;color:#374151;margin-bottom:8px">${uf.beskrivelse}</div>` : ''}
+                                      <div style="font-size:13px;color:#64748b;white-space:pre-line">${bdListe}</div>
+                                    </div>
+                                    <p style="color:#475569;font-size:14px;line-height:1.6">Vi ber om ditt tilbud på komplett ${fag.name.toLowerCase()}-arbeid for ovennevnte prosjekt.</p>
+                                    <div style="text-align:center;margin:28px 0">
+                                      <a href="${svarUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📋 Legg inn tilbud</a>
+                                    </div>
+                                    <p style="color:#94a3b8;font-size:12px">Svarfrist: 7 dager</p>
+                                  </div>`
+                                  await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+                                    body: JSON.stringify({ to: uf.email, subject: `Tilbudsforespørsel ${nr} – ${fag.name} – ${k.title}`, html: emailHtml })
+                                  })
+                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'sendt', foresporsel_id: foresp.id, nr } } : kl))
+                                  setShowUESuccess({ navn: uf.navn, nr })
+                                } catch(e) { alert('Feil: ' + e.message) }
+                              }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>📧 Send forespørsel</button>}
+                              {uf.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
+                            </div>
+                            {/* Mottatt svar */}
+                            {uf.status === 'mottatt' && uf.svar_pris && (
+                              <div style={{ marginTop:'8px', background:'#eff6ff', borderRadius:'8px', padding:'10px', border:'1px solid #bfdbfe' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'4px' }}>📨 TILBUD MOTTATT</div>
+                                <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>{fmt(uf.svar_pris)}</div>
+                                {uf.svar_beskrivelse && <div style={{ fontSize:'12px', color:'#475569', marginTop:'4px' }}>{uf.svar_beskrivelse}</div>}
+                                {uf.svar_tidsplan && <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>📅 {uf.svar_tidsplan}</div>}
+                                <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
+                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'godkjent' } } : kl))} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>✅ Godkjenn</button>
+                                  <button onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsel: { ...kl.ue_foresporsel, status: 'utkast', svar_pris: null } } : kl))} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', cursor:'pointer', color:'#64748b' }}>Avslå</button>
+                                </div>
+                              </div>
+                            )}
+                            {uf.status === 'godkjent' && <div style={{ marginTop:'6px', fontSize:'12px', color:'#16a34a', fontWeight:'600' }}>✅ Godkjent — {uf.svar_pris ? fmt(uf.svar_pris) : ''}</div>}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                 )}
