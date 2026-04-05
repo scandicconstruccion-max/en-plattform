@@ -5325,6 +5325,207 @@ async function createApprovalToken({ module, recordId, recipientEmail, createdBy
 
 // ─── END GODKJENNING MODULE ───────────────────────────────────────────────────
 
+// ─── UE SVAR PAGE (Offentlig — ingen innlogging) ─────────────────────────────
+
+function UESvarPage() {
+  const [foresp, setForesp] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [pris, setPris] = useState('')
+  const [beskrivelse, setBeskrivelse] = useState('')
+  const [tidsplan, setTidsplan] = useState('')
+  const [betingelser, setBetingelser] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (!token) { setError('Ugyldig lenke'); setLoading(false); return }
+
+    supabase.from('ue_foresporsler').select('*').eq('svar_token', token).single()
+      .then(({ data, error: e }) => {
+        if (e || !data) { setError('Forespørselen ble ikke funnet eller er utløpt'); setLoading(false); return }
+        setForesp(data)
+        if (data.status === 'mottatt' || data.status === 'godkjent') {
+          setPris(data.svar_pris || '')
+          setBeskrivelse(data.svar_beskrivelse || '')
+          setTidsplan(data.svar_tidsplan || '')
+        }
+        setLoading(false)
+      })
+  }, [])
+
+  const handleSubmit = async () => {
+    if (!pris || parseFloat(pris) <= 0) return alert('Vennligst oppgi en pris')
+    setSending(true)
+    try {
+      const { error: e } = await supabase.from('ue_foresporsler').update({
+        svar_pris: parseFloat(pris),
+        svar_beskrivelse: beskrivelse,
+        svar_tidsplan: tidsplan,
+        svar_betingelser: betingelser,
+        svar_dato: new Date().toISOString(),
+        status: 'mottatt',
+        updated_at: new Date().toISOString(),
+      }).eq('id', foresp.id)
+      if (e) throw e
+
+      // Opprett varsel i systemet for TE
+      await supabase.from('notifications').insert({
+        user_id: foresp.user_id,
+        title: `🤝 Nytt UE-tilbud mottatt fra ${foresp.ue_navn}`,
+        message: `${foresp.ue_navn} har levert tilbud på ${fmt(parseFloat(pris))} for "${foresp.oppgave_navn}" i prosjekt ${foresp.prosjekt_navn}. Ref: ${foresp.foresporsel_nr}`,
+        type: 'info',
+        link_page: 'kalkulator'
+      })
+
+      // Send e-post til TE
+      try {
+        const { data: teUser } = await supabase.from('profiles').select('email').eq('id', foresp.user_id).single()
+        if (teUser?.email) {
+          const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+            <h1 style="color:#0f172a;font-size:20px;margin:0 0 8px">🤝 Nytt tilbud mottatt</h1>
+            <p style="color:#64748b;font-size:13px;margin:0 0 20px">Ref: ${foresp.foresporsel_nr}</p>
+            <div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe">
+              <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:6px">TILBUD FRA ${foresp.ue_navn.toUpperCase()}</div>
+              <div style="font-size:24px;font-weight:800;color:#0f172a;margin-bottom:4px">${Math.round(parseFloat(pris)).toLocaleString('nb-NO')} kr</div>
+              <div style="font-size:13px;color:#64748b">Oppgave: ${foresp.oppgave_navn}</div>
+              <div style="font-size:13px;color:#64748b">Prosjekt: ${foresp.prosjekt_navn}</div>
+              ${tidsplan ? `<div style="font-size:13px;color:#64748b;margin-top:4px">📅 ${tidsplan}</div>` : ''}
+            </div>
+            ${foresp.estimert_kostnad > 0 ? `<div style="background:#f8fafc;border-radius:10px;padding:12px;font-size:13px;margin-bottom:16px">
+              <div>Ditt estimat: ${Math.round(foresp.estimert_kostnad).toLocaleString('nb-NO')} kr</div>
+              <div style="color:${parseFloat(pris) <= foresp.estimert_kostnad ? '#16a34a' : '#dc2626'};font-weight:600">Differanse: ${parseFloat(pris) <= foresp.estimert_kostnad ? '' : '+'}${Math.round(parseFloat(pris) - foresp.estimert_kostnad).toLocaleString('nb-NO')} kr</div>
+            </div>` : ''}
+            <p style="color:#475569;font-size:14px">Logg inn i En Plattform for å godkjenne eller avslå tilbudet.</p>
+            <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
+            <p style="color:#94a3b8;font-size:12px">Varsling fra En Plattform</p>
+          </div>`
+          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+            body: JSON.stringify({ to: teUser.email, subject: `Nytt UE-tilbud fra ${foresp.ue_navn} – ${foresp.prosjekt_navn}`, html: emailHtml })
+          })
+        }
+      } catch(emailErr) { /* E-post-feil skal ikke stoppe prosessen */ }
+
+      setSent(true)
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSending(false) }
+  }
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #2563eb', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
+        <p style={{ color:'#94a3b8' }}>Laster forespørsel...</p>
+      </div>
+    </div>
+  )
+
+  if (error) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center', maxWidth:'400px', padding:'40px' }}>
+        <div style={{ fontSize:'48px', marginBottom:'12px' }}>⚠️</div>
+        <h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>{error}</h2>
+        <p style={{ color:'#64748b', fontSize:'14px' }}>Kontakt oppdragsgiveren for en ny lenke.</p>
+      </div>
+    </div>
+  )
+
+  if (sent) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ textAlign:'center', maxWidth:'440px', padding:'40px', background:'white', borderRadius:'20px', boxShadow:'0 4px 24px rgba(0,0,0,0.08)' }}>
+        <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'32px' }}>✅</div>
+        <h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>Tilbud sendt!</h2>
+        <p style={{ color:'#64748b', fontSize:'14px', lineHeight:1.6 }}>Takk for ditt tilbud på <strong>{fmt(parseFloat(pris))}</strong>. Oppdragsgiveren mottar svaret ditt automatisk og tar kontakt.</p>
+      </div>
+    </div>
+  )
+
+  const alreadyAnswered = foresp.status === 'mottatt' || foresp.status === 'godkjent'
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#f8fafc', fontFamily:'system-ui,sans-serif', padding:'20px' }}>
+      <div style={{ maxWidth:'560px', margin:'0 auto' }}>
+        {/* Header */}
+        <div style={{ background:'white', borderRadius:'16px', padding:'24px', marginBottom:'16px', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px' }}>
+            <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>📋</div>
+            <div>
+              <h1 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tilbudsforespørsel</h1>
+              <span style={{ fontSize:'12px', color:'#94a3b8' }}>{foresp.foresporsel_nr}</span>
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'16px' }}>
+            <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>PROSJEKT</div>
+              <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{foresp.prosjekt_navn}</div>
+              {foresp.prosjekt_adresse && <div style={{ fontSize:'12px', color:'#64748b' }}>{foresp.prosjekt_adresse}</div>}
+            </div>
+            <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>OPPGAVE</div>
+              <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{foresp.oppgave_navn}</div>
+              {foresp.oppgave_beskrivelse && <div style={{ fontSize:'12px', color:'#64748b' }}>{foresp.oppgave_beskrivelse}</div>}
+            </div>
+          </div>
+
+          {foresp.estimert_kostnad > 0 && (
+            <div style={{ fontSize:'13px', color:'#64748b', background:'#fefce8', padding:'8px 12px', borderRadius:'8px', border:'1px solid #fde68a' }}>
+              Estimert budsjett: <strong>{fmt(foresp.estimert_kostnad)}</strong>
+            </div>
+          )}
+        </div>
+
+        {/* Svar-skjema */}
+        <div style={{ background:'white', borderRadius:'16px', padding:'24px', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
+          <h2 style={{ margin:'0 0 16px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>{alreadyAnswered ? '✅ Ditt tilbud er innsendt' : 'Legg inn ditt tilbud'}</h2>
+
+          <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Din pris (kr) *</label>
+              <input type="number" value={pris} onChange={e => setPris(e.target.value)} placeholder="0" disabled={alreadyAnswered}
+                style={{ width:'100%', padding:'12px 14px', border:'2px solid #e2e8f0', borderRadius:'10px', fontSize:'18px', fontWeight:'700', outline:'none', boxSizing:'border-box', textAlign:'right', color:'#0f172a', background: alreadyAnswered ? '#f8fafc' : 'white' }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beskrivelse av arbeidet</label>
+              <textarea value={beskrivelse} onChange={e => setBeskrivelse(e.target.value)} rows={3} placeholder="Hva inkluderer tilbudet?" disabled={alreadyAnswered}
+                style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none', fontFamily:'system-ui,sans-serif' }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tidsplan</label>
+              <input value={tidsplan} onChange={e => setTidsplan(e.target.value)} placeholder="F.eks. Kan starte uke 20, ferdig innen 5 dager" disabled={alreadyAnswered}
+                style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Betingelser</label>
+              <input value={betingelser} onChange={e => setBetingelser(e.target.value)} placeholder="F.eks. Betaling 14 dager netto" disabled={alreadyAnswered}
+                style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+
+            {!alreadyAnswered && (
+              <button onClick={handleSubmit} disabled={sending}
+                style={{ width:'100%', padding:'14px', background:sending?'#93c5fd':'#2563eb', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor:sending?'not-allowed':'pointer', marginTop:'8px' }}>
+                {sending ? 'Sender...' : '📋 Send tilbud'}
+              </button>
+            )}
+
+            {alreadyAnswered && (
+              <div style={{ textAlign:'center', padding:'12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0', fontSize:'14px', color:'#16a34a', fontWeight:'600' }}>
+                {foresp.status === 'godkjent' ? '✅ Ditt tilbud er godkjent!' : '📨 Tilbudet er mottatt — venter på svar fra oppdragsgiver'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p style={{ textAlign:'center', color:'#94a3b8', fontSize:'12px', marginTop:'20px' }}>Tilbudsforespørsel via En Plattform</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── ANBUDSMODUL ──────────────────────────────────────────────────────────────
 
 const TENDER_STATUS = {
@@ -16941,11 +17142,95 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).map(u => u.id === uId ? { ...u, [field]: value } : u) } : b) } : kl))
   }
   const addUE = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: Date.now(), navn: '', beskrivelse: '', kostnad: 0 }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: Date.now(), navn: '', beskrivelse: '', kostnad: 0, email: '', telefon: '', status: 'utkast', foresporsel_id: null }] } : b) } : kl))
   }
   const removeUE = (kalId, bdId, uId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : kl))
   }
+
+  // Send tilbudsforespørsel til UE
+  const [showUESuccess, setShowUESuccess] = useState(null)
+
+  const sendUEForesporsel = async (kalId, bdId, ue) => {
+    if (!ue.email) return alert('E-postadresse til UE er påkrevd')
+    if (!ue.navn) return alert('UE-navn er påkrevd')
+    try {
+      const kl = kalkyler.find(x => x.id === kalId)
+      const bd = kl?.bygningsdeler?.find(b => b.id === bdId)
+      const fag = kl ? getFaggruppe(kl.fag) : null
+      const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
+
+      const { data: foresp, error } = await supabase.from('ue_foresporsler').insert({
+        user_id: user?.id, calculation_id: k.id, kalkyle_fag: kl?.fag, bygningsdel_id: bdId, ue_post_id: ue.id,
+        foresporsel_nr: nr, prosjekt_navn: k.title, prosjekt_adresse: k.customer_address || '',
+        ue_navn: ue.navn, ue_email: ue.email, ue_telefon: ue.telefon || '',
+        oppgave_navn: ue.beskrivelse || `${fag?.name || 'Arbeid'} - ${bd?.name || ''}`,
+        oppgave_beskrivelse: ue.beskrivelse || '', estimert_kostnad: parseFloat(ue.kostnad) || 0,
+        status: 'sendt', frist_dato: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+      }).select().single()
+      if (error) throw error
+
+      const svarUrl = `${window.location.origin}/ue-svar?token=${foresp.svar_token}`
+      const emailHtml = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+        <h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Tilbudsforespørsel</h1>
+        <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Ref: ${nr}</p>
+        <div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">
+          <div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>
+          <div style="font-weight:700;color:#0f172a">${k.title}</div>
+          ${k.customer_address ? `<div style="font-size:13px;color:#64748b">${k.customer_address}</div>` : ''}
+        </div>
+        <div style="background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe">
+          <div style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:6px">OPPGAVE</div>
+          <div style="font-weight:700;color:#0f172a;margin-bottom:4px">${ue.beskrivelse || fag?.name || 'Arbeid'}</div>
+          ${bd?.name ? `<div style="font-size:13px;color:#64748b">Bygningsdel: ${bd.name}</div>` : ''}
+        </div>
+        <p style="color:#475569;font-size:14px;line-height:1.6">Vi ber om ditt tilbud på ovennevnte arbeid.</p>
+        <div style="text-align:center;margin:28px 0">
+          <a href="${svarUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📋 Legg inn tilbud</a>
+        </div>
+        <p style="color:#94a3b8;font-size:12px">Svarfrist: 7 dager</p>
+      </div>`
+
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: ue.email, subject: `Tilbudsforespørsel ${nr} – ${k.title}`, html: emailHtml })
+      })
+
+      updateUE(kalId, bdId, ue.id, 'status', 'sendt')
+      updateUE(kalId, bdId, ue.id, 'foresporsel_id', foresp.id)
+      setShowUESuccess({ navn: ue.navn, nr })
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
+  // Godkjenn UE-tilbud — oppdater kostnad i kalkylen
+  const godkjennUETilbud = async (kalId, bdId, ue) => {
+    if (!ue.svar_pris) return
+    updateUE(kalId, bdId, ue.id, 'kostnad', ue.svar_pris)
+    updateUE(kalId, bdId, ue.id, 'status', 'godkjent')
+    if (ue.foresporsel_id) {
+      await supabase.from('ue_foresporsler').update({ status: 'godkjent', updated_at: new Date().toISOString() }).eq('id', ue.foresporsel_id)
+    }
+  }
+
+  // Sjekk om UE har svart
+  const checkUESvar = async () => {
+    try {
+      const { data } = await supabase.from('ue_foresporsler').select('*').eq('calculation_id', k.id).eq('status', 'mottatt')
+      if (!data || data.length === 0) return
+      let updated = false
+      const newKalkyler = kalkyler.map(kl => ({ ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(bd => ({ ...bd, underleverandorer: (bd.underleverandorer||[]).map(u => {
+        const match = data.find(f => f.id === u.foresporsel_id)
+        if (match && u.status === 'sendt') {
+          updated = true
+          return { ...u, status: 'mottatt', svar_pris: match.svar_pris, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan }
+        }
+        return u
+      }) })) }))
+      if (updated) saveProject({ ...k, kalkyler: newKalkyler })
+    } catch(e) {}
+  }
+  useEffect(() => { checkUESvar(); const iv = setInterval(checkUESvar, 30000); return () => clearInterval(iv) }, [])
 
   // Add bygningsdel from library to a specific kalkyle
   const addBdFromBibliotek = (kalId, bd) => {
@@ -17300,17 +17585,63 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <button onClick={() => addMaterial(kalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
                               </div>
 
-                              {/* Underleverandører - editable */}
+                              {/* Underleverandører - editable with send functionality */}
                               <div>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>🤝 UNDERLEVERANDØRER</div>
-                                {(bd.underleverandorer||[]).map(u => (
-                                  <div key={u.id} style={{ display:'flex', gap:'4px', alignItems:'center', marginBottom:'3px' }}>
-                                    <input value={u.navn} onChange={e=>updateUE(kalk.id,bd.id,u.id,'navn',e.target.value)} placeholder="Navn" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
-                                    <input value={u.beskrivelse} onChange={e=>updateUE(kalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
-                                    <input type="number" value={u.kostnad} onChange={e=>updateUE(kalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Kr" style={{ ...qInp, width:'80px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
-                                    <button onClick={()=>removeUE(kalk.id,bd.id,u.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>
-                                  </div>
-                                ))}
+                                {(bd.underleverandorer||[]).map(u => {
+                                  const UE_STATUS = { utkast: { bg:'#f8fafc', color:'#64748b', label:'Utkast' }, sendt: { bg:'#fefce8', color:'#ca8a04', label:'Forespørsel sendt' }, mottatt: { bg:'#eff6ff', color:'#2563eb', label:'Tilbud mottatt' }, godkjent: { bg:'#f0fdf4', color:'#16a34a', label:'Godkjent' } }
+                                  const st = UE_STATUS[u.status] || UE_STATUS.utkast
+                                  return (
+                                    <div key={u.id} style={{ border:'1px solid #f1f5f9', borderRadius:'8px', padding:'10px', marginBottom:'6px', background: u.status === 'mottatt' ? '#eff6ff' : u.status === 'godkjent' ? '#f0fdf4' : 'white' }}>
+                                      {/* Rad 1: Navn + status + slett */}
+                                      <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
+                                        <input value={u.navn||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'navn',e.target.value)} placeholder="UE-firma" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px', fontWeight:'600' }} />
+                                        <span style={{ background:st.bg, color:st.color, padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>{st.label}</span>
+                                        <button onClick={()=>removeUE(kalk.id,bd.id,u.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', flexShrink:0 }}>×</button>
+                                      </div>
+                                      {/* Rad 2: Beskrivelse + estimert kostnad */}
+                                      <div style={{ display:'flex', gap:'6px', marginBottom:'6px' }}>
+                                        <input value={u.beskrivelse||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Oppgavebeskrivelse" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                                        <input type="number" value={u.kostnad||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Estimat kr" style={{ ...qInp, width:'90px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
+                                      </div>
+                                      {/* Rad 3: E-post + telefon + send-knapp */}
+                                      <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                                        <input value={u.email||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'email',e.target.value)} placeholder="ue@firma.no" type="email" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
+                                        <input value={u.telefon||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'telefon',e.target.value)} placeholder="Telefon" style={{ ...qInp, width:'100px', fontSize:'12px', padding:'6px 8px' }} />
+                                        {u.status === 'utkast' && <button onClick={() => sendUEForesporsel(kalk.id, bd.id, u)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 12px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>📧 Send forespørsel</button>}
+                                        {u.status === 'sendt' && <span style={{ fontSize:'11px', color:'#ca8a04', whiteSpace:'nowrap' }}>⏳ Venter på svar</span>}
+                                      </div>
+                                      {/* Mottatt tilbud fra UE */}
+                                      {u.status === 'mottatt' && (
+                                        <div style={{ marginTop:'8px', background:'white', borderRadius:'8px', padding:'10px', border:'1px solid #bfdbfe' }}>
+                                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'6px' }}>📨 TILBUD MOTTATT</div>
+                                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', marginBottom:'4px' }}>
+                                            <span style={{ color:'#64748b' }}>Pris fra UE:</span>
+                                            <span style={{ fontWeight:'700', color:'#0f172a' }}>{fmt(u.svar_pris)}</span>
+                                          </div>
+                                          {u.kostnad > 0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                                            <span style={{ color:'#94a3b8' }}>Ditt estimat:</span>
+                                            <span style={{ color:'#94a3b8' }}>{fmt(u.kostnad)}</span>
+                                          </div>}
+                                          {u.kostnad > 0 && u.svar_pris && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'6px' }}>
+                                            <span style={{ color: u.svar_pris <= u.kostnad ? '#16a34a' : '#dc2626' }}>Differanse:</span>
+                                            <span style={{ fontWeight:'600', color: u.svar_pris <= u.kostnad ? '#16a34a' : '#dc2626' }}>{u.svar_pris <= u.kostnad ? '' : '+'}{fmt(u.svar_pris - u.kostnad)} ({u.kostnad > 0 ? Math.round(((u.svar_pris - u.kostnad) / u.kostnad) * 100) : 0}%)</span>
+                                          </div>}
+                                          {u.svar_beskrivelse && <div style={{ fontSize:'12px', color:'#475569', marginBottom:'4px' }}>{u.svar_beskrivelse}</div>}
+                                          {u.svar_tidsplan && <div style={{ fontSize:'12px', color:'#64748b' }}>📅 {u.svar_tidsplan}</div>}
+                                          <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
+                                            <button onClick={() => godkjennUETilbud(kalk.id, bd.id, u)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>✅ Godkjenn tilbud</button>
+                                            <button onClick={() => { updateUE(kalk.id, bd.id, u.id, 'status', 'utkast'); updateUE(kalk.id, bd.id, u.id, 'svar_pris', null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', color:'#64748b' }}>Avslå</button>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Godkjent visning */}
+                                      {u.status === 'godkjent' && (
+                                        <div style={{ marginTop:'6px', fontSize:'12px', color:'#16a34a', fontWeight:'600' }}>✅ Godkjent — {fmt(u.kostnad)} innkalkulert</div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                                 <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
                               </div>
                             </div>
@@ -17408,6 +17739,23 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
       {/* Send til kunde modal */}
       {showSendModal && <KalkSendModal kalk={k} totals={totals} kalkyler={kalkyler} alleFaktorer={alleFaktorer} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); updateStatus('Tilbud sendt') }} />}
+
+      {/* UE forespørsel sendt popup */}
+      {showUESuccess && (
+        <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setShowUESuccess(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+            <div style={{ padding:'28px 24px', textAlign:'center' }}>
+              <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>📧</div>
+              <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tilbudsforespørsel sendt!</h3>
+              <p style={{ margin:'0 0 6px', color:'#64748b', fontSize:'14px' }}><strong>{showUESuccess.navn}</strong> mottar nå en e-post med forespørselen.</p>
+              <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'13px' }}>Ref: {showUESuccess.nr} · Svarfrist: 7 dager</p>
+              <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'13px' }}>Når UE svarer, oppdateres kalkylen automatisk og du får et varsel.</p>
+              <button onClick={() => setShowUESuccess(null)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'12px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tilbud popup */}
       {showTilbudPopup && (
@@ -17838,6 +18186,7 @@ function AppContent() {
   // Show approval page without login if URL is /godkjenn
   if (window.location.pathname === '/godkjenn') return <GodkjenningsPage />
   if (window.location.pathname === '/anbud-pris') return <UEPrisingsPage />
+  if (window.location.pathname === '/ue-svar') return <UESvarPage />
 
   if (loading) {
     return (
