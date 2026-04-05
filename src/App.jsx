@@ -16732,140 +16732,60 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
     customer_address: initial?.customer_address || '',
     notes: initial?.notes || '',
   })
-  const [kalkyler, setKalkyler] = useState(initial?.kalkyler || [])
-  const [faktorer, setFaktorer] = useState(initial?.faktorer || {})
-  const [bedriftFaktorer, setBedriftFaktorer] = useState(null) // loaded from company_settings
-  const [activeKalkyle, setActiveKalkyle] = useState(null)
-  const [showFaktorer, setShowFaktorer] = useState(false)
-  const [showBibliotekPicker, setShowBibliotekPicker] = useState(false)
+  const [selectedFag, setSelectedFag] = useState(() => {
+    if (initial?.kalkyler) return initial.kalkyler.map(k => k.fag)
+    return []
+  })
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  // Load bedrift-level kalkulasjonsfaktorer
-  useEffect(() => {
-    supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
-      .then(({ data }) => {
-        const bf = data?.kalk_faktorer || {}
-        setBedriftFaktorer(bf)
-        // If creating new and no faktorer yet, pre-fill from bedrift
-        if (!isEdit && Object.keys(faktorer).length === 0 && Object.keys(bf).length > 0) {
-          setFaktorer(bf)
-        }
-      })
-      .catch(() => setBedriftFaktorer({}))
-  }, [])
-
-  // Initialize faktorer for a fag if not yet set
-  const ensureFaktorer = (fagId) => {
-    if (!faktorer[fagId]) {
-      // Use bedrift-level if available, otherwise defaults
-      const bf = bedriftFaktorer?.[fagId]
-      setFaktorer(f => ({ ...f, [fagId]: bf || getDefaultFaktorer(fagId) }))
-    }
-  }
-
-  // Add a new kalkyle (per fag)
-  const addKalkyle = (fagId, name) => {
-    ensureFaktorer(fagId)
-    const fag = getFaggruppe(fagId)
-    const newKalkyle = {
-      id: Date.now(),
-      fag: fagId,
-      name: name || fag.name,
-      description: '',
-      bygningsdeler: [{ id: Date.now()+1, name: '', arbeidsarter: [{ id: Date.now()+2, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }]
-    }
-    setKalkyler(k => [...k, newKalkyle])
-    setActiveKalkyle(newKalkyle.id)
-    setShowFagPicker(false)
-  }
-
-  const removeKalkyle = (id) => {
-    setKalkyler(k => k.filter(x => x.id !== id))
-    if (activeKalkyle === id) setActiveKalkyle(null)
-  }
-
-  const updateKalkyle = (id, field, value) => setKalkyler(k => k.map(x => x.id === id ? { ...x, [field]: value } : x))
-
-  // Bygningsdel helpers
-  const addBygningsdel = (kalId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: [...x.bygningsdeler, { id: Date.now(), name: '', arbeidsarter: [{ id: Date.now()+1, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }] } : x))
-  }
-  const removeBygningsdel = (kalId, bdId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.filter(b => b.id !== bdId) } : x))
-  }
-  const updateBygningsdel = (kalId, bdId, field, value) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, [field]: value } : b) } : x))
-  }
-
-  // Arbeidsart helpers
-  const addArbeidsart = (kalId, bdId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, arbeidsarter: [...b.arbeidsarter, { id: Date.now(), beskrivelse: '', grunntid: 0 }] } : b) } : x))
-  }
-  const removeArbeidsart = (kalId, bdId, aId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, arbeidsarter: b.arbeidsarter.filter(a => a.id !== aId) } : b) } : x))
-  }
-  const updateArbeidsart = (kalId, bdId, aId, field, value) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, arbeidsarter: b.arbeidsarter.map(a => a.id === aId ? { ...a, [field]: value } : a) } : b) } : x))
-  }
-
-  // Material helpers
-  const addMaterial = (kalId, bdId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: Date.now(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0 }] } : b) } : x))
-  }
-  const removeMaterial = (kalId, bdId, mId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : x))
-  }
-  const updateMaterial = (kalId, bdId, mId, field, value) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(m => m.id === mId ? { ...m, [field]: value } : m) } : b) } : x))
-  }
-
-  // UE helpers
-  const addUE = (kalId, bdId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: Date.now(), navn: '', beskrivelse: '', kostnad: 0 }] } : b) } : x))
-  }
-  const removeUE = (kalId, bdId, uId) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : x))
-  }
-  const updateUE = (kalId, bdId, uId, field, value) => {
-    setKalkyler(k => k.map(x => x.id === kalId ? { ...x, bygningsdeler: x.bygningsdeler.map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).map(u => u.id === uId ? { ...u, [field]: value } : u) } : b) } : x))
-  }
-
-  const updateFaktor = (fagId, field, value) => {
-    setFaktorer(f => ({ ...f, [fagId]: { ...(f[fagId] || getDefaultFaktorer(fagId)), [field]: value } }))
-  }
-
-  // Insert a bygningsdel from bibliotek into the active kalkyle
-  const insertFromBibliotek = (bygningsdel) => {
-    if (!activeKalkyle) return
-    setKalkyler(k => k.map(x => x.id === activeKalkyle ? { ...x, bygningsdeler: [...x.bygningsdeler, bygningsdel] } : x))
-  }
-
-  // Save a bygningsdel to user's own library
-  const saveToLibrary = async (bd, fagId) => {
-    const payload = {
-      fag: fagId,
-      kategori: 'Egne',
-      name: bd.name,
-      beskrivelse: 'Lagret fra kalkulasjon',
-      arbeidsarter: bd.arbeidsarter || [],
-      materialer: bd.materialer || [],
-      underleverandorer: bd.underleverandorer || [],
-      enhet: 'stk',
-      source_user: user?.id,
-      created_at: new Date().toISOString(),
-    }
-    const { error } = await supabase.from('bygningsdel_bibliotek').insert(payload)
-    if (error) alert('Feil: ' + error.message)
-    else alert('✅ Bygningsdel lagret i biblioteket!')
+  const toggleFag = (fagId) => {
+    setSelectedFag(f => f.includes(fagId) ? f.filter(x => x !== fagId) : [...f, fagId])
   }
 
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) return alert('Prosjektnavn er påkrevd')
+    if (!isEdit && selectedFag.length === 0) return alert('Velg minst én faggruppe')
     setSaving(true)
     try {
+      // Load bedrift faktorer
+      let bedriftFaktorer = {}
+      try {
+        const { data } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+        bedriftFaktorer = data?.kalk_faktorer || {}
+      } catch(e) {}
+
+      let kalkyler = initial?.kalkyler || []
+      let faktorer = initial?.faktorer || {}
+
+      if (!isEdit) {
+        // Create kalkyler for each selected fag
+        kalkyler = selectedFag.map((fagId, i) => {
+          const fag = getFaggruppe(fagId)
+          return { id: Date.now() + i, fag: fagId, name: fag.name, description: '', bygningsdeler: [] }
+        })
+        // Set faktorer from bedrift defaults
+        selectedFag.forEach(fagId => {
+          faktorer[fagId] = bedriftFaktorer[fagId] || getDefaultFaktorer(fagId)
+        })
+      } else {
+        // When editing, add new fag and remove deselected
+        const existingFag = kalkyler.map(k => k.fag)
+        // Add new
+        selectedFag.forEach((fagId, i) => {
+          if (!existingFag.includes(fagId)) {
+            const fag = getFaggruppe(fagId)
+            kalkyler.push({ id: Date.now() + i, fag: fagId, name: fag.name, description: '', bygningsdeler: [] })
+            faktorer[fagId] = bedriftFaktorer[fagId] || getDefaultFaktorer(fagId)
+          }
+        })
+        // Remove deselected
+        kalkyler = kalkyler.filter(k => selectedFag.includes(k.fag))
+      }
+
       const totals = beregnProsjektTotal(kalkyler, faktorer)
       const payload = { ...form, kalkyler, faktorer, total_cost: totals.totSelvkost, total_ex_mva: totals.totMedFortjeneste, profit_percent: totals.fortjenesteProsent, updated_at: new Date().toISOString() }
+
       if (isEdit) {
         await supabase.from('calculations').update(payload).eq('id', initial.id)
       } else {
@@ -16877,270 +16797,52 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
   }
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
-  const totals = beregnProsjektTotal(kalkyler, faktorer)
-  const activeKalk = kalkyler.find(k => k.id === activeKalkyle)
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', margin:'auto', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1200px', maxHeight:'96vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
 
         {/* Header */}
-        <div style={{ padding:'16px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger' : 'Nytt'} kalkulasjonsprosjekt</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:'11px', color:'#94a3b8' }}>Total eks. mva</div>
-              <div style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>{fmt(totals.totMedFortjeneste)}</div>
-            </div>
-            <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:'11px', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : '#ca8a04' }}>Margin</div>
-              <div style={{ fontSize:'16px', fontWeight:'800', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }}>{totals.fortjenesteProsent.toFixed(1)}%</div>
-            </div>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger prosjekt' : 'Nytt kalkulasjonsprosjekt'}</h2>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        {/* Body - sidebar + main */}
-        <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-
-          {/* LEFT SIDEBAR - Prosjektinfo + Kalkyler */}
-          <div style={{ width:'260px', borderRight:'1px solid #f1f5f9', display:'flex', flexDirection:'column', flexShrink:0 }}>
-            <div style={{ padding:'16px', overflowY:'auto', flex:1 }}>
-              {/* Prosjektinfo */}
-              <div style={{ marginBottom:'16px' }}>
-                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Prosjektinfo</div>
-                {lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Prosjektnavn" style={{ ...qInp, marginBottom:'8px' }} />
-                {lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={{ ...qInp, marginBottom:'8px' }} />
-                {lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={{ ...qInp, marginBottom:'8px' }} />
-                {lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Prosjektadresse" style={{ ...qInp, marginBottom:'8px' }} />
-              </div>
-
-              {/* Kalkyler (fag-tabs) */}
-              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Fagkalkyler</div>
-              {kalkyler.map(k => {
-                const fag = getFaggruppe(k.fag)
-                const fakt = faktorer[k.fag] || getDefaultFaktorer(k.fag)
-                const kTotals = beregnKalkyle(k, fakt)
-                const isActive = activeKalkyle === k.id
-                return (
-                  <div key={k.id} onClick={() => setActiveKalkyle(k.id)}
-                    style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 12px', borderRadius:'10px', border: isActive ? '2px solid #059669' : '1px solid #f1f5f9', background: isActive ? '#f0fdf4' : 'white', cursor:'pointer', marginBottom:'4px' }}>
-                    <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{k.name}</div>
-                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{kTotals.totTimer.toFixed(1)}t · {fmt(kTotals.totMedFortjeneste)}</div>
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); removeKalkyle(k.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
-                  </div>
-                )
-              })}
-
-              {/* Faggruppe-velger: klikk for å legge til/fjerne */}
-              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'6px', marginTop:'8px' }}>Velg faggrupper</div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
-                {FAGGRUPPER.map(fag => {
-                  const isAdded = kalkyler.some(k => k.fag === fag.id)
-                  return (
-                    <button key={fag.id} onClick={() => {
-                      if (isAdded) {
-                        removeKalkyle(kalkyler.find(k => k.fag === fag.id)?.id)
-                      } else {
-                        addKalkyle(fag.id)
-                      }
-                    }}
-                      style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'8px 10px', borderRadius:'8px', border: isAdded ? '2px solid #059669' : '1px solid #f1f5f9', background: isAdded ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
-                      <span style={{ fontSize:'14px' }}>{fag.emoji}</span>
-                      <span style={{ flex:1, fontWeight: isAdded ? '600' : '400', color: isAdded ? '#059669' : '#475569' }}>{fag.name}</span>
-                      <span style={{ fontSize:'14px', color: isAdded ? '#059669' : '#e2e8f0' }}>{isAdded ? '✓' : '○'}</span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Kalkulasjonsfaktorer knapp */}
-              <button onClick={() => setShowFaktorer(!showFaktorer)} style={{ width:'100%', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px', cursor:'pointer', color:'#64748b', fontWeight:'600', fontSize:'12px', marginTop:'12px', textAlign:'left' }}>
-                ⚙️ Kalkulasjonsfaktorer
-              </button>
-            </div>
-
-            {/* Prosjektsammendrag */}
-            <div style={{ padding:'12px 16px', borderTop:'1px solid #f1f5f9', background:'#f0fdf4' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                <span style={{ color:'#64748b' }}>Timer</span><span style={{ fontWeight:'700' }}>{totals.totTimer.toFixed(0)}</span>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                <span style={{ color:'#64748b' }}>Arbeid</span><span style={{ fontWeight:'600' }}>{fmt(totals.totArbeid)}</span>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                <span style={{ color:'#64748b' }}>Materiale</span><span style={{ fontWeight:'600' }}>{fmt(totals.totMaterial)}</span>
-              </div>
-              {totals.totUE > 0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                <span style={{ color:'#64748b' }}>UE</span><span style={{ fontWeight:'600' }}>{fmt(totals.totUE)}</span>
-              </div>}
-              <div style={{ height:'1px', background:'#bbf7d0', margin:'6px 0' }} />
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px' }}>
-                <span style={{ fontWeight:'700', color:'#059669' }}>Total eks. mva</span><span style={{ fontWeight:'800', color:'#059669' }}>{fmt(totals.totMedFortjeneste)}</span>
-              </div>
-            </div>
+        {/* Body */}
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px', maxHeight:'70vh', overflowY:'auto' }}>
+          {/* Prosjektinfo */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektnavn *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbygg Strandveien 12" style={qInp} /></div>
+            <div>{lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
+            <div>{lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={qInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektadresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Adresse" style={qInp} /></div>
           </div>
 
-          {/* MAIN CONTENT - Active kalkyle or faktorer */}
-          <div style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
-            {showFaktorer ? (
-              /* Kalkulasjonsfaktorer-editor */
-              <div>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-                  <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>⚙️ Kalkulasjonsfaktorer per faggruppe</h3>
-                  <button onClick={() => setShowFaktorer(false)} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
-                </div>
-                <p style={{ color:'#64748b', fontSize:'13px', marginBottom:'16px', marginTop:0 }}>
-                  {bedriftFaktorer && Object.keys(bedriftFaktorer).length > 0
-                    ? 'Faktorene er hentet fra bedriftsinnstillingene. Du kan overstyre dem for denne kalkulasjonen.'
-                    : 'Sett opp standardfaktorer under Min Bedrift → Kalkulasjonsfaktorer for å slippe å fylle inn disse hver gang.'}
-                </p>
-                {kalkyler.map(k => {
-                  const fag = getFaggruppe(k.fag)
-                  const fakt = faktorer[k.fag] || getDefaultFaktorer(k.fag)
-                  return (
-                    <div key={k.fag} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', marginBottom:'12px' }}>
-                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>{fag.emoji} {fag.name}</div>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
-                        <div>{lbl('Prod.lønn kr/t')}<input type="number" value={fakt.produksjonslonn} onChange={e=>updateFaktor(k.fag,'produksjonslonn',e.target.value)} style={qInp} /></div>
-                        <div>{lbl('Sosiale %')}<input type="number" value={fakt.sosiale_prosent} onChange={e=>updateFaktor(k.fag,'sosiale_prosent',e.target.value)} style={qInp} /></div>
-                        <div>{lbl('Faste kost. %')}<input type="number" value={fakt.faste_prosent} onChange={e=>updateFaktor(k.fag,'faste_prosent',e.target.value)} style={qInp} /></div>
-                        <div>{lbl('Grunntid-just.')}<input type="number" step="0.1" value={fakt.grunntid_justering} onChange={e=>updateFaktor(k.fag,'grunntid_justering',e.target.value)} style={qInp} /></div>
-                        <div>{lbl('Fortj. lønn %')}<input type="number" value={fakt.fortjeneste_lonn_prosent} onChange={e=>updateFaktor(k.fag,'fortjeneste_lonn_prosent',e.target.value)} style={qInp} /></div>
-                        <div>{lbl('Fortj. innkjøp %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateFaktor(k.fag,'fortjeneste_innkjop_prosent',e.target.value)} style={qInp} /></div>
-                        <div>{lbl('Mat.just. %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateFaktor(k.fag,'mat_justering_prosent',e.target.value)} style={qInp} /></div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {kalkyler.length === 0 && <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px' }}>Legg til en fagkalkyle først for å sette faktorer.</p>}
-              </div>
-            ) : activeKalk ? (
-              /* Active kalkyle editor */
-              <div>
-                <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
-                  <span style={{ fontSize:'20px' }}>{getFaggruppe(activeKalk.fag).emoji}</span>
-                  <input value={activeKalk.name} onChange={e => updateKalkyle(activeKalk.id, 'name', e.target.value)} style={{ ...qInp, fontSize:'16px', fontWeight:'700', flex:1 }} />
-                </div>
-
-                {/* Bygningsdeler */}
-                {(activeKalk.bygningsdeler || []).map((bd, bi) => {
-                  const fakt = faktorer[activeKalk.fag] || getDefaultFaktorer(activeKalk.fag)
-                  const bdTotals = beregnBygningsdel(bd, fakt)
-                  return (
-                    <div key={bd.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', marginBottom:'12px', overflow:'hidden' }}>
-                      {/* Bygningsdel header */}
-                      <div style={{ background:'#f8fafc', padding:'12px 16px', display:'flex', alignItems:'center', gap:'10px', borderBottom:'1px solid #f1f5f9' }}>
-                        <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>{bi+1}</span>
-                        <input value={bd.name} onChange={e => updateBygningsdel(activeKalk.id, bd.id, 'name', e.target.value)} placeholder="Bygningsdel (f.eks. Stue vegg 20m²)" style={{ ...qInp, flex:1, fontWeight:'600', background:'transparent' }} />
-                        <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap' }}>{fmt(bdTotals.totalMedFortjeneste)}</span>
-                        <button onClick={() => saveToLibrary(bd, activeKalk.fag)} title="Lagre i bibliotek" style={{ background:'#eff6ff', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#2563eb', fontSize:'12px' }}>📚</button>
-                        {(activeKalk.bygningsdeler||[]).length > 1 && <button onClick={() => removeBygningsdel(activeKalk.id, bd.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}
-                      </div>
-
-                      <div style={{ padding:'12px 16px' }}>
-                        {/* Arbeidsarter */}
-                        <div style={{ marginBottom:'12px' }}>
-                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'6px' }}>⏱️ Arbeidsarter</div>
-                          <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                            <thead><tr>
-                              {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.',''].map((h,i) => (
-                                <th key={i} style={{ padding:'4px 6px', textAlign:i>=1?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                              ))}
-                            </tr></thead>
-                            <tbody>
-                              {(bd.arbeidsarter||[]).map(a => {
-                                const r = beregnArbeidskostnad(a, fakt)
-                                return (
-                                  <tr key={a.id}>
-                                    <td style={{ padding:'4px 4px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(activeKalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Arbeidsbeskrivelse" style={{ ...qInp, minWidth:'140px' }} /></td>
-                                    <td style={{ padding:'4px 4px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(activeKalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'75px', textAlign:'right' }} /></td>
-                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#64748b' }}>{r.faktiskTid.toFixed(1)} t</td>
-                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#64748b' }}>{fmt(r.timekostnad)}/t</td>
-                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#0f172a' }}>{fmt(r.arbeidskostnad)}</td>
-                                    <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
-                                    <td style={{ padding:'4px 2px' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(activeKalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button>}</td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                          <button onClick={() => addArbeidsart(activeKalk.id, bd.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Arbeidsart</button>
-                        </div>
-
-                        {/* Materialer */}
-                        <div style={{ marginBottom:'12px' }}>
-                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'6px' }}>📦 Materialer</div>
-                          {(bd.materialer||[]).length > 0 && (
-                            <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                              <thead><tr>
-                                {['Varenavn','Mengde','Enhet','Pris/enh','Kostnad','Med fortj.',''].map((h,i) => (
-                                  <th key={i} style={{ padding:'4px 6px', textAlign:i>=1?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                ))}
-                              </tr></thead>
-                              <tbody>
-                                {(bd.materialer||[]).map(m => {
-                                  const r = beregnMaterialkostnad(m, fakt)
-                                  return (
-                                    <tr key={m.id}>
-                                      <td style={{ padding:'4px 4px' }}><input value={m.varenavn} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, minWidth:'120px' }} /></td>
-                                      <td style={{ padding:'4px 4px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'65px', textAlign:'right' }} /></td>
-                                      <td style={{ padding:'4px 4px' }}><input value={m.enhet} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'50px' }} /></td>
-                                      <td style={{ padding:'4px 4px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(activeKalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'85px', textAlign:'right' }} /></td>
-                                      <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', color:'#0f172a' }}>{fmt(r.kostnad)}</td>
-                                      <td style={{ padding:'4px 6px', textAlign:'right', fontSize:'12px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
-                                      <td style={{ padding:'4px 2px' }}><button onClick={()=>removeMaterial(activeKalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button></td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
-                          )}
-                          <button onClick={() => addMaterial(activeKalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
-                        </div>
-
-                        {/* Underleverandører */}
-                        <div>
-                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'6px' }}>🤝 Underleverandører</div>
-                          {(bd.underleverandorer||[]).map(u => (
-                            <div key={u.id} style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'4px' }}>
-                              <input value={u.navn} onChange={e=>updateUE(activeKalk.id,bd.id,u.id,'navn',e.target.value)} placeholder="UE navn" style={{ ...qInp, flex:1 }} />
-                              <input value={u.beskrivelse} onChange={e=>updateUE(activeKalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, flex:1 }} />
-                              <input type="number" value={u.kostnad} onChange={e=>updateUE(activeKalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Kostnad" style={{ ...qInp, width:'100px', textAlign:'right' }} />
-                              <button onClick={()=>removeUE(activeKalk.id,bd.id,u.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button>
-                            </div>
-                          ))}
-                          <button onClick={() => addUE(activeKalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-
-                <div style={{ display:'flex', gap:'8px' }}>
-                  <button onClick={() => setShowBibliotekPicker(true)} style={{ flex:1, background:'#eff6ff', border:'2px dashed #bfdbfe', borderRadius:'14px', padding:'14px', cursor:'pointer', color:'#2563eb', fontWeight:'600', fontSize:'13px' }}>📚 Hent fra bibliotek</button>
-                  <button onClick={() => addBygningsdel(activeKalk.id)} style={{ flex:1, background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'14px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Ny tom bygningsdel</button>
-                </div>
-
-                {showBibliotekPicker && <BibliotekPickerModal fagId={activeKalk.fag} onSelect={insertFromBibliotek} onClose={() => setShowBibliotekPicker(false)} />}
-              </div>
-            ) : (
-              /* No kalkyle selected */
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'400px', flexDirection:'column' }}>
-                <div style={{ fontSize:'48px', marginBottom:'16px' }}>🧮</div>
-                <h3 style={{ color:'#0f172a', margin:'0 0 8px' }}>Legg til en fagkalkyle</h3>
-                <p style={{ color:'#94a3b8', fontSize:'14px', margin:0, textAlign:'center', maxWidth:'300px' }}>Velg faggrupper i sidepanelet til venstre. Klikk på en faggruppe for å legge den til — du kan velge flere som summeres til en totalkalkulasjon.</p>
-              </div>
-            )}
+          {/* Faggrupper */}
+          <div>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Velg faggrupper som skal inngå</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
+              {FAGGRUPPER.map(fag => {
+                const isSelected = selectedFag.includes(fag.id)
+                return (
+                  <button key={fag.id} onClick={() => toggleFag(fag.id)}
+                    style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 12px', borderRadius:'10px', border: isSelected ? '2px solid #059669' : '1px solid #f1f5f9', background: isSelected ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
+                    <span style={{ fontSize:'15px' }}>{fag.emoji}</span>
+                    <span style={{ flex:1, fontWeight: isSelected ? '600' : '400', color: isSelected ? '#059669' : '#475569' }}>{fag.name}</span>
+                    <span style={{ fontSize:'15px', color: isSelected ? '#059669' : '#e2e8f0' }}>{isSelected ? '✓' : '○'}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {selectedFag.length > 0 && <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>{selectedFag.length} faggruppe{selectedFag.length !== 1 ? 'r' : ''} valgt</div>}
           </div>
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px', flexShrink:0 }}>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px' }}>
           <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
           <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett kalkulasjon'}</button>
         </div>
