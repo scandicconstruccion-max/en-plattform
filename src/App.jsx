@@ -16448,19 +16448,110 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
 
   // ═══ MALER ════════════════════════════════════════════════════════════════
-  { id: 'mal_vegg_std', fag: 'maler', kategori: 'Vegg', name: 'Maling vegg innvendig 2 strøk', beskrivelse: 'Sparkling, sliping og 2 strøk maling på gipsvegg',
+  // Vegg innvendig
+  { id: 'mal_vegg_nybygg', fag: 'maler', kategori: 'Vegg innvendig', name: 'Maling ny gipsvegg 2 strøk', beskrivelse: 'Sparkling, sliping, grunding og 2 strøk maling på ny gips',
     arbeidsarter: [{ beskrivelse: 'Sparkling og sliping', grunntid: 0.15 }, { beskrivelse: 'Grunding', grunntid: 0.05 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.18 }],
-    materialer: [{ varenavn: 'Sparkelmasse finsparkle', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Grunning', mengde: 0.1, enhet: 'l/m²', enhetspris: 65 }, { varenavn: 'Veggmaling innvendig', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
+    materialer: [{ varenavn: 'Sparkelmasse fin', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Grunning', mengde: 0.1, enhet: 'l/m²', enhetspris: 65 }, { varenavn: 'Veggmaling innvendig', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'mal_him_std', fag: 'maler', kategori: 'Himling', name: 'Maling himling 2 strøk', beskrivelse: 'Sparkling og 2 strøk maling på himling',
-    arbeidsarter: [{ beskrivelse: 'Sparkling himling', grunntid: 0.18 }, { beskrivelse: 'Maling himling 2 strøk', grunntid: 0.22 }],
+  { id: 'mal_vegg_ommaling', fag: 'maler', kategori: 'Vegg innvendig', name: 'Ommaling vegg (eksisterende)', beskrivelse: 'Vask, lett sparkling, sliping og 2 strøk på tidligere malt vegg',
+    arbeidsarter: [{ beskrivelse: 'Vask og rengjøring', grunntid: 0.05 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.12 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.18 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.15, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Veggmaling innvendig', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_vegg_helsparkle', fag: 'maler', kategori: 'Vegg innvendig', name: 'Helsparkling vegg (glatt finish)', beskrivelse: 'Komplett helsparkling vegg for glatt, malingsklar overflate — 2-3 lag',
+    arbeidsarter: [{ beskrivelse: 'Grovsparkling 1. lag', grunntid: 0.15 }, { beskrivelse: 'Sliping', grunntid: 0.08 }, { beskrivelse: 'Finsparkling 2. lag', grunntid: 0.12 }, { beskrivelse: 'Sliping fin', grunntid: 0.08 }, { beskrivelse: 'Eventuelt 3. lag + sliping', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Grovsparkel', mengde: 0.5, enhet: 'kg/m²', enhetspris: 35 }, { varenavn: 'Finsparkel', mengde: 0.3, enhet: 'kg/m²', enhetspris: 55 }, { varenavn: 'Slipepapir/nett', mengde: 1, enhet: 'rs/m²', enhetspris: 8 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_vegg_betong', fag: 'maler', kategori: 'Vegg innvendig', name: 'Maling betongvegg innvendig', beskrivelse: 'Primer, sparkling og maling på betong — kjeller e.l.',
+    arbeidsarter: [{ beskrivelse: 'Primer betong', grunntid: 0.06 }, { beskrivelse: 'Sparkling ujevnheter', grunntid: 0.15 }, { beskrivelse: 'Sliping', grunntid: 0.08 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Betonprimer', mengde: 0.15, enhet: 'l/m²', enhetspris: 95 }, { varenavn: 'Sparkelmasse betong', mengde: 0.5, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Veggmaling', mengde: 0.22, enhet: 'l/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_vegg_tapet', fag: 'maler', kategori: 'Vegg innvendig', name: 'Tapetsering vegg', beskrivelse: 'Sparkling, grunding og tapetsering med papirtapet',
+    arbeidsarter: [{ beskrivelse: 'Sparkling og sliping', grunntid: 0.12 }, { beskrivelse: 'Grunding', grunntid: 0.05 }, { beskrivelse: 'Tapetsering', grunntid: 0.30 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.2, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Grunning', mengde: 0.1, enhet: 'l/m²', enhetspris: 65 }, { varenavn: 'Tapet papir', mengde: 1.1, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Tapetlim', mengde: 0.15, enhet: 'kg/m²', enhetspris: 55 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_vegg_glassvev', fag: 'maler', kategori: 'Vegg innvendig', name: 'Glassvev + maling vegg', beskrivelse: 'Oppsetting glassvev/malervev og 2 strøk maling — skjuler ujevnheter',
+    arbeidsarter: [{ beskrivelse: 'Sparkling grov', grunntid: 0.10 }, { beskrivelse: 'Liming glassvev', grunntid: 0.20 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.2, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Glassvev/malervev', mengde: 1.08, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Vevlim', mengde: 0.2, enhet: 'kg/m²', enhetspris: 55 }, { varenavn: 'Veggmaling', mengde: 0.22, enhet: 'l/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Himling
+  { id: 'mal_him_nybygg', fag: 'maler', kategori: 'Himling', name: 'Maling himling ny gips 2 strøk', beskrivelse: 'Sparkling og 2 strøk maling på ny gipshimling',
+    arbeidsarter: [{ beskrivelse: 'Sparkling himling', grunntid: 0.18 }, { beskrivelse: 'Sliping', grunntid: 0.08 }, { beskrivelse: 'Maling 2 strøk himling', grunntid: 0.22 }],
     materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Himlingsmaling', mengde: 0.2, enhet: 'l/m²', enhetspris: 75 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'mal_fas_std', fag: 'maler', kategori: 'Fasade', name: 'Maling fasade 2 strøk', beskrivelse: 'Vask, skraping og 2 strøk utvendig maling',
-    arbeidsarter: [{ beskrivelse: 'Vask og skraping', grunntid: 0.15 }, { beskrivelse: 'Grunding', grunntid: 0.06 }, { beskrivelse: 'Maling 2 strøk utvendig', grunntid: 0.25 }],
-    materialer: [{ varenavn: 'Grunning utvendig', mengde: 0.12, enhet: 'l/m²', enhetspris: 75 }, { varenavn: 'Fasademaling', mengde: 0.25, enhet: 'l/m²', enhetspris: 110 }],
+  { id: 'mal_him_ommaling', fag: 'maler', kategori: 'Himling', name: 'Ommaling himling (eksisterende)', beskrivelse: 'Vask, lett sparkling og 2 strøk på tidligere malt himling',
+    arbeidsarter: [{ beskrivelse: 'Vask', grunntid: 0.05 }, { beskrivelse: 'Sparkling', grunntid: 0.12 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.22 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.15, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Himlingsmaling', mengde: 0.2, enhet: 'l/m²', enhetspris: 75 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Fasade utvendig
+  { id: 'mal_fas_nytt_tre', fag: 'maler', kategori: 'Fasade', name: 'Maling ny trekledning 2 strøk', beskrivelse: 'Grunding og 2 strøk dekkbeis/maling på ny kledning',
+    arbeidsarter: [{ beskrivelse: 'Grunding', grunntid: 0.06 }, { beskrivelse: 'Maling/beis 2 strøk', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Grunning utvendig tre', mengde: 0.12, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Dekkbeis/fasademaling', mengde: 0.25, enhet: 'l/m²', enhetspris: 110 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_fas_ommaling', fag: 'maler', kategori: 'Fasade', name: 'Ommaling fasade (vedlikehold)', beskrivelse: 'Vask, skraping, grunding og 2 strøk maling på eksisterende kledning',
+    arbeidsarter: [{ beskrivelse: 'Høytrykksvask', grunntid: 0.06 }, { beskrivelse: 'Skraping/sliping', grunntid: 0.15 }, { beskrivelse: 'Grunding flekker', grunntid: 0.05 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.28 }],
+    materialer: [{ varenavn: 'Grunning utvendig', mengde: 0.08, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Fasademaling', mengde: 0.28, enhet: 'l/m²', enhetspris: 110 }, { varenavn: 'Slipepapir/skraper', mengde: 1, enhet: 'rs/m²', enhetspris: 5 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_fas_puss', fag: 'maler', kategori: 'Fasade', name: 'Maling pusset fasade', beskrivelse: 'Maling av utvendig pusset/murt fasade — silikonbasert',
+    arbeidsarter: [{ beskrivelse: 'Vask og rengjøring', grunntid: 0.06 }, { beskrivelse: 'Grunding', grunntid: 0.06 }, { beskrivelse: 'Maling 2 strøk silikonmaling', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Fasadeprimer puss', mengde: 0.15, enhet: 'l/m²', enhetspris: 95 }, { varenavn: 'Silikonharpiksmaling fasade', mengde: 0.30, enhet: 'l/m²', enhetspris: 145 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Listverk/dører
+  { id: 'mal_list_nytt', fag: 'maler', kategori: 'Listverk/detaljer', name: 'Maling listverk nytt', beskrivelse: 'Sparkling, sliping og 2 strøk maling av nye fotlister, vindusforinger og gerikter',
+    arbeidsarter: [{ beskrivelse: 'Sparkling kanter', grunntid: 0.04 }, { beskrivelse: 'Sliping', grunntid: 0.03 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.05, enhet: 'kg/lm', enhetspris: 45 }, { varenavn: 'Listmaling halvblank', mengde: 0.05, enhet: 'l/lm', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'mal_dor_innvendig', fag: 'maler', kategori: 'Listverk/detaljer', name: 'Maling innerdør (begge sider)', beskrivelse: 'Sliping, sparkling og 2 strøk maling av innerdør inkl. karm',
+    arbeidsarter: [{ beskrivelse: 'Sliping og klargjøring', grunntid: 0.5 }, { beskrivelse: 'Sparkling', grunntid: 0.3 }, { beskrivelse: 'Maling 2 strøk dør', grunntid: 0.8 }, { beskrivelse: 'Maling karm og gerikter', grunntid: 0.4 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.1, enhet: 'kg', enhetspris: 45 }, { varenavn: 'Dørmaling halvblank', mengde: 0.5, enhet: 'l', enhetspris: 120 }, { varenavn: 'Slipepapir/svamp', mengde: 1, enhet: 'rs', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'mal_vindu', fag: 'maler', kategori: 'Listverk/detaljer', name: 'Maling vinduskarm + foring', beskrivelse: 'Sliping og maling av vinduskarm, foring og listverk',
+    arbeidsarter: [{ beskrivelse: 'Sliping og klargjøring', grunntid: 0.3 }, { beskrivelse: 'Avteipping/tildekking', grunntid: 0.2 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Listmaling halvblank', mengde: 0.15, enhet: 'l', enhetspris: 120 }, { varenavn: 'Malertape', mengde: 2, enhet: 'lm', enhetspris: 3 }, { varenavn: 'Slipepapir', mengde: 1, enhet: 'rs', enhetspris: 10 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Gulv
+  { id: 'mal_gulv_beis', fag: 'maler', kategori: 'Gulv', name: 'Beising tregulv', beskrivelse: 'Sliping og beising/oljer av tregulv — 2 strøk',
+    arbeidsarter: [{ beskrivelse: 'Sliping gulv maskin', grunntid: 0.12 }, { beskrivelse: 'Finsliping', grunntid: 0.08 }, { beskrivelse: 'Påføring beis/olje 2 strøk', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Slipebelter/papir', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }, { varenavn: 'Gulvbeis/olje', mengde: 0.12, enhet: 'l/m²', enhetspris: 145 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_gulv_lakk', fag: 'maler', kategori: 'Gulv', name: 'Lakking tregulv', beskrivelse: 'Sliping og lakking av tregulv — 3 strøk',
+    arbeidsarter: [{ beskrivelse: 'Grovsliping maskin', grunntid: 0.10 }, { beskrivelse: 'Finsliping', grunntid: 0.08 }, { beskrivelse: 'Lakking 3 strøk m/mellomsl.', grunntid: 0.25 }],
+    materialer: [{ varenavn: 'Slipebelter/papir', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }, { varenavn: 'Gulvlakk vannbasert', mengde: 0.15, enhet: 'l/m²', enhetspris: 135 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_gulv_epoxy', fag: 'maler', kategori: 'Gulv', name: 'Epoxybelegg betonggulv', beskrivelse: 'Epoxybelegg på betonggulv — garasje/næring',
+    arbeidsarter: [{ beskrivelse: 'Sliping/fresing betong', grunntid: 0.12 }, { beskrivelse: 'Primer', grunntid: 0.06 }, { beskrivelse: 'Epoxy 2 strøk', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Primer epoxy', mengde: 0.15, enhet: 'kg/m²', enhetspris: 95 }, { varenavn: 'Epoxybelegg 2-komp', mengde: 0.5, enhet: 'kg/m²', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Spesial/rehabilitering
+  { id: 'mal_fjerning_tapet', fag: 'maler', kategori: 'Rehabilitering', name: 'Fjerning av tapet', beskrivelse: 'Bløtgjøring og fjerning av gammel tapet, sparkling etter',
+    arbeidsarter: [{ beskrivelse: 'Bløtgjøring og fjerning', grunntid: 0.20 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.15 }],
+    materialer: [{ varenavn: 'Tapetfjerner/dampmaskin', mengde: 1, enhet: 'rs/m²', enhetspris: 5 }, { varenavn: 'Sparkelmasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_strie', fag: 'maler', kategori: 'Rehabilitering', name: 'Strie/armering vegg (sprekker)', beskrivelse: 'Oppsetting strie/armeringsduk for å hindre sprekker — deretter maling',
+    arbeidsarter: [{ beskrivelse: 'Sparkling og klargjøring', grunntid: 0.10 }, { beskrivelse: 'Liming strie/armeringsduk', grunntid: 0.18 }, { beskrivelse: 'Sparkling over', grunntid: 0.12 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.18 }],
+    materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.4, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Strie/armeringsduk', mengde: 1.08, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Strielim', mengde: 0.15, enhet: 'kg/m²', enhetspris: 55 }, { varenavn: 'Veggmaling', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'mal_sopp_sanering', fag: 'maler', kategori: 'Rehabilitering', name: 'Soppbehandling/sanering', beskrivelse: 'Behandling av soppangrep — vask, soppmiddel og maling',
+    arbeidsarter: [{ beskrivelse: 'Vask og soppsanering', grunntid: 0.15 }, { beskrivelse: 'Tørking (venting)', grunntid: 0.01 }, { beskrivelse: 'Soppdrepende primer', grunntid: 0.06 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.20 }],
+    materialer: [{ varenavn: 'Soppmiddel/klorvask', mengde: 0.2, enhet: 'l/m²', enhetspris: 65 }, { varenavn: 'Soppdrepende primer', mengde: 0.12, enhet: 'l/m²', enhetspris: 125 }, { varenavn: 'Maling (fukt/våtrom)', mengde: 0.22, enhet: 'l/m²', enhetspris: 95 }],
     underleverandorer: [], enhet: 'm²'
   },
 
