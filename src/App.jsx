@@ -17061,11 +17061,17 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [showTilbudPopup, setShowTilbudPopup] = useState(null) // null, 'no-module', 'created'
   const [hasTilbudModule, setHasTilbudModule] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [ueTilbud, setUeTilbud] = useState([])
+  const [expandedUeTilbud, setExpandedUeTilbud] = useState(null)
 
-  // Check if user has tilbud module
+  // Check if user has tilbud module + load UE-tilbud
   useEffect(() => {
     supabase.from('company_settings').select('active_modules').limit(1).single()
       .then(({ data }) => setHasTilbudModule((data?.active_modules || []).includes('tilbud')))
+      .catch(() => {})
+    // Load all UE-forespørsler for this calculation
+    supabase.from('ue_foresporsler').select('*').eq('calculation_id', init.id).order('created_at', { ascending: false })
+      .then(({ data }) => setUeTilbud(data || []))
       .catch(() => {})
   }, [])
 
@@ -17921,6 +17927,89 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               )
             })}
           </div>
+
+          {/* Mottatte UE-tilbud */}
+          {ueTilbud.length > 0 && (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+              <div style={{ background:'#fefce8', padding:'12px 18px', borderBottom:'1px solid #fde68a' }}>
+                <div style={{ fontWeight:'700', fontSize:'13px', color:'#92400e' }}>📂 Mottatte UE-tilbud ({ueTilbud.filter(t => t.svar_pris).length})</div>
+              </div>
+              <div style={{ padding:'8px 12px' }}>
+                {ueTilbud.map(t => {
+                  const isExp = expandedUeTilbud === t.id
+                  const statusCfg = { sendt: { color:'#ca8a04', label:'Sendt' }, mottatt: { color:'#2563eb', label:'Mottatt' }, godkjent: { color:'#16a34a', label:'Godkjent' }, valgt: { color:'#16a34a', label:'Valgt' } }
+                  const st = statusCfg[t.status] || statusCfg.sendt
+                  return (
+                    <div key={t.id} style={{ marginBottom:'4px' }}>
+                      <button onClick={() => setExpandedUeTilbud(isExp ? null : t.id)}
+                        style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', padding:'8px 6px', border:'none', borderRadius:'8px', background: isExp ? '#f8fafc' : 'transparent', cursor:'pointer', textAlign:'left', fontSize:'12px' }}>
+                        <span style={{ color:'#64748b' }}>{isExp ? '▼' : '▶'}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.ue_navn}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{t.foresporsel_nr} · {t.oppgave_navn}</div>
+                        </div>
+                        <div style={{ textAlign:'right', flexShrink:0 }}>
+                          {t.svar_pris ? <div style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a' }}>{fmt(t.svar_pris)}</div> : null}
+                          <div style={{ fontSize:'10px', color:st.color, fontWeight:'600' }}>{st.label}</div>
+                        </div>
+                      </button>
+                      {isExp && (
+                        <div style={{ padding:'8px 10px', background:'#f8fafc', borderRadius:'8px', marginBottom:'4px', fontSize:'12px' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ color:'#64748b' }}>Firma:</span>
+                            <span style={{ fontWeight:'600' }}>{t.ue_navn}</span>
+                          </div>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ color:'#64748b' }}>E-post:</span>
+                            <span>{t.ue_email}</span>
+                          </div>
+                          {t.ue_telefon && <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ color:'#64748b' }}>Telefon:</span>
+                            <span>{t.ue_telefon}</span>
+                          </div>}
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ color:'#64748b' }}>Sendt:</span>
+                            <span>{new Date(t.created_at).toLocaleDateString('nb-NO')}</span>
+                          </div>
+                          {t.svar_dato && <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ color:'#64748b' }}>Svar mottatt:</span>
+                            <span>{new Date(t.svar_dato).toLocaleDateString('nb-NO')}</span>
+                          </div>}
+                          {/* Postvis priser */}
+                          {(t.svar_poster||[]).filter(p => p.pris > 0).length > 0 && (
+                            <div style={{ marginTop:'6px', borderTop:'1px solid #e2e8f0', paddingTop:'6px' }}>
+                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>POSTER</div>
+                              {t.svar_poster.filter(p => p.pris > 0).map((p, i) => (
+                                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'2px 0' }}>
+                                  <span style={{ color:'#374151' }}>{p.name}</span>
+                                  <span style={{ fontWeight:'600' }}>{fmt(p.pris)}</span>
+                                </div>
+                              ))}
+                              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderTop:'1px solid #e2e8f0', marginTop:'4px', fontWeight:'800' }}>
+                                <span>Totalt</span>
+                                <span>{fmt(t.svar_pris)}</span>
+                              </div>
+                            </div>
+                          )}
+                          {t.svar_tidsplan && <div style={{ marginTop:'4px', color:'#64748b' }}>📅 {t.svar_tidsplan}</div>}
+                          {t.svar_forbehold && <div style={{ marginTop:'4px', color:'#92400e', background:'#fefce8', padding:'4px 6px', borderRadius:'4px' }}>⚠️ {t.svar_forbehold}</div>}
+                          {/* Vedlegg */}
+                          {(t.vedlegg||[]).length > 0 && (
+                            <div style={{ marginTop:'4px' }}>
+                              <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'2px' }}>📎 Vedlegg</div>
+                              {t.vedlegg.map((v, i) => (
+                                <a key={i} href={v.url} target="_blank" rel="noopener" style={{ display:'block', fontSize:'11px', color:'#2563eb' }}>{v.name}</a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Margin */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px 18px', textAlign:'center' }}>
