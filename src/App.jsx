@@ -17230,7 +17230,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       if (updated) saveProject({ ...k, kalkyler: newKalkyler })
     } catch(e) {}
   }
-  useEffect(() => { checkUESvar(); const iv = setInterval(checkUESvar, 30000); return () => clearInterval(iv) }, [])
+  useEffect(() => { checkUESvar() }, [])
 
   // Add bygningsdel from library to a specific kalkyle
   const addBdFromBibliotek = (kalId, bd) => {
