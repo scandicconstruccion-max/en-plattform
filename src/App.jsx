@@ -16674,41 +16674,185 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
 
   // ═══ RØRLEGGER ════════════════════════════════════════════════════════════
-  { id: 'ror_bad_servant', fag: 'rorleger', kategori: 'Sanitær', name: 'Servant komplett', beskrivelse: 'Montering servant med blandebatteri og avløp',
+  // Sanitær — bad
+  { id: 'ror_servant_std', fag: 'rorleger', kategori: 'Sanitær', name: 'Servant komplett', beskrivelse: 'Montering servant med blandebatteri, vannlås og avløp',
     arbeidsarter: [{ beskrivelse: 'Montering servant', grunntid: 2.0 }, { beskrivelse: 'Montering batteri og avløp', grunntid: 1.0 }],
     materialer: [{ varenavn: 'Servant m/konsoll', mengde: 1, enhet: 'stk', enhetspris: 3200 }, { varenavn: 'Blandebatteri', mengde: 1, enhet: 'stk', enhetspris: 2100 }, { varenavn: 'Avløpssett og vannlås', mengde: 1, enhet: 'sett', enhetspris: 450 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'ror_bad_toalett', fag: 'rorleger', kategori: 'Sanitær', name: 'Toalett vegghengt', beskrivelse: 'Montering vegghengt toalett med sisterne',
+  { id: 'ror_servant_underskap', fag: 'rorleger', kategori: 'Sanitær', name: 'Servant m/underskap', beskrivelse: 'Montering møbelservant med underskap, batteri og avløp',
+    arbeidsarter: [{ beskrivelse: 'Montering underskap', grunntid: 1.5 }, { beskrivelse: 'Montering servant', grunntid: 1.0 }, { beskrivelse: 'Batteri og avløp', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Møbelservant m/underskap', mengde: 1, enhet: 'stk', enhetspris: 6500 }, { varenavn: 'Blandebatteri', mengde: 1, enhet: 'stk', enhetspris: 2100 }, { varenavn: 'Avløpssett', mengde: 1, enhet: 'sett', enhetspris: 450 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_toalett_vegg', fag: 'rorleger', kategori: 'Sanitær', name: 'Toalett vegghengt', beskrivelse: 'Montering vegghengt toalett med innbyggingssisterne',
     arbeidsarter: [{ beskrivelse: 'Montering sisterne/fixtur', grunntid: 2.5 }, { beskrivelse: 'Montering toalett', grunntid: 1.5 }],
     materialer: [{ varenavn: 'Vegghengt toalett', mengde: 1, enhet: 'stk', enhetspris: 4800 }, { varenavn: 'Innbyggingssisterne', mengde: 1, enhet: 'stk', enhetspris: 3200 }, { varenavn: 'Betjeningsplate', mengde: 1, enhet: 'stk', enhetspris: 850 }, { varenavn: 'Tilkobling og tettemidler', mengde: 1, enhet: 'rs', enhetspris: 350 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'ror_bad_dusj', fag: 'rorleger', kategori: 'Sanitær', name: 'Dusjarmatur med stang', beskrivelse: 'Montering dusjarmatur med stang og hånddusj',
-    arbeidsarter: [{ beskrivelse: 'Montering dusjarmatur', grunntid: 1.5 }],
+  { id: 'ror_toalett_gulv', fag: 'rorleger', kategori: 'Sanitær', name: 'Toalett gulvstående', beskrivelse: 'Montering gulvstående toalett med synlig sisterne',
+    arbeidsarter: [{ beskrivelse: 'Montering toalett og sisterne', grunntid: 2.0 }, { beskrivelse: 'Tilkobling vann og avløp', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Gulvstående toalett m/sisterne', mengde: 1, enhet: 'stk', enhetspris: 3500 }, { varenavn: 'Tilkobling og bolt', mengde: 1, enhet: 'sett', enhetspris: 280 }, { varenavn: 'Mansjett og tettemidler', mengde: 1, enhet: 'rs', enhetspris: 150 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_dusj_armatur', fag: 'rorleger', kategori: 'Sanitær', name: 'Dusjarmatur m/stang', beskrivelse: 'Montering dusjarmatur termostat med stang og hånddusj',
+    arbeidsarter: [{ beskrivelse: 'Montering armatur og stang', grunntid: 1.5 }],
     materialer: [{ varenavn: 'Dusjbatteri termostat', mengde: 1, enhet: 'stk', enhetspris: 3500 }, { varenavn: 'Dusjstang komplett', mengde: 1, enhet: 'sett', enhetspris: 1200 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'ror_gulvvarme', fag: 'rorleger', kategori: 'Varme', name: 'Gulvvarme vannbåren', beskrivelse: 'Vannbåren gulvvarme i bad/kjøkken',
-    arbeidsarter: [{ beskrivelse: 'Legging av gulvvarmerør', grunntid: 0.35 }, { beskrivelse: 'Tilkobling og trykkprøving', grunntid: 1.0 }],
-    materialer: [{ varenavn: 'Gulvvarmerør PEX', mengde: 5, enhet: 'lm/m²', enhetspris: 18 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+  { id: 'ror_dusj_innbygg', fag: 'rorleger', kategori: 'Sanitær', name: 'Dusjarmatur innbygget', beskrivelse: 'Innfelt dusjarmatur med takdusj — kabling i vegg',
+    arbeidsarter: [{ beskrivelse: 'Innfelling og rørlegging', grunntid: 3.5 }, { beskrivelse: 'Montering armatur og takdusj', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Innfelt dusjarmatur sett', mengde: 1, enhet: 'stk', enhetspris: 5500 }, { varenavn: 'Takdusj Ø250', mengde: 1, enhet: 'stk', enhetspris: 2800 }, { varenavn: 'Rør og deler innbygg', mengde: 1, enhet: 'rs', enhetspris: 650 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_badekar', fag: 'rorleger', kategori: 'Sanitær', name: 'Badekar montering', beskrivelse: 'Montering badekar med avløp, batteri og frontstykke',
+    arbeidsarter: [{ beskrivelse: 'Montering badekar', grunntid: 3.0 }, { beskrivelse: 'Avløp og batteri', grunntid: 1.5 }, { beskrivelse: 'Frontstykke/innmuring', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Badekar 170cm', mengde: 1, enhet: 'stk', enhetspris: 5500 }, { varenavn: 'Kar-/badekararmatur', mengde: 1, enhet: 'stk', enhetspris: 3200 }, { varenavn: 'Avløp badekar', mengde: 1, enhet: 'sett', enhetspris: 550 }, { varenavn: 'Frontstykke', mengde: 1, enhet: 'stk', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_sluk', fag: 'rorleger', kategori: 'Sanitær', name: 'Sluk m/påstøpningsring', beskrivelse: 'Montering av sluk med påstøpningsring, klemring og tilkobling avløp',
+    arbeidsarter: [{ beskrivelse: 'Montering sluk', grunntid: 2.0 }, { beskrivelse: 'Tilkobling avløp', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Sluk komplett m/rist', mengde: 1, enhet: 'stk', enhetspris: 1800 }, { varenavn: 'Påstøpningsring', mengde: 1, enhet: 'stk', enhetspris: 350 }, { varenavn: 'Klemring og mansjett', mengde: 1, enhet: 'sett', enhetspris: 250 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Sanitær — kjøkken/vaskerom
+  { id: 'ror_kjokken_vask', fag: 'rorleger', kategori: 'Sanitær', name: 'Kjøkkenvask komplett', beskrivelse: 'Montering kjøkkenvask med blandebatteri og avløp',
+    arbeidsarter: [{ beskrivelse: 'Montering vask', grunntid: 1.5 }, { beskrivelse: 'Batteri og avløp', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Kjøkkenvask rustfri', mengde: 1, enhet: 'stk', enhetspris: 2800 }, { varenavn: 'Kjøkkenbatteri', mengde: 1, enhet: 'stk', enhetspris: 2500 }, { varenavn: 'Vannlås og avløp', mengde: 1, enhet: 'sett', enhetspris: 380 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_vaskemaskin', fag: 'rorleger', kategori: 'Sanitær', name: 'Vaskemaskintilkobling', beskrivelse: 'Tilkobling vann og avløp for vaskemaskin',
+    arbeidsarter: [{ beskrivelse: 'Montering stengeventil', grunntid: 1.0 }, { beskrivelse: 'Avløp/veggboks', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Stengeventil vaskemaskin', mengde: 1, enhet: 'stk', enhetspris: 250 }, { varenavn: 'Avløpsboks/vegguttak', mengde: 1, enhet: 'stk', enhetspris: 320 }, { varenavn: 'Rør og deler', mengde: 1, enhet: 'rs', enhetspris: 180 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Rørlegning
+  { id: 'ror_vann_pex', fag: 'rorleger', kategori: 'Rørlegning', name: 'Vannrør PEX i rør', beskrivelse: 'Legging av PEX vannledning i beskyttelsesrør — varmt/kaldt',
+    arbeidsarter: [{ beskrivelse: 'Legging rør i rør', grunntid: 0.08 }, { beskrivelse: 'Tilkobling og press', grunntid: 0.02 }],
+    materialer: [{ varenavn: 'PEX-rør Ø15 m/varerør', mengde: 1.1, enhet: 'lm', enhetspris: 32 }, { varenavn: 'Pressfitting', mengde: 0.2, enhet: 'stk/lm', enhetspris: 55 }, { varenavn: 'Feste og rørholder', mengde: 1, enhet: 'stk/lm', enhetspris: 8 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'ror_avlop_110', fag: 'rorleger', kategori: 'Rørlegning', name: 'Avløpsrør Ø110 (PVC)', beskrivelse: 'Legging av avløpsrør Ø110 med bend og grenrør',
+    arbeidsarter: [{ beskrivelse: 'Legging og montering', grunntid: 0.15 }, { beskrivelse: 'Bend og grenrør', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Avløpsrør PVC Ø110', mengde: 1.05, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Bend og grenrør Ø110', mengde: 0.3, enhet: 'stk/lm', enhetspris: 65 }, { varenavn: 'Muffer og gummiring', mengde: 0.5, enhet: 'stk/lm', enhetspris: 18 }, { varenavn: 'Rørklemmer', mengde: 1, enhet: 'stk/lm', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'ror_avlop_75', fag: 'rorleger', kategori: 'Rørlegning', name: 'Avløpsrør Ø75 (PVC)', beskrivelse: 'Legging avløpsrør Ø75 for servant/dusj',
+    arbeidsarter: [{ beskrivelse: 'Legging og montering', grunntid: 0.12 }],
+    materialer: [{ varenavn: 'Avløpsrør PVC Ø75', mengde: 1.05, enhet: 'lm', enhetspris: 38 }, { varenavn: 'Bend og deler Ø75', mengde: 0.3, enhet: 'stk/lm', enhetspris: 45 }, { varenavn: 'Rørklemmer', mengde: 1, enhet: 'stk/lm', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Varme
+  { id: 'ror_gulvvarme', fag: 'rorleger', kategori: 'Varme', name: 'Gulvvarme vannbåren', beskrivelse: 'Vannbåren gulvvarme med fordeler — bad/kjøkken',
+    arbeidsarter: [{ beskrivelse: 'Legging gulvvarmerør', grunntid: 0.35 }, { beskrivelse: 'Tilkobling fordeler', grunntid: 1.0 }, { beskrivelse: 'Trykkprøving', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Gulvvarmerør PEX 17mm', mengde: 5, enhet: 'lm/m²', enhetspris: 18 }, { varenavn: 'Festemateriell/clips', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'ror_gulvvarme_fordeler', fag: 'rorleger', kategori: 'Varme', name: 'Fordelerskap gulvvarme', beskrivelse: 'Montering fordelerskap med ventiler, pumpe og styring',
+    arbeidsarter: [{ beskrivelse: 'Montering skap', grunntid: 3.0 }, { beskrivelse: 'Tilkobling kurser', grunntid: 2.0 }, { beskrivelse: 'Innregulering', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Fordelerskap komplett', mengde: 1, enhet: 'stk', enhetspris: 8500 }, { varenavn: 'Romtermostat', mengde: 3, enhet: 'stk', enhetspris: 650 }, { varenavn: 'Rør og deler tilkobling', mengde: 1, enhet: 'rs', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_radiator', fag: 'rorleger', kategori: 'Varme', name: 'Radiator montering', beskrivelse: 'Montering av radiator med ventil, rør og konsoll',
+    arbeidsarter: [{ beskrivelse: 'Montering konsoll', grunntid: 0.5 }, { beskrivelse: 'Montering radiator', grunntid: 1.0 }, { beskrivelse: 'Tilkobling rør og termostat', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Radiator (snittstr.)', mengde: 1, enhet: 'stk', enhetspris: 3500 }, { varenavn: 'Termostatventil', mengde: 1, enhet: 'stk', enhetspris: 350 }, { varenavn: 'Konsoll og festemateriell', mengde: 1, enhet: 'sett', enhetspris: 250 }, { varenavn: 'Rør og deler tilkobling', mengde: 1, enhet: 'rs', enhetspris: 450 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'ror_vvb', fag: 'rorleger', kategori: 'Varme', name: 'Varmtvannsbereder montering', beskrivelse: 'Montering VVB med tilkobling vann, sikkerhet og avløp',
+    arbeidsarter: [{ beskrivelse: 'Montering bereder', grunntid: 2.0 }, { beskrivelse: 'Tilkobling vann og sikkerhet', grunntid: 1.5 }, { beskrivelse: 'Avløp sikkerhetsventil', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Varmtvannsbereder 200L', mengde: 1, enhet: 'stk', enhetspris: 8500 }, { varenavn: 'Sikkerhetsventil', mengde: 1, enhet: 'stk', enhetspris: 350 }, { varenavn: 'Rør, ventiler og deler', mengde: 1, enhet: 'rs', enhetspris: 850 }],
+    underleverandorer: [], enhet: 'stk'
   },
 
   // ═══ ELEKTRIKER ═══════════════════════════════════════════════════════════
-  { id: 'el_stikk_std', fag: 'elektriker', kategori: 'Stikkontakter', name: 'Stikkontakt enkel', beskrivelse: 'Montering stikkontakt med kabling fra fordeling',
+  // Stikkontakter
+  { id: 'el_stikk_enkel', fag: 'elektriker', kategori: 'Stikkontakter', name: 'Stikkontakt enkel', beskrivelse: 'Montering stikkontakt med kabling fra fordeling',
     arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 1.0 }],
     materialer: [{ varenavn: 'Stikkontakt m/ramme', mengde: 1, enhet: 'stk', enhetspris: 185 }, { varenavn: 'Kabel PN 3G2.5', mengde: 8, enhet: 'lm', enhetspris: 18 }, { varenavn: 'Koblingsboks og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 65 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'el_lys_down', fag: 'elektriker', kategori: 'Belysning', name: 'Downlight LED', beskrivelse: 'Montering downlight inkl. kabling og dimmbart',
+  { id: 'el_stikk_dobbel', fag: 'elektriker', kategori: 'Stikkontakter', name: 'Stikkontakt dobbel', beskrivelse: 'Dobbel stikkontakt med felles kabling',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 1.1 }],
+    materialer: [{ varenavn: 'Dobbel stikkontakt m/ramme', mengde: 1, enhet: 'stk', enhetspris: 285 }, { varenavn: 'Kabel PN 3G2.5', mengde: 8, enhet: 'lm', enhetspris: 18 }, { varenavn: 'Koblingsboks og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 65 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_stikk_utv', fag: 'elektriker', kategori: 'Stikkontakter', name: 'Stikkontakt utvendig (IP44)', beskrivelse: 'Utvendig stikkontakt med lokk, vanntett',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 1.2 }],
+    materialer: [{ varenavn: 'Stikkontakt IP44 m/lokk', mengde: 1, enhet: 'stk', enhetspris: 320 }, { varenavn: 'Kabel PFXP 3G2.5', mengde: 10, enhet: 'lm', enhetspris: 28 }, { varenavn: 'Koblingsboks IP55', mengde: 1, enhet: 'stk', enhetspris: 95 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_stikk_komfyr', fag: 'elektriker', kategori: 'Stikkontakter', name: 'Komfyrvakt + kontakt', beskrivelse: 'Montering komfyrvakt og komfyrkontakt med kabling',
+    arbeidsarter: [{ beskrivelse: 'Kabling 3-fas', grunntid: 1.5 }, { beskrivelse: 'Montering komfyrvakt', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Komfyrvakt', mengde: 1, enhet: 'stk', enhetspris: 1850 }, { varenavn: 'Komfyrkontakt', mengde: 1, enhet: 'stk', enhetspris: 320 }, { varenavn: 'Kabel PN 5G2.5', mengde: 10, enhet: 'lm', enhetspris: 32 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Belysning
+  { id: 'el_down_led', fag: 'elektriker', kategori: 'Belysning', name: 'Downlight LED', beskrivelse: 'Montering downlight LED dimmbar inkl. kabling',
     arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 0.8 }],
     materialer: [{ varenavn: 'Downlight LED dimbar', mengde: 1, enhet: 'stk', enhetspris: 350 }, { varenavn: 'Kabel og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 85 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'el_sikring_kurs', fag: 'elektriker', kategori: 'Sikringsskap', name: 'Ny kurs i skap', beskrivelse: 'Opprettelse av ny kurs i sikringsskap',
-    arbeidsarter: [{ beskrivelse: 'Montering automatsikring og kabling', grunntid: 1.5 }],
+  { id: 'el_taklampe', fag: 'elektriker', kategori: 'Belysning', name: 'Taklampe uttak', beskrivelse: 'Montering taklampe-uttak med kabling og boks',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering boks', grunntid: 0.8 }, { beskrivelse: 'Montering DCL', grunntid: 0.2 }],
+    materialer: [{ varenavn: 'DCL koblingsstykke', mengde: 1, enhet: 'stk', enhetspris: 85 }, { varenavn: 'Kabel PN 3G1.5', mengde: 8, enhet: 'lm', enhetspris: 14 }, { varenavn: 'Koblingsboks himling', mengde: 1, enhet: 'stk', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_vegglampe', fag: 'elektriker', kategori: 'Belysning', name: 'Vegglampe uttak', beskrivelse: 'Montering uttak for vegglampe med kabling',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering boks', grunntid: 0.8 }],
+    materialer: [{ varenavn: 'Koblingsboks vegg', mengde: 1, enhet: 'stk', enhetspris: 45 }, { varenavn: 'Kabel PN 3G1.5', mengde: 6, enhet: 'lm', enhetspris: 14 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_utelys', fag: 'elektriker', kategori: 'Belysning', name: 'Utvendig belysning (fasade/hage)', beskrivelse: 'Montering utvendig armatur med jordkabel',
+    arbeidsarter: [{ beskrivelse: 'Graving/kabellegging', grunntid: 0.5 }, { beskrivelse: 'Montering armatur', grunntid: 0.8 }, { beskrivelse: 'Tilkobling', grunntid: 0.3 }],
+    materialer: [{ varenavn: 'Utelampe IP44', mengde: 1, enhet: 'stk', enhetspris: 1200 }, { varenavn: 'Jordkabel PFXP 3G1.5', mengde: 12, enhet: 'lm', enhetspris: 22 }, { varenavn: 'Kabelrør og deler', mengde: 1, enhet: 'rs', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Sikringsskap
+  { id: 'el_kurs_ny', fag: 'elektriker', kategori: 'Sikringsskap', name: 'Ny kurs i skap', beskrivelse: 'Opprettelse av ny kurs med automatsikring',
+    arbeidsarter: [{ beskrivelse: 'Montering sikring og kabling', grunntid: 1.5 }],
     materialer: [{ varenavn: 'Automatsikring', mengde: 1, enhet: 'stk', enhetspris: 220 }, { varenavn: 'Kabel til skap', mengde: 1, enhet: 'rs', enhetspris: 120 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_skap_nytt', fag: 'elektriker', kategori: 'Sikringsskap', name: 'Nytt sikringsskap komplett', beskrivelse: 'Montering nytt sikringsskap med jordfeilbryter og automater',
+    arbeidsarter: [{ beskrivelse: 'Montering skap', grunntid: 4.0 }, { beskrivelse: 'Innkobling kurser', grunntid: 4.0 }, { beskrivelse: 'Merking og dokumentasjon', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Sikringsskap 3-rad', mengde: 1, enhet: 'stk', enhetspris: 3500 }, { varenavn: 'Jordfeilbryter', mengde: 2, enhet: 'stk', enhetspris: 850 }, { varenavn: 'Automatsikringer (10 stk)', mengde: 10, enhet: 'stk', enhetspris: 220 }, { varenavn: 'Diverse kabler og skinne', mengde: 1, enhet: 'rs', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Varme
+  { id: 'el_gulvvarme_kabel', fag: 'elektriker', kategori: 'Varme', name: 'Gulvvarme elektrisk kabel', beskrivelse: 'Elektrisk gulvvarme med varmekabel i bad/entre',
+    arbeidsarter: [{ beskrivelse: 'Legging varmekabel', grunntid: 0.25 }, { beskrivelse: 'Montering termostat', grunntid: 0.5 }, { beskrivelse: 'Tilkobling', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Varmekabel komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 250 }, { varenavn: 'Termostat m/gulvføler', mengde: 0.1, enhet: 'stk/m²', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'el_gulvvarme_matte', fag: 'elektriker', kategori: 'Varme', name: 'Gulvvarme elektrisk matte', beskrivelse: 'Elektrisk varmematte — enklere legging enn kabel',
+    arbeidsarter: [{ beskrivelse: 'Legging varmematte', grunntid: 0.15 }, { beskrivelse: 'Montering termostat og tilkobling', grunntid: 0.8 }],
+    materialer: [{ varenavn: 'Varmematte', mengde: 1.05, enhet: 'm²', enhetspris: 320 }, { varenavn: 'Termostat m/gulvføler', mengde: 0.1, enhet: 'stk/m²', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'el_panelovn', fag: 'elektriker', kategori: 'Varme', name: 'Panelovn montering', beskrivelse: 'Montering panelovn med kabling og termostat',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Panelovn 1000W', mengde: 1, enhet: 'stk', enhetspris: 2200 }, { varenavn: 'Kabel PN 3G2.5', mengde: 6, enhet: 'lm', enhetspris: 18 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 45 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // Smart hjem / diverse
+  { id: 'el_bryter', fag: 'elektriker', kategori: 'Brytermateriell', name: 'Lysbryter enkel', beskrivelse: 'Montering lysbryter med kabling',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 0.8 }],
+    materialer: [{ varenavn: 'Lysbryter m/ramme', mengde: 1, enhet: 'stk', enhetspris: 165 }, { varenavn: 'Kabel PN 3G1.5', mengde: 6, enhet: 'lm', enhetspris: 14 }, { varenavn: 'Koblingsboks', mengde: 1, enhet: 'stk', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_dimmer', fag: 'elektriker', kategori: 'Brytermateriell', name: 'Dimmer LED-kompatibel', beskrivelse: 'Montering dimmer for LED-belysning',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 0.8 }],
+    materialer: [{ varenavn: 'Dimmer LED m/ramme', mengde: 1, enhet: 'stk', enhetspris: 450 }, { varenavn: 'Kabel PN 3G1.5', mengde: 6, enhet: 'lm', enhetspris: 14 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_roykdetektor', fag: 'elektriker', kategori: 'Brann/sikkerhet', name: 'Røykdetektor seriekoblet', beskrivelse: 'Montering seriekoblet røykdetektor med kabling',
+    arbeidsarter: [{ beskrivelse: 'Kabling og montering', grunntid: 0.8 }],
+    materialer: [{ varenavn: 'Røykdetektor seriekoblet', mengde: 1, enhet: 'stk', enhetspris: 450 }, { varenavn: 'Kabel', mengde: 6, enhet: 'lm', enhetspris: 14 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'el_elbil_lader', fag: 'elektriker', kategori: 'Elbillading', name: 'Elbillader montering', beskrivelse: 'Montering elbillader med kabling fra skap',
+    arbeidsarter: [{ beskrivelse: 'Kabling fra skap', grunntid: 3.0 }, { beskrivelse: 'Montering lader', grunntid: 1.5 }, { beskrivelse: 'Tilkobling og testing', grunntid: 1.0 }],
+    materialer: [{ varenavn: 'Elbillader 7.4kW', mengde: 1, enhet: 'stk', enhetspris: 8500 }, { varenavn: 'Kabel PFXP 5G6', mengde: 15, enhet: 'lm', enhetspris: 85 }, { varenavn: 'Automatsikring + jordfeil', mengde: 1, enhet: 'sett', enhetspris: 1200 }],
     underleverandorer: [], enhet: 'stk'
   },
 
@@ -16883,16 +17027,91 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
 
   // ═══ GRUNNARBEID ══════════════════════════════════════════════════════════
-  { id: 'gru_grav_tomter', fag: 'grunnarbeid', kategori: 'Graving', name: 'Graving og planering tomteareal', beskrivelse: 'Graving, masseflytting og planering for husgrunn',
+  // Graving
+  { id: 'gru_grav_tomt', fag: 'grunnarbeid', kategori: 'Graving', name: 'Graving og planering tomt', beskrivelse: 'Graving, masseflytting og grovplanering for husgrunn',
     arbeidsarter: [{ beskrivelse: 'Graving og masseflytting', grunntid: 0.10 }],
     materialer: [{ varenavn: 'Pukk/grus tilbakefylling', mengde: 0.3, enhet: 'm³/m²', enhetspris: 280 }, { varenavn: 'Fiberduk', mengde: 1.1, enhet: 'm²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
+  { id: 'gru_grav_grøft', fag: 'grunnarbeid', kategori: 'Graving', name: 'Grøftegraving VA', beskrivelse: 'Graving av grøft for vann- og avløpsledninger',
+    arbeidsarter: [{ beskrivelse: 'Graving grøft', grunntid: 0.08 }, { beskrivelse: 'Tilbakefylling og komprimering', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Pukk/singel fundament', mengde: 0.1, enhet: 'm³/lm', enhetspris: 280 }, { varenavn: 'Fiberduk', mengde: 2, enhet: 'lm/lm', enhetspris: 15 }, { varenavn: 'Tilbakefyllingsmasse', mengde: 0.3, enhet: 'm³/lm', enhetspris: 180 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'gru_grav_kjeller', fag: 'grunnarbeid', kategori: 'Graving', name: 'Utgravning kjeller', beskrivelse: 'Utgraving for kjeller inkl. bortkjøring masser',
+    arbeidsarter: [{ beskrivelse: 'Utgraving maskin', grunntid: 0.05 }, { beskrivelse: 'Bortkjøring masser', grunntid: 0.03 }],
+    materialer: [{ varenavn: 'Transport/deponi masser', mengde: 1.3, enhet: 'm³/m²', enhetspris: 120 }],
+    underleverandorer: [{ navn: 'Maskinentreprenør', beskrivelse: 'Gravemaskin med fører', kostnad: 45 }], enhet: 'm²'
+  },
+  // Drenering
+  { id: 'gru_drenering', fag: 'grunnarbeid', kategori: 'Drenering', name: 'Drenering rundt grunnmur', beskrivelse: 'Komplett drenering med drensrør, filtergrus, fiberduk og inspeksjonskum',
+    arbeidsarter: [{ beskrivelse: 'Graving drensgrøft', grunntid: 0.10 }, { beskrivelse: 'Legging drensrør og grus', grunntid: 0.12 }, { beskrivelse: 'Tilbakefylling', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Drensrør Ø110 m/filter', mengde: 1.05, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Filtergrus 8-16mm', mengde: 0.15, enhet: 'm³/lm', enhetspris: 320 }, { varenavn: 'Fiberduk', mengde: 2, enhet: 'lm/lm', enhetspris: 15 }, { varenavn: 'Inspeksjonskum', mengde: 0.1, enhet: 'stk/lm', enhetspris: 1500 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'gru_fuktsikring', fag: 'grunnarbeid', kategori: 'Drenering', name: 'Fuktsikring grunnmur', beskrivelse: 'Membran/platon og isolasjon mot grunnmur',
+    arbeidsarter: [{ beskrivelse: 'Montering platonmatte', grunntid: 0.10 }, { beskrivelse: 'Montering XPS isolasjon', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Platonmatte/membran', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'XPS isolasjon 50mm grunn', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Lim og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  // Fylling og komprimering
+  { id: 'gru_fylling_pukk', fag: 'grunnarbeid', kategori: 'Fylling', name: 'Pukkfylling under plate', beskrivelse: 'Legging og komprimering av pukk under gulvplate',
+    arbeidsarter: [{ beskrivelse: 'Utlegging pukk', grunntid: 0.05 }, { beskrivelse: 'Komprimering', grunntid: 0.03 }],
+    materialer: [{ varenavn: 'Pukk 22-120mm', mengde: 0.25, enhet: 'm³/m²', enhetspris: 240 }, { varenavn: 'Fiberduk', mengde: 1.1, enhet: 'm²', enhetspris: 15 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'gru_radon', fag: 'grunnarbeid', kategori: 'Fylling', name: 'Radonbrønn og membran', beskrivelse: 'Radonbrønn med sugeledning og radonmembran under plate',
+    arbeidsarter: [{ beskrivelse: 'Montering radonbrønn', grunntid: 2.0 }, { beskrivelse: 'Legging sugerør', grunntid: 0.5 }, { beskrivelse: 'Legging radonmembran', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Radonbrønn komplett', mengde: 1, enhet: 'stk', enhetspris: 2500 }, { varenavn: 'Sugerør Ø110', mengde: 5, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  // VA (vann og avløp i grunn)
+  { id: 'gru_va_stikk', fag: 'grunnarbeid', kategori: 'VA i grunn', name: 'VA-stikkledning (vann + avløp)', beskrivelse: 'Legging av vann- og avløpsledning fra kommunal tilkobling til bygg',
+    arbeidsarter: [{ beskrivelse: 'Graving grøft', grunntid: 0.08 }, { beskrivelse: 'Legging VA-rør', grunntid: 0.12 }, { beskrivelse: 'Tilbakefylling', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Vannledning PE Ø32', mengde: 1.05, enhet: 'lm', enhetspris: 45 }, { varenavn: 'Avløpsrør PVC Ø110', mengde: 1.05, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Sand/pukk fundament', mengde: 0.1, enhet: 'm³/lm', enhetspris: 280 }, { varenavn: 'Varselband og kabelrør', mengde: 1, enhet: 'rs/lm', enhetspris: 12 }],
+    underleverandorer: [], enhet: 'lm'
+  },
+  // Utomhus
+  { id: 'gru_asfalt', fag: 'grunnarbeid', kategori: 'Utomhus', name: 'Asfaltering oppkjørsel', beskrivelse: 'Underlag, komprimering og asfaltering',
+    arbeidsarter: [{ beskrivelse: 'Klargjøring underlag', grunntid: 0.05 }],
+    materialer: [{ varenavn: 'Forsterkningslag pukk', mengde: 0.15, enhet: 'm³/m²', enhetspris: 240 }],
+    underleverandorer: [{ navn: 'Asfaltfirma', beskrivelse: 'Asfaltering', kostnad: 180 }], enhet: 'm²'
+  },
+  { id: 'gru_belegningsstein', fag: 'grunnarbeid', kategori: 'Utomhus', name: 'Belegningsstein/heller', beskrivelse: 'Legging av belegningsstein på sand/pukk-underlag',
+    arbeidsarter: [{ beskrivelse: 'Klargjøring underlag', grunntid: 0.10 }, { beskrivelse: 'Legging stein', grunntid: 0.30 }, { beskrivelse: 'Fuging og komprimering', grunntid: 0.08 }],
+    materialer: [{ varenavn: 'Settsand 0-8mm', mengde: 0.04, enhet: 'm³/m²', enhetspris: 320 }, { varenavn: 'Belegningsstein 60mm', mengde: 1.05, enhet: 'm²', enhetspris: 250 }, { varenavn: 'Fugesand', mengde: 3, enhet: 'kg/m²', enhetspris: 5 }, { varenavn: 'Kantstein', mengde: 0.3, enhet: 'lm/m²', enhetspris: 85 }],
+    underleverandorer: [], enhet: 'm²'
+  },
 
   // ═══ RIGG OG DRIFT ════════════════════════════════════════════════════════
-  { id: 'rigg_standard', fag: 'rigg', kategori: 'Rigg', name: 'Standard rigg og drift', beskrivelse: 'Opprigging, drift og nedrigging for mindre prosjekt',
-    arbeidsarter: [{ beskrivelse: 'Opprigging og tilrigging', grunntid: 8 }, { beskrivelse: 'Nedrigging og opprydding', grunntid: 4 }],
-    materialer: [{ varenavn: 'Containerhyre', mengde: 1, enhet: 'rs', enhetspris: 3500 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs', enhetspris: 4500 }, { varenavn: 'Strøm og vann', mengde: 1, enhet: 'rs', enhetspris: 2000 }],
+  { id: 'rigg_liten', fag: 'rigg', kategori: 'Rigg', name: 'Rigg lite prosjekt (< 500.000)', beskrivelse: 'Opprigging, drift og nedrigging — enebolig/leilighet',
+    arbeidsarter: [{ beskrivelse: 'Opprigging', grunntid: 6 }, { beskrivelse: 'Nedrigging og opprydding', grunntid: 3 }],
+    materialer: [{ varenavn: 'Containerhyre (1 stk, 4 uker)', mengde: 1, enhet: 'rs', enhetspris: 3500 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs', enhetspris: 3500 }, { varenavn: 'Strøm provisorisk', mengde: 1, enhet: 'rs', enhetspris: 1500 }, { varenavn: 'Tildekking og beskyttelse', mengde: 1, enhet: 'rs', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'rs'
+  },
+  { id: 'rigg_mellom', fag: 'rigg', kategori: 'Rigg', name: 'Rigg mellomstort prosjekt (500k–2M)', beskrivelse: 'Rigg for mellomstort prosjekt — brakke, container, stillas',
+    arbeidsarter: [{ beskrivelse: 'Opprigging og tilrigging', grunntid: 12 }, { beskrivelse: 'Drift og tilsyn (ukentlig)', grunntid: 8 }, { beskrivelse: 'Nedrigging og opprydding', grunntid: 6 }],
+    materialer: [{ varenavn: 'Brakkehyre (3 mnd)', mengde: 1, enhet: 'rs', enhetspris: 12000 }, { varenavn: 'Container avfall (2 stk)', mengde: 1, enhet: 'rs', enhetspris: 8000 }, { varenavn: 'Avfallshåndtering/deponering', mengde: 1, enhet: 'rs', enhetspris: 8000 }, { varenavn: 'Strøm og vann', mengde: 1, enhet: 'rs', enhetspris: 4000 }, { varenavn: 'Stillasleie', mengde: 1, enhet: 'rs', enhetspris: 15000 }, { varenavn: 'Tildekking og sikring', mengde: 1, enhet: 'rs', enhetspris: 3000 }],
+    underleverandorer: [], enhet: 'rs'
+  },
+  { id: 'rigg_stor', fag: 'rigg', kategori: 'Rigg', name: 'Rigg stort prosjekt (> 2M)', beskrivelse: 'Komplett rigg for større prosjekt — kontorbrakker, lager, flere containere',
+    arbeidsarter: [{ beskrivelse: 'Planlegging og opprigging', grunntid: 16 }, { beskrivelse: 'Drift og tilsyn', grunntid: 16 }, { beskrivelse: 'Nedrigging', grunntid: 8 }],
+    materialer: [{ varenavn: 'Kontorbrakke (6 mnd)', mengde: 1, enhet: 'rs', enhetspris: 25000 }, { varenavn: 'Lagerbrakke', mengde: 1, enhet: 'rs', enhetspris: 12000 }, { varenavn: 'Containere avfall (4 stk)', mengde: 1, enhet: 'rs', enhetspris: 18000 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs', enhetspris: 25000 }, { varenavn: 'Strøm, vann, toalett', mengde: 1, enhet: 'rs', enhetspris: 12000 }, { varenavn: 'Stillas komplett', mengde: 1, enhet: 'rs', enhetspris: 45000 }, { varenavn: 'Sikring, gjerde, skilt', mengde: 1, enhet: 'rs', enhetspris: 8000 }],
+    underleverandorer: [], enhet: 'rs'
+  },
+  { id: 'rigg_stillas_fasade', fag: 'rigg', kategori: 'Stillas', name: 'Stillas fasade (leie)', beskrivelse: 'Oppstilling og nedrigging av fasadestillas',
+    arbeidsarter: [{ beskrivelse: 'Oppstilling stillas', grunntid: 0.15 }, { beskrivelse: 'Nedrigging', grunntid: 0.10 }],
+    materialer: [{ varenavn: 'Stillasleie pr m² fasade/mnd', mengde: 1, enhet: 'm²', enhetspris: 65 }],
+    underleverandorer: [], enhet: 'm²'
+  },
+  { id: 'rigg_avfall', fag: 'rigg', kategori: 'Avfallshåndtering', name: 'Avfallscontainer inkl. tømming', beskrivelse: 'Container med tømming — blandet byggavfall',
+    arbeidsarter: [{ beskrivelse: 'Sortering og lasting', grunntid: 2.0 }],
+    materialer: [{ varenavn: 'Container 10m³ leie + tømming', mengde: 1, enhet: 'stk', enhetspris: 5500 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'rigg_sikring', fag: 'rigg', kategori: 'Sikring', name: 'Byggeplasssikring', beskrivelse: 'Gjerde, skilt, belysning og sikring av byggeplass',
+    arbeidsarter: [{ beskrivelse: 'Oppsetting gjerde og skilt', grunntid: 4.0 }, { beskrivelse: 'Nedrigging', grunntid: 2.0 }],
+    materialer: [{ varenavn: 'Byggegjerde (leie)', mengde: 1, enhet: 'rs', enhetspris: 3500 }, { varenavn: 'Skilt og varsling', mengde: 1, enhet: 'rs', enhetspris: 1200 }, { varenavn: 'Byggeplassbelysning', mengde: 1, enhet: 'rs', enhetspris: 1500 }],
     underleverandorer: [], enhet: 'rs'
   },
 ]
