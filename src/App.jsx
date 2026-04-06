@@ -18092,6 +18092,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
             <div>{lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
             <div>{lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={qInp} /></div>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektadresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Adresse" style={qInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('Interne notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="Interne notater om prosjektet (vises ikke for kunde)" rows={3} style={{ ...qInp, resize:'vertical', fontFamily:'system-ui,sans-serif' }} /></div>
           </div>
 
           {/* Faggrupper */}
@@ -18287,6 +18288,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showMoveBdModal, setShowMoveBdModal] = useState(null) // { kalkId, bdId, bdName }
   const [toastMsg, setToastMsg] = useState(null) // { title, message, type: 'success'|'error' }
+  const [showImportKalkyle, setShowImportKalkyle] = useState(null) // kalkId to import into
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -18397,6 +18399,22 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
   // Remove bygningsdel
   const removeBd = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl))
+  }
+
+  // Move bygningsdel up/down within a kalkyle
+  const moveBdInList = (kalId, bdId, direction) => {
+    updateKalkyler(kalkyler.map(kl => {
+      if (kl.id !== kalId) return kl
+      const bds = [...(kl.bygningsdeler || [])]
+      const idx = bds.findIndex(b => b.id === bdId)
+      if (idx < 0) return kl
+      const newIdx = idx + direction
+      if (newIdx < 0 || newIdx >= bds.length) return kl
+      ;[bds[idx], bds[newIdx]] = [bds[newIdx], bds[idx]]
+      return { ...kl, bygningsdeler: bds }
+    }))
+  }
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl))
   }
 
@@ -18622,6 +18640,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             <div style={{ display:'flex', gap:'16px', marginTop:'6px' }}>
               {k.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
               {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
+              {k.notes && <span style={{ fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>📝 {k.notes}</span>}
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
@@ -18773,6 +18792,10 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                           <div onClick={() => setExpandedBd(isExpanded ? null : bd.id)}
                             style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', cursor:'pointer', background: isExpanded ? '#f8fafc' : 'white' }}>
                             <div style={{ display:'flex', alignItems:'center', gap:'8px', flex:1, minWidth:0 }}>
+                              <div onClick={e => e.stopPropagation()} style={{ display:'flex', flexDirection:'column', gap:'0px', flexShrink:0 }}>
+                                <button onClick={() => moveBdInList(kalk.id, bd.id, -1)} disabled={bi === 0} style={{ background:'none', border:'none', cursor: bi === 0 ? 'default' : 'pointer', padding:'0 3px', fontSize:'9px', color: bi === 0 ? '#e2e8f0' : '#94a3b8', lineHeight:1 }}>▲</button>
+                                <button onClick={() => moveBdInList(kalk.id, bd.id, 1)} disabled={bi === (kalk.bygningsdeler||[]).length - 1} style={{ background:'none', border:'none', cursor: bi === (kalk.bygningsdeler||[]).length - 1 ? 'default' : 'pointer', padding:'0 3px', fontSize:'9px', color: bi === (kalk.bygningsdeler||[]).length - 1 ? '#e2e8f0' : '#94a3b8', lineHeight:1 }}>▼</button>
+                              </div>
                               <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bi+1}</span>
                               <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bd.name || 'Uten navn'}</span>
                               {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
@@ -18963,6 +18986,10 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       <button onClick={() => setShowBibliotekPicker(kalk.id)}
                         style={{ flex:1, background:'#eff6ff', border:'2px dashed #bfdbfe', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#2563eb', fontWeight:'600', fontSize:'13px' }}>
                         📚 Hent fra bibliotek
+                      </button>
+                      <button onClick={() => setShowImportKalkyle(kalk.id)}
+                        style={{ flex:1, background:'#fef3c7', border:'2px dashed #fde68a', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#92400e', fontWeight:'600', fontSize:'13px' }}>
+                        📥 Importer fra annen kalkyle
                       </button>
                       <button onClick={() => addEmptyBd(kalk.id)}
                         style={{ flex:1, background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>
@@ -19336,6 +19363,90 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </>}
         </div>
       </div>
+
+      {/* Import fra annen kalkyle modal */}
+      {showImportKalkyle && (() => {
+        const ImportModal = ({ targetKalkId, onClose }) => {
+          const [otherKalks, setOtherKalks] = useState([])
+          const [loading, setLoading] = useState(true)
+          const [expandedProj, setExpandedProj] = useState(null)
+
+          useEffect(() => {
+            const load = async () => {
+              try {
+                const { data } = await supabase.from('calculations').select('id, title, kalk_number, customer_name, kalkyler').neq('id', k.id).order('updated_at', { ascending: false }).limit(20)
+                setOtherKalks(data || [])
+              } catch(e) {}
+              setLoading(false)
+            }
+            load()
+          }, [])
+
+          const importBds = (sourceKalk) => {
+            const bds = (sourceKalk.bygningsdeler || []).map(bd => {
+              const newBd = JSON.parse(JSON.stringify(bd))
+              newBd.id = Date.now() + Math.random() * 1000
+              newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a,i) => ({ ...a, id: Date.now() + i + 100 + Math.random()*100 }))
+              newBd.materialer = (newBd.materialer||[]).map((m,i) => ({ ...m, id: Date.now() + i + 200 + Math.random()*100 }))
+              newBd.underleverandorer = (newBd.underleverandorer||[]).map((u,i) => ({ ...u, id: Date.now() + i + 300 + Math.random()*100 }))
+              return newBd
+            })
+            if (bds.length === 0) return
+            updateKalkyler(kalkyler.map(kl => kl.id === targetKalkId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), ...bds] } : kl))
+            setToastMsg({ title: 'Importert', message: `${bds.length} bygningsdel${bds.length !== 1 ? 'er' : ''} importert fra "${sourceKalk.name}"`, type: 'success' })
+            onClose()
+          }
+
+          return (
+            <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'550px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+                <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700' }}>📥 Importer fra annen kalkyle</h3>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                  </div>
+                  <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>Velg en fagkalkyle å importere bygningsdeler fra</p>
+                </div>
+                <div style={{ overflowY:'auto', flex:1, padding:'12px 16px' }}>
+                  {loading && <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Laster kalkyler...</div>}
+                  {!loading && otherKalks.length === 0 && <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen andre kalkyler funnet</div>}
+                  {otherKalks.map(proj => (
+                    <div key={proj.id} style={{ marginBottom:'6px' }}>
+                      <button onClick={() => setExpandedProj(expandedProj === proj.id ? null : proj.id)}
+                        style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background: expandedProj === proj.id ? '#f8fafc' : 'white', cursor:'pointer', textAlign:'left', fontSize:'13px', fontWeight:'600' }}>
+                        <span style={{ color:'#059669' }}>{expandedProj === proj.id ? '▼' : '▶'}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{proj.title}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'400' }}>{proj.kalk_number} · {proj.customer_name || ''} · {(proj.kalkyler||[]).length} fag</div>
+                        </div>
+                      </button>
+                      {expandedProj === proj.id && (proj.kalkyler||[]).map(kl => {
+                        const fag = getFaggruppe(kl.fag)
+                        const bdCount = (kl.bygningsdeler||[]).length
+                        return (
+                          <button key={kl.id} onClick={() => importBds(kl)}
+                            style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', margin:'3px 0 3px 16px', padding:'8px 12px', borderRadius:'8px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left', fontSize:'13px', transition:'background 0.1s' }}
+                            onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
+                            onMouseLeave={e => e.currentTarget.style.background='white'}>
+                            <span style={{ fontSize:'15px' }}>{fag.emoji}</span>
+                            <div style={{ flex:1 }}>
+                              <span style={{ fontWeight:'500' }}>{kl.name}</span>
+                              <span style={{ fontSize:'11px', color:'#94a3b8', marginLeft:'8px' }}>{bdCount} bygningsdel{bdCount !== 1 ? 'er' : ''}</span>
+                            </div>
+                            <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'600' }}>Importer →</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return <ImportModal targetKalkId={showImportKalkyle} onClose={() => setShowImportKalkyle(null)} />
+      })()}
 
       {/* Flytt bygningsdel modal */}
       {showMoveBdModal && (
