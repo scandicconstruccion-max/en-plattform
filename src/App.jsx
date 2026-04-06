@@ -19930,10 +19930,25 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           const [res, setRes] = useState([])
           const [searching, setSearching] = useState(false)
           const [hasSearched, setHasSearched] = useState(false)
+          const [activeKat, setActiveKat] = useState(null)
 
-          const doSearch = async (searchTerm) => {
+          const PRODUKT_KATEGORIER = [
+            { id: 'isolasjon', label: 'Isolasjon', emoji: '🧱', search: 'ISOLASJON,EPS,XPS,GLAVA,ROCKWOOL,FLEXI,SUNDOLITT,JACKO,MINERALULL' },
+            { id: 'treverk', label: 'Treverk', emoji: '🪵', search: 'GRAN,FURU,VIRKE,STENDER,BJELKE,LEKT,SLØYFE,KONSTRUK' },
+            { id: 'plater', label: 'Plater', emoji: '📋', search: 'GIPSPL,SPONPL,OSB,FIBERPL,MDF,KRYSSF' },
+            { id: 'tekking', label: 'Tekking/Membran', emoji: '🛡️', search: 'DAMPSP,VINDSP,UNDERTAK,TYVEK,RADON,MEMBRAN,PLATON,FIBERDUK' },
+            { id: 'kledning', label: 'Kledning/Panel', emoji: '🏠', search: 'KLEDNING,KLED,PANEL,FASADE' },
+            { id: 'betong', label: 'Betong/Mur', emoji: '🏗️', search: 'BETONG,SEMENT,MØRTEL,LECA,BLOKK,ARMERING,FORSKALING' },
+            { id: 'flismur', label: 'Flis/Sparkel', emoji: '🔲', search: 'FLIS,FLISLIM,SPARKEL,AVRETTING,MEMBRAN BAD,FUGEMASSE,WEBER' },
+            { id: 'maling', label: 'Maling/Beis', emoji: '🎨', search: 'MALING,BEIS,GRUNNING,PRIMER,LAKK,JOTUN,DRYGOLIN' },
+            { id: 'tak', label: 'Tak/Renner', emoji: '🏠', search: 'TAKSTEIN,TAKPANNE,TAKRENNE,NEDLØP,BESLAG,MØNE' },
+            { id: 'ror', label: 'Rør/VVS', emoji: '🔧', search: 'PEX,AVLØP,DRENS,SLUK,VANNRØR,RØRDEL' },
+          ]
+
+          const doSearch = async (searchTerm, katFilter) => {
             const term = (searchTerm || '').trim()
-            if (term.length < 2) { setRes([]); setHasSearched(false); return }
+            const kat = katFilter || activeKat
+            if (term.length < 2 && !kat) { setRes([]); setHasSearched(false); return }
             setSearching(true)
             setHasSearched(true)
             try {
@@ -19942,24 +19957,42 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
                 if (plData) plId = plData.id
               } catch(e) {}
+
               let query = supabase.from('prisbok').select('*')
               if (plId) query = query.eq('prisliste_id', plId)
               else query = query.eq('user_id', user?.id)
-              const { data, error } = await query.or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`).order('varenavn').limit(20)
+
+              if (term.length >= 2 && kat) {
+                // Both text search and category
+                const katObj = PRODUKT_KATEGORIER.find(k => k.id === kat)
+                const katTerms = katObj ? katObj.search.split(',').map(s => `varenavn.ilike.%${s.trim()}%`).join(',') : ''
+                query = query.or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`)
+                if (katTerms) query = query.or(katTerms)
+              } else if (term.length >= 2) {
+                query = query.or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`)
+              } else if (kat) {
+                // Category only — search by category keywords
+                const katObj = PRODUKT_KATEGORIER.find(k => k.id === kat)
+                if (katObj) {
+                  const firstKeyword = katObj.search.split(',')[0].trim()
+                  query = query.ilike('varenavn', `%${firstKeyword}%`)
+                }
+              }
+
+              const { data, error } = await query.order('varenavn').limit(30)
               if (error) {
-                const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`).order('varenavn').limit(20)
+                const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${term || 'a'}%,varenavn.ilike.%${term || 'a'}%`).order('varenavn').limit(30)
                 setRes(fb || [])
               } else { setRes(data || []) }
             } catch(e) { setRes([]) }
             setSearching(false)
           }
 
-          // Live search with debounce
           useEffect(() => {
-            if (q.trim().length < 2) { setRes([]); setHasSearched(false); return }
-            const timer = setTimeout(() => doSearch(q), 300)
+            if (q.trim().length < 2 && !activeKat) { setRes([]); setHasSearched(false); return }
+            const timer = setTimeout(() => doSearch(q, activeKat), 300)
             return () => clearTimeout(timer)
-          }, [q])
+          }, [q, activeKat])
 
           const selectProduct = (p) => {
             updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === ctx.matId ? { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet } : mt) } : b) } : kl))
@@ -19969,37 +20002,46 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           return (
             <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
               <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'650px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
-                <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+                <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
                     <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>🔍 Søk i prisliste</h3>
                     <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
                   </div>
-                  <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Begynn å skrive varenavn eller NOBB-nummer..." style={{ ...qInp, width:'100%', padding:'12px 16px', fontSize:'15px', boxSizing:'border-box' }} />
+                  <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Søk varenavn eller NOBB-nummer..." style={{ ...qInp, width:'100%', padding:'11px 16px', fontSize:'14px', boxSizing:'border-box', marginBottom:'10px' }} />
+                  {/* Kategori-faner */}
+                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                    {PRODUKT_KATEGORIER.map(kat => (
+                      <button key={kat.id} onClick={() => setActiveKat(activeKat === kat.id ? null : kat.id)}
+                        style={{ padding:'4px 10px', borderRadius:'8px', fontSize:'11px', fontWeight:'600', cursor:'pointer', border: activeKat === kat.id ? '2px solid #059669' : '1px solid #e2e8f0', background: activeKat === kat.id ? '#f0fdf4' : 'white', color: activeKat === kat.id ? '#059669' : '#475569', whiteSpace:'nowrap' }}>
+                        {kat.emoji} {kat.label}
+                      </button>
+                    ))}
+                  </div>
                   {searching && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker...</div>}
                 </div>
                 <div style={{ overflowY:'auto', flex:1, padding:'4px 8px' }}>
-                  {!hasSearched && q.length < 2 && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv minst 2 tegn for å søke</div>
+                  {!hasSearched && q.length < 2 && !activeKat && (
+                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv søketekst eller velg en kategori</div>
                   )}
                   {hasSearched && res.length === 0 && !searching && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff for "{q}"</div>
+                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
                   )}
                   {res.map(p => (
                     <button key={p.id} onClick={() => selectProduct(p)}
-                      style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 12px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'1px', transition:'background 0.1s' }}
+                      style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'8px 10px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'1px', transition:'background 0.1s' }}
                       onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
                       onMouseLeave={e => e.currentTarget.style.background='white'}>
-                      <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'58px', flexShrink:0 }}>{p.varenummer}</span>
+                      <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'55px', flexShrink:0 }}>{p.varenummer}</span>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:'13px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
-                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>{p.kategori}</div>
+                        <div style={{ fontSize:'12px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{p.kategori}</div>
                       </div>
-                      <span style={{ fontSize:'12px', color:'#64748b', flexShrink:0 }}>{p.enhet}</span>
+                      <span style={{ fontSize:'11px', color:'#64748b', flexShrink:0, width:'28px', textAlign:'center' }}>{p.enhet}</span>
                       <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
                     </button>
                   ))}
-                  {res.length >= 20 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 20 treff — skriv mer spesifikt for å snevre inn</div>}
+                  {res.length >= 30 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 30 treff — skriv mer spesifikt</div>}
                 </div>
               </div>
             </div>
