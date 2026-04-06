@@ -18155,7 +18155,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
   // Send tilbudsforespørsel til UE
   const [showUESuccess, setShowUESuccess] = useState(null)
-  const [showUEExtraPoster, setShowUEExtraPoster] = useState(null) // { kalkId, poster: [{name, pris}], paaslag, callback }
+  const [showUEExtraPoster, setShowUEExtraPoster] = useState(null)
+  const [showProduktSok, setShowProduktSok] = useState(null) // { kalkId, bdId, matId } // { kalkId, poster: [{name, pris}], paaslag, callback }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -18595,21 +18596,24 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         const r = beregnMaterialkostnad(m, fakt)
                                         return (
                                           <tr key={m.id}>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
-                                              const nobb = e.target.value.trim()
-                                              if (!nobb) return
-                                              try {
-                                                // Search active prisliste first, then any
-                                                const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
-                                                let query = supabase.from('prisbok').select('*').eq('varenummer', nobb)
-                                                if (plData) query = query.eq('prisliste_id', plData.id)
-                                                const { data } = await query.limit(1).single()
-                                                if (data) {
-                                                  // Combined update to avoid race condition
-                                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet } : mt) } : b) } : kl))
-                                                }
-                                              } catch(err) {}
-                                            }} placeholder="NOBB" style={{ ...qInp, width:'70px', fontSize:'11px', padding:'6px 6px', fontFamily:'monospace' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}>
+                                              <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
+                                                <input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
+                                                  const nobb = e.target.value.trim()
+                                                  if (!nobb) return
+                                                  try {
+                                                    const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+                                                    let query = supabase.from('prisbok').select('*').eq('varenummer', nobb)
+                                                    if (plData) query = query.eq('prisliste_id', plData.id)
+                                                    const { data } = await query.limit(1).single()
+                                                    if (data) {
+                                                      updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb } : mt) } : b) } : kl))
+                                                    }
+                                                  } catch(err) {}
+                                                }} placeholder="NOBB" style={{ ...qInp, width:'58px', fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
+                                                <button onClick={() => setShowProduktSok({ kalkId: kalk.id, bdId: bd.id, matId: m.id })} title="Søk i prisliste" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', width:'22px', height:'22px', cursor:'pointer', fontSize:'11px', padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔍</button>
+                                              </div>
+                                            </td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
@@ -19084,6 +19088,75 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
         </div>
       )}
+
+      {/* Produktsøk i prisliste modal */}
+      {showProduktSok && (() => {
+        const PS = ({ ctx, onClose }) => {
+          const [q, setQ] = useState('')
+          const [res, setRes] = useState([])
+          const [searching, setSearching] = useState(false)
+
+          const doSearch = async () => {
+            if (q.trim().length < 2) return
+            setSearching(true)
+            try {
+              const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+              let query = supabase.from('prisbok').select('*')
+              if (plData) query = query.eq('prisliste_id', plData.id)
+              const { data } = await query.or(`varenummer.ilike.%${q.trim()}%,varenavn.ilike.%${q.trim()}%,kategori.ilike.%${q.trim()}%`).order('varenavn').limit(30)
+              setRes(data || [])
+            } catch(e) { setRes([]) }
+            setSearching(false)
+          }
+
+          const selectProduct = (p) => {
+            updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === ctx.matId ? { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet } : mt) } : b) } : kl))
+            onClose()
+          }
+
+          return (
+            <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'650px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+                <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+                    <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>🔍 Søk i prisliste</h3>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                  </div>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} autoFocus placeholder="Søk varenavn, NOBB eller kategori..." style={{ ...qInp, flex:1, padding:'10px 14px', fontSize:'14px' }} />
+                    <button onClick={doSearch} disabled={searching} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{searching ? '...' : 'Søk'}</button>
+                  </div>
+                </div>
+                <div style={{ overflowY:'auto', flex:1, padding:'8px 12px' }}>
+                  {res.length === 0 && q.length >= 2 && !searching && (
+                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff for "{q}"</div>
+                  )}
+                  {res.length === 0 && q.length < 2 && (
+                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Skriv minst 2 tegn og trykk Søk eller Enter</div>
+                  )}
+                  {res.map(p => (
+                    <button key={p.id} onClick={() => selectProduct(p)}
+                      style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 12px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'2px', transition:'background 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
+                      onMouseLeave={e => e.currentTarget.style.background='white'}>
+                      <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'60px', flexShrink:0 }}>{p.varenummer}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>{p.kategori}</div>
+                      </div>
+                      <span style={{ fontSize:'12px', color:'#64748b', flexShrink:0 }}>{p.enhet}</span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
+                    </button>
+                  ))}
+                  {res.length >= 30 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Maks 30 treff — prøv et mer spesifikt søk</div>}
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return <PS ctx={showProduktSok} onClose={() => setShowProduktSok(null)} />
+      })()}
 
       {/* UE ekstra poster confirmation */}
       {showUEExtraPoster && (
