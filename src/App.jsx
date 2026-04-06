@@ -19105,33 +19105,37 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           const [q, setQ] = useState('')
           const [res, setRes] = useState([])
           const [searching, setSearching] = useState(false)
+          const [hasSearched, setHasSearched] = useState(false)
 
-          const doSearch = async () => {
-            if (q.trim().length < 2) return
+          const doSearch = async (searchTerm) => {
+            const term = (searchTerm || '').trim()
+            if (term.length < 2) { setRes([]); setHasSearched(false); return }
             setSearching(true)
+            setHasSearched(true)
             try {
-              // Try active prisliste first
               let plId = null
               try {
                 const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
                 if (plData) plId = plData.id
-              } catch(e) { /* no active prisliste, search all */ }
-              
+              } catch(e) {}
               let query = supabase.from('prisbok').select('*')
               if (plId) query = query.eq('prisliste_id', plId)
               else query = query.eq('user_id', user?.id)
-              const { data, error } = await query.or(`varenummer.ilike.%${q.trim()}%,varenavn.ilike.%${q.trim()}%,kategori.ilike.%${q.trim()}%`).order('varenavn').limit(30)
-              
+              const { data, error } = await query.or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`).order('varenavn').limit(20)
               if (error) {
-                // Fallback: search without prisliste filter
-                const { data: fallback } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${q.trim()}%,varenavn.ilike.%${q.trim()}%,kategori.ilike.%${q.trim()}%`).order('varenavn').limit(30)
-                setRes(fallback || [])
-              } else {
-                setRes(data || [])
-              }
-            } catch(e) { console.error('Søkefeil:', e); setRes([]) }
+                const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`).order('varenavn').limit(20)
+                setRes(fb || [])
+              } else { setRes(data || []) }
+            } catch(e) { setRes([]) }
             setSearching(false)
           }
+
+          // Live search with debounce
+          useEffect(() => {
+            if (q.trim().length < 2) { setRes([]); setHasSearched(false); return }
+            const timer = setTimeout(() => doSearch(q), 300)
+            return () => clearTimeout(timer)
+          }, [q])
 
           const selectProduct = (p) => {
             updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === ctx.matId ? { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet } : mt) } : b) } : kl))
@@ -19147,24 +19151,22 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>🔍 Søk i prisliste</h3>
                     <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
                   </div>
-                  <div style={{ display:'flex', gap:'8px' }}>
-                    <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} autoFocus placeholder="Søk varenavn, NOBB eller kategori..." style={{ ...qInp, flex:1, padding:'10px 14px', fontSize:'14px' }} />
-                    <button onClick={doSearch} disabled={searching} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{searching ? '...' : 'Søk'}</button>
-                  </div>
+                  <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Begynn å skrive varenavn eller NOBB-nummer..." style={{ ...qInp, width:'100%', padding:'12px 16px', fontSize:'15px', boxSizing:'border-box' }} />
+                  {searching && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker...</div>}
                 </div>
-                <div style={{ overflowY:'auto', flex:1, padding:'8px 12px' }}>
-                  {res.length === 0 && q.length >= 2 && !searching && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff for "{q}"</div>
+                <div style={{ overflowY:'auto', flex:1, padding:'4px 8px' }}>
+                  {!hasSearched && q.length < 2 && (
+                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv minst 2 tegn for å søke</div>
                   )}
-                  {res.length === 0 && q.length < 2 && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Skriv minst 2 tegn og trykk Søk eller Enter</div>
+                  {hasSearched && res.length === 0 && !searching && (
+                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff for "{q}"</div>
                   )}
                   {res.map(p => (
                     <button key={p.id} onClick={() => selectProduct(p)}
-                      style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 12px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'2px', transition:'background 0.1s' }}
+                      style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 12px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'1px', transition:'background 0.1s' }}
                       onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
                       onMouseLeave={e => e.currentTarget.style.background='white'}>
-                      <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'60px', flexShrink:0 }}>{p.varenummer}</span>
+                      <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'58px', flexShrink:0 }}>{p.varenummer}</span>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:'13px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
                         <div style={{ fontSize:'11px', color:'#94a3b8' }}>{p.kategori}</div>
@@ -19173,7 +19175,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
                     </button>
                   ))}
-                  {res.length >= 30 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Maks 30 treff — prøv et mer spesifikt søk</div>}
+                  {res.length >= 20 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 20 treff — skriv mer spesifikt for å snevre inn</div>}
                 </div>
               </div>
             </div>
