@@ -17357,6 +17357,7 @@ function PrisbokPage({ onBack }) {
   const [colMapping, setColMapping] = useState({ varenummer: '', varenavn: '', enhet: '', pris: '', kategori: '' })
   const [is5001, setIs5001] = useState(false)
   const [importProgress, setImportProgress] = useState('')
+  const [toast, setToast] = useState(null) // { type: 'success'|'error', message }
   const fileRef = React.useRef(null)
 
   const loadData = async () => {
@@ -17481,8 +17482,8 @@ function PrisbokPage({ onBack }) {
       setImportStep(null)
       setImportProgress('')
       await loadData()
-      alert(`✅ ${inserted} varer importert som "${navn}"!`)
-    } catch(e) { alert('Feil: ' + e.message) }
+      setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
+    } catch(e) { setToast({ type: 'error', message: 'Feil ved import: ' + e.message }) }
     finally { setImporting(false); setImportProgress('') }
   }
 
@@ -17496,7 +17497,7 @@ function PrisbokPage({ onBack }) {
   }
 
   const handleImportCSV = () => {
-    if (!colMapping.varenavn && !colMapping.varenummer) return alert('Velg minst varenavn')
+    if (!colMapping.varenavn && !colMapping.varenummer) return setToast({ type: 'error', message: 'Velg minst varenavn' })
     const items = rawRows.map(row => ({
       varenummer: row[colMapping.varenummer] || '',
       varenavn: row[colMapping.varenavn] || row[colMapping.varenummer] || 'Ukjent',
@@ -17542,6 +17543,22 @@ function PrisbokPage({ onBack }) {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* In-app toast popup */}
+      {toast && (
+        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setToast(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'32px 28px', textAlign:'center' }}>
+              <div style={{ width:'56px', height:'56px', borderRadius:'50%', background: toast.type === 'success' ? '#f0fdf4' : '#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>
+                {toast.type === 'success' ? '✅' : '⚠️'}
+              </div>
+              <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>{toast.type === 'success' ? 'Fullført' : 'Feil'}</h3>
+              <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>{toast.message}</p>
+              <button onClick={() => setToast(null)} style={{ background: toast.type === 'success' ? '#059669' : '#dc2626', color:'white', border:'none', borderRadius:'10px', padding:'10px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
           <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
