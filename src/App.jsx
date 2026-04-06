@@ -6545,8 +6545,19 @@ function EndringsmeldingPage() {
       setSaving(true)
       try {
         const payload = {
-          ...form,
-          amount: calcTotal(),
+          title: form.title.trim(),
+          em_number: form.em_number,
+          project_id: form.project_id || null,
+          description: form.description,
+          reason: form.reason,
+          amount: calcTotal() || 0,
+          hours: parseFloat(form.hours) || 0,
+          materials_cost: parseFloat(form.materials_cost) || 0,
+          ue_cost: parseFloat(form.ue_cost) || 0,
+          time_consequence: form.time_consequence,
+          status: form.status,
+          customer_email: form.customer_email,
+          notes: form.notes,
           images,
           vedlegg,
           updated_at: new Date().toISOString(),
