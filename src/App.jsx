@@ -6011,8 +6011,14 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
       }).select().single()
       if (error) throw error
       await supabase.from('tenders').update({ generated_quote_id: data.id }).eq('id', t.id)
-      alert('✅ Tilbud opprettet! Gå til Tilbud-modulen for å se det.')
-    } catch(e) { alert('Feil: '+e.message) }
+      const log = [...(t.activity_log || []), { action: 'Tilbud generert fra anbud', by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ activity_log: log }).eq('id', t.id)
+      await showAlert({ message: 'Tilbud opprettet!', subMessage: `Tilbud "${data.title}" (${data.quote_number}) er opprettet som utkast. Du sendes nå til tilbudsmodulen.`, emoji: '📋' })
+      // Navigate to tilbud page
+      window.history.pushState({ page: 'tilbud' }, '', '#tilbud')
+      window.location.hash = '#tilbud'
+      window.location.reload()
+    } catch(e) { showAlert({ message: 'Feil ved generering', subMessage: e.message, type: 'error' }) }
   }
 
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
@@ -6160,10 +6166,12 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏢 UE-er og innkomne priser</h3>
               {pricedUes.length > 0 && (
                 <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bbf7d0', marginBottom:'14px', fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>
-                  🏆 Laveste pris: {pricedUes[0].company_name} — {fmtT(pricedUes[0].total_amount)}
+                  🏆 Laveste totalpris: {pricedUes[0].company_name} — {fmtT(pricedUes[0].total_amount)}
                 </div>
               )}
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+
+              {/* Oversiktsliste per UE */}
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px' }}>
                 {ues.map(ue => {
                   const ucfg = UE_STATUS[ue.status]
                   const isLowest = pricedUes[0]?.id === ue.id
@@ -6186,6 +6194,82 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                   )
                 })}
               </div>
+
+              {/* Detaljert prissammenligning per post */}
+              {pricedUes.length >= 2 && (t.chapters||[]).length > 0 && (
+                <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}>
+                  <h4 style={{ margin:'0 0 12px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📊 Prissammenligning per post</h4>
+                  {(t.chapters||[]).map((ch, ci) => (
+                    <div key={ci} style={{ marginBottom:'14px' }}>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669', marginBottom:'8px' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</div>
+                      <div style={{ overflowX:'auto' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px', minWidth:'500px' }}>
+                          <thead>
+                            <tr style={{ background:'#f8fafc' }}>
+                              <th style={{ padding:'8px 10px', textAlign:'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', minWidth:'160px' }}>Post</th>
+                              <th style={{ padding:'8px 6px', textAlign:'center', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', width:'60px' }}>Mengde</th>
+                              {pricedUes.map(ue => (
+                                <th key={ue.id} style={{ padding:'8px 10px', textAlign:'right', color: pricedUes[0]?.id===ue.id ? '#16a34a' : '#0f172a', fontWeight:'700', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', minWidth:'100px' }}>
+                                  {ue.company_name.length > 15 ? ue.company_name.slice(0,15)+'…' : ue.company_name}
+                                  {pricedUes[0]?.id===ue.id && ' 🏆'}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(ch.posts||[]).map((post, pi) => {
+                              // Find each UE's price for this post
+                              const uePrices = pricedUes.map(ue => {
+                                const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
+                                const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
+                                return { ueId: ue.id, price: uePost ? (parseFloat(uePost.uePrice)||0) * (parseFloat(post.qty)||1) : 0, unitPrice: uePost ? parseFloat(uePost.uePrice)||0 : 0 }
+                              })
+                              const lowestPrice = Math.min(...uePrices.filter(p=>p.price>0).map(p=>p.price))
+                              return (
+                                <tr key={pi} style={{ borderBottom:'1px solid #f8fafc' }}>
+                                  <td style={{ padding:'7px 10px', color:'#0f172a', fontWeight:'500' }}>{post.description||'—'}</td>
+                                  <td style={{ padding:'7px 6px', textAlign:'center', color:'#94a3b8' }}>{post.qty} {post.unit}</td>
+                                  {uePrices.map(up => {
+                                    const isBest = up.price > 0 && up.price === lowestPrice
+                                    return (
+                                      <td key={up.ueId} style={{ padding:'7px 10px', textAlign:'right', fontWeight: isBest ? '800' : '500', color: isBest ? '#16a34a' : '#0f172a', background: isBest ? '#f0fdf4' : 'transparent' }}>
+                                        {up.price > 0 ? fmtT(up.price) : <span style={{ color:'#cbd5e1' }}>—</span>}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              )
+                            })}
+                            {/* Kapittelsum-rad */}
+                            <tr style={{ borderTop:'2px solid #e2e8f0', background:'#f8fafc' }}>
+                              <td style={{ padding:'8px 10px', fontWeight:'700', color:'#0f172a' }} colSpan={2}>Kapittelsum</td>
+                              {pricedUes.map(ue => {
+                                const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
+                                const chTotal = ueCh ? (ueCh.posts||[]).reduce((a,p) => a + (parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0), 0) : 0
+                                const allChTotals = pricedUes.map(u2 => { const c2 = (u2.chapters||[]).find(c=>c.id===ch.id)||(u2.chapters||[])[ci]; return c2?(c2.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0):0 }).filter(v=>v>0)
+                                const isBest = chTotal > 0 && chTotal === Math.min(...allChTotals)
+                                return <td key={ue.id} style={{ padding:'8px 10px', textAlign:'right', fontWeight:'800', color: isBest ? '#16a34a' : '#0f172a', background: isBest ? '#f0fdf4' : 'transparent' }}>{chTotal > 0 ? fmtT(chTotal) : '—'}</td>
+                              })}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Totalrad */}
+                  <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px' }}>
+                    <span style={{ fontWeight:'700', fontSize:'13px', color:'#16a34a' }}>Totalt</span>
+                    <div style={{ display:'flex', gap:'20px' }}>
+                      {pricedUes.map(ue => (
+                        <div key={ue.id} style={{ textAlign:'right' }}>
+                          <div style={{ fontSize:'11px', color:'#64748b' }}>{ue.company_name}</div>
+                          <div style={{ fontWeight:'800', fontSize:'15px', color: pricedUes[0]?.id===ue.id ? '#16a34a' : '#0f172a' }}>{fmtT(ue.total_amount)} {pricedUes[0]?.id===ue.id && '🏆'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -6493,6 +6577,37 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
   const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'' }])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [previousUEs, setPreviousUEs] = useState([])
+  const [showRegister, setShowRegister] = useState(false)
+  const [registerSearch, setRegisterSearch] = useState('')
+
+  // Load previously used UEs from tender_ues table
+  useEffect(() => {
+    supabase.from('tender_ues').select('company_name, contact_name, email').order('created_at', { ascending: false }).then(({ data }) => {
+      if (!data) return
+      // Deduplicate by email
+      const seen = new Set()
+      const unique = data.filter(u => {
+        if (!u.email || seen.has(u.email.toLowerCase())) return false
+        seen.add(u.email.toLowerCase())
+        return true
+      })
+      setPreviousUEs(unique)
+    })
+  }, [])
+
+  const addFromRegister = (prev) => {
+    // Check if already added
+    if (ues.some(u => u.email.toLowerCase() === prev.email.toLowerCase())) return
+    setUes(u => [...u.filter(x => x.company_name || x.email), { id: Date.now(), company_name: prev.company_name, contact_name: prev.contact_name || '', email: prev.email }])
+    setRegisterSearch('')
+  }
+
+  const filteredRegister = previousUEs.filter(p => {
+    if (!registerSearch) return true
+    const s = registerSearch.toLowerCase()
+    return p.company_name?.toLowerCase().includes(s) || p.email?.toLowerCase().includes(s) || p.contact_name?.toLowerCase().includes(s)
+  })
 
   const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'' }])
   const removeUE = (id) => setUes(u=>u.filter(x=>x.id!==id))
@@ -6559,6 +6674,39 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
               <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', fontSize:'13px', color:'#1d4ed8' }}>
                 📋 <strong>{tender.title}</strong> — {tender.tender_number}{tender.deadline?` · Frist: ${tender.deadline}`:''}
               </div>
+
+              {/* UE-register */}
+              {previousUEs.length > 0 && (
+                <div>
+                  <button onClick={() => setShowRegister(!showRegister)}
+                    style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'10px', padding:'10px 16px', cursor:'pointer', color:'#7c3aed', fontWeight:'600', fontSize:'13px', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                    📇 {showRegister ? 'Skjul' : 'Velg fra'} tidligere UE-er ({previousUEs.length})
+                  </button>
+                  {showRegister && (
+                    <div style={{ marginTop:'8px', background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'12px' }}>
+                      <input value={registerSearch} onChange={e => setRegisterSearch(e.target.value)} placeholder="🔍 Søk firma, kontakt, e-post..." style={{ ...tInp, marginBottom:'8px', fontSize:'13px' }} />
+                      <div style={{ maxHeight:'180px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {filteredRegister.slice(0, 20).map((prev, i) => {
+                          const alreadyAdded = ues.some(u => u.email.toLowerCase() === prev.email.toLowerCase())
+                          return (
+                            <button key={i} onClick={() => !alreadyAdded && addFromRegister(prev)} disabled={alreadyAdded}
+                              style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderRadius:'8px', border:'1px solid #f1f5f9', background: alreadyAdded ? '#f1f5f9' : 'white', cursor: alreadyAdded ? 'default' : 'pointer', textAlign:'left', width:'100%', opacity: alreadyAdded ? 0.5 : 1 }}
+                              onMouseEnter={e => { if (!alreadyAdded) e.currentTarget.style.background='#f5f3ff' }} onMouseLeave={e => { if (!alreadyAdded) e.currentTarget.style.background='white' }}>
+                              <div>
+                                <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{prev.company_name}</div>
+                                <div style={{ fontSize:'11px', color:'#64748b' }}>{prev.contact_name ? `${prev.contact_name} · ` : ''}{prev.email}</div>
+                              </div>
+                              <span style={{ fontSize:'12px', color: alreadyAdded ? '#94a3b8' : '#7c3aed', fontWeight:'600' }}>{alreadyAdded ? '✓ Lagt til' : '+ Legg til'}</span>
+                            </button>
+                          )
+                        })}
+                        {filteredRegister.length === 0 && <p style={{ margin:0, color:'#94a3b8', fontSize:'12px', textAlign:'center', padding:'8px 0' }}>Ingen treff</p>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {ues.map((ue,i)=>(
                 <div key={ue.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
