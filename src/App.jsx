@@ -4875,6 +4875,47 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   )
 }
 
+// ── Intro Text with Templates ────────────────────────────────────────────────
+function IntroTextWithTemplates({ value, onChange, userId, inputStyle }) {
+  const [templates, setTemplates] = useState([])
+  const [showSaveMal, setShowSaveMal] = useState(false)
+  const [malName, setMalName] = useState('')
+  useEffect(() => {
+    supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name').then(({data}) => setTemplates(data||[])).catch(()=>{})
+  }, [])
+  const saveMal = async () => {
+    if (!malName.trim() || !value.trim()) return
+    await supabase.from('text_templates').insert({ name: malName.trim(), type: 'tilbud_intro', content: value, created_by: userId })
+    const {data} = await supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name')
+    setTemplates(data||[])
+    setMalName(''); setShowSaveMal(false)
+  }
+  const deleteMal = async (id) => {
+    await supabase.from('text_templates').delete().eq('id', id)
+    setTemplates(t => t.filter(x => x.id !== id))
+  }
+  return <>
+    <div style={{ display:'flex', gap:'6px', marginBottom:'6px', flexWrap:'wrap' }}>
+      {templates.map(t => (
+        <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer' }}>
+          <span onClick={() => onChange(t.content)} style={{ color:'#059669', fontWeight:'600' }}>{t.name}</span>
+          <button onClick={() => deleteMal(t.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px', padding:'0 2px', lineHeight:1 }}>×</button>
+        </span>
+      ))}
+      {!showSaveMal ? (
+        <button onClick={() => setShowSaveMal(true)} style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer', color:'#94a3b8' }}>💾 Lagre som mal</button>
+      ) : (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
+          <input value={malName} onChange={e=>setMalName(e.target.value)} placeholder="Malnavn..." style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', width:'120px', outline:'none' }} onKeyDown={e=>e.key==='Enter'&&saveMal()} />
+          <button onClick={saveMal} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', cursor:'pointer', fontWeight:'600' }}>Lagre</button>
+          <button onClick={() => setShowSaveMal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
+        </span>
+      )}
+    </div>
+    <textarea value={value} onChange={e=>onChange(e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...inputStyle, resize:'none' }} />
+  </>
+}
+
 function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit = !!initial
   const [step, setStep] = useState(1) // 1=info, 2=kapitler
@@ -4969,45 +5010,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" max="100" style={qInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>
                 {lbl('Innledende tekst')}
-                {(() => {
-                  const [templates, setTemplates] = React.useState([])
-                  const [showSaveMal, setShowSaveMal] = React.useState(false)
-                  const [malName, setMalName] = React.useState('')
-                  React.useEffect(() => {
-                    supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name').then(({data}) => setTemplates(data||[]))
-                  }, [])
-                  const saveMal = async () => {
-                    if (!malName.trim() || !form.intro_text.trim()) return
-                    await supabase.from('text_templates').insert({ name: malName.trim(), type: 'tilbud_intro', content: form.intro_text, created_by: user?.id })
-                    const {data} = await supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name')
-                    setTemplates(data||[])
-                    setMalName(''); setShowSaveMal(false)
-                  }
-                  const deleteMal = async (id) => {
-                    await supabase.from('text_templates').delete().eq('id', id)
-                    setTemplates(t => t.filter(x => x.id !== id))
-                  }
-                  return <>
-                    <div style={{ display:'flex', gap:'6px', marginBottom:'6px', flexWrap:'wrap' }}>
-                      {templates.map(t => (
-                        <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer' }}>
-                          <span onClick={() => set('intro_text', t.content)} style={{ color:'#059669', fontWeight:'600' }}>{t.name}</span>
-                          <button onClick={() => deleteMal(t.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px', padding:'0 2px', lineHeight:1 }}>×</button>
-                        </span>
-                      ))}
-                      {!showSaveMal ? (
-                        <button onClick={() => setShowSaveMal(true)} style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer', color:'#94a3b8' }}>💾 Lagre som mal</button>
-                      ) : (
-                        <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
-                          <input value={malName} onChange={e=>setMalName(e.target.value)} placeholder="Malnavn..." style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', width:'120px', outline:'none' }} onKeyDown={e=>e.key==='Enter'&&saveMal()} />
-                          <button onClick={saveMal} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', cursor:'pointer', fontWeight:'600' }}>Lagre</button>
-                          <button onClick={() => setShowSaveMal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
-                        </span>
-                      )}
-                    </div>
-                    <textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...qInp, resize:'none' }} />
-                  </>
-                })()}
+                <IntroTextWithTemplates value={form.intro_text} onChange={v => set('intro_text', v)} userId={user?.id} inputStyle={qInp} />
               </div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Avsluttende tekst')}<textarea value={form.outro_text} onChange={e=>set('outro_text',e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} /></div>
             </div>
