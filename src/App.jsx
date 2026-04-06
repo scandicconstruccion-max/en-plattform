@@ -5957,8 +5957,9 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   useEffect(() => { load() }, [])
 
   const updateStatus = async (status) => {
-    await supabase.from('tenders').update({ status, updated_at: new Date().toISOString() }).eq('id', t.id)
-    setT(v=>({...v, status}))
+    const log = [...(t.activity_log || []), { action: `Status endret til ${status}`, by: user?.email, at: new Date().toISOString() }]
+    await supabase.from('tenders').update({ status, activity_log: log, updated_at: new Date().toISOString() }).eq('id', t.id)
+    setT(v=>({...v, status, activity_log: log}))
   }
 
   const handleDelete = async () => {
@@ -6023,6 +6024,26 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Description */}
           {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
+
+          {/* Vedlegg */}
+          {(t.vedlegg||[]).length > 0 && (
+            <div style={tCard}>
+              <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Vedlegg ({t.vedlegg.length})</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {t.vedlegg.map((v, i) => (
+                  <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'12px 16px', textDecoration:'none', transition:'box-shadow 0.15s' }}
+                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                    <span style={{ fontSize:'24px' }}>{v.name.match(/\.(pdf)$/i) ? '📄' : v.name.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? '🖼️' : v.name.match(/\.(dwg|dxf)$/i) ? '📐' : v.name.match(/\.(xlsx?|csv)$/i) ? '📊' : '📎'}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:'14px', fontWeight:'600', color:'#2563eb' }}>{v.name}</div>
+                      {v.size && <div style={{ fontSize:'11px', color:'#94a3b8' }}>{(v.size/1024).toFixed(0)} KB</div>}
+                    </div>
+                    <span style={{ fontSize:'13px', color:'#94a3b8' }}>↗</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Chapters / kalkyle */}
           {(t.chapters||[]).length > 0 && (
@@ -6097,6 +6118,33 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               </div>
             </div>
           )}
+
+          {/* Aktivitetslogg */}
+          <div style={tCard}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
+            {(!t.activity_log || t.activity_log.length === 0) ? (
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert ennå</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                {(t.activity_log || []).slice().reverse().map((log, i) => {
+                  const isFirst = i === 0
+                  return (
+                    <div key={i} style={{ display:'flex', gap:'12px', alignItems:'flex-start', position:'relative', paddingLeft:'22px', paddingBottom:'14px' }}>
+                      <div style={{ position:'absolute', left:'6px', top:'0', bottom:'0', width:'2px', background: i === (t.activity_log.length - 1) ? 'transparent' : '#e2e8f0' }} />
+                      <div style={{ position:'absolute', left:'0', top:'3px', width:'14px', height:'14px', borderRadius:'50%', background: isFirst ? '#059669' : '#e2e8f0', border:'2px solid white', zIndex:1 }} />
+                      <div style={{ flex:1 }}>
+                        <span style={{ fontSize:'13px', fontWeight:'600', color: isFirst ? '#059669' : '#374151' }}>{log.action}</span>
+                        <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
+                          {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                          {log.by && <span> · {log.by}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -6152,6 +6200,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   const [chapters, setChapters] = useState(initial?.chapters||[
     { id: Date.now(), title: 'Generelt', markup: 0, posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
   ])
+  const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
@@ -6162,13 +6211,28 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   const removePost = (chId,pId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.filter(p=>p.id!==pId)}:x))
   const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
 
+  const handleVedleggUpload = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return
+    try {
+      const path = `anbud-vedlegg/${Date.now()}_${file.name}`
+      const { error } = await supabase.storage.from('plattform-files').upload(path, file)
+      if (error) throw error
+      const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      setVedlegg(prev => [...prev, { name: file.name, url: data.publicUrl, size: file.size }])
+    } catch(err) { console.error(err) }
+    e.target.value = ''
+  }
+
   const handleSave = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, type, chapters, project_id: form.project_id||null, updated_at: new Date().toISOString() }
+      const payload = { ...form, type, chapters, vedlegg, project_id: form.project_id||null, updated_at: new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('tenders').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('tenders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
+      else {
+        const log = [{ action: 'Anbud opprettet', by: user?.email, at: new Date().toISOString() }]
+        const {error}=await supabase.from('tenders').insert({...payload, status:'Utkast', created_by:user?.id, activity_log: log }); if(error) throw error
+      }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -6212,6 +6276,25 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={tInp} /></div>
               <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={tInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Beskrivelse / Omfang')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={4} placeholder="Beskriv arbeidet, omfang, krav og betingelser..." style={{ ...tInp, resize:'none' }} /></div>
+              {/* Vedlegg */}
+              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>📎 Vedlegg / Dokumenter</div>
+                <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>Last opp tegninger, beskrivelser, kravspesifikasjoner eller andre dokumenter som UE trenger for å prise.</p>
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
+                  {vedlegg.map((v, i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'6px 12px' }}>
+                      <span style={{ fontSize:'16px' }}>{v.name.match(/\.(pdf)$/i) ? '📄' : v.name.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? '🖼️' : v.name.match(/\.(dwg|dxf)$/i) ? '📐' : v.name.match(/\.(xlsx?|csv)$/i) ? '📊' : '📎'}</span>
+                      <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'13px', color:'#2563eb', textDecoration:'none', fontWeight:'500', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.name}</a>
+                      {v.size && <span style={{ fontSize:'11px', color:'#94a3b8' }}>({(v.size/1024).toFixed(0)} KB)</span>}
+                      <button onClick={() => setVedlegg(prev => prev.filter((_, j) => j !== i))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0 2px' }}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'10px 18px', cursor:'pointer', color:'#64748b', fontSize:'13px', fontWeight:'600' }}>
+                  📎 Last opp fil
+                  <input type="file" style={{ display:'none' }} onChange={handleVedleggUpload} accept=".pdf,.png,.jpg,.jpeg,.gif,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.zip" />
+                </label>
+              </div>
             </div>
           )}
           {step===2 && (
@@ -6298,6 +6381,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
             <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>
             ${tender.description?`<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">${tender.description}</p></div>`:''}
             ${tender.deadline?`<p style="color:#dc2626;font-weight:600;font-size:14px">⏰ Anbudsfrist: ${tender.deadline}</p>`:''}
+            ${(tender.vedlegg||[]).length > 0 ? '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0;border:1px solid #f1f5f9"><p style="margin:0 0 8px;font-weight:700;font-size:14px;color:#0f172a">📎 Vedlegg</p>' + tender.vedlegg.map(v => `<a href="${v.url}" style="display:block;color:#2563eb;font-size:13px;margin-bottom:4px;text-decoration:none">📎 ${v.name}</a>`).join('') + '</div>' : ''}
             <p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for følgende poster.</p>
             <div style="text-align:center;margin:32px 0">
               <a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📝 Fyll inn priser</a>
@@ -6311,6 +6395,11 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
         })
         if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
       }
+      // Log invitations
+      const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
+      const names = valid.map(u => u.company_name.trim()).join(', ')
+      const log = [...(tenderRec?.activity_log || []), { action: `Invitert UE: ${names}`, by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ activity_log: log }).eq('id', tender.id)
       setSent(true)
       setTimeout(()=>onSaved(), 1500)
     } catch(e) { alert('Feil: '+e.message) }
@@ -6374,7 +6463,9 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
     if (!ue) return alert('Velg en UE')
     setSaving(true)
     try {
-      await supabase.from('tenders').update({ status:'Tildelt', awarded_ue:ue.company_name, awarded_amount:ue.total_amount, project_id:projectId||null, updated_at:new Date().toISOString() }).eq('id', tender.id)
+      const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
+      const log = [...(tenderRec?.activity_log || []), { action: `Tildelt til ${ue.company_name} — ${fmtT(ue.total_amount||0)}`, by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ status:'Tildelt', awarded_ue:ue.company_name, awarded_amount:ue.total_amount, project_id:projectId||null, activity_log: log, updated_at:new Date().toISOString() }).eq('id', tender.id)
       await supabase.from('tender_ues').update({ status:'Avslått' }).eq('tender_id', tender.id).neq('id', selectedUE)
       if (user?.id) {
         await supabase.from('notifications').insert({ user_id:user.id, title:`Anbud tildelt: ${tender.title}`, message:`Tildelt til ${ue.company_name} for ${fmtT(ue.total_amount||0)}`, type:'success', link_page:'anbudsmodul' })
@@ -6470,6 +6561,10 @@ function UEPrisingsPage() {
     try {
       const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
       await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString() }).eq('id', ueData.id)
+      // Log UE pricing in tender activity
+      const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
+      const tLog = [...(tenderRec?.activity_log || []), { action: `Pris mottatt fra ${ueData.company_name}: ${fmtT(totalAmount)}`, by: ueData.company_name, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ activity_log: tLog }).eq('id', tender.id)
       if (tender.created_by) {
         await supabase.from('notifications').insert({ user_id:tender.created_by, title:`Ny anbудspris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul' })
       }
@@ -6499,6 +6594,16 @@ function UEPrisingsPage() {
             </div>
           </div>
           {tender.description && <p style={{ margin:'16px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, background:'#f8fafc', borderRadius:'10px', padding:'12px 16px' }}>{tender.description}</p>}
+          {(tender.vedlegg||[]).length > 0 && (
+            <div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>📎 Vedlegg fra oppdragsgiver</div>
+              {tender.vedlegg.map((v, i) => (
+                <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'13px', color:'#2563eb', textDecoration:'none', marginBottom:'4px', fontWeight:'500' }}>
+                  {v.name.match(/\.(pdf)$/i) ? '📄' : '📎'} {v.name}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         {chapters.map((ch,ci)=>(
