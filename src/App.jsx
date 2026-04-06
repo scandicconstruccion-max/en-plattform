@@ -6306,12 +6306,68 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
           <div style={tCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-              {Object.keys(TENDER_STATUS).map(s => (
-                <button key={s} onClick={()=>updateStatus(s)} disabled={t.status===s}
-                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${t.status===s?TENDER_STATUS[s].border:'#e2e8f0'}`, background:t.status===s?TENDER_STATUS[s].bg:'white', color:t.status===s?TENDER_STATUS[s].color:'#475569', fontWeight:t.status===s?'700':'400', fontSize:'13px', cursor:t.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
-                  {t.status===s?'✓ ':''}{TENDER_STATUS[s].emoji} {s}
-                </button>
-              ))}
+              {(() => {
+                // Define allowed transitions based on current status and type
+                const currentIdx = Object.keys(TENDER_STATUS).indexOf(t.status)
+                const hasPricedUEs = pricedUes.length > 0
+                const hasUEs = ues.length > 0
+
+                return Object.keys(TENDER_STATUS).map(s => {
+                  const isCurrent = t.status === s
+                  const targetIdx = Object.keys(TENDER_STATUS).indexOf(s)
+
+                  // Determine if this transition is allowed/warned
+                  let blocked = false
+                  let warning = null
+
+                  if (s === 'Tildelt' && !isIncoming && !hasPricedUEs) {
+                    blocked = true
+                    warning = 'Ingen UE har levert pris ennå'
+                  }
+                  if (s === 'Tildelt' && !isIncoming) {
+                    // Should use TildelModal instead
+                    blocked = true
+                    warning = hasPricedUEs ? 'Bruk «🏆 Tildel anbud»-knappen ovenfor' : 'Ingen UE har levert pris ennå'
+                  }
+                  if (s === 'Mottatt' && !isIncoming && !hasUEs) {
+                    warning = 'Ingen UE er invitert'
+                  }
+                  if (s === 'Under vurdering' && !isIncoming && !hasPricedUEs) {
+                    warning = 'Ingen priser er mottatt ennå'
+                  }
+                  // Don't allow going backwards to Utkast if already sent
+                  if (s === 'Utkast' && currentIdx > 0) {
+                    blocked = true
+                  }
+
+                  const handleClick = async () => {
+                    if (blocked) {
+                      if (warning) showAlert({ message: 'Kan ikke endre status', subMessage: warning, type: 'warning', emoji: '⚠️' })
+                      return
+                    }
+                    if (warning) {
+                      if (!(await confirm({ message: `Sett status til "${s}"?`, subMessage: `⚠️ ${warning}. Vil du fortsette likevel?`, confirmLabel: `Ja, sett ${s}`, danger: false }))) return
+                    }
+                    updateStatus(s)
+                  }
+
+                  return (
+                    <button key={s} onClick={handleClick} disabled={isCurrent}
+                      style={{
+                        padding:'9px 14px', borderRadius:'10px', width:'100%', textAlign:'left', fontSize:'13px',
+                        border: `1px solid ${isCurrent ? TENDER_STATUS[s].border : blocked ? '#f1f5f9' : '#e2e8f0'}`,
+                        background: isCurrent ? TENDER_STATUS[s].bg : blocked ? '#fafafa' : 'white',
+                        color: isCurrent ? TENDER_STATUS[s].color : blocked ? '#cbd5e1' : '#475569',
+                        fontWeight: isCurrent ? '700' : '400',
+                        cursor: isCurrent ? 'default' : blocked ? 'not-allowed' : 'pointer',
+                        opacity: blocked && !isCurrent ? 0.6 : 1,
+                      }}>
+                      {isCurrent ? '✓ ' : ''}{TENDER_STATUS[s].emoji} {s}
+                      {blocked && !isCurrent && warning && <span style={{ display:'block', fontSize:'10px', color:'#94a3b8', marginTop:'2px' }}>🔒 {warning}</span>}
+                    </button>
+                  )
+                })
+              })()}
             </div>
           </div>
           <div style={tCard}>
