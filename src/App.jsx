@@ -19682,7 +19682,7 @@ function AppContent() {
           </button>
         </div>
         <button onClick={() => setCollapsed(!collapsed)}
-          style={{ position: 'absolute', top: '108px', right: '-13px', width: '26px', height: '26px', borderRadius: '50%',
+          style={{ position: 'absolute', top: '78px', right: '10px', width: '26px', height: '26px', borderRadius: '50%',
             background: 'white', border: '1.5px solid #cbd5e1',
             cursor: 'pointer', fontSize: '14px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
