@@ -17643,18 +17643,56 @@ function PrisbokPage({ onBack }) {
       const kategoriNavn = p[3].trim()
       const varenavn = p[4].trim()
       const bruttoPrisOre = parseInt(p[5]) || 0
-      const enhet = p[7].trim()
+      let enhet = p[7].trim()
       const nettoPrisOre = parseInt(p[12]) || 0
       const rabattProm = parseInt(p[13]) || 0
       const tillegg = p[9].trim()
-      // Use nettopris if available, otherwise bruttopris
       const prisOre = nettoPrisOre > 0 ? nettoPrisOre : bruttoPrisOre
-      const prisKr = prisOre / 100
+      let prisKr = prisOre / 100
       if (!varenavn || varenavn === '') continue
+
+      // Smart konvertering: rull/pakke-pris → pris per m²
+      // Gjelder når enhet er RUL, STK eller PAK og produktet har areal-dimensjoner
+      if ((enhet === 'RUL' || enhet === 'STK' || enhet === 'PAK') && prisKr > 0) {
+        let areal = 0
+
+        // 1. Sjekk tilleggsinfo for "XX M2" (f.eks. "39 M2", "100M2")
+        const m2Match = tillegg.match(/(\d+[,.]?\d*)\s*M2/i)
+        if (m2Match) {
+          areal = parseFloat(m2Match[1].replace(',', '.'))
+        }
+
+        // 2. Parsér bredde×lengde fra varenavn (f.eks. "1,30X50M", "2600X15M", "0,20X2600X15M")
+        if (areal === 0) {
+          const fullText = varenavn + ' ' + tillegg
+          // Match patterns like "1,30X50M" or "1,5X50M" or "2X15M"
+          const dimMatch = fullText.match(/(\d+[,.]?\d*)\s*[xX]\s*(\d+[,.]?\d*)\s*M(?:\b|$)/i)
+          if (dimMatch) {
+            let d1 = parseFloat(dimMatch[1].replace(',', '.'))
+            let d2 = parseFloat(dimMatch[2].replace(',', '.'))
+            // If d1 is in mm (>100), convert to m
+            if (d1 > 100) d1 = d1 / 1000
+            if (d2 > 100) d2 = d2 / 1000
+            areal = d1 * d2
+          }
+        }
+
+        // 3. Konverter til m²-pris hvis vi fant areal > 1 m²
+        if (areal > 1) {
+          prisKr = prisKr / areal
+          enhet = 'M2'
+        }
+      }
+
+      // Også konverter LM-produkter der pris er per pakke (sjekk for lengde i navn)
+      // F.eks. stenderverk "48X148X4800" — enhet LM er allerede korrekt per lm
+
+      const bruttoPrisKr = bruttoPrisOre / 100
+      const origNetto = nettoPrisOre / 100
       rows.push({
         nobb, kategoriNavn, varenavn: varenavn + (tillegg ? ' ' + tillegg : ''),
-        enhet: enhet || 'STK', prisKr, bruttoPrisKr: bruttoPrisOre / 100,
-        nettoPrisKr: nettoPrisOre / 100, rabatt: rabattProm / 100
+        enhet: enhet || 'STK', prisKr, bruttoPrisKr: enhet === 'M2' && bruttoPrisKr > prisKr * 10 ? prisKr * (bruttoPrisKr / origNetto) : bruttoPrisKr,
+        nettoPrisKr: prisKr, rabatt: rabattProm / 100
       })
     }
     return rows
