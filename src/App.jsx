@@ -18156,7 +18156,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   // Send tilbudsforespørsel til UE
   const [showUESuccess, setShowUESuccess] = useState(null)
   const [showUEExtraPoster, setShowUEExtraPoster] = useState(null)
-  const [showProduktSok, setShowProduktSok] = useState(null) // { kalkId, bdId, matId } // { kalkId, poster: [{name, pris}], paaslag, callback }
+  const [showProduktSok, setShowProduktSok] = useState(null) // { kalkId, bdId, matId }
+  const [sidebarOpen, setSidebarOpen] = useState(true) // { kalkId, poster: [{name, pris}], paaslag, callback }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -18918,8 +18919,14 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           {kalkyler.length === 0 && <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'40px', textAlign:'center', color:'#94a3b8' }}>Ingen fagkalkyler — klikk "Rediger prosjektinfo" for å legge til fag.</div>}
         </div>
 
-        {/* Sidebar */}
-        <div style={{ flex:1, minWidth:'280px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        {/* Sidebar — collapsible */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px', transition:'width 0.2s', ...(sidebarOpen ? { flex:1, minWidth:'280px' } : { width:'40px', minWidth:'40px', flexShrink:0 }) }}>
+          {/* Toggle button */}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#64748b', alignSelf: sidebarOpen ? 'flex-end' : 'center' }}>
+            {sidebarOpen ? '▶ Skjul' : '◀'}
+          </button>
+
+          {sidebarOpen && <>
           {/* Totaler */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
             <div style={{ background:'#f8fafc', padding:'12px 18px', borderBottom:'1px solid #f1f5f9' }}>
@@ -19059,6 +19066,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
 
           <button onClick={handleDelete} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🗑️ Slett kalkulasjon</button>
+          </>}
         </div>
       </div>
 
