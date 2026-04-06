@@ -18163,8 +18163,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
         name: bd.name,
         data: { arbeidsarter: bd.arbeidsarter, materialer: bd.materialer, underleverandorer: bd.underleverandorer, enhet: bd.enhet },
       })
-      setShowUESuccess({ navn: `"${bd.name}" lagret til ditt bibliotek`, nr: '' })
-    } catch(e) { console.error(e) }
+      setToastMsg({ title: 'Lagret til bibliotek', message: `"${bd.name}" er lagret under Egne maler`, type: 'success' })
+    } catch(e) { setToastMsg({ title: 'Feil', message: 'Kunne ikke lagre: ' + e.message, type: 'error' }) }
   }
 
   // Bygningsdel field update (name, mengde, enhet)
@@ -18214,6 +18214,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [undoStack, setUndoStack] = useState([])
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showMoveBdModal, setShowMoveBdModal] = useState(null) // { kalkId, bdId, bdName }
+  const [toastMsg, setToastMsg] = useState(null) // { title, message, type: 'success'|'error' }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -18500,8 +18501,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
                   <button onClick={async () => {
                     const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
-                    if (count > 0) { updateKalkyler(updated); setShowUESuccess({ navn: `${count} materialpriser oppdatert`, nr: '' }) }
-                    else { setShowUESuccess({ navn: 'Ingen NOBB-materialer funnet', nr: '' }) }
+                    if (count > 0) { updateKalkyler(updated); setToastMsg({ title: 'Priser oppdatert', message: `${count} materialpriser oppdatert fra aktiv prisliste`, type: 'success' }) }
+                    else { setToastMsg({ title: 'Ingen endringer', message: 'Ingen materialer med NOBB-nummer funnet, eller ingen aktiv prisliste', type: 'error' }) }
                     setShowMoreMenu(false)
                   }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
                   <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
@@ -19232,6 +19233,23 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'13px' }}>Ref: {showUESuccess.nr} · Svarfrist: 7 dager</p>
               <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'13px' }}>Når UE svarer, oppdateres kalkylen automatisk og du får et varsel.</p>
               <button onClick={() => setShowUESuccess(null)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'12px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generell suksess/feil popup */}
+      {toastMsg && (
+        <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setToastMsg(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'32px 28px', textAlign:'center' }}>
+              <div style={{ width:'56px', height:'56px', borderRadius:'50%', background: toastMsg.type === 'success' ? '#f0fdf4' : '#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>
+                {toastMsg.type === 'success' ? '✅' : '⚠️'}
+              </div>
+              <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>{toastMsg.title}</h3>
+              <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>{toastMsg.message}</p>
+              <button onClick={() => setToastMsg(null)} style={{ background: toastMsg.type === 'success' ? '#059669' : '#dc2626', color:'white', border:'none', borderRadius:'10px', padding:'10px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
             </div>
           </div>
         </div>
