@@ -6696,10 +6696,18 @@ function EndringsmeldingPage() {
     if (!em.customer_email) return alert('Legg til kundens e-post først')
     try {
       const proj = projects.find(p => p.id === em.project_id)
+
+      // Generate view token if not exists
+      let viewToken = em.view_token
+      if (!viewToken) {
+        viewToken = crypto.randomUUID()
+        await supabase.from('endringsmeldinger').update({ view_token: viewToken }).eq('id', em.id)
+      }
+
+      const viewUrl = `${window.location.origin}/em-view?token=${viewToken}`
       const imgHtml = (em.images||[]).length > 0 ? '<div style="margin:16px 0">' + em.images.map(img => `<img src="${img.url}" style="max-width:280px;border-radius:8px;margin:4px" />`).join('') + '</div>' : ''
       const vedleggHtml = (em.vedlegg||[]).length > 0 ? '<div style="margin:12px 0"><strong>Vedlegg:</strong><br>' + em.vedlegg.map(v => `<a href="${v.url}" style="color:#2563eb">${v.name}</a>`).join('<br>') + '</div>' : ''
 
-      const godkjennUrl = `${window.location.origin}/godkjenn-em?id=${em.id}`
       const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
         '<h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Endringsmelding</h1>' +
         '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px">' + em.em_number + '</p>' +
@@ -6718,10 +6726,9 @@ function EndringsmeldingPage() {
           '<div style="font-size:12px;color:#64748b;text-align:center">eks. mva</div>' +
           (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
         '</div>' + vedleggHtml +
-        '<p style="color:#475569;font-size:14px">Vennligst godkjenn eller avvis denne endringen:</p>' +
+        '<p style="color:#475569;font-size:14px">Se fullstendig endringsmelding og gi ditt svar:</p>' +
         '<div style="text-align:center;margin:24px 0">' +
-          '<a href="' + godkjennUrl + '&action=godkjent" style="background:#059669;color:white;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;margin:4px">✅ Godkjenn</a> ' +
-          '<a href="' + godkjennUrl + '&action=avvist" style="background:#dc2626;color:white;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;margin:4px">❌ Avvis</a>' +
+          '<a href="' + viewUrl + '" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Se endringsmelding og gi svar →</a>' +
         '</div>' +
         '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
 
@@ -6731,7 +6738,7 @@ function EndringsmeldingPage() {
       })
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
-      await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+      await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }).eq('id', em.id)
       load()
     } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
   }
@@ -20988,6 +20995,131 @@ function ComingSoon({ title }) {
   )
 }
 
+// ─── ENDRINGSMELDING KUNDEVISNING (Offentlig — ingen innlogging) ──────────────
+function EMViewPage() {
+  const [em, setEm] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [responded, setResponded] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    const action = params.get('action')
+    if (!token) { setError('Ugyldig lenke'); setLoading(false); return }
+
+    supabase.from('endringsmeldinger').select('*').eq('view_token', token).single()
+      .then(async ({ data, error: e }) => {
+        if (e || !data) { setError('Endringsmeldingen ble ikke funnet'); setLoading(false); return }
+        setEm(data)
+
+        // Logg at kunde åpnet
+        const log = [...(data.activity_log || [])]
+        const alreadyOpened = log.some(l => l.action === 'Åpnet av kunde')
+        if (!alreadyOpened) {
+          log.push({ action: 'Åpnet av kunde', at: new Date().toISOString(), ip: '' })
+          await supabase.from('endringsmeldinger').update({ activity_log: log }).eq('id', data.id)
+        }
+
+        // Handle godkjenn/avvis fra e-post-knapper
+        if (action === 'godkjent' && data.status === 'Sendt') {
+          const newLog = [...log, { action: 'Godkjent av kunde (digitalt)', at: new Date().toISOString() }]
+          await supabase.from('endringsmeldinger').update({ status: 'Godkjent', activity_log: newLog, updated_at: new Date().toISOString() }).eq('id', data.id)
+          setEm(prev => ({ ...prev, status: 'Godkjent' }))
+          setResponded(true)
+        } else if (action === 'avvist' && data.status === 'Sendt') {
+          const newLog = [...log, { action: 'Avvist av kunde (digitalt)', at: new Date().toISOString() }]
+          await supabase.from('endringsmeldinger').update({ status: 'Avvist', activity_log: newLog, updated_at: new Date().toISOString() }).eq('id', data.id)
+          setEm(prev => ({ ...prev, status: 'Avvist' }))
+          setResponded(true)
+        }
+
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><p>Laster...</p></div>
+  if (error) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>⚠️</div><h2>{error}</h2></div></div>
+
+  const handleRespond = async (action) => {
+    const log = [...(em.activity_log || []), { action: action === 'godkjent' ? 'Godkjent av kunde (digitalt)' : 'Avvist av kunde (digitalt)', at: new Date().toISOString() }]
+    await supabase.from('endringsmeldinger').update({ status: action === 'godkjent' ? 'Godkjent' : 'Avvist', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+    setEm(prev => ({ ...prev, status: action === 'godkjent' ? 'Godkjent' : 'Avvist' }))
+    setResponded(true)
+  }
+
+  const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#f8fafc', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ maxWidth:'700px', margin:'0 auto', padding:'32px 20px' }}>
+        <div style={{ background:'white', borderRadius:'20px', border:'1px solid #f1f5f9', boxShadow:'0 4px 20px rgba(0,0,0,0.08)', overflow:'hidden' }}>
+          {/* Header */}
+          <div style={{ background:'linear-gradient(135deg, #059669, #10b981)', padding:'24px', color:'white' }}>
+            <div style={{ fontSize:'13px', opacity:0.8, marginBottom:'4px' }}>ENDRINGSMELDING</div>
+            <h1 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'700' }}>{em.title}</h1>
+            <div style={{ fontSize:'14px', opacity:0.9 }}>{em.em_number}</div>
+          </div>
+
+          <div style={{ padding:'24px' }}>
+            {/* Status */}
+            {responded && (
+              <div style={{ background: em.status === 'Godkjent' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${em.status === 'Godkjent' ? '#bbf7d0' : '#fecaca'}`, borderRadius:'12px', padding:'16px', textAlign:'center', marginBottom:'20px' }}>
+                <div style={{ fontSize:'24px', marginBottom:'6px' }}>{em.status === 'Godkjent' ? '✅' : '❌'}</div>
+                <div style={{ fontWeight:'700', fontSize:'16px', color: em.status === 'Godkjent' ? '#16a34a' : '#dc2626' }}>Endringen er {em.status === 'Godkjent' ? 'godkjent' : 'avvist'}</div>
+                <div style={{ fontSize:'13px', color:'#64748b', marginTop:'4px' }}>Svaret ditt er registrert — {new Date().toLocaleString('nb-NO')}</div>
+              </div>
+            )}
+
+            {/* Årsak */}
+            {em.reason && <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'16px', fontSize:'13px', color:'#92400e' }}>🏷️ Årsak: <strong>{em.reason}</strong></div>}
+
+            {/* Beskrivelse */}
+            <div style={{ marginBottom:'20px' }}>
+              <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Beskrivelse</h3>
+              <p style={{ margin:0, fontSize:'14px', color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{em.description || '—'}</p>
+            </div>
+
+            {/* Bilder */}
+            {(em.images||[]).length > 0 && (
+              <div style={{ marginBottom:'20px' }}>
+                <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>📸 Bildedokumentasjon</h3>
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                  {em.images.map((img, i) => <img key={i} src={img.url} alt={img.name} style={{ width:'140px', height:'140px', objectFit:'cover', borderRadius:'10px', border:'1px solid #e2e8f0', cursor:'pointer' }} onClick={() => window.open(img.url, '_blank')} />)}
+                </div>
+              </div>
+            )}
+
+            {/* Beløp */}
+            <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'20px', textAlign:'center', marginBottom:'20px', border:'1px solid #bbf7d0' }}>
+              <div style={{ fontSize:'28px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
+              <div style={{ fontSize:'13px', color:'#64748b' }}>eks. mva</div>
+              {em.time_consequence && <div style={{ fontSize:'13px', color:'#d97706', marginTop:'6px' }}>⏱️ {em.time_consequence}</div>}
+            </div>
+
+            {/* Vedlegg */}
+            {(em.vedlegg||[]).length > 0 && (
+              <div style={{ marginBottom:'20px' }}>
+                <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>📎 Vedlegg</h3>
+                {em.vedlegg.map((v, i) => <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'block', color:'#2563eb', fontSize:'13px', marginBottom:'4px' }}>📎 {v.name}</a>)}
+              </div>
+            )}
+
+            {/* Godkjenn/avvis knapper */}
+            {em.status === 'Sendt' && !responded && (
+              <div style={{ display:'flex', gap:'12px', marginTop:'24px' }}>
+                <button onClick={() => handleRespond('godkjent')} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'16px', fontSize:'16px', fontWeight:'700', cursor:'pointer' }}>✅ Godkjenn endring</button>
+                <button onClick={() => handleRespond('avvist')} style={{ flex:1, background:'#dc2626', color:'white', border:'none', borderRadius:'12px', padding:'16px', fontSize:'16px', fontWeight:'700', cursor:'pointer' }}>❌ Avvis endring</button>
+              </div>
+            )}
+          </div>
+        </div>
+        <p style={{ textAlign:'center', color:'#94a3b8', fontSize:'12px', marginTop:'20px' }}>Endringsmelding via En Plattform</p>
+      </div>
+    </div>
+  )
+}
+
 function AppContent() {
   const { user, loading, supabase, displayName } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
@@ -21063,6 +21195,7 @@ function AppContent() {
   if (window.location.pathname === '/godkjenn') return <GodkjenningsPage />
   if (window.location.pathname === '/anbud-pris') return <UEPrisingsPage />
   if (window.location.pathname === '/ue-svar') return <UESvarPage />
+  if (window.location.pathname === '/em-view') return <EMViewPage />
 
   if (loading) {
     return (
