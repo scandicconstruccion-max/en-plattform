@@ -617,7 +617,7 @@ function ProsjekterPage({ onNavigateDetail }) {
   const handleCreate = async (form) => {
     setSaving(true)
     try {
-      await db.createProject({ ...form, project_number: form.project_number || `P-${Date.now().toString().slice(-5)}`, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null })
+      await db.createProject({ ...form, project_number: form.project_number || `P-${Date.now().toString().slice(-5)}`, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreate(false)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
@@ -4295,6 +4295,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
         current_project_id:form.status==='På prosjekt'?(form.current_project_id||null):null,
         last_service:form.last_service||null, next_service:form.next_service||null,
         notes:form.notes||null, status:form.status, updated_at:new Date().toISOString(),
+        created_by:user?.id,
       }
       if (isEdit) {
         const {error} = await supabase.from('machines').update(payload).eq('id', initial.id)
