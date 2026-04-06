@@ -5765,6 +5765,7 @@ const TENDER_STATUS = {
   'Under vurdering': { bg: '#fffbeb', color: '#d97706', border: '#fde68a', emoji: '🔍' },
   'Tildelt':         { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   'Avslått':         { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+  'Kansellert':      { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', emoji: '🚫' },
 }
 
 const UE_STATUS = {
@@ -5821,7 +5822,7 @@ function AnbudsPage() {
       if (user?.id) {
         const today = new Date(); today.setHours(0,0,0,0)
         for (const tender of t) {
-          if (!tender.deadline || tender.status === 'Tildelt' || tender.status === 'Avslått') continue
+          if (!tender.deadline || tender.status === 'Tildelt' || tender.status === 'Avslått' || tender.status === 'Kansellert') continue
           const deadlineDate = new Date(tender.deadline); deadlineDate.setHours(0,0,0,0)
           const daysLeft = Math.ceil((deadlineDate - today) / (1000*60*60*24))
           if (daysLeft === 3 || daysLeft === 1) {
@@ -6062,7 +6063,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+      <div className="no-print-anbud" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
           <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
@@ -6085,12 +6086,14 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
             {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
             {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
+            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
             <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <style>{`@media print { .no-print-anbud{display:none!important} .print-full-anbud{grid-template-columns:1fr!important} }`}</style>
+      <div className="print-full-anbud" style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Description */}
           {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
@@ -6302,7 +6305,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
         </div>
 
         {/* Sidebar */}
-        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div className="no-print-anbud" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={tCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
@@ -6339,13 +6342,29 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                   if (s === 'Utkast' && currentIdx > 0) {
                     blocked = true
                   }
+                  // Kansellert is always available but requires confirmation
+                  if (s === 'Kansellert' && t.status !== 'Kansellert') {
+                    warning = 'Anbudet kanselleres og kan ikke gjenåpnes'
+                  }
+                  // Don't allow changes from Kansellert except to Utkast
+                  if (t.status === 'Kansellert' && s !== 'Utkast' && s !== 'Kansellert') {
+                    blocked = true
+                    warning = 'Anbudet er kansellert'
+                  }
+                  // Allow reopening from Kansellert to Utkast
+                  if (t.status === 'Kansellert' && s === 'Utkast') {
+                    blocked = false
+                    warning = 'Gjenåpner anbudet som utkast'
+                  }
 
                   const handleClick = async () => {
                     if (blocked) {
                       if (warning) showAlert({ message: 'Kan ikke endre status', subMessage: warning, type: 'warning', emoji: '⚠️' })
                       return
                     }
-                    if (warning) {
+                    if (s === 'Kansellert') {
+                      if (!(await confirm({ message: 'Kansellere anbudet?', subMessage: 'Anbudet markeres som kansellert. Du kan gjenåpne det senere ved å sette status tilbake til Utkast.', confirmLabel: '🚫 Kanseller', danger: true }))) return
+                    } else if (warning) {
                       if (!(await confirm({ message: `Sett status til "${s}"?`, subMessage: `⚠️ ${warning}. Vil du fortsette likevel?`, confirmLabel: `Ja, sett ${s}`, danger: false }))) return
                     }
                     updateStatus(s)
@@ -6405,10 +6424,10 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
     project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
     deadline: initial?.deadline||'', valid_until: initial?.valid_until||'',
-    description: initial?.description||'', global_markup: initial?.global_markup||0,
+    description: initial?.description||'', global_markup: initial?.global_markup||'',
   })
   const [chapters, setChapters] = useState(initial?.chapters||[
-    { id: Date.now(), title: 'Generelt', markup: 0, posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
+    { id: Date.now(), title: 'Generelt', markup: '', posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
   ])
   const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
   const [saving, setSaving] = useState(false)
@@ -6428,12 +6447,12 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
         description: bd.name || bd.bygningsdel || '',
         qty: parseFloat(bd.mengde) || 1,
         unit: bd.enhet || 'stk',
-        unitCost: 0, // UE fyller inn sin pris
+        unitCost: 0,
       }))
       return {
         id: Date.now() + i,
         title: k.name || `Fagkalkyle ${i + 1}`,
-        markup: 0,
+        markup: '',
         posts: posts.length > 0 ? posts : [{ id: Date.now() + 999 + i, description: '', qty: 1, unit: 'stk', unitCost: 0 }],
       }
     })
@@ -6445,7 +6464,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   }
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
-  const addChapter = () => setChapters(c=>[...c,{ id:Date.now(), title:`Kapittel ${c.length+1}`, markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitCost:0}] }])
+  const addChapter = () => setChapters(c=>[...c,{ id:Date.now(), title:`Kapittel ${c.length+1}`, markup:'', posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitCost:0}] }])
   const removeChapter = (id) => setChapters(c=>c.filter(x=>x.id!==id))
   const updateChapter = (id,f,v) => setChapters(c=>c.map(x=>x.id===id?{...x,[f]:v}:x))
   const addPost = (chId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:[...x.posts,{id:Date.now(),description:'',qty:1,unit:'stk',unitCost:0}]}:x))
@@ -6515,7 +6534,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Frister og betingelser</div></div>
               <div>{lbl('Anbudsfrist')}<input type="date" value={form.deadline} onChange={e=>set('deadline',e.target.value)} style={tInp} /></div>
               <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={tInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={tInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" max="100" style={tInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Beskrivelse / Omfang')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={4} placeholder="Beskriv arbeidet, omfang, krav og betingelser..." style={{ ...tInp, resize:'none' }} /></div>
               {/* Vedlegg */}
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
@@ -6560,7 +6579,16 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                             return <tr key={p.id}>
                               <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...tInp, minWidth:'180px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...tInp, width:'70px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...tInp, width:'60px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}>
+                                <select value={['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke'].includes(p.unit) ? p.unit : (p.unit ? '_custom' : '')} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...tInp, width:'75px', appearance:'auto' }}>
+                                  <option value="">Velg</option>
+                                  {['stk','m²','m³','lm','m','rs','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
+                                  <option value="_custom">Annet…</option>
+                                </select>
+                                {!['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke',''].includes(p.unit) && (
+                                  <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...tInp, width:'75px', marginTop:'4px' }} />
+                                )}
+                              </td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitCost} onChange={e=>updatePost(ch.id,p.id,'unitCost',e.target.value)} style={{ ...tInp, width:'120px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtT(ls)}</td>
                               <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
