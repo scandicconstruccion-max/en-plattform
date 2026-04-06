@@ -19147,21 +19147,23 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
                                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                   <thead><tr>
-                                    {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.',''].map((h,i) => (
+                                    {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.','Totalt',''].map((h,i) => (
                                       <th key={i} style={{ padding:'3px 4px', textAlign:i>=1?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
                                     {(bd.arbeidsarter||[]).map(a => {
                                       const r = beregnArbeidskostnad(a, fakt)
+                                      const bdMengdeA = parseFloat(bd.mengde) || 1
                                       return (
                                         <tr key={a.id}>
                                           <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
                                           <td style={{ padding:'3px 2px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'65px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{r.faktiskTid.toFixed(1)} t</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{Math.round(r.timekostnad)}</td>
-                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#0f172a' }}>{fmt(r.arbeidskostnad)}</td>
-                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste)}</td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.arbeidskostnad)}</td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.medFortjeneste)}</td>
+                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengdeA)}</td>
                                           <td style={{ padding:'3px 2px' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(kalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>}</td>
                                         </tr>
                                       )
