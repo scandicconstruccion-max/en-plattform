@@ -4935,13 +4935,13 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     global_markup: initial?.global_markup || 0,
   })
   const [chapters, setChapters] = useState(initial?.chapters || [
-    { id: Date.now(), title: 'Generelt', description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }
+    { id: Date.now(), title: 'Generelt', description: '', markup: '', posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }
   ])
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   // Chapter helpers
-  const addChapter = () => setChapters(c => [...c, { id: Date.now(), title: `Kapittel ${c.length+1}`, description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }])
+  const addChapter = () => setChapters(c => [...c, { id: Date.now(), title: `Kapittel ${c.length+1}`, description: '', markup: '', posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }])
   const removeChapter = (id) => setChapters(c => c.filter(x => x.id !== id))
   const updateChapter = (id, f, v) => setChapters(c => c.map(x => x.id === id ? { ...x, [f]: v } : x))
   const addPost = (chId) => setChapters(c => c.map(x => x.id === chId ? { ...x, posts: [...x.posts, { id: Date.now(), description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] } : x))
@@ -7400,12 +7400,12 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
     global_markup: initial?.global_markup||0,
   })
   const [chapters, setChapters] = useState(initial?.chapters||[
-    { id:Date.now(), title:'Generelt', markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}] }
+    { id:Date.now(), title:'Generelt', markup:'', posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}] }
   ])
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
-  const addChapter = () => setChapters(c=>[...c,{id:Date.now(),title:`Kapittel ${c.length+1}`,markup:0,posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}])
+  const addChapter = () => setChapters(c=>[...c,{id:Date.now(),title:`Kapittel ${c.length+1}`,markup:'',posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}])
   const removeChapter = (id) => setChapters(c=>c.filter(x=>x.id!==id))
   const updateChapter = (id,f,v) => setChapters(c=>c.map(x=>x.id===id?{...x,[f]:v}:x))
   const addPost = (chId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:[...x.posts,{id:Date.now(),description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}:x))
