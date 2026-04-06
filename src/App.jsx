@@ -20005,7 +20005,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // Debounced search
           useEffect(() => {
             if (q.trim().length < 2 && !activeKat) { setRes([]); setHasSearched(false); return }
-            const timer = setTimeout(() => doSearch(q, activeKat), 250)
+            const timer = setTimeout(() => doSearch(q, activeKat), 500)
             return () => clearTimeout(timer)
           }, [q, activeKat])
 
