@@ -17321,9 +17321,46 @@ function KalkBibliotekPage({ onBack }) {
 // ─── BIBLIOTEK PICKER MODAL (brukes inne i KalkProsjektEditor) ───────────────
 
 function BibliotekPickerModal({ fagId, onSelect, onClose }) {
+  const { user } = useAuth()
   const [mengde, setMengde] = useState(1)
   const [selectedBd, setSelectedBd] = useState(null)
   const [expandedKat, setExpandedKat] = useState(null)
+  const [brukerMaler, setBrukerMaler] = useState([])
+  const [loadingMaler, setLoadingMaler] = useState(true)
+
+  // Load user's saved templates for this fag
+  useEffect(() => {
+    const loadMaler = async () => {
+      try {
+        const { data } = await supabase.from('bruker_bibliotek').select('*').eq('user_id', user?.id).eq('fag', fagId).order('created_at', { ascending: false })
+        setBrukerMaler(data || [])
+      } catch(e) {}
+      setLoadingMaler(false)
+    }
+    loadMaler()
+  }, [fagId])
+
+  // Delete user template
+  const deleteMal = async (id, e) => {
+    e.stopPropagation()
+    await supabase.from('bruker_bibliotek').delete().eq('id', id)
+    setBrukerMaler(prev => prev.filter(m => m.id !== id))
+    if (selectedBd?.id === id) setSelectedBd(null)
+  }
+
+  // Convert user template to bibliotek format
+  const brukerMalToBd = (mal) => ({
+    id: mal.id,
+    name: mal.name,
+    fag: mal.fag,
+    kategori: mal.kategori,
+    beskrivelse: 'Egen mal',
+    arbeidsarter: mal.data?.arbeidsarter || [],
+    materialer: mal.data?.materialer || [],
+    underleverandorer: mal.data?.underleverandorer || [],
+    enhet: mal.data?.enhet || 'stk',
+    _isBrukerMal: true,
+  })
 
   const bibliotek = getBibliotekByFag()
   const fagBibliotek = bibliotek[fagId] || {}
@@ -17342,6 +17379,31 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
         </div>
 
         <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
+          {/* Brukerens egne maler */}
+          {brukerMaler.length > 0 && (
+            <div style={{ marginBottom:'12px' }}>
+              <button onClick={() => setExpandedKat(expandedKat === '_egne' ? null : '_egne')}
+                style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #fef08a', background: expandedKat === '_egne' ? '#fefce8' : '#fffef5', cursor:'pointer', textAlign:'left', fontSize:'13px', fontWeight:'600', color:'#92400e' }}>
+                <span style={{ color:'#ca8a04' }}>{expandedKat === '_egne' ? '▼' : '▶'}</span> ⭐ Egne maler
+                <span style={{ marginLeft:'auto', fontSize:'12px', color:'#ca8a04', fontWeight:'400' }}>{brukerMaler.length}</span>
+              </button>
+              {expandedKat === '_egne' && brukerMaler.map(mal => {
+                const bd = brukerMalToBd(mal)
+                return (
+                  <div key={mal.id} onClick={() => setSelectedBd(selectedBd?.id === mal.id ? null : bd)}
+                    style={{ margin:'4px 0 4px 16px', padding:'10px 14px', borderRadius:'10px', border: selectedBd?.id === mal.id ? '2px solid #ca8a04' : '1px solid #fef9c3', background: selectedBd?.id === mal.id ? '#fefce8' : 'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px' }}>⭐ {mal.name}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{(mal.data?.arbeidsarter||[]).length} arbeidsarter · {(mal.data?.materialer||[]).length} materialer · per {mal.data?.enhet || 'stk'}</div>
+                    </div>
+                    <button onClick={(e) => deleteMal(mal.id, e)} title="Slett mal" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'4px', flexShrink:0 }}>×</button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Standard bibliotek */}
           {Object.entries(fagBibliotek).map(([kat, items]) => (
             <div key={kat} style={{ marginBottom:'8px' }}>
               <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
@@ -17359,7 +17421,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
               ))}
             </div>
           ))}
-          {Object.keys(fagBibliotek).length === 0 && (
+          {Object.keys(fagBibliotek).length === 0 && brukerMaler.length === 0 && (
             <p style={{ textAlign:'center', color:'#94a3b8', padding:'20px' }}>Ingen bygningsdeler i biblioteket for {fag.name}.</p>
           )}
         </div>
