@@ -6800,7 +6800,7 @@ function EndringsmeldingPage() {
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
       await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }).eq('id', em.id)
-      setSentToast(true); setTimeout(() => setSentToast(false), 2500)
+      setSentToast(true)
       load()
     } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
     finally { setSendingEmId(null) }
@@ -7043,13 +7043,18 @@ function EndringsmeldingPage() {
 
       {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
 
-      {/* Sendt-toast */}
+      {/* Sendt-bekreftelse popup */}
       {sentToast && (
-        <div style={{ position:'fixed', top:'24px', left:'50%', transform:'translateX(-50%)', background:'#059669', color:'white', padding:'14px 28px', borderRadius:'14px', fontSize:'15px', fontWeight:'700', boxShadow:'0 8px 32px rgba(5,150,105,0.35)', zIndex:200, display:'flex', alignItems:'center', gap:'10px', animation:'slideDown 0.3s ease' }}>
-          <span style={{ fontSize:'22px' }}>✅</span> Sendt til kunde!
+        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', padding:'40px', maxWidth:'400px', width:'100%', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize:'48px', marginBottom:'16px' }}>✅</div>
+            <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>Sendt!</h3>
+            <p style={{ margin:'0 0 24px', fontSize:'14px', color:'#64748b' }}>Endringsmeldingen er sendt til kunde på e-post.</p>
+            <button onClick={() => setSentToast(false)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'12px 32px', fontSize:'15px', fontWeight:'700', cursor:'pointer' }}>OK</button>
+          </div>
         </div>
       )}
-      <style>{`@keyframes slideDown { from { opacity:0; transform:translateX(-50%) translateY(-20px) } to { opacity:1; transform:translateX(-50%) translateY(0) } }`}</style>
     </div>
   )
 }
