@@ -6476,6 +6476,7 @@ function EndringsmeldingPage() {
   const [showForm, setShowForm] = useState(false)
   const [editEm, setEditEm] = useState(null)
   const [viewEm, setViewEm] = useState(null)
+  const [expandedEm, setExpandedEm] = useState(null)
   const f = { fontFamily:'system-ui,sans-serif' }
   const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
 
@@ -6862,33 +6863,102 @@ function EndringsmeldingPage() {
           {filtered.map(em => {
             const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
             const proj = projects.find(p => p.id === em.project_id)
+            const isExpanded = expandedEm === em.id
             return (
-              <div key={em.id} onClick={() => setViewEm(em)} style={{ background:'white', borderRadius:'14px', border:`1px solid ${st.border}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', transition:'box-shadow 0.15s' }}
-                onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'}
-                onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                <div style={{ width:'42px', height:'42px', borderRadius:'12px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                    <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{em.title}</span>
-                    <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'600' }}>{em.status}</span>
+              <div key={em.id} style={{ background:'white', borderRadius:'14px', border:`1px solid ${st.border}`, overflow:'hidden' }}>
+                {/* Hovedrad */}
+                <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:'12px' }}>
+                  <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>
+                  <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setViewEm(em)}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
+                      <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{em.title}</span>
+                      <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'600' }}>{em.status}</span>
+                    </div>
+                    <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>
+                      {proj && <span style={{ fontSize:'12px', color:'#059669' }}>🏗️ {proj.name}</span>}
+                      {em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
+                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>
+                      {(em.images||[]).length > 0 && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📸 {em.images.length}</span>}
+                    </div>
                   </div>
-                  <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>
-                    {proj && <span style={{ fontSize:'12px', color:'#059669' }}>🏗️ {proj.name}</span>}
-                    {em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
-                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>
-                    {(em.images||[]).length > 0 && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📸 {em.images.length}</span>}
+                  <div style={{ textAlign:'right', flexShrink:0, marginRight:'8px' }}>
+                    <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
+                    {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
+                  </div>
+                  <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
+                    {(em.status === 'Utkast' || em.status === 'Under forhandling') && (
+                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde"
+                        style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
+                    )}
+                    {em.status === 'Sendt' && (
+                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
+                        style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
+                    <button onClick={(e) => { e.stopPropagation(); setExpandedEm(isExpanded ? null : em.id) }} title="Vis historikk"
+                      style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'700' }}>{isExpanded ? '▲' : '▼'}</button>
                   </div>
                 </div>
-                <div style={{ textAlign:'right', flexShrink:0 }}>
-                  <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
-                  {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
-                </div>
-                <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
-                  {em.status === 'Utkast' && <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>📧</button>}
-                  <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
-                </div>
+                {/* Utvidet: Historikk og aktivitetslogg */}
+                {isExpanded && (
+                  <div style={{ borderTop:'1px solid #f1f5f9', padding:'14px 20px', background:'#fafbfc' }}>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>📋 Aktivitetslogg</div>
+                    {(em.activity_log || []).length === 0 && <div style={{ fontSize:'12px', color:'#94a3b8' }}>Ingen aktivitet registrert</div>}
+                    <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                      {(em.activity_log || []).slice().reverse().map((log, i) => {
+                        const isFirst = i === 0
+                        return (
+                          <div key={i} style={{ display:'flex', gap:'12px', alignItems:'flex-start', position:'relative', paddingLeft:'20px', paddingBottom:'10px' }}>
+                            {/* Tidslinje */}
+                            <div style={{ position:'absolute', left:'6px', top:'0', bottom:'0', width:'2px', background: isFirst ? 'transparent' : '#e2e8f0' }} />
+                            <div style={{ position:'absolute', left:'0', top:'3px', width:'14px', height:'14px', borderRadius:'50%', background: isFirst ? '#059669' : '#e2e8f0', border:'2px solid white', zIndex:1 }} />
+                            <div style={{ flex:1 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                <span style={{ fontSize:'12px', fontWeight:'600', color: isFirst ? '#059669' : '#374151' }}>{log.action}</span>
+                                {log.to && <span style={{ fontSize:'11px', color:'#64748b' }}>→ {log.to}</span>}
+                              </div>
+                              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'1px' }}>
+                                {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                                {log.by && <span> · {log.by}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {/* Status-oppdatering knapper */}
+                    {em.status === 'Sendt' && (
+                      <div style={{ display:'flex', gap:'6px', marginTop:'10px', paddingTop:'10px', borderTop:'1px solid #e2e8f0' }}>
+                        <button onClick={async () => {
+                          const log = [...(em.activity_log || []), { action: 'Godkjent av kunde', by: user?.email, at: new Date().toISOString() }]
+                          await supabase.from('endringsmeldinger').update({ status: 'Godkjent', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+                          load()
+                        }} style={{ background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>✅ Merk som godkjent</button>
+                        <button onClick={async () => {
+                          const log = [...(em.activity_log || []), { action: 'Avvist av kunde', by: user?.email, at: new Date().toISOString() }]
+                          await supabase.from('endringsmeldinger').update({ status: 'Avvist', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+                          load()
+                        }} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>❌ Merk som avvist</button>
+                        <button onClick={async () => {
+                          const log = [...(em.activity_log || []), { action: 'Satt til under forhandling', by: user?.email, at: new Date().toISOString() }]
+                          await supabase.from('endringsmeldinger').update({ status: 'Under forhandling', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+                          load()
+                        }} style={{ background:'#fffbeb', color:'#d97706', border:'1px solid #fde68a', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>🤝 Under forhandling</button>
+                      </div>
+                    )}
+                    {em.status === 'Godkjent' && (
+                      <div style={{ marginTop:'10px', paddingTop:'10px', borderTop:'1px solid #e2e8f0' }}>
+                        <button onClick={async () => {
+                          const log = [...(em.activity_log || []), { action: 'Merket som fakturert', by: user?.email, at: new Date().toISOString() }]
+                          await supabase.from('endringsmeldinger').update({ status: 'Fakturert', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+                          load()
+                        }} style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>🧾 Merk som fakturert</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
