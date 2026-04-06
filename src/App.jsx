@@ -18146,6 +18146,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const kalkyler = k.kalkyler || []
   const alleFaktorer = k.faktorer || {}
   const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
+  const hasCustomFaktorer = Object.keys(alleFaktorer).length > 0
 
   const KALK_STATUS_CFG = {
     'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
@@ -18491,6 +18492,68 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       })
     }
 
+    // Intern kalkyle — viser selvkost, fortjeneste, grunntider, NOBB
+    if (visning === 'intern') {
+      const internHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Intern kalkyle ${k.kalk_number}</title>
+<style>@media print{body{margin:0}@page{margin:15mm 10mm;size:landscape}} body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:30px 24px;color:#0f172a;font-size:12px;line-height:1.5}
+h1{font-size:18px;margin:0 0 4px} .sub{font-size:12px;color:#64748b;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11px} th{padding:5px 8px;text-align:left;font-weight:700;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px;text-transform:uppercase}
+td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font-weight:700} .fag-hdr{background:#f0fdf4;font-weight:700;font-size:13px}
+.bd-hdr{background:#f8fafc;font-weight:600} .nobb{font-family:monospace;font-size:10px;color:#94a3b8}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px} .summary-box{background:#f8fafc;border-radius:8px;padding:12px;text-align:center}
+.summary-box .val{font-size:18px;font-weight:800} .summary-box .lbl{font-size:10px;color:#64748b;text-transform:uppercase;margin-top:2px}
+.footer{margin-top:20px;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px}
+@media print{.no-print{display:none!important}}</style></head><body>
+<div class="no-print" style="background:#dc2626;color:white;padding:10px 20px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+  <span>🔒 INTERN KALKYLE — Kun for internt bruk</span>
+  <button onclick="window.print()" style="background:white;color:#dc2626;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">🖨️ Skriv ut</button>
+</div>
+<h1>🔒 ${k.title} — Intern kalkyle</h1>
+<div class="sub">${k.kalk_number} · ${k.customer_name || ''} · ${dato}</div>
+<div class="summary">
+  <div class="summary-box"><div class="val">${fmt(totals.totSelvkost)}</div><div class="lbl">Selvkost</div></div>
+  <div class="summary-box"><div class="val">${fmt(totals.totMedFortjeneste)}</div><div class="lbl">Eks. mva</div></div>
+  <div class="summary-box"><div class="val" style="color:#059669">+${fmt(totals.fortjeneste)}</div><div class="lbl">Fortjeneste</div></div>
+  <div class="summary-box"><div class="val" style="color:${totals.fortjenesteProsent >= 20 ? '#059669' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626'}">${totals.fortjenesteProsent.toFixed(1)}%</div><div class="lbl">Margin</div></div>
+</div>
+<div class="summary">
+  <div class="summary-box"><div class="val">${totals.totTimer.toFixed(0)}t</div><div class="lbl">Timer totalt</div></div>
+  <div class="summary-box"><div class="val">${fmt(totals.totArbeid)}</div><div class="lbl">Arbeid</div></div>
+  <div class="summary-box"><div class="val">${fmt(totals.totMaterial)}</div><div class="lbl">Materiale</div></div>
+  <div class="summary-box"><div class="val">${fmt(totals.totUE)}</div><div class="lbl">UE</div></div>
+</div>
+` + kalkyler.map(kl => {
+        const fag = getFaggruppe(kl.fag)
+        const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+        const kt = beregnKalkyle(kl, fakt)
+        let rows = `<table><thead><tr><th>Beskrivelse</th><th>NOBB</th><th class="r">Grunntid</th><th class="r">Mengde</th><th>Enhet</th><th class="r">Enhetspris</th><th class="r">Selvkost</th><th class="r">Med fortj.</th></tr></thead><tbody>`
+        rows += `<tr class="fag-hdr"><td colspan="6">${fag.emoji} ${kl.name}</td><td class="r b">${fmt(kt.totSelvkost)}</td><td class="r b">${fmt(kt.totMedFortjeneste)}</td></tr>`
+        ;(kl.bygningsdeler || []).forEach(bd => {
+          const bdt = beregnBygningsdel(bd, fakt)
+          const mengde = parseFloat(bd.mengde) || 1
+          rows += `<tr class="bd-hdr"><td colspan="4">${bd.name} × ${mengde} ${bd.enhet||'stk'}</td><td colspan="2">${bdt.totalTimer.toFixed(1)}t</td><td class="r">${fmt(bdt.totalSelvkost)}</td><td class="r">${fmt(bdt.totalMedFortjeneste)}</td></tr>`
+          ;(bd.arbeidsarter||[]).forEach(a => {
+            const r = beregnArbeidskostnad(a, fakt)
+            rows += `<tr><td style="padding-left:20px;color:#2563eb">⏱ ${a.beskrivelse}</td><td></td><td class="r">${a.grunntid}t</td><td class="r">${(r.faktiskTid*mengde).toFixed(2)}</td><td>t</td><td class="r">${fmt(fakt.timekostnad || 532)}/t</td><td class="r">${fmt(r.kostnad*mengde)}</td><td class="r">${fmt(r.medFortjeneste*mengde)}</td></tr>`
+          })
+          ;(bd.materialer||[]).forEach(m => {
+            const r = beregnMaterialkostnad(m, fakt)
+            rows += `<tr><td style="padding-left:20px;color:#059669">📦 ${m.varenavn}</td><td class="nobb">${m.nobb||''}</td><td></td><td class="r">${((parseFloat(m.mengde)||0)*mengde).toFixed(2)}</td><td>${m.enhet||''}</td><td class="r">${fmt(m.enhetspris)}</td><td class="r">${fmt(r.kostnad*mengde)}</td><td class="r">${fmt(r.medFortjeneste*mengde)}</td></tr>`
+          })
+          ;(bd.underleverandorer||[]).forEach(u => {
+            rows += `<tr><td style="padding-left:20px;color:#7c3aed">🏗️ ${u.navn} — ${u.beskrivelse}</td><td></td><td></td><td class="r">${mengde}</td><td>${bd.enhet||'stk'}</td><td class="r">${fmt(u.kostnad)}</td><td class="r">${fmt((u.kostnad||0)*mengde)}</td><td class="r">${fmt((u.kostnad||0)*mengde*(1+(parseFloat(fakt.fortjeneste||25)/100)))}</td></tr>`
+          })
+        })
+        rows += '</tbody></table>'
+        return rows
+      }).join('') + `<div class="footer">Intern kalkyle — ${ci.name || 'Bedrift'} · ${dato} · Generert fra En Plattform</div></body></html>`
+
+      const w = window.open('', '_blank')
+      w.document.write(internHtml)
+      w.document.close()
+      return
+    }
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tilbud ${k.kalk_number}</title>
 <style>@media print{body{margin:0}@page{margin:20mm 15mm}} body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:40px 32px;color:#0f172a;font-size:14px;line-height:1.6}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid #059669}
@@ -18589,7 +18652,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 <>
                 <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowPreviewMenu(false)} />
                 <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'220px' }}>
-                  {[['total','💰 Kun totalsum'],['faggruppe','👷 Per faggruppe'],['bygningsdel','🧱 Per bygningsdel'],['detaljert','📋 Detaljert']].map(([id, label]) => (
+                  {[['total','💰 Kun totalsum'],['faggruppe','👷 Per faggruppe'],['bygningsdel','🧱 Per bygningsdel'],['detaljert','📋 Detaljert'],['intern','🔒 Intern kalkyle']].map(([id, label]) => (
                     <button key={id} onClick={() => { openPreview(id); setShowPreviewMenu(false) }}
                       style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a', marginBottom:'2px', fontWeight:'500' }}>
                       {label}
@@ -18648,6 +18711,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
         {/* Main - per kalkyle with interactive bygningsdeler */}
         <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Faktorer guide for new users */}
+          {!hasCustomFaktorer && kalkyler.length > 0 && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fef08a', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px' }}>
+              <span style={{ fontSize:'24px', flexShrink:0 }}>💡</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:'700', fontSize:'13px', color:'#92400e', marginBottom:'2px' }}>Sett opp kalkulasjonsfaktorer</div>
+                <div style={{ fontSize:'12px', color:'#a16207' }}>Timepris, sosiale kostnader og fortjenestepåslag bruker standardverdier. Tilpass til din bedrift for korrekte kalkyler.</div>
+              </div>
+              <button onClick={() => onEdit(k)} style={{ background:'#f59e0b', color:'white', border:'none', borderRadius:'8px', padding:'8px 16px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>⚙️ Sett faktorer</button>
+            </div>
+          )}
           {kalkyler.map(kalk => {
             const fag = getFaggruppe(kalk.fag)
             const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
@@ -19115,7 +19189,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600' }}>{totals.totTimer.toFixed(0)} t</span></div>
               <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Arbeid</span><span style={{ fontWeight:'600' }}>{fmt(totals.totArbeid)}</span></div>
               <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Materiale</span><span style={{ fontWeight:'600' }}>{fmt(totals.totMaterial)}</span></div>
-              {totals.totUE > 0 && <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Underlev.</span><span style={{ fontWeight:'600' }}>{fmt(totals.totUE)}</span></div>}
+              {totals.totUE > 0 && (
+                <>
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#2563eb' }}>UE innkjøp</span><span style={{ fontWeight:'600', color:'#2563eb' }}>{fmt(totals.totUE)}</span></div>
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#7c3aed' }}>UE påslag</span><span style={{ fontWeight:'600', color:'#7c3aed' }}>{fmt(totals.totMedFortjeneste - totals.totSelvkost > 0 ? (totals.totMedFortjeneste - totals.totSelvkost) * (totals.totUE / Math.max(totals.totSelvkost, 1)) : 0)}</span></div>
+                </>
+              )}
               <div style={{ height:'1px', background:'#f1f5f9', margin:'8px 0' }} />
               <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Selvkost</span><span>{fmt(totals.totSelvkost)}</span></div>
               <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#059669' }}>Fortjeneste</span><span style={{ color:'#059669', fontWeight:'600' }}>+{fmt(totals.fortjeneste)}</span></div>
