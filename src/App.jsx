@@ -18652,20 +18652,23 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
 
   // Last ned materialliste som CSV + åpne i utskriftsvennlig vindu
   const downloadMaterialliste = () => {
-    // Samle alle materialer fra alle fagkalkyler og bygningsdeler
     const lines = []
     let totalKostnad = 0
+    let totalMedFortjeneste = 0
 
     kalkyler.forEach(kl => {
       const fag = getFaggruppe(kl.fag)
       const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+      const fortjInnkjop = parseFloat(fakt.fortjeneste_innkjop_prosent) || 0
       ;(kl.bygningsdeler || []).forEach(bd => {
         const mengde = parseFloat(bd.mengde) || 1
         ;(bd.materialer || []).forEach(m => {
           const mMengde = (parseFloat(m.mengde) || 0) * mengde
           const enhetspris = parseFloat(m.enhetspris) || 0
           const kostnad = mMengde * enhetspris
+          const medFortjeneste = kostnad * (1 + fortjInnkjop / 100)
           totalKostnad += kostnad
+          totalMedFortjeneste += medFortjeneste
           lines.push({
             fag: fag.name,
             bygningsdel: bd.name || '',
@@ -18675,29 +18678,30 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
             enhet: m.enhet || '',
             enhetspris,
             kostnad,
+            medFortjeneste,
           })
         })
       })
     })
 
-    // Generer CSV
-    const csvHeader = 'Faggruppe;Bygningsdel;NOBB;Varenavn;Mengde;Enhet;Enhetspris;Kostnad'
+    // CSV
+    const csvHeader = 'Faggruppe;Bygningsdel;NOBB;Varenavn;Mengde;Enhet;Enhetspris;Selvkost;Med fortjeneste'
     const csvRows = lines.map(l =>
-      `${l.fag};${l.bygningsdel};${l.nobb};${l.varenavn};${l.mengde.toFixed(2).replace('.',',')};${l.enhet};${l.enhetspris.toFixed(2).replace('.',',')};${l.kostnad.toFixed(2).replace('.',',')}`
+      `${l.fag};${l.bygningsdel};${l.nobb};${l.varenavn};${l.mengde.toFixed(2).replace('.',',')};${l.enhet};${l.enhetspris.toFixed(2).replace('.',',')};${l.kostnad.toFixed(2).replace('.',',')};${l.medFortjeneste.toFixed(2).replace('.',',')}`
     )
-    const csv = [csvHeader, ...csvRows, `;;;;;;;;`, `;;;;;;TOTALT;${totalKostnad.toFixed(2).replace('.',',')}`].join('\n')
+    const csv = [csvHeader, ...csvRows, `;;;;;;`, `;;;;;;TOTALT;${totalKostnad.toFixed(2).replace('.',',')};${totalMedFortjeneste.toFixed(2).replace('.',',')}`].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url; a.download = `materialliste-${k.kalk_number || k.title}.csv`; a.click()
     URL.revokeObjectURL(url)
 
-    // Også åpne utskriftsvennlig visning
+    // Utskriftsvennlig visning
     const tableRows = lines.map(l =>
-      `<tr><td style="padding:4px 8px;font-size:12px;color:#64748b">${l.fag}</td><td style="padding:4px 8px;font-size:12px">${l.bygningsdel}</td><td style="padding:4px 8px;font-family:monospace;font-size:11px;color:#94a3b8">${l.nobb}</td><td style="padding:4px 8px;font-size:12px;font-weight:500">${l.varenavn}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${l.mengde.toFixed(2)}</td><td style="padding:4px 8px;font-size:12px;color:#64748b">${l.enhet}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${fmt(l.enhetspris)}</td><td style="padding:4px 8px;text-align:right;font-size:12px;font-weight:600">${fmt(l.kostnad)}</td></tr>`
+      `<tr><td style="padding:4px 8px;font-size:12px;color:#64748b">${l.fag}</td><td style="padding:4px 8px;font-size:12px">${l.bygningsdel}</td><td style="padding:4px 8px;font-family:monospace;font-size:11px;color:#94a3b8">${l.nobb}</td><td style="padding:4px 8px;font-size:12px;font-weight:500">${l.varenavn}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${l.mengde.toFixed(2)}</td><td style="padding:4px 8px;font-size:12px;color:#64748b">${l.enhet}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${fmt(l.enhetspris)}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${fmt(l.kostnad)}</td><td style="padding:4px 8px;text-align:right;font-size:12px;font-weight:600;color:#059669">${fmt(l.medFortjeneste)}</td></tr>`
     ).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Materialliste ${k.kalk_number||''}</title>
-<style>@media print{body{margin:0}@page{margin:15mm 10mm;size:landscape}} body{font-family:system-ui,sans-serif;max-width:1100px;margin:30px auto;padding:0 20px;color:#0f172a;font-size:13px}
+<style>@media print{body{margin:0}@page{margin:15mm 10mm;size:landscape}} body{font-family:system-ui,sans-serif;max-width:1200px;margin:30px auto;padding:0 20px;color:#0f172a;font-size:13px}
 table{width:100%;border-collapse:collapse} th{padding:6px 8px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;border-bottom:2px solid #e2e8f0;text-transform:uppercase}
 td{border-bottom:1px solid #f1f5f9} .total td{border-top:3px solid #0f172a;font-weight:800;font-size:14px;padding:8px}
 .no-print{} @media print{.no-print{display:none!important}}</style></head><body>
@@ -18707,10 +18711,10 @@ td{border-bottom:1px solid #f1f5f9} .total td{border-top:3px solid #0f172a;font-
 </div>
 <h1 style="font-size:18px;margin:0 0 4px">📦 Materialliste</h1>
 <p style="color:#64748b;font-size:13px;margin:0 0 16px">${k.title} · ${k.kalk_number||''} · ${k.customer_name||''} · ${new Date().toLocaleDateString('nb-NO')}</p>
-<p style="font-size:13px;margin:0 0 16px">${lines.length} materialposter · Totalt: <strong>${fmt(totalKostnad)}</strong></p>
-<table><thead><tr><th>Fag</th><th>Bygningsdel</th><th>NOBB</th><th>Varenavn</th><th style="text-align:right">Mengde</th><th>Enhet</th><th style="text-align:right">Enhetspris</th><th style="text-align:right">Kostnad</th></tr></thead>
+<p style="font-size:13px;margin:0 0 16px">${lines.length} materialposter · Selvkost: <strong>${fmt(totalKostnad)}</strong> · Med fortjeneste: <strong style="color:#059669">${fmt(totalMedFortjeneste)}</strong></p>
+<table><thead><tr><th>Fag</th><th>Bygningsdel</th><th>NOBB</th><th>Varenavn</th><th style="text-align:right">Mengde</th><th>Enhet</th><th style="text-align:right">Enhetspris</th><th style="text-align:right">Selvkost</th><th style="text-align:right">Med fortj.</th></tr></thead>
 <tbody>${tableRows}
-<tr class="total"><td colspan="7">Totalt materialkostnad</td><td style="text-align:right">${fmt(totalKostnad)}</td></tr>
+<tr class="total"><td colspan="7">Totalt</td><td style="text-align:right">${fmt(totalKostnad)}</td><td style="text-align:right;color:#059669">${fmt(totalMedFortjeneste)}</td></tr>
 </tbody></table>
 <p style="color:#94a3b8;font-size:11px;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:8px">Materialliste generert fra En Plattform · ${new Date().toLocaleDateString('nb-NO')}</p>
 </body></html>`
