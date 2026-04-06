@@ -6272,6 +6272,37 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   ])
   const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
   const [saving, setSaving] = useState(false)
+  const [showKalkImport, setShowKalkImport] = useState(false)
+  const [availableKalks, setAvailableKalks] = useState([])
+
+  const loadKalks = async () => {
+    const { data } = await supabase.from('calculations').select('id, title, kalk_number, kalkyler, status').order('updated_at', { ascending: false })
+    setAvailableKalks(data || [])
+    setShowKalkImport(true)
+  }
+
+  const importFromKalk = (kalk) => {
+    const newChapters = (kalk.kalkyler || []).map((k, i) => {
+      const posts = (k.bygningsdeler || []).map(bd => ({
+        id: Date.now() + Math.random(),
+        description: bd.name || bd.bygningsdel || '',
+        qty: parseFloat(bd.mengde) || 1,
+        unit: bd.enhet || 'stk',
+        unitCost: 0, // UE fyller inn sin pris
+      }))
+      return {
+        id: Date.now() + i,
+        title: k.name || `Fagkalkyle ${i + 1}`,
+        markup: 0,
+        posts: posts.length > 0 ? posts : [{ id: Date.now() + 999 + i, description: '', qty: 1, unit: 'stk', unitCost: 0 }],
+      }
+    })
+    if (newChapters.length > 0) {
+      setChapters(newChapters)
+      if (!form.title && kalk.title) set('title', kalk.title)
+    }
+    setShowKalkImport(false)
+  }
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
   const addChapter = () => setChapters(c=>[...c,{ id:Date.now(), title:`Kapittel ${c.length+1}`, markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitCost:0}] }])
@@ -6406,6 +6437,38 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                 )
               })}
               <button onClick={addChapter} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
+              <button onClick={loadKalks} style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'14px', padding:'14px 16px', cursor:'pointer', color:'#7c3aed', fontWeight:'600', fontSize:'14px', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px' }}>🧮 Importer poster fra kalkulasjon</button>
+
+              {showKalkImport && (
+                <div style={{ background:'white', borderRadius:'14px', border:'2px solid #ddd6fe', padding:'16px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+                    <h4 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#7c3aed' }}>🧮 Velg kalkulasjon å importere fra</h4>
+                    <button onClick={() => setShowKalkImport(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'18px' }}>×</button>
+                  </div>
+                  {availableKalks.length === 0 ? (
+                    <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'16px 0' }}>Ingen kalkulasjoner funnet</p>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'6px', maxHeight:'300px', overflowY:'auto' }}>
+                      {availableKalks.map(k => {
+                        const antall = (k.kalkyler||[]).reduce((a, kl) => a + (kl.bygningsdeler||[]).length, 0)
+                        return (
+                          <button key={k.id} onClick={() => importFromKalk(k)}
+                            style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left', width:'100%' }}
+                            onMouseEnter={e=>e.currentTarget.style.background='#f5f3ff'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div>
+                              <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{k.title}</div>
+                              <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{k.kalk_number} · {(k.kalkyler||[]).length} fag · {antall} bygningsdel{antall!==1?'er':''} · {k.status}</div>
+                            </div>
+                            <span style={{ color:'#7c3aed', fontSize:'13px', fontWeight:'600' }}>Importer →</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <p style={{ margin:'10px 0 0', fontSize:'11px', color:'#94a3b8' }}>Alle bygningsdeler importeres som poster. Kostpris settes til 0 — UE fyller inn sin pris.</p>
+                </div>
+              )}
+
               <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'18px 24px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div><div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Total kalkylepris eks. mva</div>{parseFloat(form.global_markup)>0&&<div style={{ fontSize:'12px', color:'#94a3b8' }}>Inkl. generelt påslag {form.global_markup}%</div>}</div>
                 <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmtT(grandTotal)}</div>
@@ -6536,7 +6599,50 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
       const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
       const log = [...(tenderRec?.activity_log || []), { action: `Tildelt til ${ue.company_name} — ${fmtT(ue.total_amount||0)}`, by: user?.email, at: new Date().toISOString() }]
       await supabase.from('tenders').update({ status:'Tildelt', awarded_ue:ue.company_name, awarded_amount:ue.total_amount, project_id:projectId||null, activity_log: log, updated_at:new Date().toISOString() }).eq('id', tender.id)
+      await supabase.from('tender_ues').update({ status:'godkjent' }).eq('id', selectedUE)
       await supabase.from('tender_ues').update({ status:'Avslått' }).eq('tender_id', tender.id).neq('id', selectedUE)
+
+      // Send e-post til vinnende UE
+      const winHtml = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <div style="background:#f0fdf4;border-radius:12px;padding:20px;border:1px solid #bbf7d0;margin-bottom:20px;text-align:center">
+            <div style="font-size:48px;margin-bottom:8px">🏆</div>
+            <h1 style="margin:0;color:#16a34a;font-size:22px">Gratulerer – du er tildelt oppdraget!</h1>
+          </div>
+          <h2 style="color:#0f172a;font-size:18px;margin:0 0 8px">${tender.title}</h2>
+          <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>
+          <div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0;border:1px solid #f1f5f9">
+            <div style="font-size:13px;color:#64748b;margin-bottom:4px">Din pris</div>
+            <div style="font-size:24px;font-weight:800;color:#0f172a">${fmtT(ue.total_amount||0)}</div>
+            <div style="font-size:12px;color:#94a3b8">eks. mva</div>
+          </div>
+          <p style="color:#475569;font-size:14px;line-height:1.6">Vi bekrefter at ditt tilbud er valgt. Vi vil kontakte deg for videre detaljer og avtale oppstart.</p>
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+        </div>`
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: ue.email, subject:`🏆 Tildelt: ${tender.title} (${tender.tender_number})`, html: winHtml })
+      })
+
+      // Send avslags-e-post til de andre UE-ene
+      const losers = ues.filter(u => u.id !== selectedUE && u.email)
+      for (const loser of losers) {
+        const loseHtml = `
+          <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+            <h2 style="color:#0f172a;font-size:18px;margin:0 0 8px">Angående anbudsforespørsel: ${tender.title}</h2>
+            <p style="color:#64748b;font-size:14px">Anbudsnummer: ${tender.tender_number}</p>
+            <p style="color:#475569;font-size:14px;line-height:1.6">Vi takker for ditt tilbud og din interesse. Etter en helhetsvurdering har vi valgt å gå videre med en annen leverandør for dette oppdraget.</p>
+            <p style="color:#475569;font-size:14px;line-height:1.6">Vi setter stor pris på samarbeidet og håper på muligheten til å jobbe sammen ved en senere anledning.</p>
+            <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+            <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
+          </div>`
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+          method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+          body: JSON.stringify({ to: loser.email, subject:`Angående anbudsforespørsel: ${tender.title}`, html: loseHtml })
+        }).catch(() => {}) // don't fail if rejection email fails
+      }
+
       if (user?.id) {
         await supabase.from('notifications').insert({ user_id:user.id, title:`Anbud tildelt: ${tender.title}`, message:`Tildelt til ${ue.company_name} for ${fmtT(ue.total_amount||0)}`, type:'success', link_page:'anbudsmodul' })
       }
