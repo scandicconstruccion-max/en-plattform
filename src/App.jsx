@@ -18354,6 +18354,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   }
 
   // Sjekk om UE har svart
+  const [nyeUESvar, setNyeUESvar] = useState([]) // Array of { navn, fag } for newly received answers
+
   const checkUESvar = async () => {
     try {
       const { data } = await supabase.from('ue_foresporsler').select('*').eq('calculation_id', k.id)
@@ -18361,16 +18363,19 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       const mottatte = data.filter(f => f.status === 'mottatt' || f.status === 'godkjent')
       if (mottatte.length === 0) return
       let updated = false
+      const newSvar = []
       const newKalkyler = kalkyler.map(kl => {
-        // Check kalkyle-level UE forespørsler (array)
         const newUFs = (kl.ue_foresporsler || []).map(uf => {
           if (uf.foresporsel_id && uf.status === 'sendt') {
             const match = mottatte.find(f => f.id === uf.foresporsel_id)
-            if (match) { updated = true; return { ...uf, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold } }
+            if (match) {
+              updated = true
+              newSvar.push({ navn: uf.navn, fag: getFaggruppe(kl.fag).name })
+              return { ...uf, status: 'mottatt', svar_pris: match.svar_pris, svar_poster: match.svar_poster, svar_beskrivelse: match.svar_beskrivelse, svar_tidsplan: match.svar_tidsplan, svar_forbehold: match.svar_forbehold, svar_dato: match.updated_at }
+            }
           }
           return uf
         })
-        // Also check legacy single ue_foresporsel
         let newUf = kl.ue_foresporsel ? { ...kl.ue_foresporsel } : null
         if (newUf && newUf.foresporsel_id && newUf.status === 'sendt') {
           const match = mottatte.find(f => f.id === newUf.foresporsel_id)
@@ -18382,10 +18387,32 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
           return u
         }) })) }
       })
-      if (updated) saveProject({ ...k, kalkyler: newKalkyler })
+      if (updated) {
+        saveProject({ ...k, kalkyler: newKalkyler })
+        if (newSvar.length > 0) setNyeUESvar(newSvar)
+      }
     } catch(e) { console.error('checkUESvar error:', e) }
   }
   useEffect(() => { checkUESvar() }, [])
+
+  // Send påminnelse til UE
+  const sendPaaminnelse = async (kalkId, uf) => {
+    if (!uf.foresporsel_id || !uf.email) return
+    try {
+      const { data: foresp } = await supabase.from('ue_foresporsler').select('svar_token').eq('id', uf.foresporsel_id).single()
+      if (!foresp) return
+      const svarUrl = `${window.location.origin}/ue-svar?token=${foresp.svar_token}`
+      const fag = getFaggruppe(kalkyler.find(kl => kl.id === kalkId)?.fag)
+      const emailHtml = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        '<h1 style="color:#0f172a;font-size:20px;margin:0 0 8px">Påminnelse — Tilbudsforespørsel</h1>' +
+        '<p style="color:#64748b;font-size:14px;margin:0 0 20px">Vi har sendt en tilbudsforespørsel for <strong>' + k.title + '</strong> (' + (fag?.name || '') + ') som vi ennå ikke har mottatt svar på.</p>' +
+        '<p style="color:#475569;font-size:14px">Vi ber vennligst om at tilbudet leveres snarest.</p>' +
+        '<div style="text-align:center;margin:28px 0"><a href="' + svarUrl + '" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Legg inn tilbud</a></div>' +
+        '</div>'
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: uf.email, subject: `Påminnelse — Tilbudsforespørsel ${uf.nr || ''} – ${k.title}`, html: emailHtml }) })
+      setToastMsg({ title: 'Påminnelse sendt', message: `Påminnelse sendt til ${uf.navn} (${uf.email})`, type: 'success' })
+    } catch(e) { setToastMsg({ title: 'Feil', message: 'Kunne ikke sende påminnelse: ' + e.message, type: 'error' }) }
+  }
 
   // Add bygningsdel from library to a specific kalkyle
   const addBdFromBibliotek = (kalId, bd) => {
@@ -18735,6 +18762,18 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
         </div>
       )}
 
+      {/* Nytt UE-tilbud mottatt banner */}
+      {nyeUESvar.length > 0 && (
+        <div style={{ background:'#eff6ff', borderBottom:'1px solid #bfdbfe', padding:'12px 32px', display:'flex', alignItems:'center', gap:'12px' }}>
+          <span style={{ fontSize:'20px' }}>🔔</span>
+          <div style={{ flex:1 }}>
+            <span style={{ fontWeight:'700', fontSize:'13px', color:'#1e40af' }}>Nytt UE-tilbud mottatt!</span>
+            <span style={{ fontSize:'13px', color:'#3b82f6', marginLeft:'8px' }}>{nyeUESvar.map(s => `${s.navn} (${s.fag})`).join(', ')}</span>
+          </div>
+          <button onClick={() => setNyeUESvar([])} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>Lukk</button>
+        </div>
+      )}
+
       <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
         {/* Main - per kalkyle with interactive bygningsdeler */}
         <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
@@ -19060,8 +19099,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             {/* Send-knapp */}
                             {uf.status === 'utkast' && (
                               <button onClick={async () => {
-                                if (!uf.email || !uf.navn) return alert('Fyll inn UE-navn og e-post')
-                                if ((kalk.bygningsdeler||[]).length === 0) return alert('Legg til bygningsdeler først')
+                                if (!uf.email || !uf.navn) return setToastMsg({ title: 'Mangler info', message: 'Fyll inn UE-navn og e-post', type: 'error' })
+                                if ((kalk.bygningsdeler||[]).length === 0) return setToastMsg({ title: 'Ingen poster', message: 'Legg til bygningsdeler først', type: 'error' })
                                 try {
                                   const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
                                   const fag = getFaggruppe(kalk.fag)
@@ -19103,7 +19142,22 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 } catch(e) { alert('Feil: ' + e.message) }
                               }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', width:'100%' }}>📧 Send forespørsel til {uf.navn || 'UE'}</button>
                             )}
-                            {uf.status === 'sendt' && <div style={{ fontSize:'12px', color:'#ca8a04', textAlign:'center', padding:'4px' }}>⏳ Venter på svar fra {uf.navn}</div>}
+                            {uf.status === 'sendt' && (
+                              <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginTop:'4px' }}>
+                                <div style={{ fontSize:'12px', color:'#ca8a04', textAlign:'center', padding:'4px' }}>⏳ Venter på svar fra {uf.navn} {uf.nr ? `(ref: ${uf.nr})` : ''}</div>
+                                <div style={{ display:'flex', gap:'6px' }}>
+                                  <button onClick={() => sendPaaminnelse(kalk.id, uf)} style={{ flex:1, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'6px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📩 Send påminnelse</button>
+                                  <button onClick={() => {
+                                    const fag = getFaggruppe(kalk.fag)
+                                    const poster = (kalk.bygningsdeler||[]).map(bd => `${bd.name || 'Bygningsdel'} — ${bd.mengde || 1} ${bd.enhet || 'stk'}`).join('\n')
+                                    const info = `Forespørsel: ${uf.nr || '—'}\nTil: ${uf.navn} (${uf.email})\nFag: ${fag.name}\nProsjekt: ${k.title}\nAdresse: ${k.customer_address || '—'}\nBeskrivelse: ${uf.beskrivelse || '—'}\nSendt: ${uf.nr ? 'Ja' : '—'}\nFrist: 7 dager\n\nPoster:\n${poster}\n\nVedlegg: ${(uf.vedlegg||[]).map(v => v.name).join(', ') || 'Ingen'}`
+                                    const w = window.open('', '_blank')
+                                    w.document.write(`<html><head><title>Sendt forespørsel ${uf.nr||''}</title><style>body{font-family:system-ui,sans-serif;max-width:600px;margin:40px auto;padding:0 20px}pre{background:#f8fafc;padding:16px;border-radius:10px;font-size:13px;white-space:pre-wrap;line-height:1.8}</style></head><body><h2>📧 Sendt forespørsel</h2><pre>${info}</pre></body></html>`)
+                                    w.document.close()
+                                  }} style={{ flex:1, background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📋 Vis sendt forespørsel</button>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Mottatt tilbud */}
                             {uf.status === 'mottatt' && uf.svar_pris && (
