@@ -17527,17 +17527,17 @@ function PrisbokPage({ onBack }) {
     if (!search.trim()) {
       if (aktivPrisliste) {
         const { data } = await supabase.from('prisbok').select('*').eq('prisliste_id', aktivPrisliste.id).order('varenavn').limit(200)
-        setPrisbok(data || [])
+        setPrisbok([])
       }
       return
     }
     const query = supabase.from('prisbok').select('*')
     if (aktivPrisliste) query.eq('prisliste_id', aktivPrisliste.id)
     else query.eq('user_id', user?.id)
-    const { data } = await query.or(`varenummer.ilike.%${search}%,varenavn.ilike.%${search}%,kategori.ilike.%${search}%`).order('varenavn').limit(200)
+    const { data } = await query.or(`varenummer.ilike.%${search}%,varenavn.ilike.%${search}%,kategori.ilike.%${search}%`).order('varenavn').limit(50)
     setPrisbok(data || [])
   }
-  useEffect(() => { const t = setTimeout(searchPrisbok, 300); return () => clearTimeout(t) }, [search, aktivPrisliste])
+  useEffect(() => { if (search.trim().length >= 2) { const t = setTimeout(searchPrisbok, 300); return () => clearTimeout(t) } else { setPrisbok([]) } }, [search, aktivPrisliste])
 
   const filtered = prisbok
 
@@ -17671,19 +17671,28 @@ function PrisbokPage({ onBack }) {
 
         {/* Search */}
         <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'16px' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk NOBB, varenavn, kategori..." style={{ ...qInp, maxWidth:'400px', flex:1 }} />
-          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{filtered.length} varer{aktivPrisliste ? ` i "${aktivPrisliste.navn}"` : ''}</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk NOBB-nummer, varenavn eller kategori (min. 2 tegn)..." style={{ ...qInp, maxWidth:'500px', flex:1 }} />
+          {prisbok.length > 0 && <span style={{ fontSize:'13px', color:'#94a3b8' }}>{prisbok.length} treff{aktivPrisliste ? ` i "${aktivPrisliste.navn}"` : ''}</span>}
         </div>
 
-        {/* Table */}
+        {/* Table - only shown when searching */}
         {loading ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster prisbok...</div>
+          <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster...</div>
         ) : prislister.length === 0 ? (
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
             <div style={{ fontSize:'40px', marginBottom:'12px' }}>💰</div>
             <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen prislister lastet</h3>
-            <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:'14px' }}>Importer en 5001-prisliste fra din byggevareleverandør for NOBB-oppslag.</p>
+            <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:'14px' }}>Importer en 5001-prisliste fra din byggevareleverandør for NOBB-oppslag i kalkyler.</p>
             <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'12px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
+          </div>
+        ) : !search.trim() ? (
+          <div style={{ background:'#f8fafc', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'40px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'32px', marginBottom:'8px' }}>🔍</div>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Søk etter varer med NOBB-nummer, varenavn eller kategori</p>
+          </div>
+        ) : prisbok.length === 0 ? (
+          <div style={{ background:'#fef2f2', borderRadius:'14px', padding:'30px 20px', textAlign:'center' }}>
+            <p style={{ margin:0, color:'#dc2626', fontSize:'14px' }}>Ingen treff for "{search}"</p>
           </div>
         ) : (
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
@@ -17694,7 +17703,7 @@ function PrisbokPage({ onBack }) {
                 ))}
               </tr></thead>
               <tbody>
-                {filtered.map((p, i) => (
+                {prisbok.map((p, i) => (
                   <tr key={p.id || i} style={{ borderBottom:'1px solid #f8fafc' }}>
                     <td style={{ padding:'8px 14px', fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{p.varenummer}</td>
                     <td style={{ padding:'8px 14px', fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{p.varenavn}</td>
@@ -17705,7 +17714,7 @@ function PrisbokPage({ onBack }) {
                 ))}
               </tbody>
             </table>
-            {filtered.length >= 200 && <div style={{ padding:'12px 14px', fontSize:'12px', color:'#94a3b8', textAlign:'center', borderTop:'1px solid #f1f5f9' }}>Viser maks 200 — bruk søk for å finne varer</div>}
+            {prisbok.length >= 50 && <div style={{ padding:'10px 14px', fontSize:'12px', color:'#94a3b8', textAlign:'center', borderTop:'1px solid #f1f5f9' }}>Maks 50 treff vist — prøv et mer spesifikt søk</div>}
           </div>
         )}
       </div>
@@ -18525,15 +18534,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         return (
                                           <tr key={m.id}>
                                             <td style={{ padding:'3px 2px' }}><input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
-                                              // Prisbok-oppslag ved NOBB-nr
                                               const nobb = e.target.value.trim()
                                               if (!nobb) return
                                               try {
-                                                const { data } = await supabase.from('prisbok').select('*').eq('varenummer', nobb).limit(1).single()
+                                                // Search active prisliste first, then any
+                                                const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+                                                let query = supabase.from('prisbok').select('*').eq('varenummer', nobb)
+                                                if (plData) query = query.eq('prisliste_id', plData.id)
+                                                const { data } = await query.limit(1).single()
                                                 if (data) {
-                                                  updateMaterial(kalk.id,bd.id,m.id,'varenavn',data.varenavn)
-                                                  updateMaterial(kalk.id,bd.id,m.id,'enhetspris',data.pris_per_enhet)
-                                                  if (data.enhet) updateMaterial(kalk.id,bd.id,m.id,'enhet',data.enhet)
+                                                  // Combined update to avoid race condition
+                                                  updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet } : mt) } : b) } : kl))
                                                 }
                                               } catch(err) {}
                                             }} placeholder="NOBB" style={{ ...qInp, width:'70px', fontSize:'11px', padding:'6px 6px', fontFamily:'monospace' }} /></td>
