@@ -2339,7 +2339,7 @@ function AvvikPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                       {proj && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
                       {dev.location && <span style={{ fontSize: '12px', color: '#64748b' }}>📍 {dev.location}</span>}
-                      {dev.assigned_to && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to}</span>}
+                      {dev.assigned_to_name && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to_name}</span>}
                       <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>
                       {dev.images?.length > 0 && <span style={{ fontSize: '12px', color: '#94a3b8' }}>📎 {dev.images.length} bilde{dev.images.length > 1 ? 'r' : ''}</span>}
                     </div>
@@ -2400,8 +2400,8 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         description: form.description,
         location: form.location,
         severity: form.severity,
-        project_id: form.project_id,
-        assigned_to: form.assigned_to,
+        project_id: form.project_id || null,
+        assigned_to_name: form.assigned_to || null,
         status: 'Åpen',
         images: imageUrls,
         created_by: user?.id,
@@ -2645,7 +2645,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
                 { label: 'Status', value: <AvvikStatusBadge status={dev.status} /> },
                 { label: 'Prosjekt', value: proj?.name },
                 { label: 'Sted', value: dev.location },
-                { label: 'Ansvarlig', value: dev.assigned_to },
+                { label: 'Ansvarlig', value: dev.assigned_to_name },
                 { label: 'Registrert', value: new Date(dev.created_at).toLocaleDateString('nb-NO') },
               ].filter(r => r.value).map((row, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
@@ -2745,7 +2745,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
     location: dev.location || '',
     severity: dev.severity || 'Medium',
     project_id: dev.project_id || '',
-    assigned_to: dev.assigned_to || '',
+    assigned_to: dev.assigned_to_name || '',
     status: dev.status || 'Åpen',
   })
   const [saving, setSaving] = useState(false)
@@ -2756,7 +2756,8 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
     e.preventDefault()
     setSaving(true)
     try {
-      const { error } = await supabase.from('deviations').update({ ...form, updated_at: new Date().toISOString() }).eq('id', dev.id)
+      const { assigned_to, ...rest } = form
+      const { error } = await supabase.from('deviations').update({ ...rest, assigned_to_name: assigned_to || null, updated_at: new Date().toISOString() }).eq('id', dev.id)
       if (error) throw error
       onSaved()
     } catch (e) { alert('Feil: ' + e.message) }
