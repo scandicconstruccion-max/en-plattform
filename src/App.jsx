@@ -16191,73 +16191,73 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Etasjeskille
   { id: 'tom_etasje_tre_200', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille trebjelkelag 200mm', beskrivelse: 'Standard trebjelkelag 48×198 c/c 600 med isolasjon, undergulv og himling under',
     arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 198mm', grunntid: 0.35 }, { beskrivelse: 'Isolering 200mm (lyd/brann)', grunntid: 0.15 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.15 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling himling', grunntid: 0.12 }],
-    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5 gulv', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '7083223', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5 gulv', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_tre_250', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille trebjelkelag 250mm', beskrivelse: 'Forsterket trebjelkelag 48×248 for større spenn eller tyngre belastning',
     arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 248mm', grunntid: 0.40 }, { beskrivelse: 'Isolering 250mm', grunntid: 0.18 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.15 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling himling', grunntid: 0.12 }],
-    materialer: [{ varenavn: 'Bjelker 48×248 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Lydisolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Sponplate 22mm P5 gulv', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    materialer: [{ varenavn: 'Bjelker 48×248 c/c 600', nobb: '7144305', mengde: 2, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Lydisolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Sponplate 22mm P5 gulv', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_i_bjelke', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille I-bjelker (konstruksjonsvirke)', beskrivelse: 'Etasjeskille med I-bjelker for lange spenn, lett og stivt',
     arbeidsarter: [{ beskrivelse: 'Montering I-bjelker', grunntid: 0.30 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.18 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.15 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling', grunntid: 0.12 }],
-    materialer: [{ varenavn: 'I-bjelker 300mm c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 95 }, { varenavn: 'Lydisolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 135 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'I-bjelker 300mm c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 95 }, { varenavn: 'Lydisolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 135 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_lim_tre', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille limtrebjelker', beskrivelse: 'Limtrebjelker for synlig konstruksjon eller ekstra lange spenn',
     arbeidsarter: [{ beskrivelse: 'Montering limtrebjelker', grunntid: 0.35 }, { beskrivelse: 'Isolering mellom bjelker', grunntid: 0.15 }, { beskrivelse: 'Undergulv', grunntid: 0.15 }, { beskrivelse: 'Himling/synlig bjelkelag finish', grunntid: 0.20 }],
-    materialer: [{ varenavn: 'Limtrebjelker 66×270 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 145 }, { varenavn: 'Isolasjon mellom bjelker', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Bjelkesko og beslag', mengde: 2, enhet: 'stk/m²', enhetspris: 45 }],
+    materialer: [{ varenavn: 'Limtrebjelker 66×270 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 145 }, { varenavn: 'Isolasjon mellom bjelker', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Bjelkesko og beslag', mengde: 2, enhet: 'stk/m²', enhetspris: 45 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_dobbel_gips', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille m/lydkrav (dobbel gips)', beskrivelse: 'Etasjeskille som tilfredsstiller lydkrav mellom boenheter — dobbel gips under og lydbånd',
     arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 198mm', grunntid: 0.35 }, { beskrivelse: 'Lydbånd og isolering 200mm', grunntid: 0.20 }, { beskrivelse: 'Undergulv m/flytende sjikt', grunntid: 0.20 }, { beskrivelse: 'Dobbel gips himling', grunntid: 0.35 }, { beskrivelse: 'Sparkling', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydbånd for bjelker', mengde: 2, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Trinnlyddempende matte', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm (dobbel)', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
+    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '7083223', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydbånd for bjelker', mengde: 2, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Trinnlyddempende matte', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm (dobbel)', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_betong_pabygg', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille over betong (påbygg)', beskrivelse: 'Trebjelkelag oppå eksisterende betongdekke — typisk ved påbygg/rehabilitering',
     arbeidsarter: [{ beskrivelse: 'Montering svill og bjelkelag', grunntid: 0.30 }, { beskrivelse: 'Isolering 100mm', grunntid: 0.10 }, { beskrivelse: 'Undergulv sponplate', grunntid: 0.15 }, { beskrivelse: 'Fuktsperre mot betong', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Fuktsperre 0.2mm', mengde: 1.1, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Svillebjelker 48×98', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Sponplate 22mm P5', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Festemateriell betong', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Fuktsperre 0.2mm', mengde: 1.1, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Svillebjelker 48×98', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Festemateriell betong', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Yttervegger
   { id: 'tom_yv_148_kled', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/trekledning', beskrivelse: 'Standard bindingsverk 48×148, isolasjon 150mm, vindsperre, utlekting og stående trekledning',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.45 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148 stående', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148 stående', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_198_kled', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 198mm m/trekledning', beskrivelse: 'Bindingsverk 36×198 for økt isolasjon, vindsperre, utlekting og kledning',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 198mm', grunntid: 0.50 }, { beskrivelse: 'Isolering 200mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stenderverk 36×198 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 110 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 36×198 c/c 600', nobb: '7083218', mengde: 3.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 110 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_148_tillegg', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148+48mm m/påforing', beskrivelse: '148mm bindingsverk + 48mm påforing innvendig = 200mm total isolasjon',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.45 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre', grunntid: 0.08 }, { beskrivelse: 'Påforing 48mm innvendig', grunntid: 0.20 }, { beskrivelse: 'Isolering påforing 50mm', grunntid: 0.08 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Påforing 48×48', mengde: 2.5, enhet: 'lm/m²', enhetspris: 15 }, { varenavn: 'Isolasjon 50mm', mengde: 1.05, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', mengde: 1.1, enhet: 'm²', enhetspris: 145 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Påforing 48×48', mengde: 2.5, enhet: 'lm/m²', enhetspris: 15 }, { varenavn: 'Isolasjon 50mm', mengde: 1.05, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_248_passiv', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 250mm passivhus', beskrivelse: 'Passivhus-vegg med 250mm isolasjon, dampsperre og vindtett sjikt',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 248mm', grunntid: 0.55 }, { beskrivelse: 'Isolering 250mm', grunntid: 0.22 }, { beskrivelse: 'Vindsperre med teipede skjøter', grunntid: 0.12 }, { beskrivelse: 'Dampsperre med tetting', grunntid: 0.12 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.35 }],
-    materialer: [{ varenavn: 'Stenderverk 48×248 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Isolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Vindsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 38 }, { varenavn: 'Dampsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', mengde: 1.1, enhet: 'm²', enhetspris: 145 }],
+    materialer: [{ varenavn: 'Stenderverk 48×248 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Isolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Vindsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 38 }, { varenavn: 'Dampsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_148_mur', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/murpuss', beskrivelse: 'Bindingsverk 148mm med vindsperre og utvendig murpuss på nett',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.45 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre', grunntid: 0.08 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [{ navn: 'Murpuss UE', beskrivelse: 'Utvendig pussarbeid', kostnad: 450 }], enhet: 'm²'
   },
   { id: 'tom_yv_148_plate', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/fasadeplater', beskrivelse: 'Bindingsverk 148mm med fasadeplater (Cembrit, Eternit e.l.)',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.45 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre', grunntid: 0.08 }, { beskrivelse: 'Utlekting', grunntid: 0.12 }, { beskrivelse: 'Montering fasadeplater', grunntid: 0.30 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Fasadeplater fibercement', mengde: 1.08, enhet: 'm²', enhetspris: 285 }, { varenavn: 'Dampsperre 0.2mm', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Fasadeplater fibercement', mengde: 1.08, enhet: 'm²', enhetspris: 285 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_staal', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg stålstendere m/gips', beskrivelse: 'Stålstenderverk med isolasjon og gipsplater begge sider',
     arbeidsarter: [{ beskrivelse: 'Montering stålstendere', grunntid: 0.35 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.15 }, { beskrivelse: 'Vindsperre', grunntid: 0.08 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.40 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stålstendere 150mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Gipsplate 13mm', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stålstendere 150mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_rehabilitering', fag: 'tomrer', kategori: 'Yttervegg', name: 'Etterisolering yttervegg utvendig', beskrivelse: 'Etterisolering av eksisterende vegg utvendig med 50-100mm, vindsperre og ny kledning',
     arbeidsarter: [{ beskrivelse: 'Demontering gammel kledning', grunntid: 0.20 }, { beskrivelse: 'Utlekting og isolering 100mm', grunntid: 0.25 }, { beskrivelse: 'Vindsperre', grunntid: 0.08 }, { beskrivelse: 'Sløyfer og ny kledning', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Utlekting 48×98', mengde: 3, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Vindsperre', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Sløyfer 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning ny', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Utlekting 48×98', mengde: 3, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning ny', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_element', fag: 'tomrer', kategori: 'Yttervegg', name: 'Prefab veggelement', beskrivelse: 'Montering av prefabrikkerte veggelementer levert fra fabrikk',
@@ -16268,58 +16268,58 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Innervegger
   { id: 'tom_iv_bind_70', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 70mm gips begge sider', beskrivelse: 'Standard innervegg 70mm med lydisolasjon og gips',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.30 }, { beskrivelse: 'Isolering 70mm (lyd)', grunntid: 0.08 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '7523437', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_bind_98', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 98mm gips begge sider', beskrivelse: 'Innervegg 98mm for VVS-rør eller bedre lydisolering',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 98mm', grunntid: 0.32 }, { beskrivelse: 'Isolering 100mm (lyd)', grunntid: 0.10 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Stenderverk 36×98 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Lydisolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gipsplate 13mm', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stenderverk 36×98 c/c 600', nobb: '7217502', mengde: 3.5, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Lydisolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_70_panel', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 70mm m/trepanel', beskrivelse: 'Innervegg med trepanel på én side og gips på den andre',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.30 }, { beskrivelse: 'Isolering 70mm', grunntid: 0.08 }, { beskrivelse: 'Gipsplate 1 side', grunntid: 0.20 }, { beskrivelse: 'Trepanel 1 side', grunntid: 0.30 }],
-    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Trepanel 14×120 SPS', mengde: 1.1, enhet: 'm²', enhetspris: 165 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '7523437', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Trepanel 14×120 SPS', mengde: 1.1, enhet: 'm²', enhetspris: 165 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_staal_70', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg stålstender 70mm', beskrivelse: 'Stålstendervegg 70mm med gips begge sider',
     arbeidsarter: [{ beskrivelse: 'Montering stålstendere', grunntid: 0.25 }, { beskrivelse: 'Isolering 70mm', grunntid: 0.08 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Stålstendere 70mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 32 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stålstendere 70mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 32 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_dobbel_gips', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 70mm dobbel gips (brann/lyd)', beskrivelse: 'Innervegg med doble gipsplater begge sider for brann- og lydkrav',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.30 }, { beskrivelse: 'Isolering 70mm (brann)', grunntid: 0.08 }, { beskrivelse: 'Gipsplater dobbel 2 sider', grunntid: 0.55 }],
-    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Brannisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', mengde: 4.2, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '7523437', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Brannisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 4.2, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Yttertak
   { id: 'tom_tak_salt', fag: 'tomrer', kategori: 'Yttertak', name: 'Salttak med sperrer', beskrivelse: 'Salttak med taksperrer, isolasjon, undertak og takstein',
     arbeidsarter: [{ beskrivelse: 'Montering taksperrer', grunntid: 0.50 }, { beskrivelse: 'Isolering tak 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak/vindsperre', grunntid: 0.12 }, { beskrivelse: 'Lekting og sløyfer', grunntid: 0.20 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer 48×198 c/c 900', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak/vindsperre', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198 c/c 900', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak/vindsperre', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_pult', fag: 'tomrer', kategori: 'Yttertak', name: 'Pulttak med sperrer', beskrivelse: 'Pulttak med ensidig fall, isolasjon og tekking',
     arbeidsarter: [{ beskrivelse: 'Montering taksperrer pulttak', grunntid: 0.45 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak', grunntid: 0.12 }, { beskrivelse: 'Lekting', grunntid: 0.15 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer pulttak 48×248', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer pulttak 48×248', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_flat', fag: 'tomrer', kategori: 'Yttertak', name: 'Flatt tak m/membran', beskrivelse: 'Flatt tak med bæring, isolasjon, fall og takmembran',
     arbeidsarter: [{ beskrivelse: 'Bærekonstruksjon', grunntid: 0.40 }, { beskrivelse: 'Isolering og fall', grunntid: 0.30 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Bjelkelag 48×248', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon m/fall EPS', mengde: 1, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'OSB-plate 18mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }],
+    materialer: [{ varenavn: 'Bjelkelag 48×248', nobb: '7144305', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon m/fall EPS', mengde: 1, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'OSB-plate 18mm', nobb: '7214523', mengde: 1.05, enhet: 'm²', enhetspris: 95 }],
     underleverandorer: [{ navn: 'Taktekkerfirma', beskrivelse: 'Membranarbeid', kostnad: 350 }], enhet: 'm²'
   },
   { id: 'tom_tak_takstein', fag: 'tomrer', kategori: 'Yttertak', name: 'Salttak m/betongtakstein', beskrivelse: 'Salttak med lekting og betongtakstein',
     arbeidsarter: [{ beskrivelse: 'Montering taksperrer', grunntid: 0.50 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak', grunntid: 0.12 }, { beskrivelse: 'Lekting', grunntid: 0.15 }, { beskrivelse: 'Legging takstein', grunntid: 0.25 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer 48×198', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Betongtakstein', mengde: 10, enhet: 'stk/m²', enhetspris: 18 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Betongtakstein', mengde: 10, enhet: 'stk/m²', enhetspris: 18 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_staal', fag: 'tomrer', kategori: 'Yttertak', name: 'Tak m/stålplater (profilplater)', beskrivelse: 'Tak med profilerte stålplater på lekting',
     arbeidsarter: [{ beskrivelse: 'Montering sperrer/bæring', grunntid: 0.45 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak', grunntid: 0.12 }, { beskrivelse: 'Lekting og stålplater', grunntid: 0.25 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer 48×198', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Lekter', mengde: 3, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Stålplater profilerte', mengde: 1.1, enhet: 'm²', enhetspris: 195 }, { varenavn: 'Dampsperre', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Lekter', mengde: 3, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Stålplater profilerte', mengde: 1.1, enhet: 'm²', enhetspris: 195 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_omtekking', fag: 'tomrer', kategori: 'Yttertak', name: 'Omtekking tak (rehabilitering)', beskrivelse: 'Riving gammel tekking, ny undertak, lekting og takstein',
     arbeidsarter: [{ beskrivelse: 'Riving gammel tekking', grunntid: 0.20 }, { beskrivelse: 'Ny undertak', grunntid: 0.12 }, { beskrivelse: 'Ny lekting', grunntid: 0.15 }, { beskrivelse: 'Legging ny takstein', grunntid: 0.25 }],
-    materialer: [{ varenavn: 'Undertak', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Takstein ny', mengde: 10, enhet: 'stk/m²', enhetspris: 22 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 30 }],
+    materialer: [{ varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Takstein ny', mengde: 10, enhet: 'stk/m²', enhetspris: 22 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 30 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_takvindu', fag: 'tomrer', kategori: 'Yttertak', name: 'Takvindu montering', beskrivelse: 'Montering av takvindu (Velux e.l.) inkl. innforingskasse',
@@ -16362,7 +16362,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Himling
   { id: 'tom_him_gips', fag: 'tomrer', kategori: 'Himling', name: 'Himling gipsplater på lekter', beskrivelse: 'Gipshimling på trelekter med sparkling',
     arbeidsarter: [{ beskrivelse: 'Montering lekter c/c 400', grunntid: 0.20 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.25 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Skruer gips', mengde: 15, enhet: 'stk/m²', enhetspris: 0.8 }],
+    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Skruer gips', mengde: 15, enhet: 'stk/m²', enhetspris: 0.8 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_him_panel', fag: 'tomrer', kategori: 'Himling', name: 'Himling trepanel', beskrivelse: 'Trepanelhimling på lekter',
@@ -16372,7 +16372,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
   { id: 'tom_him_nedforet', fag: 'tomrer', kategori: 'Himling', name: 'Nedforet himling med stålprofil', beskrivelse: 'Nedforet himling med stålstendere og gips',
     arbeidsarter: [{ beskrivelse: 'Montering stålprofil og oppheng', grunntid: 0.25 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.25 }, { beskrivelse: 'Sparkling', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Stålprofil himling komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stålprofil himling komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Trapper
@@ -16416,12 +16416,12 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Kledning
   { id: 'tom_kledning_staaende', fag: 'tomrer', kategori: 'Kledning', name: 'Stående kledning utvendig', beskrivelse: 'Utvendig stående trekledning på lekter',
     arbeidsarter: [{ beskrivelse: 'Montering sløyfer og lekter', grunntid: 0.15 }, { beskrivelse: 'Montering stående kledning', grunntid: 0.35 }],
-    materialer: [{ varenavn: 'Sløyfer 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Stående kledning 19×148', mengde: 1.15, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Spiker/skruer rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Stående kledning 19×148', mengde: 1.15, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Spiker/skruer rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_kledning_liggende', fag: 'tomrer', kategori: 'Kledning', name: 'Liggende kledning utvendig', beskrivelse: 'Utvendig liggende trekledning med underligger',
     arbeidsarter: [{ beskrivelse: 'Montering sløyfer og lekter', grunntid: 0.15 }, { beskrivelse: 'Montering liggende kledning', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Sløyfer 23×48', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Underligger 19×98', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Overligger 19×123', mengde: 1.1, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Spiker rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Underligger 19×98', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Overligger 19×123', mengde: 1.1, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Spiker rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Gulv
@@ -16569,7 +16569,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
   { id: 'mur_isoblokk', fag: 'murer', kategori: 'Oppmuring', name: 'Isoblokk yttervegg', beskrivelse: 'Oppmuring med Isoblokk (EPS-forskaling) med armering og betongfyll — komplett yttervegg',
     arbeidsarter: [{ beskrivelse: 'Oppsetting Isoblokk', grunntid: 0.50 }, { beskrivelse: 'Armering vertikal og horisontal', grunntid: 0.20 }, { beskrivelse: 'Utstøping betong', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Isoblokk 25cm (EPS)', mengde: 4, enhet: 'stk/m²', enhetspris: 95 }, { varenavn: 'Armering Ø10mm', mengde: 4, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Betong B30', mengde: 0.06, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindeledd og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Isoblokk 25cm (EPS)', nobb: '7460471', mengde: 4, enhet: 'stk/m²', enhetspris: 95 }, { varenavn: 'Armering Ø10mm', mengde: 4, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Betong B30', mengde: 0.06, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindeledd og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'mur_isoblokk_30', fag: 'murer', kategori: 'Oppmuring', name: 'Isoblokk yttervegg 30cm (passivhus)', beskrivelse: 'Tykkere Isoblokk for økte isolasjonskrav, passivhusnivå',
@@ -16860,17 +16860,17 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Gulvplate/såle
   { id: 'bet_plate_100', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate på grunn 100mm', beskrivelse: 'Plate på mark — radonmembran, isolasjon, armering (nett) og støp 100mm',
     arbeidsarter: [{ beskrivelse: 'Legging radonmembran', grunntid: 0.05 }, { beskrivelse: 'Legging isolasjon', grunntid: 0.08 }, { beskrivelse: 'Forskaling kant', grunntid: 0.12 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Støp og avretting', grunntid: 0.20 }],
-    materialer: [{ varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett K500 Ø8 150×150', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser og diverse', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    materialer: [{ varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett K500 Ø8 150×150', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser og diverse', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'bet_plate_150', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate på grunn 150mm', beskrivelse: 'Plate på mark — forsterket 150mm for garasje/næringsbygg',
     arbeidsarter: [{ beskrivelse: 'Legging radonmembran', grunntid: 0.05 }, { beskrivelse: 'Legging isolasjon', grunntid: 0.08 }, { beskrivelse: 'Forskaling', grunntid: 0.15 }, { beskrivelse: 'Armering dobbelt nett', grunntid: 0.15 }, { beskrivelse: 'Støp og avretting', grunntid: 0.25 }],
-    materialer: [{ varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8 150×150 (dobbelt)', mengde: 2.2, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (150mm)', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8 150×150 (dobbelt)', mengde: 2.2, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (150mm)', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'bet_plate_varme', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate m/gulvvarme', beskrivelse: 'Plate på mark med innstøpt vannbåren gulvvarme',
     arbeidsarter: [{ beskrivelse: 'Legging radonmembran og isolasjon', grunntid: 0.12 }, { beskrivelse: 'Forskaling', grunntid: 0.12 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Legging varmeslanger', grunntid: 0.15 }, { beskrivelse: 'Støp og avretting', grunntid: 0.22 }],
-    materialer: [{ varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }],
+    materialer: [{ varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }],
     underleverandorer: [{ navn: 'Rørlegger', beskrivelse: 'Legging varmeslanger', kostnad: 180 }], enhet: 'm²'
   },
   // Fundamenter
@@ -17062,7 +17062,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
   { id: 'gru_radon', fag: 'grunnarbeid', kategori: 'Fylling', name: 'Radonbrønn og membran', beskrivelse: 'Radonbrønn med sugeledning og radonmembran under plate',
     arbeidsarter: [{ beskrivelse: 'Montering radonbrønn', grunntid: 2.0 }, { beskrivelse: 'Legging sugerør', grunntid: 0.5 }, { beskrivelse: 'Legging radonmembran', grunntid: 0.05 }],
-    materialer: [{ varenavn: 'Radonbrønn komplett', mengde: 1, enhet: 'stk', enhetspris: 2500 }, { varenavn: 'Sugerør Ø110', mengde: 5, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Radonmembran', mengde: 1.1, enhet: 'm²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Radonbrønn komplett', mengde: 1, enhet: 'stk', enhetspris: 2500 }, { varenavn: 'Sugerør Ø110', mengde: 5, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'stk'
   },
   // VA (vann og avløp i grunn)
@@ -17139,12 +17139,13 @@ function bibliotekTilBygningsdel(bd, mengde) {
     arbeidsarter: bd.arbeidsarter.map((a, i) => ({
       id: Date.now() + i + 100,
       beskrivelse: a.beskrivelse,
-      grunntid: parseFloat(a.grunntid) || 0, // per enhet
+      grunntid: parseFloat(a.grunntid) || 0,
     })),
     materialer: bd.materialer.map((mat, i) => ({
       id: Date.now() + i + 200,
       varenavn: mat.varenavn,
-      mengde: parseFloat(mat.mengde) || 0, // per enhet
+      nobb: mat.nobb || '',
+      mengde: parseFloat(mat.mengde) || 0,
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
     })),
@@ -17152,9 +17153,47 @@ function bibliotekTilBygningsdel(bd, mengde) {
       id: Date.now() + i + 300,
       navn: u.navn || '',
       beskrivelse: u.beskrivelse || '',
-      kostnad: u.kostnad || 0, // per enhet
+      kostnad: u.kostnad || 0,
     })),
   }
+}
+
+// Oppdater materialpriser fra aktiv prisliste basert på NOBB
+async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
+  try {
+    // Find active prisliste
+    const { data: pl } = await supabase.from('prislister').select('id').eq('user_id', userId).eq('aktiv', true).limit(1).single()
+    if (!pl) return { kalkyler, count: 0 }
+    
+    // Collect all NOBB numbers from kalkyler
+    const allNobb = new Set()
+    kalkyler.forEach(kl => (kl.bygningsdeler || []).forEach(bd => (bd.materialer || []).forEach(m => { if (m.nobb) allNobb.add(m.nobb) })))
+    if (allNobb.size === 0) return { kalkyler, count: 0 }
+    
+    // Fetch prices from prisbok
+    const nobbArr = [...allNobb]
+    const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbArr)
+    if (!priser || priser.length === 0) return { kalkyler, count: 0 }
+    
+    const prisMap = {}
+    priser.forEach(p => { prisMap[p.varenummer] = p })
+    
+    let count = 0
+    const updatedKalkyler = kalkyler.map(kl => ({
+      ...kl,
+      bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
+        ...bd,
+        materialer: (bd.materialer || []).map(m => {
+          if (m.nobb && prisMap[m.nobb]) {
+            count++
+            return { ...m, enhetspris: prisMap[m.nobb].pris_per_enhet, varenavn: prisMap[m.nobb].varenavn || m.varenavn }
+          }
+          return m
+        })
+      }))
+    }))
+    return { kalkyler: updatedKalkyler, count }
+  } catch(e) { console.error('Prisoppdatering feil:', e); return { kalkyler, count: 0 } }
 }
 
 // ─── BIBLIOTEK-SIDE ──────────────────────────────────────────────────────────
@@ -17329,7 +17368,25 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
           <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
             <span style={{ fontSize:'13px', color:'#374151', fontWeight:'600' }}>Mengde ({selectedBd.enhet}):</span>
             <input type="number" value={mengde} onChange={e => setMengde(e.target.value)} min="0.1" step="0.1" style={{ ...qInp, width:'100px', textAlign:'right' }} />
-            <button onClick={() => { onSelect(bibliotekTilBygningsdel(selectedBd, mengde)); onClose() }}
+            <button onClick={async () => {
+              const bd = bibliotekTilBygningsdel(selectedBd, mengde)
+              // Auto-oppdater priser fra aktiv prisliste for materialer med NOBB
+              const nobbMats = bd.materialer.filter(m => m.nobb)
+              if (nobbMats.length > 0) {
+                try {
+                  const { data: pl } = await supabase.from('prislister').select('id').eq('aktiv', true).limit(1).single()
+                  if (pl) {
+                    const nobbs = nobbMats.map(m => m.nobb)
+                    const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbs)
+                    if (priser) {
+                      const prisMap = {}; priser.forEach(p => { prisMap[p.varenummer] = p })
+                      bd.materialer = bd.materialer.map(m => m.nobb && prisMap[m.nobb] ? { ...m, enhetspris: prisMap[m.nobb].pris_per_enhet, varenavn: prisMap[m.nobb].varenavn || m.varenavn } : m)
+                    }
+                  }
+                } catch(e) {}
+              }
+              onSelect(bd); onClose()
+            }}
               style={{ marginLeft:'auto', background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
               Legg til bygningsdel →
             </button>
@@ -18377,6 +18434,11 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
             <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
+            <button onClick={async () => {
+              const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
+              if (count > 0) { updateKalkyler(updated); setShowUESuccess({ navn: `${count} materialpriser oppdatert fra aktiv prisliste`, nr: '' }) }
+              else { setShowUESuccess({ navn: 'Ingen materialer med NOBB-nummer funnet, eller ingen aktiv prisliste', nr: '' }) }
+            }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔄 Oppdater priser</button>
 
             {/* Forhåndsvis PDF dropdown */}
             <div style={{ position:'relative' }}>
