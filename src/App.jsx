@@ -5816,6 +5816,31 @@ function AnbudsPage() {
         supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
       ])
       setTenders(t); setProjects(p)
+
+      // Frist-varsling: sjekk anbud med frist 3 dager eller 1 dag unna
+      if (user?.id) {
+        const today = new Date(); today.setHours(0,0,0,0)
+        for (const tender of t) {
+          if (!tender.deadline || tender.status === 'Tildelt' || tender.status === 'Avslått') continue
+          const deadlineDate = new Date(tender.deadline); deadlineDate.setHours(0,0,0,0)
+          const daysLeft = Math.ceil((deadlineDate - today) / (1000*60*60*24))
+          if (daysLeft === 3 || daysLeft === 1) {
+            // Sjekk om varsel allerede er sendt i dag for denne fristen
+            const notifKey = `deadline_${tender.id}_${daysLeft}d_${today.toISOString().split('T')[0]}`
+            const { data: existing } = await supabase.from('notifications').select('id').eq('user_id', user.id).eq('link_id', tender.id).ilike('title', `%${daysLeft} dag%`).gte('created_at', today.toISOString()).limit(1)
+            if (!existing || existing.length === 0) {
+              await supabase.from('notifications').insert({
+                user_id: user.id,
+                title: `⏰ Anbudsfrist om ${daysLeft} dag${daysLeft>1?'er':''}: ${tender.title}`,
+                message: `${tender.tender_number} har frist ${tender.deadline}. ${daysLeft === 1 ? 'Fristen utløper i morgen!' : ''}`,
+                type: daysLeft === 1 ? 'warning' : 'info',
+                link_page: 'anbudsmodul',
+                link_id: tender.id,
+              })
+            }
+          }
+        }
+      }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -5936,11 +5961,13 @@ function AnbudsPage() {
 
 function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const showAlert = useAlert()
   const [t, setT] = useState(init)
   const [ues, setUes] = useState([])
   const [editing, setEditing] = useState(false)
   const [showInviteUE, setShowInviteUE] = useState(false)
   const [showAward, setShowAward] = useState(false)
+  const [sendingReminder, setSendingReminder] = useState(null)
   const cfg = TENDER_STATUS[t.status]
   const proj = projects.find(p=>p.id===t.project_id)
   const { totalCost, grandTotal } = calcTender(t.chapters||[], t.global_markup)
@@ -5989,6 +6016,43 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   }
 
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
+
+  const sendReminder = async (ue) => {
+    if (sendingReminder) return
+    setSendingReminder(ue.id)
+    try {
+      const pricingUrl = `${window.location.origin}/anbud-pris?token=${ue.token}`
+      const deadlineText = t.deadline ? `<p style="color:#dc2626;font-weight:700;font-size:14px">⏰ Frist: ${t.deadline}</p>` : ''
+      const html = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <div style="background:#fffbeb;border-radius:12px;padding:16px;border:1px solid #fde68a;margin-bottom:20px">
+            <p style="margin:0;color:#92400e;font-weight:700;font-size:15px">📩 Påminnelse — Anbudsforespørsel</p>
+          </div>
+          <h1 style="color:#0f172a;font-size:20px;margin-bottom:8px">${t.title}</h1>
+          <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${t.tender_number}</strong></p>
+          ${deadlineText}
+          <p style="color:#475569;font-size:14px;line-height:1.6">Vi minner om at vi fortsatt venter på ditt tilbud. Vennligst fyll inn dine priser via lenken nedenfor.</p>
+          ${(t.vedlegg||[]).length > 0 ? '<div style="background:#f8fafc;border-radius:12px;padding:14px;margin:16px 0;border:1px solid #f1f5f9"><p style="margin:0 0 6px;font-weight:700;font-size:13px;color:#0f172a">📎 Vedlegg</p>' + t.vedlegg.map(v => `<a href="${v.url}" style="display:block;color:#2563eb;font-size:13px;margin-bottom:3px;text-decoration:none">📎 ${v.name}</a>`).join('') + '</div>' : ''}
+          <div style="text-align:center;margin:28px 0">
+            <a href="${pricingUrl}" style="background:#d97706;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📝 Fyll inn priser</a>
+          </div>
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
+          <p style="color:#94a3b8;font-size:12px">Påminnelse sendt via En Plattform KS-system</p>
+        </div>`
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: ue.email, subject:`Påminnelse: Anbudsforespørsel ${t.tender_number} – ${t.title}`, html })
+      })
+      if (!fnRes.ok) { const d = await fnRes.json(); throw new Error(d.error||'E-post feilet') }
+      const log = [...(t.activity_log || []), { action: `Påminnelse sendt til ${ue.company_name}`, by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ activity_log: log }).eq('id', t.id)
+      setT(v => ({ ...v, activity_log: log }))
+      showAlert({ message: 'Påminnelse sendt!', subMessage: `E-post sendt til ${ue.company_name} (${ue.email})`, emoji: '📩' })
+    } catch(e) {
+      showAlert({ message: 'Kunne ikke sende påminnelse', subMessage: e.message, type: 'error' })
+    }
+    finally { setSendingReminder(null) }
+  }
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -6111,6 +6175,12 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                         {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}</div>}
                       </div>
                       <span style={{ background:ucfg.bg, color:ucfg.color, border:`1px solid ${ucfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{ue.status}</span>
+                      {(ue.status === 'Invitert' || ue.status === 'Åpnet') && (
+                        <button onClick={() => sendReminder(ue)} disabled={sendingReminder===ue.id}
+                          style={{ background: sendingReminder===ue.id ? '#fef3c7' : '#fffbeb', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'5px 12px', cursor: sendingReminder===ue.id ? 'not-allowed' : 'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>
+                          {sendingReminder===ue.id ? '⏳ Sender...' : '📩 Purr'}
+                        </button>
+                      )}
                       {ue.total_amount && <div style={{ fontWeight:'800', fontSize:'15px', color:isLowest?'#16a34a':'#0f172a', minWidth:'100px', textAlign:'right' }}>{fmtT(ue.total_amount)}</div>}
                     </div>
                   )
