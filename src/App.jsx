@@ -112,6 +112,7 @@ const navGroups = [
       { id: 'kalkulator', label: 'Kalkulasjon', emoji: '🧮' },
       { id: 'tilbud',      label: 'Tilbud',       emoji: '📋' },
       { id: 'anbudsmodul', label: 'Anbudsmodul',  emoji: '⚖️' },
+      { id: 'endringsmelding', label: 'Endringer', emoji: '🔄' },
       { id: 'ordre',       label: 'Ordre',         emoji: '📝' },
       { id: 'faktura',     label: 'Faktura',       emoji: '🧾' },
     ]
@@ -157,6 +158,7 @@ const moduleCards = [
   { id: 'kalkulator', name: 'Kalkulasjon', desc: 'Kostnadskalkulasjon og fortjeneste', emoji: '🧮', color: '#fef9c3' },
   { id: 'anbudsmodul', name: 'Anbudsportal', desc: 'Leverandøranbud', emoji: '⚖️', color: '#fff7ed' },
   { id: 'ordre', name: 'Ordre', desc: 'Arbeidsordre', emoji: '📝', color: '#eef2ff' },
+  { id: 'endringsmelding', name: 'Endringer', desc: 'Endringsmeldinger og tilleggsarbeid', emoji: '🔄', color: '#fef9c3' },
   { id: 'faktura', name: 'Faktura', desc: 'Fakturering', emoji: '🧾', color: '#f0fdf4' },
   { id: 'ansatte', name: 'Ansatte', desc: 'Personaladministrasjon', emoji: '👷', color: '#f8fafc' },
   { id: 'timelister', name: 'Timelister', desc: 'Timeføring', emoji: '⏱️', color: '#eef2ff' },
@@ -181,7 +183,7 @@ const moduleSections = [
   },
   {
     title: '💰 ØKONOMI & KONTRAKT',
-    modules: ['kalkulator', 'tilbud', 'anbudsmodul', 'ordre', 'faktura'],
+    modules: ['kalkulator', 'tilbud', 'anbudsmodul', 'endringsmelding', 'ordre', 'faktura'],
   },
   {
     title: '👷 PERSONELL & RESSURSER',
@@ -6449,6 +6451,442 @@ function calcOrderChapter(ch) {
 function calcOrder(chapters, globalMarkup) {
   const chapterTotals = chapters.reduce((acc,ch) => acc + calcOrderChapter(ch).total, 0)
   return { chapterTotals, grandTotal: chapterTotals * (1 + (parseFloat(globalMarkup)||0)/100) }
+}
+
+// ─── ENDRINGSMELDINGER ────────────────────────────────────────────────────────
+// Registrer tillegg/endringer fra byggeplass, send til kunde for godkjenning
+
+const EM_STATUS = {
+  'Utkast':           { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
+  'Sendt':            { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📧' },
+  'Godkjent':         { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'✅' },
+  'Avvist':           { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'❌' },
+  'Under forhandling':{ bg:'#fffbeb', color:'#d97706', border:'#fde68a', emoji:'🤝' },
+  'Fakturert':        { bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', emoji:'🧾' },
+}
+
+function EndringsmeldingPage() {
+  const { user } = useAuth()
+  const [endringer, setEndringer] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [projectFilter, setProjectFilter] = useState('all')
+  const [showForm, setShowForm] = useState(false)
+  const [editEm, setEditEm] = useState(null)
+  const [viewEm, setViewEm] = useState(null)
+  const f = { fontFamily:'system-ui,sans-serif' }
+  const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
+
+  const load = async () => {
+    try {
+      const [emRes, prRes] = await Promise.all([
+        supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false }),
+        supabase.from('projects').select('id, name').order('name'),
+      ])
+      setEndringer(emRes.data || [])
+      setProjects(prRes.data || [])
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = endringer.filter(em => {
+    if (statusFilter !== 'all' && em.status !== statusFilter) return false
+    if (projectFilter !== 'all' && em.project_id !== projectFilter) return false
+    if (search && !em.title?.toLowerCase().includes(search.toLowerCase()) && !em.em_number?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  const totalTillegg = filtered.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+  const totalIkkeFakturert = filtered.filter(e => e.status === 'Godkjent').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+
+  const handleDelete = async (em) => {
+    if (!window.confirm(`Slette endringsmelding "${em.title}"?`)) return
+    await supabase.from('endringsmeldinger').delete().eq('id', em.id)
+    load()
+  }
+
+  // ── Form Component ─────────────────────────────────────────────────────────
+  const EmForm = ({ initial, onClose, onSaved }) => {
+    const isEdit = !!initial?.id
+    const [form, setForm] = useState({
+      title: initial?.title || '',
+      em_number: initial?.em_number || `EM-${String(endringer.length + 1).padStart(3, '0')}`,
+      project_id: initial?.project_id || '',
+      description: initial?.description || '',
+      reason: initial?.reason || '',
+      amount: initial?.amount || '',
+      hours: initial?.hours || '',
+      materials_cost: initial?.materials_cost || '',
+      ue_cost: initial?.ue_cost || '',
+      time_consequence: initial?.time_consequence || '',
+      status: initial?.status || 'Utkast',
+      customer_email: initial?.customer_email || '',
+      notes: initial?.notes || '',
+    })
+    const [images, setImages] = useState(initial?.images || [])
+    const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
+    const [saving, setSaving] = useState(false)
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+    const calcTotal = () => {
+      const h = (parseFloat(form.hours) || 0) * 550 // Snittimepris
+      const m = parseFloat(form.materials_cost) || 0
+      const u = parseFloat(form.ue_cost) || 0
+      const manual = parseFloat(form.amount) || 0
+      return manual || (h + m + u)
+    }
+
+    const handleSave = async (e) => {
+      e?.preventDefault()
+      if (!form.title.trim()) return
+      setSaving(true)
+      try {
+        const payload = {
+          ...form,
+          amount: calcTotal(),
+          images,
+          vedlegg,
+          updated_at: new Date().toISOString(),
+        }
+        if (isEdit) {
+          const { error } = await supabase.from('endringsmeldinger').update(payload).eq('id', initial.id)
+          if (error) throw error
+          // Log activity
+          const log = [...(initial.activity_log || []), { action: 'Endret', by: user?.email, at: new Date().toISOString() }]
+          await supabase.from('endringsmeldinger').update({ activity_log: log }).eq('id', initial.id)
+        } else {
+          const { error } = await supabase.from('endringsmeldinger').insert({
+            ...payload,
+            created_by: user?.id,
+            activity_log: [{ action: 'Opprettet', by: user?.email, at: new Date().toISOString() }],
+          })
+          if (error) throw error
+        }
+        onSaved()
+      } catch(e) { alert('Feil: ' + e.message) }
+      finally { setSaving(false) }
+    }
+
+    const handleImageUpload = async (e) => {
+      const file = e.target.files?.[0]; if (!file) return
+      try {
+        const path = `endringsmeldinger/${Date.now()}_${file.name}`
+        const { error } = await supabase.storage.from('plattform-files').upload(path, file)
+        if (error) throw error
+        const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
+        setImages(prev => [...prev, { name: file.name, url: data.publicUrl }])
+      } catch(err) { console.error(err) }
+      e.target.value = ''
+    }
+
+    const handleVedleggUpload = async (e) => {
+      const file = e.target.files?.[0]; if (!file) return
+      try {
+        const path = `endringsmeldinger/${Date.now()}_${file.name}`
+        const { error } = await supabase.storage.from('plattform-files').upload(path, file)
+        if (error) throw error
+        const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
+        setVedlegg(prev => [...prev, { name: file.name, url: data.publicUrl }])
+      } catch(err) { console.error(err) }
+      e.target.value = ''
+    }
+
+    const lbl = (t) => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{t}</label>
+
+    return (
+      <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
+        <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700' }}>🔄 {isEdit ? 'Rediger' : 'Ny'} endringsmelding</h2>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+          <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
+              <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
+              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+            </div>
+
+            <div>{lbl('Årsak til endring')}<select value={form.reason} onChange={e=>set('reason',e.target.value)} style={{ ...inp, background:'white' }}>
+              <option value="">Velg årsak</option>
+              <option value="Bestilling fra byggherre">Bestilling fra byggherre</option>
+              <option value="Prosjekteringsendring">Prosjekteringsendring</option>
+              <option value="Uforutsette forhold">Uforutsette forhold</option>
+              <option value="Forskriftskrav">Forskriftskrav</option>
+              <option value="Feil i tegninger">Feil i tegninger</option>
+              <option value="Annet">Annet</option>
+            </select></div>
+
+            <div>{lbl('Beskrivelse av endringen')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} placeholder="Detaljert beskrivelse av hva som er endret fra opprinnelig kontrakt..." style={{ ...inp, resize:'vertical', fontFamily:'system-ui,sans-serif' }} /></div>
+
+            <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px' }}>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>💰 Kostnadskonsekvens</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }}>
+                <div>{lbl('Timer')}<input type="number" value={form.hours} onChange={e=>set('hours',e.target.value)} placeholder="0" style={inp} /></div>
+                <div>{lbl('Materialer (kr)')}<input type="number" value={form.materials_cost} onChange={e=>set('materials_cost',e.target.value)} placeholder="0" style={inp} /></div>
+                <div>{lbl('UE (kr)')}<input type="number" value={form.ue_cost} onChange={e=>set('ue_cost',e.target.value)} placeholder="0" style={inp} /></div>
+              </div>
+              <div style={{ marginTop:'10px' }}>{lbl('Totalbeløp (kr)')}<input type="number" value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder={calcTotal() > 0 ? String(calcTotal()) : '0'} style={{ ...inp, fontWeight:'700', fontSize:'16px' }} /></div>
+            </div>
+
+            <div>{lbl('Tidskonsekvens')}<input value={form.time_consequence} onChange={e=>set('time_consequence',e.target.value)} placeholder="F.eks. 3 dagers fristforlengelse" style={inp} /></div>
+
+            {/* Bilder */}
+            <div>
+              {lbl('📸 Bildedokumentasjon')}
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'6px' }}>
+                {images.map((img, i) => (
+                  <div key={i} style={{ position:'relative', width:'80px', height:'80px', borderRadius:'8px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
+                    <img src={img.url} alt={img.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} style={{ position:'absolute', top:'2px', right:'2px', background:'rgba(0,0,0,0.5)', color:'white', border:'none', borderRadius:'50%', width:'18px', height:'18px', cursor:'pointer', fontSize:'10px', lineHeight:1 }}>×</button>
+                  </div>
+                ))}
+                <label style={{ width:'80px', height:'80px', borderRadius:'8px', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'#94a3b8', fontSize:'24px' }}>
+                  +<input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload} />
+                </label>
+              </div>
+            </div>
+
+            {/* Vedlegg */}
+            <div>
+              {lbl('📎 Vedlegg')}
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'6px' }}>
+                {vedlegg.map((v, i) => (
+                  <span key={i} style={{ background:'#f1f5f9', padding:'4px 10px', borderRadius:'6px', fontSize:'12px', display:'flex', alignItems:'center', gap:'4px' }}>
+                    📎 {v.name} <button onClick={() => setVedlegg(prev => prev.filter((_, j) => j !== i))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px' }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <label style={{ display:'inline-block', background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', cursor:'pointer', color:'#64748b' }}>
+                + Legg til vedlegg<input type="file" style={{ display:'none' }} onChange={handleVedleggUpload} />
+              </label>
+            </div>
+
+            <div>{lbl('E-post til kunde (for utsendelse)')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@firma.no" style={inp} /></div>
+            <div>{lbl('Interne notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Interne merknader (vises ikke for kunde)" style={{ ...inp, resize:'none', fontFamily:'system-ui,sans-serif' }} /></div>
+          </form>
+
+          <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', justifyContent:'flex-end', flexShrink:0 }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Avbryt</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>{saving ? 'Lagrer...' : isEdit ? 'Oppdater' : 'Opprett'}</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Send til kunde ─────────────────────────────────────────────────────────
+  const sendToCustomer = async (em) => {
+    if (!em.customer_email) return alert('Legg til kundens e-post først')
+    try {
+      const proj = projects.find(p => p.id === em.project_id)
+      const imgHtml = (em.images||[]).length > 0 ? '<div style="margin:16px 0">' + em.images.map(img => `<img src="${img.url}" style="max-width:280px;border-radius:8px;margin:4px" />`).join('') + '</div>' : ''
+      const vedleggHtml = (em.vedlegg||[]).length > 0 ? '<div style="margin:12px 0"><strong>Vedlegg:</strong><br>' + em.vedlegg.map(v => `<a href="${v.url}" style="color:#2563eb">${v.name}</a>`).join('<br>') + '</div>' : ''
+
+      const godkjennUrl = `${window.location.origin}/godkjenn-em?id=${em.id}`
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        '<h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Endringsmelding</h1>' +
+        '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px">' + em.em_number + '</p>' +
+        '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>' +
+          '<div style="font-weight:700">' + (proj?.name || '—') + '</div>' +
+        '</div>' +
+        '<div style="background:#fffbeb;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #fde68a">' +
+          '<div style="font-weight:700;margin-bottom:8px">' + em.title + '</div>' +
+          (em.reason ? '<div style="font-size:13px;color:#92400e;margin-bottom:8px">Årsak: ' + em.reason + '</div>' : '') +
+          '<div style="font-size:14px;color:#374151">' + (em.description || '').replace(/\n/g, '<br>') + '</div>' +
+          imgHtml +
+        '</div>' +
+        '<div style="background:#f0fdf4;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bbf7d0">' +
+          '<div style="font-size:24px;font-weight:800;color:#059669;text-align:center">' + Math.round(em.amount || 0).toLocaleString('nb-NO') + ' kr</div>' +
+          '<div style="font-size:12px;color:#64748b;text-align:center">eks. mva</div>' +
+          (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
+        '</div>' + vedleggHtml +
+        '<p style="color:#475569;font-size:14px">Vennligst godkjenn eller avvis denne endringen:</p>' +
+        '<div style="text-align:center;margin:24px 0">' +
+          '<a href="' + godkjennUrl + '&action=godkjent" style="background:#059669;color:white;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;margin:4px">✅ Godkjenn</a> ' +
+          '<a href="' + godkjennUrl + '&action=avvist" style="background:#dc2626;color:white;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;margin:4px">❌ Avvis</a>' +
+        '</div>' +
+        '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
+
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: em.customer_email, subject: `Endringsmelding ${em.em_number} – ${em.title}`, html })
+      })
+
+      const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
+      await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+      load()
+    } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
+  }
+
+  // ── Detail View ────────────────────────────────────────────────────────────
+  if (viewEm) {
+    const em = viewEm
+    const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
+    const proj = projects.find(p => p.id === em.project_id)
+    return (
+      <div style={f}>
+        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+          <button onClick={() => setViewEm(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#64748b', marginBottom:'12px' }}>← Tilbake til oversikt</button>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold' }}>{em.title}</h1>
+                <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'3px 12px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>{st.emoji} {em.status}</span>
+              </div>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
+            </div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              {em.status === 'Utkast' && <button onClick={() => sendToCustomer(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📧 Send til kunde</button>}
+              <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', cursor:'pointer' }}>✏️ Rediger</button>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding:'24px 32px', maxWidth:'800px' }}>
+          {em.reason && <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', fontSize:'13px', color:'#92400e' }}>🏷️ Årsak: <strong>{em.reason}</strong></div>}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px', marginBottom:'16px' }}>
+            <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
+            <p style={{ margin:0, fontSize:'14px', color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{em.description || '—'}</p>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'16px' }}>
+            <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
+              <div style={{ fontSize:'12px', color:'#64748b' }}>Totalt beløp</div>
+            </div>
+            {em.hours > 0 && <div style={{ background:'#eff6ff', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#2563eb' }}>{em.hours}</div>
+              <div style={{ fontSize:'12px', color:'#64748b' }}>Timer</div>
+            </div>}
+            {em.time_consequence && <div style={{ background:'#fffbeb', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'14px', fontWeight:'700', color:'#d97706' }}>{em.time_consequence}</div>
+              <div style={{ fontSize:'12px', color:'#64748b' }}>Tidskonsekvens</div>
+            </div>}
+          </div>
+          {/* Bilder */}
+          {(em.images||[]).length > 0 && (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px' }}>
+              <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📸 Bilder</h3>
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                {em.images.map((img, i) => <img key={i} src={img.url} alt={img.name} style={{ width:'120px', height:'120px', objectFit:'cover', borderRadius:'10px', border:'1px solid #e2e8f0', cursor:'pointer' }} onClick={() => window.open(img.url, '_blank')} />)}
+              </div>
+            </div>
+          )}
+          {/* Vedlegg */}
+          {(em.vedlegg||[]).length > 0 && (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px' }}>
+              <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📎 Vedlegg</h3>
+              {em.vedlegg.map((v, i) => <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'block', color:'#2563eb', fontSize:'13px', marginBottom:'4px' }}>📎 {v.name}</a>)}
+            </div>
+          )}
+          {/* Aktivitetslogg */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px' }}>
+            <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📋 Aktivitetslogg</h3>
+            {(em.activity_log || []).slice().reverse().map((log, i) => (
+              <div key={i} style={{ display:'flex', gap:'10px', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8', fontSize:'12px', width:'130px', flexShrink:0 }}>{new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+                <span style={{ color:'#374151' }}>{log.action}</span>
+                <span style={{ color:'#94a3b8', marginLeft:'auto' }}>{log.by}</span>
+              </div>
+            ))}
+            {(!em.activity_log || em.activity_log.length === 0) && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert</p>}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── List View ──────────────────────────────────────────────────────────────
+  return (
+    <div style={f}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
+            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>
+          </div>
+          <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny endringsmelding</button>
+        </div>
+      </div>
+
+      {/* Statistikk */}
+      <div style={{ padding:'16px 32px', display:'flex', gap:'12px' }}>
+        {[
+          { label:'Totalt', value: endringer.length, color:'#0f172a' },
+          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b' },
+          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb' },
+          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a' },
+          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669' },
+          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706' },
+        ].map((s,i) => (
+          <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'12px 16px', flex:1, textAlign:'center' }}>
+            <div style={{ fontSize:'18px', fontWeight:'800', color:s.color }}>{s.value}</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtre */}
+      <div style={{ padding:'0 32px 12px', display:'flex', gap:'10px', alignItems:'center' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk i endringer..." style={{ ...inp, maxWidth:'250px' }} />
+        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...inp, maxWidth:'160px', background:'white' }}>
+          <option value="all">Alle statuser</option>
+          {Object.keys(EM_STATUS).map(s => <option key={s} value={s}>{EM_STATUS[s].emoji} {s}</option>)}
+        </select>
+        <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth:'200px', background:'white' }}>
+          <option value="all">Alle prosjekter</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+
+      {/* Liste */}
+      <div style={{ padding:'0 32px 32px' }}>
+        {loading && <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster...</div>}
+        {!loading && filtered.length === 0 && <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Ingen endringsmeldinger funnet</div>}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          {filtered.map(em => {
+            const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
+            const proj = projects.find(p => p.id === em.project_id)
+            return (
+              <div key={em.id} onClick={() => setViewEm(em)} style={{ background:'white', borderRadius:'14px', border:`1px solid ${st.border}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', transition:'box-shadow 0.15s' }}
+                onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'}
+                onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                <div style={{ width:'42px', height:'42px', borderRadius:'12px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                    <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{em.title}</span>
+                    <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'600' }}>{em.status}</span>
+                  </div>
+                  <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>
+                    {proj && <span style={{ fontSize:'12px', color:'#059669' }}>🏗️ {proj.name}</span>}
+                    {em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
+                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>
+                    {(em.images||[]).length > 0 && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📸 {em.images.length}</span>}
+                  </div>
+                </div>
+                <div style={{ textAlign:'right', flexShrink:0 }}>
+                  <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
+                  {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
+                </div>
+                <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
+                  {em.status === 'Utkast' && <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>📧</button>}
+                  <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
+    </div>
+  )
 }
 
 function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
@@ -14761,6 +15199,14 @@ const MODULE_CATALOG = [
     navId: 'ordre',
   },
   {
+    id: 'endringsmelding',
+    name: 'Endringsmodul',
+    desc: 'Endringsmeldinger med bildedokumentasjon, digital godkjenning og aktivitetslogg. Kobles mot Prosjekter og Faktura.',
+    emoji: '🔄',
+    price: 29,
+    navId: 'endringsmelding',
+  },
+  {
     id: 'faktura',
     name: 'Faktura',
     desc: 'Fakturering og betalinger',
@@ -20481,7 +20927,7 @@ function AppContent() {
     dashboard: null, // always accessible
     prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke', sjekklister: 'grunnpakke',
     avvik: 'grunnpakke', hms: 'grunnpakke', maskiner: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
-    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', ordre: 'ordre', faktura: 'faktura',
+    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
     ansatte: 'ansatte', timelister: 'timelister', ressursplan: 'ressursplan',
     kalender: 'kalender', chat: 'chat',
     befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
@@ -20647,6 +21093,7 @@ function AppContent() {
         {page === 'kalkulator' && <KalkulasjonPage onNavigate={navigate} />}
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
+        {page === 'endringsmelding' && <EndringsmeldingPage />}
         {page === 'ordre' && <OrdrePage />}
         {page === 'faktura' && <FakturaPage />}
         {page === 'ansatte' && <AnsattePage />}
