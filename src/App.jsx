@@ -18416,8 +18416,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       return { ...kl, bygningsdeler: bds }
     }))
   }
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) } : kl))
-  }
 
   // Move kalkyle up/down
   const moveKalkyle = (kalId, direction) => {
