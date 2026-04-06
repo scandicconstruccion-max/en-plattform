@@ -4468,6 +4468,56 @@ function ConfirmProvider({ children }) {
 const useConfirm = () => React.useContext(ConfirmContext)
 // ─── END CONFIRM DIALOG ───────────────────────────────────────────────────────
 
+// ─── ALERT DIALOG (replaces browser alert()) ─────────────────────────────────
+const AlertContext = React.createContext(null)
+
+function AlertProvider({ children }) {
+  const [dialog, setDialog] = React.useState(null)
+  const cbRef = React.useRef(null)
+
+  const showAlert = React.useCallback((opts) => {
+    const options = typeof opts === 'string' ? { message: opts } : opts
+    return new Promise((resolve) => {
+      cbRef.current = resolve
+      setDialog(options)
+    })
+  }, [])
+
+  const close = () => {
+    setDialog(null)
+    const cb = cbRef.current
+    cbRef.current = null
+    if (cb) cb()
+  }
+
+  return (
+    <AlertContext.Provider value={showAlert}>
+      {children}
+      {dialog && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={close} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'28px 24px 0', textAlign:'center' }}>
+              <div style={{ fontSize:'44px', marginBottom:'14px' }}>{dialog.emoji || (dialog.type === 'error' ? '❌' : dialog.type === 'warning' ? '⚠️' : '✅')}</div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{dialog.message}</h3>
+              {dialog.subMessage && <p style={{ margin:'0', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{dialog.subMessage}</p>}
+            </div>
+            <div style={{ display:'flex', justifyContent:'center', padding:'24px' }}>
+              <button onClick={close}
+                style={{ padding:'11px 36px', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700', color:'white', background: dialog.type === 'error' ? '#dc2626' : '#059669' }}>
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </AlertContext.Provider>
+  )
+}
+
+const useAlert = () => React.useContext(AlertContext)
+// ─── END ALERT DIALOG ─────────────────────────────────────────────────────────
+
 // Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
 async function notifyProjectManager(projectId, title, message, type, linkPage) {
   if (!projectId) return
@@ -6520,6 +6570,7 @@ const EM_STATUS = {
 
 function EndringsmeldingPage() {
   const { user } = useAuth()
+  const showAlert = useAlert()
   const [endringer, setEndringer] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -6748,11 +6799,10 @@ function EndringsmeldingPage() {
   }
 
   const [sendingEmId, setSendingEmId] = useState(null)
-  const [sentToast, setSentToast] = useState(false)
 
   // ── Send til kunde ─────────────────────────────────────────────────────────
   const sendToCustomer = async (em) => {
-    if (!em.customer_email) return alert('Legg til kundens e-post først')
+    if (!em.customer_email) return showAlert({ message: 'E-post mangler', subMessage: 'Legg til kundens e-postadresse først.', type: 'warning', emoji: '⚠️' })
     if (sendingEmId) return // prevent double-click
     setSendingEmId(em.id)
     try {
@@ -6800,9 +6850,9 @@ function EndringsmeldingPage() {
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
       await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }).eq('id', em.id)
-      setSentToast(true)
+      showAlert({ message: 'Sendt!', subMessage: 'Endringsmeldingen er sendt til kunde på e-post.', emoji: '✅' })
       load()
-    } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
+    } catch(e) { showAlert({ message: 'Feil ved utsendelse', subMessage: e.message, type: 'error' }) }
     finally { setSendingEmId(null) }
   }
 
@@ -7043,18 +7093,6 @@ function EndringsmeldingPage() {
 
       {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
 
-      {/* Sendt-bekreftelse popup */}
-      {sentToast && (
-        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} />
-          <div style={{ position:'relative', background:'white', borderRadius:'20px', padding:'40px', maxWidth:'400px', width:'100%', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize:'48px', marginBottom:'16px' }}>✅</div>
-            <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>Sendt!</h3>
-            <p style={{ margin:'0 0 24px', fontSize:'14px', color:'#64748b' }}>Endringsmeldingen er sendt til kunde på e-post.</p>
-            <button onClick={() => setSentToast(false)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'12px 32px', fontSize:'15px', fontWeight:'700', cursor:'pointer' }}>OK</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -21465,5 +21503,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AuthProvider><NotifProvider><ConfirmProvider><AppContent /></ConfirmProvider></NotifProvider></AuthProvider>
+  return <AuthProvider><NotifProvider><ConfirmProvider><AlertProvider><AppContent /></AlertProvider></ConfirmProvider></NotifProvider></AuthProvider>
 }
