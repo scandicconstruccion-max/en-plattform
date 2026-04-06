@@ -5049,12 +5049,12 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                                 <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv arbeid/materiale" style={{ ...qInp, minWidth:'180px' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 4px' }}>
-                                  <select value={['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk'].includes(p.unit) ? p.unit : '_custom'} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...qInp, width:'75px', appearance:'auto' }}>
+                                  <select value={['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke'].includes(p.unit) ? p.unit : (p.unit ? '_custom' : '')} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...qInp, width:'75px', appearance:'auto' }}>
                                     <option value="">Velg</option>
-                                    {['m²','m³','LM','m','STK','stk','RS','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
+                                    {['stk','m²','m³','lm','m','rs','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
                                     <option value="_custom">Annet…</option>
                                   </select>
-                                  {!['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk',''].includes(p.unit) && (
+                                  {!['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke',''].includes(p.unit) && (
                                     <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...qInp, width:'75px', marginTop:'4px' }} />
                                   )}
                                 </td>
@@ -7487,12 +7487,12 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                               <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 4px' }}>
-                                  <select value={['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk'].includes(p.unit) ? p.unit : '_custom'} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...oInp, width:'75px', appearance:'auto' }}>
+                                  <select value={['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke'].includes(p.unit) ? p.unit : (p.unit ? '_custom' : '')} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...oInp, width:'75px', appearance:'auto' }}>
                                     <option value="">Velg</option>
-                                    {['m²','m³','LM','m','STK','stk','RS','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
+                                    {['stk','m²','m³','lm','m','rs','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
                                     <option value="_custom">Annet…</option>
                                   </select>
-                                  {!['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk',''].includes(p.unit) && (
+                                  {!['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke',''].includes(p.unit) && (
                                     <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...oInp, width:'75px', marginTop:'4px' }} />
                                   )}
                               </td>
