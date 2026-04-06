@@ -19684,7 +19684,7 @@ function AppContent() {
         <button onClick={() => setCollapsed(!collapsed)}
           style={{ position: 'absolute', top: '78px', right: '10px', width: '26px', height: '26px', borderRadius: '50%',
             background: 'white', border: '1.5px solid #cbd5e1',
-            cursor: 'pointer', fontSize: '18px', fontWeight: '700',
+            cursor: 'pointer', fontSize: '22px', fontWeight: '700', paddingBottom: '2px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 50, boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
             color: '#64748b', lineHeight: 1 }}>
