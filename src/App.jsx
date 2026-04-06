@@ -18650,6 +18650,73 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     return map[(e||'').toLowerCase()] || map[e] || e || ''
   }
 
+  // Last ned materialliste som CSV + åpne i utskriftsvennlig vindu
+  const downloadMaterialliste = () => {
+    // Samle alle materialer fra alle fagkalkyler og bygningsdeler
+    const lines = []
+    let totalKostnad = 0
+
+    kalkyler.forEach(kl => {
+      const fag = getFaggruppe(kl.fag)
+      const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+      ;(kl.bygningsdeler || []).forEach(bd => {
+        const mengde = parseFloat(bd.mengde) || 1
+        ;(bd.materialer || []).forEach(m => {
+          const mMengde = (parseFloat(m.mengde) || 0) * mengde
+          const enhetspris = parseFloat(m.enhetspris) || 0
+          const kostnad = mMengde * enhetspris
+          totalKostnad += kostnad
+          lines.push({
+            fag: fag.name,
+            bygningsdel: bd.name || '',
+            nobb: m.nobb || '',
+            varenavn: m.varenavn || '',
+            mengde: mMengde,
+            enhet: m.enhet || '',
+            enhetspris,
+            kostnad,
+          })
+        })
+      })
+    })
+
+    // Generer CSV
+    const csvHeader = 'Faggruppe;Bygningsdel;NOBB;Varenavn;Mengde;Enhet;Enhetspris;Kostnad'
+    const csvRows = lines.map(l =>
+      `${l.fag};${l.bygningsdel};${l.nobb};${l.varenavn};${l.mengde.toFixed(2).replace('.',',')};${l.enhet};${l.enhetspris.toFixed(2).replace('.',',')};${l.kostnad.toFixed(2).replace('.',',')}`
+    )
+    const csv = [csvHeader, ...csvRows, `;;;;;;;;`, `;;;;;;TOTALT;${totalKostnad.toFixed(2).replace('.',',')}`].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `materialliste-${k.kalk_number || k.title}.csv`; a.click()
+    URL.revokeObjectURL(url)
+
+    // Også åpne utskriftsvennlig visning
+    const tableRows = lines.map(l =>
+      `<tr><td style="padding:4px 8px;font-size:12px;color:#64748b">${l.fag}</td><td style="padding:4px 8px;font-size:12px">${l.bygningsdel}</td><td style="padding:4px 8px;font-family:monospace;font-size:11px;color:#94a3b8">${l.nobb}</td><td style="padding:4px 8px;font-size:12px;font-weight:500">${l.varenavn}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${l.mengde.toFixed(2)}</td><td style="padding:4px 8px;font-size:12px;color:#64748b">${l.enhet}</td><td style="padding:4px 8px;text-align:right;font-size:12px">${fmt(l.enhetspris)}</td><td style="padding:4px 8px;text-align:right;font-size:12px;font-weight:600">${fmt(l.kostnad)}</td></tr>`
+    ).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Materialliste ${k.kalk_number||''}</title>
+<style>@media print{body{margin:0}@page{margin:15mm 10mm;size:landscape}} body{font-family:system-ui,sans-serif;max-width:1100px;margin:30px auto;padding:0 20px;color:#0f172a;font-size:13px}
+table{width:100%;border-collapse:collapse} th{padding:6px 8px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;border-bottom:2px solid #e2e8f0;text-transform:uppercase}
+td{border-bottom:1px solid #f1f5f9} .total td{border-top:3px solid #0f172a;font-weight:800;font-size:14px;padding:8px}
+.no-print{} @media print{.no-print{display:none!important}}</style></head><body>
+<div class="no-print" style="background:#059669;color:white;padding:10px 20px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+  <span>📦 Materialliste — ${k.title}</span>
+  <button onclick="window.print()" style="background:white;color:#059669;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">🖨️ Skriv ut</button>
+</div>
+<h1 style="font-size:18px;margin:0 0 4px">📦 Materialliste</h1>
+<p style="color:#64748b;font-size:13px;margin:0 0 16px">${k.title} · ${k.kalk_number||''} · ${k.customer_name||''} · ${new Date().toLocaleDateString('nb-NO')}</p>
+<p style="font-size:13px;margin:0 0 16px">${lines.length} materialposter · Totalt: <strong>${fmt(totalKostnad)}</strong></p>
+<table><thead><tr><th>Fag</th><th>Bygningsdel</th><th>NOBB</th><th>Varenavn</th><th style="text-align:right">Mengde</th><th>Enhet</th><th style="text-align:right">Enhetspris</th><th style="text-align:right">Kostnad</th></tr></thead>
+<tbody>${tableRows}
+<tr class="total"><td colspan="7">Totalt materialkostnad</td><td style="text-align:right">${fmt(totalKostnad)}</td></tr>
+</tbody></table>
+<p style="color:#94a3b8;font-size:11px;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:8px">Materialliste generert fra En Plattform · ${new Date().toLocaleDateString('nb-NO')}</p>
+</body></html>`
+    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
+  }
+
   const openPreview = async (visning) => {
     setShowPreviewMenu(false)
     let ci = {}
@@ -18826,6 +18893,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
                   <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
+                  <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📦 Last ned materialliste</button>
                   <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
                   <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
