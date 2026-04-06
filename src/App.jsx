@@ -5336,6 +5336,7 @@ function UESvarPage() {
   const [forbehold, setForbehold] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [svarVedlegg, setSvarVedlegg] = useState([])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -5367,7 +5368,7 @@ function UESvarPage() {
       const svarPoster = poster.map(p => ({ id: p.id, name: p.name, pris: parseFloat(posterPriser[p.id]) || 0 }))
       const { error: e } = await supabase.from('ue_foresporsler').update({
         svar_pris: totalPris, svar_poster: svarPoster, svar_tidsplan: tidsplan,
-        svar_forbehold: forbehold, svar_dato: new Date().toISOString(),
+        svar_forbehold: forbehold, svar_vedlegg: svarVedlegg, svar_dato: new Date().toISOString(),
         status: 'mottatt', updated_at: new Date().toISOString(),
       }).eq('id', foresp.id)
       if (e) throw e
@@ -5502,6 +5503,36 @@ function UESvarPage() {
             <textarea value={forbehold} onChange={e => setForbehold(e.target.value)} rows={3} placeholder="F.eks. Forutsetter tilgang til byggstrøm, tørt arbeidsunderlag etc." disabled={alreadyAnswered}
               style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none', fontFamily:'system-ui,sans-serif' }} />
           </div>
+
+          {/* Vedlegg fra UE */}
+          {!alreadyAnswered && (
+            <div style={{ marginBottom:'16px' }}>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Vedlegg (valgfritt)</label>
+              <p style={{ fontSize:'12px', color:'#94a3b8', margin:'0 0 8px' }}>Last opp dokumenter, tegninger eller kalkulasjoner som støtter tilbudet ditt</p>
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'6px' }}>
+                {svarVedlegg.map((v, vi) => (
+                  <span key={vi} style={{ background:'#eff6ff', border:'1px solid #bfdbfe', padding:'4px 10px', borderRadius:'6px', fontSize:'12px', color:'#2563eb', display:'flex', alignItems:'center', gap:'4px' }}>
+                    📎 {v.name}
+                    <button onClick={() => setSvarVedlegg(prev => prev.filter((_, i) => i !== vi))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'12px', padding:0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <label style={{ display:'inline-block', background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'8px 16px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>
+                📎 Legg til vedlegg
+                <input type="file" style={{ display:'none' }} onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return
+                  try {
+                    const path = `ue-vedlegg/${Date.now()}_${file.name}`
+                    const { error } = await supabase.storage.from('project-files').upload(path, file)
+                    if (error) throw error
+                    const { data: urlData } = supabase.storage.from('project-files').getPublicUrl(path)
+                    setSvarVedlegg(prev => [...prev, { name: file.name, url: urlData.publicUrl }])
+                  } catch(err) { console.error('Upload feil:', err) }
+                  e.target.value = ''
+                }} />
+              </label>
+            </div>
+          )}
 
           {!alreadyAnswered && (
             <button onClick={handleSubmit} disabled={sending}
@@ -17878,12 +17909,14 @@ function KalkFaktorerPage({ onBack }) {
     setFaktorer(f => ({ ...f, [fagId]: { ...(f[fagId] || getDefaultFaktorer(fagId)), [field]: value } }))
   }
 
+  const [toast, setToast] = useState(null)
+
   const handleSave = async () => {
     setSaving(true)
     try {
       await supabase.from('company_settings').update({ kalk_faktorer: faktorer, updated_at: new Date().toISOString() }).eq('id', settingsId)
-      alert('✅ Kalkulasjonsfaktorer lagret!')
-    } catch(e) { alert('Feil: ' + e.message) }
+      setToast({ type: 'success', message: 'Kalkulasjonsfaktorer lagret!' })
+    } catch(e) { setToast({ type: 'error', message: 'Feil: ' + e.message }) }
     finally { setSaving(false) }
   }
 
@@ -17920,6 +17953,19 @@ function KalkFaktorerPage({ onBack }) {
           </button>
         </div>
       </div>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setToast(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'32px 28px', textAlign:'center' }}>
+              <div style={{ width:'56px', height:'56px', borderRadius:'50%', background: toast.type === 'success' ? '#f0fdf4' : '#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>{toast.type === 'success' ? '✅' : '⚠️'}</div>
+              <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px' }}>{toast.message}</p>
+              <button onClick={() => setToast(null)} style={{ background: toast.type === 'success' ? '#059669' : '#dc2626', color:'white', border:'none', borderRadius:'10px', padding:'10px 32px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'16px', maxWidth:'1000px' }}>
         {/* Forklaring */}
@@ -17976,9 +18022,16 @@ function KalkFaktorerPage({ onBack }) {
             <span style={{ fontSize:'22px' }}>🤝</span>
             <span style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Underleverandører</span>
           </div>
-          <div style={{ maxWidth:'250px' }}>
-            {lbl('Fortjeneste på UE %')}
-            <input type="number" value={(faktorer['ue'] || getDefaultFaktorer('ue')).fortjeneste_innkjop_prosent} onChange={e=>updateF('ue','fortjeneste_innkjop_prosent',e.target.value)} style={qInp} />
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px', maxWidth:'500px' }}>
+            <div>
+              {lbl('Fortjeneste på UE %')}
+              <input type="number" value={(faktorer['ue'] || getDefaultFaktorer('ue')).fortjeneste_innkjop_prosent} onChange={e=>updateF('ue','fortjeneste_innkjop_prosent',e.target.value)} style={qInp} />
+            </div>
+            <div>
+              {lbl('Standard UE-påslag %')}
+              <input type="number" value={(faktorer['ue'] || {}).ue_paaslag_prosent ?? 15} onChange={e=>updateF('ue','ue_paaslag_prosent',e.target.value)} style={qInp} />
+              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>Brukes som standard ved nye UE-forespørsler</div>
+            </div>
           </div>
         </div>
 
@@ -19035,15 +19088,31 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       </button>
                     </div>
 
-                    {/* UE-forespørsler på fagkalkyle-nivå — støtter flere UE */}
-                    <div style={{ marginTop:'12px', background:'#fefce8', borderRadius:'10px', border:'1px solid #fde68a', padding:'12px 14px' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e' }}>🤝 UE-tilbud for {kalk.name}</div>
-                        <button onClick={() => {
+                    {/* UE-forespørsler på fagkalkyle-nivå — sammentrekkbar */}
+                    {(() => {
+                      const ueCount = (kalk.ue_foresporsler||[]).length
+                      const hasMottatt = (kalk.ue_foresporsler||[]).some(u => u.status === 'mottatt')
+                      const defaultOpen = ueCount > 0 || kalk.valgt_ue
+                      return (
+                    <div style={{ marginTop:'12px', background:'#fefce8', borderRadius:'10px', border: hasMottatt ? '2px solid #3b82f6' : '1px solid #fde68a', overflow:'hidden' }}>
+                      <div onClick={() => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, _ueOpen: !kalk._ueOpen } : kl))}
+                        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', cursor:'pointer' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                          <span style={{ color:'#ca8a04', fontSize:'12px' }}>{(defaultOpen || kalk._ueOpen) ? '▼' : '▶'}</span>
+                          <span style={{ fontSize:'13px', fontWeight:'700', color:'#92400e' }}>🤝 UE-tilbud</span>
+                          {ueCount > 0 && <span style={{ background:'#ca8a04', color:'white', fontSize:'10px', fontWeight:'700', padding:'1px 6px', borderRadius:'10px' }}>{ueCount}</span>}
+                          {hasMottatt && <span style={{ background:'#2563eb', color:'white', fontSize:'10px', fontWeight:'700', padding:'1px 6px', borderRadius:'10px' }}>Nytt svar!</span>}
+                        </div>
+                        <button onClick={(e) => {
+                          e.stopPropagation()
                           const foresporsler = kalk.ue_foresporsler || []
-                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: [...foresporsler, { id: Date.now(), navn: '', email: '', telefon: '', beskrivelse: '', status: 'utkast', vedlegg: [], paaslag: 15 }] } : kl))
+                          const defaultPaaslag = parseFloat(alleFaktorer['ue']?.ue_paaslag_prosent || alleFaktorer[kalk.fag]?.ue_paaslag_prosent) || 15
+                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, _ueOpen: true, ue_foresporsler: [...foresporsler, { id: Date.now(), navn: '', email: '', telefon: '', beskrivelse: '', status: 'utkast', vedlegg: [], paaslag: defaultPaaslag }] } : kl))
                         }} style={{ background:'#ca8a04', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny forespørsel</button>
                       </div>
+
+                      {(defaultOpen || kalk._ueOpen) && (
+                        <div style={{ padding:'0 14px 12px' }}>
 
                       {/* Valgt UE indikator */}
                       {kalk.valgt_ue && <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'8px 12px', marginBottom:'8px', fontSize:'12px' }}>
@@ -19053,16 +19122,40 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       </div>}
 
                       {(kalk.ue_foresporsler || []).map((uf, ufi) => {
-                        const UF_STATUS = { utkast: { bg:'#f8fafc', color:'#64748b', label:'Utkast' }, sendt: { bg:'#fefce8', color:'#ca8a04', label:'Sendt' }, mottatt: { bg:'#eff6ff', color:'#2563eb', label:'Tilbud mottatt' }, valgt: { bg:'#f0fdf4', color:'#16a34a', label:'Valgt' } }
+                        const UF_STATUS = { utkast: { bg:'#f8fafc', color:'#64748b', label:'Utkast' }, sendt: { bg:'#fefce8', color:'#ca8a04', label:'Sendt' }, mottatt: { bg:'#eff6ff', color:'#2563eb', label:'Tilbud mottatt' }, valgt: { bg:'#f0fdf4', color:'#16a34a', label:'Valgt' }, avvist: { bg:'#fef2f2', color:'#dc2626', label:'Avvist' } }
                         const st = UF_STATUS[uf.status] || UF_STATUS.utkast
                         const updateUF = (field, value) => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, [field]: value } : u) } : kl))
                         const removeUF = () => updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: (kl.ue_foresporsler||[]).filter(u => u.id !== uf.id) } : kl))
 
                         return (
                           <div key={uf.id} style={{ background:'white', borderRadius:'8px', padding:'10px', border: uf.status === 'mottatt' ? '2px solid #bfdbfe' : '1px solid #fde68a', marginBottom:'6px' }}>
-                            {/* Rad 1: Navn + status */}
-                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
-                              <input value={uf.navn||''} onChange={e => updateUF('navn', e.target.value)} placeholder="UE-firma" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px', fontWeight:'600' }} />
+                            {/* Rad 1: Navn + status + UE-register autocomplete */}
+                            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px', position:'relative' }}>
+                              <div style={{ flex:1, position:'relative' }}>
+                                <input value={uf.navn||''} onChange={async (e) => {
+                                  updateUF('navn', e.target.value)
+                                  // Autocomplete from UE register
+                                  if (e.target.value.length >= 2) {
+                                    try {
+                                      const { data } = await supabase.from('ue_register').select('*').ilike('navn', `%${e.target.value}%`).limit(5)
+                                      updateUF('_suggestions', data || [])
+                                    } catch(err) { updateUF('_suggestions', []) }
+                                  } else { updateUF('_suggestions', []) }
+                                }} onBlur={() => setTimeout(() => updateUF('_suggestions', []), 200)} placeholder="UE-firma (søk i register)" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', fontWeight:'600' }} />
+                                {(uf._suggestions||[]).length > 0 && (
+                                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', boxShadow:'0 4px 12px rgba(0,0,0,0.1)', zIndex:10, marginTop:'2px' }}>
+                                    {uf._suggestions.map(s => (
+                                      <button key={s.id} onMouseDown={() => { updateUF('navn', s.navn); updateUF('email', s.email||''); updateUF('telefon', s.telefon||''); updateUF('_suggestions', []) }}
+                                        style={{ display:'block', width:'100%', padding:'6px 10px', border:'none', background:'white', cursor:'pointer', textAlign:'left', fontSize:'12px' }}
+                                        onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
+                                        onMouseLeave={e => e.currentTarget.style.background='white'}>
+                                        <span style={{ fontWeight:'600' }}>{s.navn}</span>
+                                        <span style={{ color:'#94a3b8', marginLeft:'6px' }}>{s.email} · {s.fag||''}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <span style={{ background:st.bg, color:st.color, padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>{st.label}</span>
                               <button onClick={removeUF} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', flexShrink:0 }}>×</button>
                             </div>
@@ -19139,12 +19232,19 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   // Single combined update to avoid race condition
                                   updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, status: 'sendt', foresporsel_id: foresp.id, nr } : u) } : kl))
                                   setShowUESuccess({ navn: uf.navn, nr })
+                                  // Auto-save to UE register
+                                  if (uf.navn && uf.email) {
+                                    try { await supabase.from('ue_register').upsert({ user_id: user?.id, navn: uf.navn, email: uf.email, telefon: uf.telefon || '', fag: fag.name }, { onConflict: 'user_id,email' }) } catch(e) {}
+                                  }
                                 } catch(e) { alert('Feil: ' + e.message) }
                               }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', width:'100%' }}>📧 Send forespørsel til {uf.navn || 'UE'}</button>
                             )}
                             {uf.status === 'sendt' && (
                               <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginTop:'4px' }}>
-                                <div style={{ fontSize:'12px', color:'#ca8a04', textAlign:'center', padding:'4px' }}>⏳ Venter på svar fra {uf.navn} {uf.nr ? `(ref: ${uf.nr})` : ''}</div>
+                                <div style={{ fontSize:'12px', color:'#ca8a04', textAlign:'center', padding:'4px' }}>
+                                  ⏳ Venter på svar fra {uf.navn} {uf.nr ? `(ref: ${uf.nr})` : ''}
+                                  <span style={{ display:'block', fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>📅 Svarfrist: 7 dager fra utsendelse</span>
+                                </div>
                                 <div style={{ display:'flex', gap:'6px' }}>
                                   <button onClick={() => sendPaaminnelse(kalk.id, uf)} style={{ flex:1, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'6px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📩 Send påminnelse</button>
                                   <button onClick={() => {
@@ -19162,7 +19262,25 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             {/* Mottatt tilbud */}
                             {uf.status === 'mottatt' && uf.svar_pris && (
                               <div style={{ marginTop:'6px', background:'#eff6ff', borderRadius:'8px', padding:'10px', border:'1px solid #bfdbfe' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', marginBottom:'6px' }}>📨 TILBUD FRA {(uf.navn||'').toUpperCase()}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb' }}>📨 TILBUD FRA {(uf.navn||'').toUpperCase()}</div>
+                                  <button onClick={() => {
+                                    const fag = getFaggruppe(kalk.fag)
+                                    const posterRows = (uf.svar_poster||[]).filter(p => p.pris > 0).map(p => `<tr><td style="padding:6px 12px;font-size:13px;border-bottom:1px solid #e2e8f0">${p.name}</td><td style="padding:6px 12px;text-align:right;font-size:13px;font-weight:600;border-bottom:1px solid #e2e8f0">${Math.round(p.pris).toLocaleString('nb-NO')} kr</td></tr>`).join('')
+                                    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>UE-tilbud ' + (uf.navn||'') + '</title>' +
+                                      '<style>@media print{body{margin:0}@page{margin:20mm}} body{font-family:system-ui,sans-serif;max-width:700px;margin:40px auto;padding:0 20px;color:#0f172a} .hdr{border-bottom:2px solid #2563eb;padding-bottom:16px;margin-bottom:20px} table{width:100%;border-collapse:collapse;margin:16px 0} .total td{border-top:3px solid #0f172a;font-weight:800;font-size:16px;padding:10px 12px} .info{background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px} .no-print{} @media print{.no-print{display:none!important}}</style></head><body>' +
+                                      '<div class="no-print" style="background:#2563eb;color:white;padding:10px 20px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center"><span>UE-tilbud</span><button onclick="window.print()" style="background:white;color:#2563eb;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">🖨️ Skriv ut / PDF</button></div>' +
+                                      '<div class="hdr"><h1 style="margin:0 0 4px;font-size:20px">UE-tilbud fra ' + (uf.navn||'') + '</h1><p style="color:#64748b;margin:0;font-size:13px">' + (uf.email||'') + (uf.telefon ? ' · ' + uf.telefon : '') + '</p></div>' +
+                                      '<div class="info"><strong>Prosjekt:</strong> ' + k.title + '<br><strong>Adresse:</strong> ' + (k.customer_address||'—') + '<br><strong>Fag:</strong> ' + fag.name + '</div>' +
+                                      '<table><thead><tr><th style="text-align:left;padding:6px 12px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Post</th><th style="text-align:right;padding:6px 12px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0">Pris</th></tr></thead><tbody>' + posterRows +
+                                      '<tr class="total"><td>Totalpris</td><td style="text-align:right">' + Math.round(uf.svar_pris).toLocaleString('nb-NO') + ' kr</td></tr></tbody></table>' +
+                                      (uf.svar_tidsplan ? '<div class="info"><strong>📅 Tidsplan:</strong> ' + uf.svar_tidsplan + '</div>' : '') +
+                                      (uf.svar_forbehold ? '<div class="info" style="border:1px solid #fde68a;background:#fefce8"><strong>⚠️ Forbehold:</strong> ' + uf.svar_forbehold + '</div>' : '') +
+                                      (uf.svar_vedlegg && uf.svar_vedlegg.length > 0 ? '<div class="info"><strong>📎 Vedlegg fra UE:</strong><br>' + uf.svar_vedlegg.map(v => '<a href="' + v.url + '">' + v.name + '</a>').join('<br>') + '</div>' : '') +
+                                      '<p style="color:#94a3b8;font-size:11px;margin-top:30px;border-top:1px solid #e2e8f0;padding-top:12px">UE-tilbud mottatt via En Plattform</p></body></html>'
+                                    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
+                                  }} title="Skriv ut / PDF" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', padding:'2px 8px', fontSize:'10px', cursor:'pointer', color:'#2563eb', fontWeight:'600' }}>🖨️</button>
+                                </div>
                                 {(uf.svar_poster||[]).filter(p => p.pris > 0).length > 0 && (
                                   <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'6px', fontSize:'12px' }}>
                                     {uf.svar_poster.filter(p => p.pris > 0).map((p,i) => (
@@ -19180,6 +19298,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   <span style={{ fontSize:'12px', color:'#64748b' }}>%</span>
                                   <span style={{ fontSize:'12px', color:'#0f172a', fontWeight:'600', marginLeft:'auto' }}>Ut: {fmt(uf.svar_pris * (1 + (parseFloat(uf.paaslag ?? 15) / 100)))}</span>
                                 </div>
+                                <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
                                 <button onClick={() => {
                                   const paaslag = parseFloat(uf.paaslag ?? 15)
                                   const svarPoster = uf.svar_poster || []
@@ -19242,17 +19361,30 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   } else {
                                     applyUEPrices(false)
                                   }
-                                }} style={{ width:'100%', background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'8px', fontSize:'13px', fontWeight:'700', cursor:'pointer', marginTop:'6px' }}>
-                                  📥 Bruk dette tilbudet i kalkylen — {fmt(uf.svar_pris * (1 + (parseFloat(uf.paaslag ?? 15) / 100)))} ut til kunde
+                                }}
+                                  style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'8px', fontSize:'13px', fontWeight:'700', cursor:'pointer' }}>
+                                  📥 Bruk i kalkyle — {fmt(uf.svar_pris * (1 + (parseFloat(uf.paaslag ?? 15) / 100)))}
                                 </button>
+                                <button onClick={() => {
+                                  updateUF('status', 'avvist')
+                                  if (uf.foresporsel_id) supabase.from('ue_foresporsler').update({ status: 'avvist' }).eq('id', uf.foresporsel_id)
+                                }} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', padding:'8px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
+                                  ✕ Avvis
+                                </button>
+                                </div>
                               </div>
                             )}
+                            {uf.status === 'avvist' && <div style={{ marginTop:'4px', fontSize:'12px', color:'#dc2626', fontWeight:'600', textAlign:'center' }}>✕ Avvist</div>}
                             {uf.status === 'valgt' && <div style={{ marginTop:'4px', fontSize:'12px', color:'#16a34a', fontWeight:'600', textAlign:'center' }}>✅ Valgt — brukes i kalkylen</div>}
                           </div>
                         )
                       })}
                       {(kalk.ue_foresporsler||[]).length === 0 && <p style={{ fontSize:'12px', color:'#94a3b8', margin:'4px 0 0', textAlign:'center' }}>Klikk "+ Ny forespørsel" for å innhente UE-tilbud</p>}
+                        </div>
+                      )}
                     </div>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
