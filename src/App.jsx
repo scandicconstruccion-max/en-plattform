@@ -19690,7 +19690,7 @@ function AppContent() {
             color: '#64748b', lineHeight: 1 }}>
           {collapsed ? '›' : '‹'}
         </button>
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '8px', paddingTop: '24px' }}>
           {navGroups.map((group, gi) => (
             <div key={gi} style={{ marginBottom: '4px' }}>
               {!collapsed && (
