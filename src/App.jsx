@@ -900,7 +900,7 @@ function ProsjektfilerPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
   const [uploadFiles, setUploadFiles] = useState([])
-  const [expandedCats, setExpandedCats] = useState({ tegninger: true })
+  const [expandedCats, setExpandedCats] = useState({})
   const [showArchive, setShowArchive] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null) // file to confirm delete
   const fileInputRef = React.useRef()
@@ -1139,7 +1139,7 @@ function ProsjektfilerPage() {
                     <div style={{ fontSize: '13px', fontWeight: isActive ? '600' : '500', color: isActive ? cat.color : '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.name}</div>
                     <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : `${catCount} fil${catCount !== 1 ? 'er' : ''}`}</div>
                   </div>
-                  {hasSubs && <span style={{ fontSize: '11px', color: '#94a3b8' }}>{isExpanded ? '▾' : '▸'}</span>}
+                  {hasSubs && <span style={{ fontSize: '16px', color: '#64748b', fontWeight: '700' }}>{isExpanded ? '▾' : '▸'}</span>}
                 </div>
                 {hasSubs && isExpanded && cat.sub.map(sub => {
                   const subCount = countForSub(cat.id, sub)
@@ -1374,11 +1374,22 @@ function ProsjektfilerPage() {
 }
 
 function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
+  const [showPreview, setShowPreview] = useState(false)
   const revBg    = isArchived ? '#fef2f2' : '#f0fdf4'
   const revColor = isArchived ? '#dc2626' : '#059669'
   const revBorder= isArchived ? '#fecaca' : '#bbf7d0'
+  const ext = file.name?.split('.').pop()?.toLowerCase() || ''
+  const isImage = ['jpg','jpeg','png','gif','webp','svg'].includes(ext)
+  const isPdf = ext === 'pdf'
+  const canPreview = isImage || isPdf
+
+  const getPublicUrl = () => {
+    const { data } = supabase.storage.from('plattform-files').getPublicUrl(file.file_url)
+    return data?.publicUrl
+  }
 
   return (
+    <>
     <div style={{ background: isArchived ? '#fef9f9' : 'white', borderRadius: '12px',
       border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: '12px 16px',
       display: 'flex', alignItems: 'center', gap: '12px', opacity: isArchived ? 0.85 : 1 }}
@@ -1419,12 +1430,34 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
             <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
           </label>
         )}
+        {canPreview && <button onClick={() => setShowPreview(true)} title="Forhåndsvisning"
+          style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
         <button onClick={() => onDownload(file)} title="Last ned"
           style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
         <button onClick={() => onDelete(file)} title="Slett"
           style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
       </div>
     </div>
+    {/* Forhåndsvisning modal */}
+    {showPreview && (
+      <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)' }} onClick={() => setShowPreview(false)} />
+        <div style={{ position:'relative', background:'white', borderRadius:'16px', maxWidth:'90vw', maxHeight:'90vh', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', display:'flex', flexDirection:'column' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+            <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{file.name}</span>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={() => onDownload(file)} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', cursor:'pointer' }}>⬇️ Last ned</button>
+              <button onClick={() => setShowPreview(false)} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+          </div>
+          <div style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', background:'#f8fafc', minHeight:'400px' }}>
+            {isImage && <img src={getPublicUrl()} alt={file.name} style={{ maxWidth:'100%', maxHeight:'80vh', objectFit:'contain' }} />}
+            {isPdf && <iframe src={getPublicUrl()} style={{ width:'800px', height:'80vh', border:'none' }} title={file.name} />}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
@@ -1531,6 +1564,8 @@ function SjekklistePage({ onNavigateDetail }) {
   const [editTemplate, setEditTemplate] = useState(null)
   const [newForm, setNewForm] = useState({ project_id: '', template_id: '', title: '' })
   const [saving, setSaving] = useState(false)
+  const [expandedMalKat, setExpandedMalKat] = useState({})
+  const [previewTemplate, setPreviewTemplate] = useState(null)
   const { user } = useAuth()
   const f = { fontFamily: 'system-ui, sans-serif' }
   const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
@@ -1647,7 +1682,7 @@ function SjekklistePage({ onNavigateDetail }) {
   const groupedTemplates = Object.entries(CATEGORY_LABELS).map(([cat, { label, emoji }]) => ({
     cat, label, emoji,
     templates: templates.filter(t => t.category === cat)
-  })).filter(g => g.templates.length > 0)
+  })).filter(g => g.templates.length > 0).sort((a, b) => a.label.localeCompare(b.label, 'nb'))
 
   const uncategorized = templates.filter(t => !CATEGORY_LABELS[t.category])
 
@@ -1744,13 +1779,15 @@ function SjekklistePage({ onNavigateDetail }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
                 {groupedTemplates.map(group => (
                   <div key={group.cat}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                    <button onClick={() => setExpandedMalKat(p => ({ ...p, [group.cat]: !p[group.cat] }))}
+                      style={{ display: 'flex', alignItems: 'center', gap: '10px', width:'100%', padding:'10px 14px', border:'1px solid #f1f5f9', borderRadius:'12px', background: expandedMalKat[group.cat] ? '#f0fdf4' : '#f8fafc', cursor:'pointer', textAlign:'left', marginBottom:'6px' }}>
+                      <span style={{ fontSize: '18px', color:'#059669' }}>{expandedMalKat[group.cat] ? '▼' : '▶'}</span>
                       <span style={{ fontSize: '20px' }}>{group.emoji}</span>
-                      <span style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>{group.label}</span>
-                      <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
+                      <span style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a', flex:1 }}>{group.label}</span>
                       <span style={{ fontSize: '12px', color: '#94a3b8' }}>{group.templates.length} maler</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                    </button>
+                    {expandedMalKat[group.cat] && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
                       {group.templates.map(tmpl => (
                         <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -1763,13 +1800,15 @@ function SjekklistePage({ onNavigateDetail }) {
                             {tmpl.items?.length || tmpl.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0} kontrollpunkter
                           </div>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => { setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
+                            <button onClick={() => { setNewForm(f => ({ ...f, template_id: tmpl.id })); setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
+                            <button onClick={() => setPreviewTemplate(tmpl)} title="Forhåndsvisning" style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>👁️</button>
                             <button onClick={() => { setEditTemplate(tmpl); setShowNewTemplate(true) }} style={{ background: '#f8fafc', color: '#475569', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', cursor: 'pointer' }}>✏️</button>
                             <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
                           </div>
                         </div>
                       ))}
                     </div>
+                    )}
                   </div>
                 ))}
                 {uncategorized.length > 0 && (
@@ -1844,6 +1883,50 @@ function SjekklistePage({ onNavigateDetail }) {
       )}
 
       {/* New/Edit Template Modal */}
+      {/* Forhåndsvisning av mal */}
+      {previewTemplate && (
+        <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setPreviewTemplate(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'550px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <h3 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>👁️ {previewTemplate.name}</h3>
+                {previewTemplate.description && <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{previewTemplate.description}</p>}
+              </div>
+              <button onClick={() => setPreviewTemplate(null)} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
+              {(previewTemplate.sections || []).map((sec, si) => (
+                <div key={si} style={{ marginBottom:'16px' }}>
+                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'8px', padding:'6px 10px', background:'#f8fafc', borderRadius:'8px' }}>{sec.title}</div>
+                  {(sec.items || []).map((item, ii) => (
+                    <div key={ii} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 10px', borderBottom:'1px solid #f8fafc' }}>
+                      <span style={{ width:'18px', height:'18px', borderRadius:'4px', border:'2px solid #e2e8f0', flexShrink:0 }} />
+                      <span style={{ fontSize:'13px', color:'#374151' }}>{typeof item === 'string' ? item : item.title || item}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {(!previewTemplate.sections || previewTemplate.sections.length === 0) && previewTemplate.items && (
+                <div>
+                  {previewTemplate.items.map((item, ii) => (
+                    <div key={ii} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 10px', borderBottom:'1px solid #f8fafc' }}>
+                      <span style={{ width:'18px', height:'18px', borderRadius:'4px', border:'2px solid #e2e8f0', flexShrink:0 }} />
+                      <span style={{ fontSize:'13px', color:'#374151' }}>{item.title || item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', justifyContent:'flex-end', flexShrink:0 }}>
+              <button onClick={() => { setNewForm(f => ({ ...f, template_id: previewTemplate.id })); setShowNew(true); setPreviewTemplate(null) }}
+                style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Bruk denne malen</button>
+              <button onClick={() => setPreviewTemplate(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Lukk</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showNewTemplate && (
         <TemplateEditorModal
           template={editTemplate}
