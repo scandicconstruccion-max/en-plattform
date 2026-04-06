@@ -5019,7 +5019,6 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
           {/* STEP 2 - Chapters */}
           {step === 2 && (
             <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-              <datalist id="enhet-options-tilbud">{['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}/>)}</datalist>
               {chapters.map((ch, ci) => {
                 const { sum, total } = calcChapter(ch)
                 return (
@@ -5049,7 +5048,16 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                               <tr key={p.id}>
                                 <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv arbeid/materiale" style={{ ...qInp, minWidth:'180px' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" list="enhet-options-tilbud" style={{ ...qInp, width:'60px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}>
+                                  <select value={['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk'].includes(p.unit) ? p.unit : '_custom'} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...qInp, width:'75px', appearance:'auto' }}>
+                                    <option value="">Velg</option>
+                                    {['m²','m³','LM','m','STK','stk','RS','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
+                                    <option value="_custom">Annet…</option>
+                                  </select>
+                                  {!['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk',''].includes(p.unit) && (
+                                    <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...qInp, width:'75px', marginTop:'4px' }} />
+                                  )}
+                                </td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(lineSum)}</td>
@@ -7458,7 +7466,6 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
           )}
           {step===2 && (
             <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
-              <datalist id="enhet-options-ordre">{['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}/>)}</datalist>
               {chapters.map((ch,ci) => {
                 const { sum, total } = calcOrderChapter(ch)
                 return (
@@ -7479,7 +7486,16 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                             return <tr key={p.id}>
                               <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" list="enhet-options-ordre" style={{ ...oInp, width:'55px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}>
+                                  <select value={['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk'].includes(p.unit) ? p.unit : '_custom'} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...oInp, width:'75px', appearance:'auto' }}>
+                                    <option value="">Velg</option>
+                                    {['m²','m³','LM','m','STK','stk','RS','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
+                                    <option value="_custom">Annet…</option>
+                                  </select>
+                                  {!['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke','stk',''].includes(p.unit) && (
+                                    <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...oInp, width:'75px', marginTop:'4px' }} />
+                                  )}
+                              </td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtO(ls)}</td>
