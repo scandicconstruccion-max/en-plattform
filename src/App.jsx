@@ -16076,7 +16076,18 @@ function KalkulasjonPage({ onNavigate }) {
     </div>
   )
 
-  if (viewKalk) return <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} />
+  if (viewKalk) return <>
+    {showEditor && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={async () => {
+      setShowEditor(false); setEditKalk(null); await load()
+      if (viewKalk) {
+        try {
+          const { data } = await supabase.from('calculations').select('*').eq('id', viewKalk.id).single()
+          if (data) setViewKalk(data)
+        } catch(e) {}
+      }
+    }} />}
+    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} />
+  </>
 
   if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
 
