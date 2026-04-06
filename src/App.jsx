@@ -4966,8 +4966,49 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={qInp} /></div>
               <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={qInp} /></div>
               <div>{lbl('Leveringstid')}<input value={form.delivery_time} onChange={e=>set('delivery_time',e.target.value)} placeholder="F.eks. 3–4 uker" style={qInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={qInp} /></div>
-              <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...qInp, resize:'none' }} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" max="100" style={qInp} /></div>
+              <div style={{ gridColumn:'1/-1' }}>
+                {lbl('Innledende tekst')}
+                {(() => {
+                  const [templates, setTemplates] = React.useState([])
+                  const [showSaveMal, setShowSaveMal] = React.useState(false)
+                  const [malName, setMalName] = React.useState('')
+                  React.useEffect(() => {
+                    supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name').then(({data}) => setTemplates(data||[]))
+                  }, [])
+                  const saveMal = async () => {
+                    if (!malName.trim() || !form.intro_text.trim()) return
+                    await supabase.from('text_templates').insert({ name: malName.trim(), type: 'tilbud_intro', content: form.intro_text, created_by: user?.id })
+                    const {data} = await supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name')
+                    setTemplates(data||[])
+                    setMalName(''); setShowSaveMal(false)
+                  }
+                  const deleteMal = async (id) => {
+                    await supabase.from('text_templates').delete().eq('id', id)
+                    setTemplates(t => t.filter(x => x.id !== id))
+                  }
+                  return <>
+                    <div style={{ display:'flex', gap:'6px', marginBottom:'6px', flexWrap:'wrap' }}>
+                      {templates.map(t => (
+                        <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer' }}>
+                          <span onClick={() => set('intro_text', t.content)} style={{ color:'#059669', fontWeight:'600' }}>{t.name}</span>
+                          <button onClick={() => deleteMal(t.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px', padding:'0 2px', lineHeight:1 }}>×</button>
+                        </span>
+                      ))}
+                      {!showSaveMal ? (
+                        <button onClick={() => setShowSaveMal(true)} style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer', color:'#94a3b8' }}>💾 Lagre som mal</button>
+                      ) : (
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
+                          <input value={malName} onChange={e=>setMalName(e.target.value)} placeholder="Malnavn..." style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', width:'120px', outline:'none' }} onKeyDown={e=>e.key==='Enter'&&saveMal()} />
+                          <button onClick={saveMal} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', cursor:'pointer', fontWeight:'600' }}>Lagre</button>
+                          <button onClick={() => setShowSaveMal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
+                        </span>
+                      )}
+                    </div>
+                    <textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...qInp, resize:'none' }} />
+                  </>
+                })()}
+              </div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Avsluttende tekst')}<textarea value={form.outro_text} onChange={e=>set('outro_text',e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} /></div>
             </div>
           )}
@@ -4975,6 +5016,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
           {/* STEP 2 - Chapters */}
           {step === 2 && (
             <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+              <datalist id="enhet-options-tilbud">{['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}/>)}</datalist>
               {chapters.map((ch, ci) => {
                 const { sum, total } = calcChapter(ch)
                 return (
@@ -4983,7 +5025,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                     <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
                       <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
                       <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px' }} title="Påslag %" />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px', color: ch.markup ? '#0f172a' : '#94a3b8' }} title="Påslag %" />
                       <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
                       {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
                     </div>
@@ -5004,7 +5046,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                               <tr key={p.id}>
                                 <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv arbeid/materiale" style={{ ...qInp, minWidth:'180px' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...qInp, width:'60px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" list="enhet-options-tilbud" style={{ ...qInp, width:'60px' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(lineSum)}</td>
@@ -5208,7 +5250,7 @@ function GodkjenningsPage() {
           title: cfg.notifTitle(record),
           message: `Signert av ${signedName.trim()}${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
           type: 'success',
-          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
+          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module === 'order' ? 'ordre' : tokenData.module === 'change_order' ? 'endringsmelding' : tokenData.module,
           link_id: tokenData.record_id,
         })
       }
@@ -5232,7 +5274,7 @@ function GodkjenningsPage() {
           title: cfg.notifTitleReject(record),
           message: rejectComment.trim() || `Avslått av mottaker${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
           type: 'warning',
-          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
+          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module === 'order' ? 'ordre' : tokenData.module === 'change_order' ? 'endringsmelding' : tokenData.module,
           link_id: tokenData.record_id,
         })
       }
@@ -6494,7 +6536,10 @@ function EndringsmeldingPage() {
   useEffect(() => { load() }, [])
 
   const filtered = endringer.filter(em => {
-    if (statusFilter !== 'all' && em.status !== statusFilter) return false
+    if (statusFilter === '_godkjent') {
+      // "Godkjent beløp" filter: show Godkjent + Fakturert
+      if (em.status !== 'Godkjent' && em.status !== 'Fakturert') return false
+    } else if (statusFilter !== 'all' && em.status !== statusFilter) return false
     if (projectFilter !== 'all' && em.project_id !== projectFilter) return false
     if (search && !em.title?.toLowerCase().includes(search.toLowerCase()) && !em.em_number?.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -6691,9 +6736,14 @@ function EndringsmeldingPage() {
     )
   }
 
+  const [sendingEmId, setSendingEmId] = useState(null)
+  const [sentToast, setSentToast] = useState(false)
+
   // ── Send til kunde ─────────────────────────────────────────────────────────
   const sendToCustomer = async (em) => {
     if (!em.customer_email) return alert('Legg til kundens e-post først')
+    if (sendingEmId) return // prevent double-click
+    setSendingEmId(em.id)
     try {
       const proj = projects.find(p => p.id === em.project_id)
 
@@ -6739,8 +6789,10 @@ function EndringsmeldingPage() {
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
       await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }).eq('id', em.id)
+      setSentToast(true); setTimeout(() => setSentToast(false), 2500)
       load()
     } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
+    finally { setSendingEmId(null) }
   }
 
   // ── Detail View ────────────────────────────────────────────────────────────
@@ -6835,14 +6887,20 @@ function EndringsmeldingPage() {
       {/* Statistikk */}
       <div style={{ padding:'16px 32px', display:'flex', gap:'12px' }}>
         {[
-          { label:'Totalt', value: endringer.length, color:'#0f172a' },
-          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b' },
-          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb' },
-          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a' },
-          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669' },
-          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706' },
+          { label:'Totalt', value: endringer.length, color:'#0f172a', filterVal:'all' },
+          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b', filterVal:'Utkast' },
+          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb', filterVal:'Sendt' },
+          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a', filterVal:'Godkjent' },
+          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669', filterVal:'_godkjent_beløp' },
+          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706', filterVal:'_klar_fakturering' },
         ].map((s,i) => (
-          <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'12px 16px', flex:1, textAlign:'center' }}>
+          <div key={i} onClick={() => {
+            if (s.filterVal === 'all') { setStatusFilter('all') }
+            else if (s.filterVal === '_godkjent_beløp') { setStatusFilter(statusFilter==='_godkjent'?'all':'_godkjent') }
+            else if (s.filterVal === '_klar_fakturering') { setStatusFilter(statusFilter==='Godkjent'?'all':'Godkjent') }
+            else { setStatusFilter(statusFilter===s.filterVal?'all':s.filterVal) }
+          }}
+          style={{ background: (statusFilter===s.filterVal || (s.filterVal==='_godkjent_beløp'&&statusFilter==='_godkjent') || (s.filterVal==='_klar_fakturering'&&statusFilter==='Godkjent'&&i===5)) ? '#f0fdf4' : 'white', borderRadius:'12px', border:`1px solid ${(statusFilter===s.filterVal || (s.filterVal==='_godkjent_beløp'&&statusFilter==='_godkjent') || (s.filterVal==='_klar_fakturering'&&statusFilter==='Godkjent'&&i===5)) ? '#bbf7d0' : '#f1f5f9'}`, padding:'12px 16px', flex:1, textAlign:'center', cursor:'pointer', transition:'all 0.15s' }}>
             <div style={{ fontSize:'18px', fontWeight:'800', color:s.color }}>{s.value}</div>
             <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.label}</div>
           </div>
@@ -6895,12 +6953,12 @@ function EndringsmeldingPage() {
                   </div>
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
                     {(em.status === 'Utkast' || em.status === 'Under forhandling') && (
-                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde"
-                        style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
+                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde" disabled={sendingEmId===em.id}
+                        style={{ background: sendingEmId===em.id ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor: sendingEmId===em.id ? 'not-allowed' : 'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>{sendingEmId===em.id ? '⏳ Sender...' : '📧 Send'}</button>
                     )}
                     {em.status === 'Sendt' && (
-                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
-                        style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
+                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse" disabled={sendingEmId===em.id}
+                        style={{ background: sendingEmId===em.id ? '#fef3c7' : '#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor: sendingEmId===em.id ? 'not-allowed' : 'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>{sendingEmId===em.id ? '⏳ Sender...' : '📩 Purr'}</button>
                     )}
                     <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
                     <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
@@ -6973,6 +7031,14 @@ function EndringsmeldingPage() {
       </div>
 
       {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
+
+      {/* Sendt-toast */}
+      {sentToast && (
+        <div style={{ position:'fixed', top:'24px', left:'50%', transform:'translateX(-50%)', background:'#059669', color:'white', padding:'14px 28px', borderRadius:'14px', fontSize:'15px', fontWeight:'700', boxShadow:'0 8px 32px rgba(5,150,105,0.35)', zIndex:200, display:'flex', alignItems:'center', gap:'10px', animation:'slideDown 0.3s ease' }}>
+          <span style={{ fontSize:'22px' }}>✅</span> Sendt til kunde!
+        </div>
+      )}
+      <style>{`@keyframes slideDown { from { opacity:0; transform:translateX(-50%) translateY(-20px) } to { opacity:1; transform:translateX(-50%) translateY(0) } }`}</style>
     </div>
   )
 }
@@ -7129,7 +7195,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     const { data } = await supabase.from('orders').select('*').eq('id',o.id).single()
     if (data) setO(data)
   }
-  useEffect(() => { loadChanges() }, [])
+  useEffect(() => { loadChanges(); refresh() }, [])
 
   const updateStatus = async (status) => {
     const updates = { status, updated_at: new Date().toISOString() }
@@ -7383,12 +7449,13 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Betingelser</div></div>
               <div>{lbl('Leveringsdato')}<input type="date" value={form.delivery_date} onChange={e=>set('delivery_date',e.target.value)} style={oInp} /></div>
               <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={oInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" style={oInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" style={oInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Ordrebekreftelse for..." style={{ ...oInp, resize:'none' }} /></div>
             </div>
           )}
           {step===2 && (
             <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+              <datalist id="enhet-options-ordre">{['m²','RS','LM','STK','m³','m','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}/>)}</datalist>
               {chapters.map((ch,ci) => {
                 const { sum, total } = calcOrderChapter(ch)
                 return (
@@ -7396,7 +7463,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                     <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
                       <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
                       <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px' }} title="Påslag %" />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px', color: ch.markup ? '#0f172a' : '#94a3b8' }} title="Påslag %" />
                       <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
                       {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
                     </div>
@@ -7409,7 +7476,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                             return <tr key={p.id}>
                               <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...oInp, width:'55px' }} /></td>
+                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" list="enhet-options-ordre" style={{ ...oInp, width:'55px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtO(ls)}</td>
@@ -7689,7 +7756,7 @@ function FakturaPage() {
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,client_name,client_email,client_contact,client_phone,address_street,address_postal,address_city,customer_id').order('name').then(r=>r.data||[])
       ])
       setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p)
     } catch(e) { console.error(e) }
@@ -8085,7 +8152,37 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   })
   const [lines, setLines] = useState(initial?.lines||[{ id:Date.now(), description:'', qty:1, unit:'stk', unitPrice:0, mvaRate:0.25 }])
   const [saving, setSaving] = useState(false)
-  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const set = (k,v) => {
+    setForm(f=>({...f,[k]:v}))
+    // Auto-fill customer info when project is selected
+    if (k === 'project_id' && v) {
+      const proj = projects.find(p => p.id === v)
+      if (proj) {
+        const addr = [proj.address_street, proj.address_postal, proj.address_city].filter(Boolean).join(', ')
+        setForm(f => ({
+          ...f,
+          project_id: v,
+          customer_name: f.customer_name || proj.client_name || '',
+          customer_email: f.customer_email || proj.client_email || '',
+          customer_address: f.customer_address || addr || '',
+        }))
+        // Also look up customer record for orgnr
+        if (proj.customer_id) {
+          supabase.from('customers').select('name,email,orgnr,address').eq('id', proj.customer_id).single().then(({ data: cust }) => {
+            if (cust) {
+              setForm(f => ({
+                ...f,
+                customer_name: f.customer_name || cust.name || '',
+                customer_email: f.customer_email || cust.email || '',
+                customer_orgnr: f.customer_orgnr || cust.orgnr || '',
+                customer_address: f.customer_address || cust.address || addr || '',
+              }))
+            }
+          })
+        }
+      }
+    }
+  }
 
   // Auto-calc due date when payment terms change
   const setPaymentTerms = (v) => { set('payment_terms',v); set('due_date', addDays(form.invoice_date, paymentDays(v))) }
@@ -8116,7 +8213,6 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
             <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
