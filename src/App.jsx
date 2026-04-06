@@ -18112,9 +18112,59 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     }, 800)
   }
 
-  // Deep update helper: update a field anywhere in the kalkyler tree
+  // Deep update helper with undo support
   const updateKalkyler = (newKalkyler) => {
+    setUndoStack(prev => [...prev.slice(-9), kalkyler]) // Keep last 10 states
     saveProject({ ...k, kalkyler: newKalkyler })
+  }
+
+  // Undo last change
+  const handleUndo = () => {
+    if (undoStack.length === 0) return
+    const prev = undoStack[undoStack.length - 1]
+    setUndoStack(s => s.slice(0, -1))
+    saveProject({ ...k, kalkyler: prev })
+  }
+
+  // Copy bygningsdel within same kalkyle
+  const copyBd = (kalId, bd) => {
+    const newBd = JSON.parse(JSON.stringify(bd))
+    newBd.id = Date.now() + Math.random() * 1000
+    newBd.name = bd.name + ' (kopi)'
+    // Reset all sub-IDs
+    newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a,i) => ({ ...a, id: Date.now() + i + 100 }))
+    newBd.materialer = (newBd.materialer||[]).map((m,i) => ({ ...m, id: Date.now() + i + 200 }))
+    newBd.underleverandorer = (newBd.underleverandorer||[]).map((u,i) => ({ ...u, id: Date.now() + i + 300 }))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), newBd] } : kl))
+  }
+
+  // Move bygningsdel to another kalkyle
+  const moveBdToKalkyle = (fromKalId, bdId, toKalId) => {
+    const fromKalk = kalkyler.find(kl => kl.id === fromKalId)
+    const bd = fromKalk?.bygningsdeler?.find(b => b.id === bdId)
+    if (!bd) return
+    updateKalkyler(kalkyler.map(kl => {
+      if (kl.id === fromKalId) return { ...kl, bygningsdeler: (kl.bygningsdeler||[]).filter(b => b.id !== bdId) }
+      if (kl.id === toKalId) return { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), bd] }
+      return kl
+    }))
+    setShowMoveBdModal(null)
+  }
+
+  // Save bygningsdel to user library
+  const saveBdToLibrary = async (kalId, bd) => {
+    const kl = kalkyler.find(k => k.id === kalId)
+    if (!kl || !bd) return
+    try {
+      await supabase.from('bruker_bibliotek').insert({
+        user_id: user?.id,
+        fag: kl.fag,
+        kategori: 'Egne maler',
+        name: bd.name,
+        data: { arbeidsarter: bd.arbeidsarter, materialer: bd.materialer, underleverandorer: bd.underleverandorer, enhet: bd.enhet },
+      })
+      setShowUESuccess({ navn: `"${bd.name}" lagret til ditt bibliotek`, nr: '' })
+    } catch(e) { console.error(e) }
   }
 
   // Bygningsdel field update (name, mengde, enhet)
@@ -18158,8 +18208,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   // Send tilbudsforespørsel til UE
   const [showUESuccess, setShowUESuccess] = useState(null)
   const [showUEExtraPoster, setShowUEExtraPoster] = useState(null)
-  const [showProduktSok, setShowProduktSok] = useState(null) // { kalkId, bdId, matId }
-  const [sidebarOpen, setSidebarOpen] = useState(true) // { kalkId, poster: [{name, pris}], paaslag, callback }
+  const [showProduktSok, setShowProduktSok] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [showMiniSummary, setShowMiniSummary] = useState(true)
+  const [undoStack, setUndoStack] = useState([])
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showMoveBdModal, setShowMoveBdModal] = useState(null) // { kalkId, bdId, bdName }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -18435,14 +18489,29 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+          <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
-            <button onClick={handleDuplicate} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Dupliser</button>
-            <button onClick={async () => {
-              const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
-              if (count > 0) { updateKalkyler(updated); setShowUESuccess({ navn: `${count} materialpriser oppdatert fra aktiv prisliste`, nr: '' }) }
-              else { setShowUESuccess({ navn: 'Ingen materialer med NOBB-nummer funnet, eller ingen aktiv prisliste', nr: '' }) }
-            }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔄 Oppdater priser</button>
+
+            {/* Mer-dropdown for sekundære handlinger */}
+            <div style={{ position:'relative' }}>
+              <button onClick={() => setShowMoreMenu(!showMoreMenu)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⋯ Mer ▾</button>
+              {showMoreMenu && (
+                <div style={{ position:'absolute', top:'100%', left:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'200px' }}>
+                  <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
+                  <button onClick={async () => {
+                    const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
+                    if (count > 0) { updateKalkyler(updated); setShowUESuccess({ navn: `${count} materialpriser oppdatert`, nr: '' }) }
+                    else { setShowUESuccess({ navn: 'Ingen NOBB-materialer funnet', nr: '' }) }
+                    setShowMoreMenu(false)
+                  }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
+                  <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
+                  <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
+                  <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
+                </div>
+              )}
+            </div>
 
             {/* Forhåndsvis PDF dropdown */}
             <div style={{ position:'relative' }}>
@@ -18472,6 +18541,40 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
         </div>
       </div>
+
+      {/* Mini-sammendrag — alltid synlig, toggle-bar */}
+      {showMiniSummary && (
+        <div style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0', padding:'10px 32px', display:'flex', alignItems:'center', gap:'24px', fontSize:'13px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ color:'#64748b' }}>Eks. mva:</span>
+            <span style={{ fontWeight:'800', color:'#0f172a', fontSize:'15px' }}>{fmt(totals.totMedFortjeneste)}</span>
+          </div>
+          <div style={{ width:'1px', height:'20px', background:'#e2e8f0' }} />
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ color:'#64748b' }}>Ink. mva:</span>
+            <span style={{ fontWeight:'700', color:'#16a34a' }}>{fmt(totals.totInkMva)}</span>
+          </div>
+          <div style={{ width:'1px', height:'20px', background:'#e2e8f0' }} />
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ color:'#64748b' }}>Margin:</span>
+            <span style={{ fontWeight:'700', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626' }}>{totals.fortjenesteProsent.toFixed(1)}%</span>
+          </div>
+          <div style={{ width:'1px', height:'20px', background:'#e2e8f0' }} />
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ color:'#64748b' }}>Selvkost:</span>
+            <span style={{ fontWeight:'600', color:'#475569' }}>{fmt(totals.totSelvkost)}</span>
+          </div>
+          <div style={{ width:'1px', height:'20px', background:'#e2e8f0' }} />
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ color:'#64748b' }}>Timer:</span>
+            <span style={{ fontWeight:'600', color:'#475569' }}>{totals.totTimer.toFixed(0)}t</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ color:'#64748b' }}>{kalkyler.length} fag</span>
+          </div>
+          {undoStack.length > 0 && <button onClick={handleUndo} style={{ marginLeft:'auto', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer', color:'#64748b' }}>↩️ Angre</button>}
+        </div>
+      )}
 
       <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
         {/* Main - per kalkyle with interactive bygningsdeler */}
@@ -18525,7 +18628,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
-                              <button onClick={(e) => { e.stopPropagation(); removeBd(kalk.id, bd.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
+                              <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
+                                <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>
+                                {kalkyler.length > 1 && <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })} title="Flytt til annen faggruppe" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>↗️</button>}
+                                <button onClick={() => saveBdToLibrary(kalk.id, bd)} title="Lagre til bibliotek" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>💾</button>
+                                <button onClick={() => removeBd(kalk.id, bd.id)} title="Slett" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
+                              </div>
                             </div>
                           </div>
 
@@ -19071,6 +19179,36 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </>}
         </div>
       </div>
+
+      {/* Flytt bygningsdel modal */}
+      {showMoveBdModal && (
+        <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setShowMoveBdModal(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'380px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'24px 24px 8px' }}>
+              <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700' }}>Flytt "{showMoveBdModal.bdName}"</h3>
+              <p style={{ margin:'0 0 14px', color:'#64748b', fontSize:'13px' }}>Velg faggruppe å flytte til:</p>
+            </div>
+            <div style={{ padding:'0 16px 16px' }}>
+              {kalkyler.filter(kl => kl.id !== showMoveBdModal.kalkId).map(kl => {
+                const fag = getFaggruppe(kl.fag)
+                return (
+                  <button key={kl.id} onClick={() => moveBdToKalkyle(showMoveBdModal.kalkId, showMoveBdModal.bdId, kl.id)}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', marginBottom:'4px', textAlign:'left', fontSize:'13px', fontWeight:'500' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
+                    onMouseLeave={e => e.currentTarget.style.background='white'}>
+                    <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
+                    <span>{kl.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ padding:'12px 16px', borderTop:'1px solid #f1f5f9' }}>
+              <button onClick={() => setShowMoveBdModal(null)} style={{ width:'100%', padding:'8px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'13px' }}>Avbryt</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bibliotek picker modal */}
       {showBibliotekPicker && (() => {
