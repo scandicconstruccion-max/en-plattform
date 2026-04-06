@@ -21025,11 +21025,13 @@ function EMViewPage() {
         if (action === 'godkjent' && data.status === 'Sendt') {
           const newLog = [...log, { action: 'Godkjent av kunde (digitalt)', at: new Date().toISOString() }]
           await supabase.from('endringsmeldinger').update({ status: 'Godkjent', activity_log: newLog, updated_at: new Date().toISOString() }).eq('id', data.id)
+          await supabase.from('notifications').insert({ user_id: data.created_by, title: `✅ Endringsmelding godkjent: ${data.title}`, message: `${data.em_number} — ${Math.round(data.amount||0).toLocaleString('nb-NO')} kr er godkjent av kunde`, type: 'success', link_page: 'endringsmelding' })
           setEm(prev => ({ ...prev, status: 'Godkjent' }))
           setResponded(true)
         } else if (action === 'avvist' && data.status === 'Sendt') {
           const newLog = [...log, { action: 'Avvist av kunde (digitalt)', at: new Date().toISOString() }]
           await supabase.from('endringsmeldinger').update({ status: 'Avvist', activity_log: newLog, updated_at: new Date().toISOString() }).eq('id', data.id)
+          await supabase.from('notifications').insert({ user_id: data.created_by, title: `❌ Endringsmelding avvist: ${data.title}`, message: `${data.em_number} ble avvist av kunde`, type: 'warning', link_page: 'endringsmelding' })
           setEm(prev => ({ ...prev, status: 'Avvist' }))
           setResponded(true)
         }
@@ -21043,8 +21045,18 @@ function EMViewPage() {
 
   const handleRespond = async (action) => {
     const log = [...(em.activity_log || []), { action: action === 'godkjent' ? 'Godkjent av kunde (digitalt)' : 'Avvist av kunde (digitalt)', at: new Date().toISOString() }]
-    await supabase.from('endringsmeldinger').update({ status: action === 'godkjent' ? 'Godkjent' : 'Avvist', activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
-    setEm(prev => ({ ...prev, status: action === 'godkjent' ? 'Godkjent' : 'Avvist' }))
+    const newStatus = action === 'godkjent' ? 'Godkjent' : 'Avvist'
+    await supabase.from('endringsmeldinger').update({ status: newStatus, activity_log: log, updated_at: new Date().toISOString() }).eq('id', em.id)
+    if (em.created_by) {
+      await supabase.from('notifications').insert({
+        user_id: em.created_by,
+        title: action === 'godkjent' ? `✅ Endringsmelding godkjent: ${em.title}` : `❌ Endringsmelding avvist: ${em.title}`,
+        message: `${em.em_number} — ${Math.round(em.amount||0).toLocaleString('nb-NO')} kr ble ${newStatus.toLowerCase()} av kunde`,
+        type: action === 'godkjent' ? 'success' : 'warning',
+        link_page: 'endringsmelding'
+      })
+    }
+    setEm(prev => ({ ...prev, status: newStatus }))
     setResponded(true)
   }
 
