@@ -17581,18 +17581,20 @@ function PrisbokPage({ onBack }) {
   }
 
   const searchPrisbok = async () => {
-    if (!search.trim()) {
-      if (aktivPrisliste) {
-        const { data } = await supabase.from('prisbok').select('*').eq('prisliste_id', aktivPrisliste.id).order('varenavn').limit(200)
-        setPrisbok([])
+    if (!search.trim()) { setPrisbok([]); return }
+    try {
+      let query = supabase.from('prisbok').select('*')
+      if (aktivPrisliste) query = query.eq('prisliste_id', aktivPrisliste.id)
+      else query = query.eq('user_id', user?.id)
+      const { data, error } = await query.or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
+      if (error) {
+        // Fallback without prisliste filter
+        const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
+        setPrisbok(fb || [])
+      } else {
+        setPrisbok(data || [])
       }
-      return
-    }
-    const query = supabase.from('prisbok').select('*')
-    if (aktivPrisliste) query.eq('prisliste_id', aktivPrisliste.id)
-    else query.eq('user_id', user?.id)
-    const { data } = await query.or(`varenummer.ilike.%${search}%,varenavn.ilike.%${search}%,kategori.ilike.%${search}%`).order('varenavn').limit(50)
-    setPrisbok(data || [])
+    } catch(e) { setPrisbok([]) }
   }
   useEffect(() => { if (search.trim().length >= 2) { const t = setTimeout(searchPrisbok, 300); return () => clearTimeout(t) } else { setPrisbok([]) } }, [search, aktivPrisliste])
 
@@ -19108,12 +19110,26 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             if (q.trim().length < 2) return
             setSearching(true)
             try {
-              const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+              // Try active prisliste first
+              let plId = null
+              try {
+                const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+                if (plData) plId = plData.id
+              } catch(e) { /* no active prisliste, search all */ }
+              
               let query = supabase.from('prisbok').select('*')
-              if (plData) query = query.eq('prisliste_id', plData.id)
-              const { data } = await query.or(`varenummer.ilike.%${q.trim()}%,varenavn.ilike.%${q.trim()}%,kategori.ilike.%${q.trim()}%`).order('varenavn').limit(30)
-              setRes(data || [])
-            } catch(e) { setRes([]) }
+              if (plId) query = query.eq('prisliste_id', plId)
+              else query = query.eq('user_id', user?.id)
+              const { data, error } = await query.or(`varenummer.ilike.%${q.trim()}%,varenavn.ilike.%${q.trim()}%,kategori.ilike.%${q.trim()}%`).order('varenavn').limit(30)
+              
+              if (error) {
+                // Fallback: search without prisliste filter
+                const { data: fallback } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${q.trim()}%,varenavn.ilike.%${q.trim()}%,kategori.ilike.%${q.trim()}%`).order('varenavn').limit(30)
+                setRes(fallback || [])
+              } else {
+                setRes(data || [])
+              }
+            } catch(e) { console.error('Søkefeil:', e); setRes([]) }
             setSearching(false)
           }
 
