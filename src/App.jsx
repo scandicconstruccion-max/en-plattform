@@ -4559,7 +4559,7 @@ function NotifBell({ onNavigate }) {
               {notifs.length === 0 ? (
                 <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>Ingen varsler ennå</div>
               ) : notifs.map(n => (
-                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page) }}
+                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page, n.link_id) }}
                   style={{ padding: '12px 18px', borderBottom: '1px solid #f8fafc', background: n.read ? 'white' : '#f0fdf4', cursor: 'pointer', display: 'flex', gap: '10px', alignItems: 'flex-start' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = n.read ? 'white' : '#f0fdf4'}>
                   <span style={{ fontSize: '18px', flexShrink: 0 }}>{typeIcon(n.type)}</span>
@@ -5305,6 +5305,13 @@ function GodkjenningsPage() {
       await supabase.from('approval_tokens').update({ status: 'approved', signed_name: signedName.trim(), approved_at: now }).eq('id', tokenData.id)
       await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.approvedStatus, accepted_at: now, updated_at: now }).eq('id', tokenData.record_id)
 
+      // Add activity log for orders
+      if (tokenData.module === 'order') {
+        const { data: orderRec } = await supabase.from('orders').select('activity_log').eq('id', tokenData.record_id).single()
+        const log = [...(orderRec?.activity_log || []), { action: `Bekreftet av ${signedName.trim()}`, by: tokenData.recipient_email || signedName.trim(), at: now }]
+        await supabase.from('orders').update({ activity_log: log, confirmed_at: now }).eq('id', tokenData.record_id)
+      }
+
       if (tokenData.created_by) {
         await supabase.from('notifications').insert({
           user_id: tokenData.created_by,
@@ -5328,6 +5335,13 @@ function GodkjenningsPage() {
 
       await supabase.from('approval_tokens').update({ status: 'rejected', signed_name: signedName.trim()||null, reject_comment: rejectComment.trim()||null, rejected_at: now }).eq('id', tokenData.id)
       await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.rejectedStatus, updated_at: now }).eq('id', tokenData.record_id)
+
+      // Add activity log for orders
+      if (tokenData.module === 'order') {
+        const { data: orderRec } = await supabase.from('orders').select('activity_log').eq('id', tokenData.record_id).single()
+        const log = [...(orderRec?.activity_log || []), { action: `Avslått av ${signedName.trim() || 'kunde'}${rejectComment.trim() ? ': ' + rejectComment.trim() : ''}`, by: tokenData.recipient_email || 'kunde', at: now }]
+        await supabase.from('orders').update({ activity_log: log }).eq('id', tokenData.record_id)
+      }
 
       if (tokenData.created_by) {
         await supabase.from('notifications').insert({
@@ -7100,7 +7114,7 @@ function EndringsmeldingPage() {
 function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
-function OrdrePage() {
+function OrdrePage({ openOrderId, onOpenHandled }) {
   const { user } = useAuth()
   const [orders, setOrders] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -7120,6 +7134,12 @@ function OrdrePage() {
         supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
       ])
       setOrders(o); setQuotes(q); setProjects(p)
+      // Auto-open order from notification
+      if (openOrderId) {
+        const target = o.find(x => x.id === openOrderId)
+        if (target) setSelected(target)
+        if (onOpenHandled) onOpenHandled()
+      }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -7231,6 +7251,7 @@ function OrdrePage() {
 
 function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const showAlert = useAlert()
   const [o, setO] = useState(init)
   const [changes, setChanges] = useState([])
   const [editing, setEditing] = useState(false)
@@ -7255,6 +7276,9 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status==='Bekreftet') updates.confirmed_at = new Date().toISOString()
     if (status==='Fullført') updates.completed_at = new Date().toISOString()
+    // Activity log
+    const log = [...(o.activity_log || []), { action: status === 'Fullført' ? 'Fullført og klar for fakturering' : `Status endret til ${status}`, by: user?.email, at: new Date().toISOString() }]
+    updates.activity_log = log
     await supabase.from('orders').update(updates).eq('id',o.id)
     setO(v=>({...v,...updates}))
   }
@@ -7265,8 +7289,57 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     onBack()
   }
 
-  const createInvoice = async () => {
-    alert('Gå til Faktura-modulen og velg "Fra ordre" for å opprette faktura.')
+  const handleCompleteAndInvoice = async () => {
+    // 1. Set status to Fullført
+    const updates = { status: 'Fullført', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    const log = [...(o.activity_log || []), { action: 'Fullført og sendt til fakturering', by: user?.email, at: new Date().toISOString() }]
+    updates.activity_log = log
+    await supabase.from('orders').update(updates).eq('id',o.id)
+    setO(v=>({...v,...updates}))
+
+    // 2. Auto-create invoice from order
+    try {
+      const invoiceLines = (o.chapters||[]).flatMap(ch =>
+        (ch.posts||[]).map(p => ({
+          id: Date.now() + Math.random(),
+          description: `${ch.title}: ${p.description || ''}`.trim(),
+          qty: parseFloat(p.qty)||1,
+          unit: p.unit||'stk',
+          unitPrice: ((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0)) * (1 + (parseFloat(ch.markup)||0)/100),
+          mvaRate: 0.25,
+        }))
+      )
+      // Add global markup as separate line if applicable
+      if (parseFloat(o.global_markup) > 0) {
+        const subTotal = invoiceLines.reduce((a,l) => a + (l.qty * l.unitPrice), 0)
+        invoiceLines.push({ id: Date.now()+999, description: `Generelt påslag ${o.global_markup}%`, qty: 1, unit: 'rs', unitPrice: subTotal * (parseFloat(o.global_markup)/100), mvaRate: 0.25 })
+      }
+      // Add change orders
+      const approvedChanges = changes.filter(c => c.status === 'Godkjent')
+      approvedChanges.forEach(c => {
+        invoiceLines.push({ id: Date.now()+Math.random(), description: `Endringsmelding: ${c.title}`, qty: 1, unit: 'rs', unitPrice: c.amount||0, mvaRate: 0.25 })
+      })
+
+      const invNum = `FKT-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
+      const { error } = await supabase.from('invoices').insert({
+        title: `Faktura – ${o.title}`,
+        invoice_number: invNum,
+        project_id: o.project_id || null,
+        order_id: o.id,
+        customer_name: o.customer_name, customer_email: o.customer_email,
+        customer_address: o.customer_address, customer_orgnr: o.customer_orgnr,
+        invoice_date: new Date().toISOString().split('T')[0],
+        payment_terms: o.payment_terms || '30 dager netto',
+        due_date: addDays(new Date().toISOString().split('T')[0], paymentDays(o.payment_terms)),
+        lines: invoiceLines,
+        status: 'Utkast',
+        created_by: user?.id,
+      })
+      if (error) throw error
+      showAlert({ message: 'Fullført og faktura opprettet!', subMessage: `Faktura ${invNum} er opprettet som utkast i faktura-modulen.`, emoji: '🧾' })
+    } catch(e) {
+      showAlert({ message: 'Ordre fullført', subMessage: `Status satt til Fullført, men faktura kunne ikke opprettes automatisk: ${e.message}`, type: 'warning', emoji: '⚠️' })
+    }
   }
 
   return (
@@ -7291,7 +7364,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send bekreftelse</button>}
-            {o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Opprett faktura</button>}
             <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄 Endringsmelding</button>
             <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>
@@ -7387,6 +7459,33 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               </div>
             </div>
           )}
+
+          {/* Aktivitetslogg */}
+          <div style={oCard}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
+            {(!o.activity_log || o.activity_log.length === 0) ? (
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert ennå</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                {(o.activity_log || []).slice().reverse().map((log, i) => {
+                  const isFirst = i === 0
+                  return (
+                    <div key={i} style={{ display:'flex', gap:'12px', alignItems:'flex-start', position:'relative', paddingLeft:'22px', paddingBottom:'14px' }}>
+                      <div style={{ position:'absolute', left:'6px', top:'0', bottom:'0', width:'2px', background: i === (o.activity_log.length - 1) ? 'transparent' : '#e2e8f0' }} />
+                      <div style={{ position:'absolute', left:'0', top:'3px', width:'14px', height:'14px', borderRadius:'50%', background: isFirst ? '#059669' : '#e2e8f0', border:'2px solid white', zIndex:1 }} />
+                      <div style={{ flex:1 }}>
+                        <span style={{ fontSize:'13px', fontWeight:'600', color: isFirst ? '#059669' : '#374151' }}>{log.action}</span>
+                        <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
+                          {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                          {log.by && <span> · {log.by}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -7394,12 +7493,16 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           <div style={oCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-              {Object.keys(ORDER_STATUS).map(s=>(
-                <button key={s} onClick={()=>updateStatus(s)} disabled={o.status===s}
-                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${o.status===s?ORDER_STATUS[s].border:'#e2e8f0'}`, background:o.status===s?ORDER_STATUS[s].bg:'white', color:o.status===s?ORDER_STATUS[s].color:'#475569', fontWeight:o.status===s?'700':'400', fontSize:'13px', cursor:o.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
-                  {o.status===s?'✓ ':''}{ORDER_STATUS[s].emoji} {s}
-                </button>
-              ))}
+              {Object.keys(ORDER_STATUS).map(s=>{
+                const isFullfort = s === 'Fullført'
+                const label = isFullfort ? '🧾 Fullført og fakturer' : `${ORDER_STATUS[s].emoji} ${s}`
+                return (
+                  <button key={s} onClick={() => isFullfort ? handleCompleteAndInvoice() : updateStatus(s)} disabled={o.status===s}
+                    style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${o.status===s?ORDER_STATUS[s].border:'#e2e8f0'}`, background: isFullfort && o.status!==s ? 'linear-gradient(135deg,#059669,#0891b2)' : o.status===s?ORDER_STATUS[s].bg:'white', color: isFullfort && o.status!==s ? 'white' : o.status===s?ORDER_STATUS[s].color:'#475569', fontWeight: o.status===s || isFullfort ?'700':'400', fontSize:'13px', cursor:o.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                    {o.status===s?'✓ ':''}{label}
+                  </button>
+                )
+              })}
             </div>
           </div>
           <div style={oCard}>
@@ -7672,7 +7775,7 @@ function SendOrdreModal({ order, user, onClose, onSent }) {
       })
       const d = await fnRes.json()
       if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
-      await supabase.from('orders').update({ status:'Sendt', updated_at:new Date().toISOString(), customer_email:email }).eq('id',order.id)
+      await supabase.from('orders').update({ status:'Sendt', updated_at:new Date().toISOString(), customer_email:email, activity_log: [...(order.activity_log||[]), { action:'Sendt til kunde', by:user?.email, at:new Date().toISOString(), to:email }] }).eq('id',order.id)
       setSent(true); setTimeout(()=>onSent(),1500)
     } catch(e) { alert('Kunne ikke sende: '+e.message) }
     finally { setSending(false) }
@@ -21332,9 +21435,11 @@ function AppContent() {
   }
 
   const [page, setPage] = React.useState(getPageFromHash)
+  const [pendingLinkId, setPendingLinkId] = React.useState(null)
 
-  const navigate = (p) => {
-    if (p === page) return
+  const navigate = (p, linkId) => {
+    setPendingLinkId(linkId || null)
+    if (p === page && !linkId) return
     window.history.pushState({ page: p }, '', '#' + p)
     setPage(p)
     setProjectId(null)
@@ -21478,7 +21583,7 @@ function AppContent() {
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
         {page === 'endringsmelding' && <EndringsmeldingPage />}
-        {page === 'ordre' && <OrdrePage />}
+        {page === 'ordre' && <OrdrePage openOrderId={pendingLinkId} onOpenHandled={() => setPendingLinkId(null)} />}
         {page === 'faktura' && <FakturaPage />}
         {page === 'ansatte' && <AnsattePage />}
         {page === 'timelister' && <TimelistePage />}
