@@ -18497,6 +18497,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             <div style={{ position:'relative' }}>
               <button onClick={() => setShowMoreMenu(!showMoreMenu)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⋯ Mer ▾</button>
               {showMoreMenu && (
+                <>
+                <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowMoreMenu(false)} />
                 <div style={{ position:'absolute', top:'100%', left:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'200px' }}>
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
                   <button onClick={async () => {
@@ -18511,6 +18513,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
                 </div>
+                </>
               )}
             </div>
 
@@ -18521,14 +18524,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 👁️ Forhåndsvis ▾
               </button>
               {showPreviewMenu && (
+                <>
+                <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowPreviewMenu(false)} />
                 <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'220px' }}>
                   {[['total','💰 Kun totalsum'],['faggruppe','👷 Per faggruppe'],['bygningsdel','🧱 Per bygningsdel'],['detaljert','📋 Detaljert']].map(([id, label]) => (
-                    <button key={id} onClick={() => openPreview(id)}
+                    <button key={id} onClick={() => { openPreview(id); setShowPreviewMenu(false) }}
                       style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a', marginBottom:'2px', fontWeight:'500' }}>
                       {label}
                     </button>
                   ))}
                 </div>
+                </>
               )}
             </div>
 
