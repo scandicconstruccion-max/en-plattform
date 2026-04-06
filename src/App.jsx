@@ -19968,15 +19968,22 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               else query = query.eq('user_id', user?.id)
 
               if (term.length >= 2 && katId) {
-                // Text + category: search text within category products
+                // Text + category: each word must match AND category keyword
                 const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
                 const kw = katObj?.keywords || []
-                // Build OR filter: match text AND at least one category keyword
                 const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                query = query.or(catFilters).ilike('varenavn', `%${term}%`)
+                query = query.or(catFilters)
+                const words = term.split(/\s+/).filter(w => w.length >= 2)
+                words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
               } else if (term.length >= 2) {
-                // Text only
-                query = query.or(`varenummer.ilike.%${term}%,varenavn.ilike.%${term}%`)
+                // Text only: split into words, each word must match in varenavn
+                // First check if it looks like a NOBB number (all digits)
+                const words = term.split(/\s+/).filter(w => w.length >= 1)
+                if (words.length === 1 && /^\d+$/.test(words[0])) {
+                  query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+                } else {
+                  words.filter(w => w.length >= 2).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+                }
               } else if (katId) {
                 // Category only - show first keyword results
                 const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
