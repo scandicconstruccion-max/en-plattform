@@ -834,56 +834,50 @@ function ProsjekterPage({ onNavigateDetail }) {
             {filtered.map(p => renderHierarchyNode(p, 0))}
           </div>
         ) : viewMode === 'grid' ? (
-          <div style={{ display:'flex', flexDirection:'column', gap:'24px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px', alignItems:'start' }}>
             {(() => {
-              // Group: show root projects, each followed by their children
               const roots = filtered.filter(p => !p.parent_id)
               const orphanSubs = filtered.filter(p => p.parent_id && !roots.find(r => r.id === p.parent_id))
               return [...roots, ...orphanSubs].map(rootP => {
                 const children = projects.filter(c => c.parent_id === rootP.id).sort((a,b) => (a.project_number||'').localeCompare(b.project_number||''))
                 return (
                   <div key={rootP.id}>
-                    {/* Hovedprosjekt-kort */}
+                    {/* Hovedprosjekt-kort — same size as before */}
                     <button onClick={() => onNavigateDetail(rootP.id)}
-                      style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', width:'100%', display:'flex', alignItems:'center', gap:'16px' }}
+                      style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', width:'100%' }}
                       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
                       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                      <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>🏗️</div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                          <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{rootP.name}</h3>
-                          {rootP.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{rootP.project_number}</span>}
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
+                        <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>🏗️</div>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                           <StatusBadge status={rootP.status} />
-                          {children.length > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'2px 8px', borderRadius:'999px', fontWeight:'600' }}>📂 {children.length} under</span>}
-                        </div>
-                        <div style={{ display:'flex', gap:'12px', fontSize:'13px', color:'#64748b' }}>
-                          {rootP.client_name && <span>👥 {rootP.client_name}</span>}
-                          {rootP.address && <span>📍 {rootP.address}</span>}
-                          {rootP.start_date && <span>📅 {new Date(rootP.start_date).toLocaleDateString('nb-NO')}</span>}
+                          {children.length > 0 && <span style={{ fontSize:'10px', color:'#059669', background:'#ecfdf5', padding:'2px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {children.length}</span>}
                         </div>
                       </div>
-                      <span style={{ color:'#cbd5e1', fontSize:'18px' }}>›</span>
+                      <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{rootP.name}</h3>
+                      {rootP.project_number && <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>#{rootP.project_number}</p>}
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
+                        {rootP.client_name && <span>👥 {rootP.client_name}</span>}
+                        {rootP.address && <span>📍 {rootP.address}</span>}
+                        {rootP.start_date && <span>📅 {new Date(rootP.start_date).toLocaleDateString('nb-NO')}</span>}
+                      </div>
                     </button>
-                    {/* Underprosjekter */}
+                    {/* Underprosjekter — smaller, under parent */}
                     {children.length > 0 && (
-                      <div style={{ marginLeft:'28px', marginTop:'4px', paddingLeft:'16px', borderLeft:'2px solid #d1fae5' }}>
-                        <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', padding:'6px 0 4px', textTransform:'uppercase', letterSpacing:'0.05em' }}>{rootP.name} → Underprosjekter</div>
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:'8px' }}>
-                          {children.map(sub => (
-                            <button key={sub.id} onClick={() => onNavigateDetail(sub.id)}
-                              style={{ background:'#faf5ff', borderRadius:'12px', border:'1px solid #e9d5ff', padding:'14px 16px', cursor:'pointer', textAlign:'left', borderLeft:'3px solid #7c3aed', transition:'box-shadow 0.15s' }}
-                              onMouseEnter={e => e.currentTarget.style.boxShadow='0 2px 8px rgba(124,58,237,0.1)'}
-                              onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px' }}>
-                                <div style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px' }}>📄</div>
-                                <StatusBadge status={sub.status} />
-                              </div>
-                              <h4 style={{ margin:'0 0 2px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{sub.name}</h4>
+                      <div style={{ marginTop:'6px', paddingLeft:'12px', borderLeft:'2px solid #d1fae5', display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {children.map(sub => (
+                          <button key={sub.id} onClick={() => onNavigateDetail(sub.id)}
+                            style={{ background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'10px 14px', cursor:'pointer', textAlign:'left', borderLeft:'3px solid #7c3aed', display:'flex', alignItems:'center', gap:'10px', width:'100%', transition:'box-shadow 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.boxShadow='0 2px 6px rgba(124,58,237,0.1)'}
+                            onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
+                            <div style={{ width:'28px', height:'28px', borderRadius:'7px', background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', flexShrink:0 }}>📄</div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{sub.name}</div>
                               <span style={{ fontSize:'11px', color:'#7c3aed' }}>#{sub.project_number}</span>
-                              {sub.client_name && sub.client_name !== rootP.client_name && <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>👤 {sub.client_name}</div>}
-                            </button>
-                          ))}
-                        </div>
+                            </div>
+                            <StatusBadge status={sub.status} />
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
