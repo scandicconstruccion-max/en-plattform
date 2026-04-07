@@ -658,6 +658,10 @@ function ProsjekterPage({ onNavigateDetail }) {
   const rootProjects = React.useMemo(() => projects.filter(p => !p.parent_id), [projects])
   const getChildren = (parentId) => projects.filter(p => p.parent_id === parentId)
   const hasChildren = (parentId) => projects.some(p => p.parent_id === parentId)
+  const countAllDescendants = (parentId) => {
+    const direct = projects.filter(p => p.parent_id === parentId)
+    return direct.reduce((sum, child) => sum + 1 + countAllDescendants(child.id), 0)
+  }
 
   // For grid/list views, show all projects (flat) or only roots depending on mode
   const filtered = React.useMemo(() => {
@@ -841,7 +845,7 @@ function ProsjekterPage({ onNavigateDetail }) {
         ) : viewMode === 'grid' ? (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px' }}>
             {filtered.filter(p => !p.parent_id).map(p => {
-              const childCount = projects.filter(c => c.parent_id === p.id).length
+              const childCount = countAllDescendants(p.id)
               return (
                 <button key={p.id} onClick={() => onNavigateDetail(p.id)}
                   style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}
@@ -868,7 +872,7 @@ function ProsjekterPage({ onNavigateDetail }) {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {filtered.filter(p => !p.parent_id).map(p => {
-              const childCount = projects.filter(c => c.parent_id === p.id).length
+              const childCount = countAllDescendants(p.id)
               return (
                 <button key={p.id} onClick={() => onNavigateDetail(p.id)}
                   style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px' }}>
