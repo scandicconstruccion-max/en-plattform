@@ -9174,7 +9174,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
         </div>
         <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
           <div>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg ordre</label>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg ordre med endringsmeldinger</label>
             <select value={selectedOrder} onChange={e=>{ setSelectedOrder(e.target.value); if(e.target.value) loadChanges(e.target.value) }} style={iInp}>
               <option value="">Velg ordre...</option>
               {orders.map(o=><option key={o.id} value={o.id}>{o.order_number} – {o.title}</option>)}
@@ -9182,7 +9182,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
           </div>
           {changes.length>0 && (
             <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Godkjente endringsmeldinger</label>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg endringsmeldinger å fakturere</label>
               {changes.map(c=>(
                 <div key={c.id} onClick={()=>toggleChange(c.id)}
                   style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:selectedChanges.includes(c.id)?'#f0fdf4':'#f8fafc', borderRadius:'10px', border:`1px solid ${selectedChanges.includes(c.id)?'#bbf7d0':'#f1f5f9'}`, cursor:'pointer', marginBottom:'6px' }}>
