@@ -434,6 +434,27 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
 }
 
 // ─── DB HELPERS ───────────────────────────────────────────────────────────
+// Helper to render project options with hierarchy indication in <select> dropdowns
+function projectOptions(projects) {
+  if (!projects || projects.length === 0) return null
+  // Build tree
+  const roots = projects.filter(p => !p.parent_id)
+  const getChildren = (pid) => projects.filter(p => p.parent_id === pid).sort((a,b) => (a.project_number||'').localeCompare(b.project_number||''))
+  const result = []
+  const render = (proj, depth) => {
+    const prefix = depth > 0 ? '└ '.padStart(depth * 2 + 2, '  ') : ''
+    result.push(<option key={proj.id} value={proj.id}>{prefix}{proj.name}{proj.project_number ? ` (${proj.project_number})` : ''}</option>)
+    getChildren(proj.id).forEach(child => render(child, depth + 1))
+  }
+  roots.sort((a,b) => (a.name||'').localeCompare(b.name||'','nb')).forEach(r => render(r, 0))
+  // Also include orphans (parent_id points to deleted project)
+  const allRenderedIds = new Set(result.map(r => r.key))
+  projects.filter(p => p.parent_id && !projects.find(pp => pp.id === p.parent_id)).forEach(p => {
+    if (!allRenderedIds.has(p.id)) result.push(<option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)
+  })
+  return result
+}
+
 const db = {
   async getProjects() {
     const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
@@ -471,6 +492,7 @@ const emptyProsjekt = {
   resident_name:'', resident_phone:'', resident_email:'',
   project_manager_name:'', project_manager_email:'', project_manager_phone:'', customer_id:'',
   subcontractors:[], architects:[], consultants:[],
+  parent_id: null,
 }
 
 function FLabel({ label, children }) {
@@ -518,8 +540,25 @@ function ContactSection({ title, items, onChange }) {
   )
 }
 
-function ProsjektModal({ title, initial, onSave, onClose, saving }) {
-  const [form, setForm] = useState(initial || emptyProsjekt)
+function ProsjektModal({ title, initial, onSave, onClose, saving, parentProject }) {
+  const [form, setForm] = useState(() => {
+    const base = initial || { ...emptyProsjekt }
+    if (parentProject && !initial) {
+      // Pre-fill from parent for sub-projects
+      base.parent_id = parentProject.id
+      base.address_street = parentProject.address_street || ''
+      base.address_postal = parentProject.address_postal || ''
+      base.address_city = parentProject.address_city || ''
+      base.client_name = parentProject.client_name || ''
+      base.client_contact = parentProject.client_contact || ''
+      base.client_email = parentProject.client_email || ''
+      base.client_phone = parentProject.client_phone || ''
+      base.project_manager_name = parentProject.project_manager_name || ''
+      base.project_manager_email = parentProject.project_manager_email || ''
+      base.project_manager_phone = parentProject.project_manager_phone || ''
+    }
+    return base
+  })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const g2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }
   const sec = (label) => <h3 style={{ margin:'8px 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a', borderBottom:'1px solid #f1f5f9', paddingBottom:'8px' }}>{label}</h3>
@@ -539,6 +578,15 @@ function ProsjektModal({ title, initial, onSave, onClose, saving }) {
           </div>
           {/* Scrollbart innhold */}
           <div style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+            {parentProject && (
+              <div style={{ background:'#f5f3ff', borderRadius:'12px', padding:'12px 16px', border:'1px solid #ddd6fe', display:'flex', alignItems:'center', gap:'10px' }}>
+                <span style={{ fontSize:'18px' }}>📂</span>
+                <div>
+                  <div style={{ fontSize:'12px', color:'#7c3aed', fontWeight:'600' }}>Underprosjekt av</div>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{parentProject.name} <span style={{ color:'#94a3b8', fontWeight:'400' }}>#{parentProject.project_number}</span></div>
+                </div>
+              </div>
+            )}
             {sec('Grunnleggende')}
             <div style={g2}>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Prosjektnavn *"><FInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="Skriv inn prosjektnavn" required /></FLabel></div>
@@ -592,15 +640,23 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [viewMode, setViewMode] = useState('grid')
   const [sortBy, setSortBy] = useState('created_desc')
   const [showCreate, setShowCreate] = useState(false)
+  const [createParent, setCreateParent] = useState(null) // parent project when creating sub-project
   const [saving, setSaving] = useState(false)
+  const [expandedIds, setExpandedIds] = useState({})
   const f = { fontFamily:'system-ui, sans-serif' }
   const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
+  // Build hierarchy helpers
+  const rootProjects = React.useMemo(() => projects.filter(p => !p.parent_id), [projects])
+  const getChildren = (parentId) => projects.filter(p => p.parent_id === parentId)
+  const hasChildren = (parentId) => projects.some(p => p.parent_id === parentId)
+
+  // For grid/list views, show all projects (flat) or only roots depending on mode
   const filtered = React.useMemo(() => {
-    const list = projects.filter(p => {
+    const list = (viewMode === 'hierarchy' ? rootProjects : projects).filter(p => {
       const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.client_name?.toLowerCase().includes(search.toLowerCase())
       const mst = statusFilter === 'all' || p.status === statusFilter
       return ms && mst
@@ -614,15 +670,73 @@ function ProsjekterPage({ onNavigateDetail }) {
         default: return 0
       }
     })
-  }, [projects, search, statusFilter, sortBy])
+  }, [projects, rootProjects, search, statusFilter, sortBy, viewMode])
+
+  const generateSubNumber = (parentNumber, existingChildren) => {
+    const nextIdx = existingChildren.length + 1
+    return `${parentNumber}-${String(nextIdx).padStart(2,'0')}`
+  }
 
   const handleCreate = async (form) => {
     setSaving(true)
     try {
-      await db.createProject({ ...form, project_number: form.project_number || `P-${Date.now().toString().slice(-5)}`, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      let projectNumber = form.project_number
+      if (!projectNumber) {
+        if (form.parent_id) {
+          const parent = projects.find(p => p.id === form.parent_id)
+          const siblings = getChildren(form.parent_id)
+          projectNumber = generateSubNumber(parent?.project_number || 'P-00000', siblings)
+        } else {
+          projectNumber = `P-${Date.now().toString().slice(-5)}`
+        }
+      }
+      await db.createProject({ ...form, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreate(false)
+      setCreateParent(null)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
+  }
+
+  const toggleExpand = (id) => setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }))
+
+  // Recursive hierarchy renderer
+  const renderHierarchyNode = (project, depth = 0) => {
+    const children = getChildren(project.id)
+    const isExpanded = expandedIds[project.id]
+    const hasKids = children.length > 0
+    return (
+      <div key={project.id}>
+        <div style={{ display:'flex', alignItems:'center', gap:'0', marginBottom:'4px', paddingLeft: depth * 32 }}>
+          {/* Vertical line connector */}
+          <div style={{ width:'28px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            {hasKids ? (
+              <button onClick={() => toggleExpand(project.id)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#64748b', padding:'4px', lineHeight:1 }}>{isExpanded ? '▼' : '▶'}</button>
+            ) : depth > 0 ? (
+              <div style={{ width:'2px', height:'100%', minHeight:'20px', background:'#e2e8f0' }} />
+            ) : null}
+          </div>
+          <button onClick={() => onNavigateDetail(project.id)}
+            style={{ flex:1, display:'flex', alignItems:'center', gap:'12px', background:'white', borderRadius:'12px', border:`1px solid ${depth > 0 ? '#e9d5ff' : '#f1f5f9'}`, padding:'12px 16px', cursor:'pointer', textAlign:'left', borderLeft: depth > 0 ? '3px solid #7c3aed' : '3px solid #059669' }}
+            onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{ width:'36px', height:'36px', borderRadius:'10px', background: depth > 0 ? '#f5f3ff' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>{depth > 0 ? '📄' : '🏗️'}</div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{project.name}</div>
+              <div style={{ fontSize:'12px', color:'#94a3b8' }}>#{project.project_number}{project.client_name ? ` · ${project.client_name}` : ''}</div>
+            </div>
+            <StatusBadge status={project.status} />
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); setCreateParent(project); setShowCreate(true) }} title="Opprett underprosjekt"
+            style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'20px', padding:'8px', flexShrink:0, lineHeight:1 }}
+            onMouseEnter={e=>e.currentTarget.style.color='#059669'} onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>+</button>
+        </div>
+        {/* Children */}
+        {hasKids && isExpanded && (
+          <div>
+            {children.sort((a,b) => (a.project_number||'').localeCompare(b.project_number||'')).map(child => renderHierarchyNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -633,7 +747,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
             <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{projects.length} prosjekter totalt</p>
           </div>
-          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
+          <button onClick={() => { setCreateParent(null); setShowCreate(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
         </div>
       </div>
       <div style={{ padding:'24px 32px' }}>
@@ -654,7 +768,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             <option value="created_asc">Eldste først</option>
           </select>
           <div style={{ display:'flex', gap:'4px' }}>
-            {['grid','list'].map(v => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }}>{v==='grid'?'⊞':'☰'}</button>)}
+            {[['grid','⊞'],['list','☰'],['hierarchy','🗂️']].map(([v,icon]) => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }} title={v==='hierarchy'?'Hierarki':v==='grid'?'Rutenett':'Liste'}>{icon}</button>)}
           </div>
         </div>
         {loading ? (
@@ -666,66 +780,94 @@ function ProsjekterPage({ onNavigateDetail }) {
             <p style={{ color:'#64748b', margin:'0 0 20px' }}>{search ? 'Ingen matcher søket' : 'Opprett ditt første prosjekt'}</p>
             {!search && <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>}
           </div>
+        ) : viewMode === 'hierarchy' ? (
+          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px' }}>
+            {filtered.map(p => renderHierarchyNode(p, 0))}
+          </div>
         ) : viewMode === 'grid' ? (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px' }}>
-            {filtered.map(p => (
-              <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}
-                onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
-                onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>🏗️</div>
-                  <StatusBadge status={p.status} />
-                </div>
-                <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{p.name}</h3>
-                {p.project_number && <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</p>}
-                <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
-                  {p.client_name && <span>👥 {p.client_name}</span>}
-                  {p.address && <span>📍 {p.address}</span>}
-                  {p.start_date && <span>📅 {new Date(p.start_date).toLocaleDateString('nb-NO')}</span>}
-                </div>
-              </button>
-            ))}
+            {filtered.map(p => {
+              const parent = p.parent_id ? projects.find(pp => pp.id === p.parent_id) : null
+              return (
+                <button key={p.id} onClick={() => onNavigateDetail(p.id)}
+                  style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', borderLeft: p.parent_id ? '3px solid #7c3aed' : 'none' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
+                    <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: p.parent_id ? '#f5f3ff' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>{p.parent_id ? '📄' : '🏗️'}</div>
+                    <StatusBadge status={p.status} />
+                  </div>
+                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{p.name}</h3>
+                  {p.project_number && <p style={{ margin:'0 0 4px', fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</p>}
+                  {parent && <p style={{ margin:'0 0 8px', fontSize:'11px', color:'#7c3aed' }}>📂 {parent.name}</p>}
+                  <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
+                    {p.client_name && <span>👥 {p.client_name}</span>}
+                    {p.address && <span>📍 {p.address}</span>}
+                    {p.start_date && <span>📅 {new Date(p.start_date).toLocaleDateString('nb-NO')}</span>}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {filtered.map(p => (
-              <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px' }}>
-                <div style={{ width:'38px', height:'38px', borderRadius:'10px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏗️</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
-                    {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
+            {filtered.map(p => {
+              const parent = p.parent_id ? projects.find(pp => pp.id === p.parent_id) : null
+              return (
+                <button key={p.id} onClick={() => onNavigateDetail(p.id)}
+                  style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px', borderLeft: p.parent_id ? '3px solid #7c3aed' : 'none' }}>
+                  <div style={{ width:'38px', height:'38px', borderRadius:'10px', background: p.parent_id ? '#f5f3ff' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{p.parent_id ? '📄' : '🏗️'}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
+                      {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
+                      {parent && <span style={{ color:'#7c3aed' }}>📂 {parent.name}</span>}
+                      {p.client_name && <span>{p.client_name}</span>}
+                      {p.address && <span>{p.address}</span>}
+                    </div>
                   </div>
-                  <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
-                    {p.client_name && <span>{p.client_name}</span>}
-                    {p.address && <span>{p.address}</span>}
-                  </div>
-                </div>
-                <StatusBadge status={p.status} />
-                <span style={{ color:'#cbd5e1' }}>›</span>
-              </button>
-            ))}
+                  <StatusBadge status={p.status} />
+                  <span style={{ color:'#cbd5e1' }}>›</span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
-      {showCreate && <ProsjektModal title="Nytt prosjekt" onSave={handleCreate} onClose={() => setShowCreate(false)} saving={saving} />}
+      {showCreate && <ProsjektModal title={createParent ? `Nytt underprosjekt av ${createParent.name}` : 'Nytt prosjekt'} parentProject={createParent} onSave={handleCreate} onClose={() => { setShowCreate(false); setCreateParent(null) }} saving={saving} />}
     </div>
   )
 }
 
-function ProsjektDetaljerPage({ projectId, onBack }) {
+function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
+  const [showCreateSub, setShowCreateSub] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
+  const [subProjects, setSubProjects] = useState([])
+  const [parentProject, setParentProject] = useState(null)
   const f = { fontFamily:'system-ui, sans-serif' }
   const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding:'24px' }
 
-  const load = async () => { try { setProject(await db.getProject(projectId)) } catch(e){console.error(e)} finally { setLoading(false) } }
+  const load = async () => {
+    try {
+      const proj = await db.getProject(projectId)
+      setProject(proj)
+      // Load sub-projects
+      const { data: subs } = await supabase.from('projects').select('*').eq('parent_id', projectId).order('project_number')
+      setSubProjects(subs || [])
+      // Load parent if exists
+      if (proj?.parent_id) {
+        const { data: parent } = await supabase.from('projects').select('id, name, project_number').eq('id', proj.parent_id).single()
+        setParentProject(parent)
+      }
+    } catch(e){console.error(e)} finally { setLoading(false) }
+  }
   useEffect(() => { load() }, [projectId])
 
   const handleUpdate = async (form) => {
@@ -733,6 +875,19 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
     try {
       await db.updateProject(projectId, { ...form, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', ') || form.address, budget: form.budget ? parseFloat(form.budget) : null })
       setShowEdit(false); load()
+    } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
+  }
+
+  const handleCreateSub = async (form) => {
+    setSaving(true)
+    try {
+      const siblings = subProjects
+      const nextIdx = siblings.length + 1
+      const parentNum = project.project_number || 'P-00000'
+      const projectNumber = form.project_number || `${parentNum}-${String(nextIdx).padStart(2,'0')}`
+      await db.createProject({ ...form, parent_id: projectId, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      setShowCreateSub(false)
+      load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
   }
 
@@ -773,9 +928,17 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
     <div style={f}>
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake til prosjekter</button>
+        {parentProject && (
+          <div style={{ marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', fontSize:'13px', color:'#7c3aed' }}>
+            <span>📂</span>
+            <span style={{ color:'#94a3b8' }}>Underprosjekt av</span>
+            <strong>{parentProject.name}</strong>
+            <span style={{ color:'#94a3b8' }}>#{parentProject.project_number}</span>
+          </div>
+        )}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'16px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>🏗️</div>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f5f3ff' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📄' : '🏗️'}</div>
             <div>
               <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                 <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
@@ -785,6 +948,7 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>+ Underprosjekt</button>
             <button onClick={() => setShowEdit(true)} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>✏️ Rediger</button>
             <button onClick={() => setShowDelete(true)} style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
           </div>
@@ -802,6 +966,31 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
             </div>
             {project.description && <p style={{ margin:'16px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{project.description}</p>}
           </div>
+
+          {/* Underprosjekter */}
+          {subProjects.length > 0 && (
+            <div style={card}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#7c3aed' }}>📂 Underprosjekter ({subProjects.length})</h3>
+                <button onClick={() => setShowCreateSub(true)} style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Nytt</button>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {subProjects.map(sub => (
+                  <button key={sub.id} onClick={() => onNavigateDetail(sub.id)}
+                    style={{ display:'flex', alignItems:'center', gap:'12px', background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'12px 16px', cursor:'pointer', textAlign:'left', width:'100%', transition:'box-shadow 0.15s' }}
+                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(124,58,237,0.12)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                    <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>📄</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{sub.name}</div>
+                      <div style={{ fontSize:'12px', color:'#94a3b8' }}>#{sub.project_number}{sub.client_name && sub.client_name !== project.client_name ? ` · ${sub.client_name}` : ''}</div>
+                    </div>
+                    <StatusBadge status={sub.status} />
+                    <span style={{ color:'#c4b5fd' }}>›</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={card}>
             <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'16px', marginLeft:'-24px', marginRight:'-24px', paddingLeft:'24px' }}>
@@ -836,6 +1025,7 @@ function ProsjektDetaljerPage({ projectId, onBack }) {
       </div>
 
       {showEdit && <ProsjektModal title="Rediger prosjekt" initial={initEdit} onSave={handleUpdate} onClose={() => setShowEdit(false)} saving={saving} />}
+      {showCreateSub && <ProsjektModal title={`Nytt underprosjekt av ${project.name}`} parentProject={project} onSave={handleCreateSub} onClose={() => setShowCreateSub(false)} saving={saving} />}
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
@@ -22268,7 +22458,7 @@ function AppContent() {
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
         {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { window.history.pushState({ page: 'sjekkliste_detaljer', checklistId: id }, '', '#sjekkliste_detaljer'); setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
         {page === 'sjekkliste_detaljer' && <SjekklisteDetaljerPage checklistId={checklistId} onBack={() => setPage('sjekklister')} />}
-        {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} />}
+        {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} onNavigateDetail={openProject} />}
         {page === 'avvik' && <AvvikPage />}
         {page === 'hms' && <HmsPage />}
         {page === 'maskiner' && <MaskinPage />}
