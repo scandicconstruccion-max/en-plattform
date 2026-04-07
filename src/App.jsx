@@ -9176,7 +9176,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg endringsmeldinger knyttet til</label>
             <select value={selectedOrder} onChange={e=>{ setSelectedOrder(e.target.value); if(e.target.value) loadChanges(e.target.value) }} style={iInp}>
-              <option value="">Velg prosjekt/ordre...</option>
+              <option value="">Velg endringsmelding...</option>
               {orders.map(o=><option key={o.id} value={o.id}>{o.title}</option>)}
             </select>
           </div>
