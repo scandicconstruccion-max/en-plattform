@@ -699,39 +699,88 @@ function ProsjekterPage({ onNavigateDetail }) {
 
   const toggleExpand = (id) => setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }))
 
-  // Recursive hierarchy renderer
+  // Recursive hierarchy renderer — redesigned for clear visual hierarchy
   const renderHierarchyNode = (project, depth = 0) => {
     const children = getChildren(project.id)
     const isExpanded = expandedIds[project.id]
     const hasKids = children.length > 0
-    return (
-      <div key={project.id}>
-        <div style={{ display:'flex', alignItems:'center', gap:'0', marginBottom:'4px', paddingLeft: depth * 32 }}>
-          {/* Vertical line connector */}
-          <div style={{ width:'28px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-            {hasKids ? (
-              <button onClick={() => toggleExpand(project.id)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#64748b', padding:'4px', lineHeight:1 }}>{isExpanded ? '▼' : '▶'}</button>
-            ) : depth > 0 ? (
-              <div style={{ width:'2px', height:'100%', minHeight:'20px', background:'#e2e8f0' }} />
-            ) : null}
+    const isRoot = depth === 0
+
+    if (isRoot) {
+      // ── HOVEDPROSJEKT: stort, fremtredende kort ──
+      return (
+        <div key={project.id} style={{ marginBottom:'20px' }}>
+          <div style={{ background:'linear-gradient(135deg, #f8fafc 0%, #f0fdf4 100%)', borderRadius:'16px', border:'2px solid #bbf7d0', padding:'0', overflow:'hidden', boxShadow:'0 2px 12px rgba(5,150,105,0.08)' }}>
+            {/* Hovedprosjekt header */}
+            <div style={{ display:'flex', alignItems:'center', gap:'14px', padding:'18px 20px', cursor:'pointer' }} onClick={() => onNavigateDetail(project.id)}>
+              <div style={{ width:'48px', height:'48px', borderRadius:'14px', background:'#059669', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0, color:'white', fontWeight:'800' }}>🏗️</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:'800', fontSize:'17px', color:'#0f172a', marginBottom:'2px' }}>{project.name}</div>
+                <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'12px', color:'#059669', fontWeight:'600', fontFamily:'monospace' }}>#{project.project_number}</span>
+                  {project.client_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {project.client_name}</span>}
+                  {project.address && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📍 {project.address}</span>}
+                </div>
+              </div>
+              <StatusBadge status={project.status} />
+              {hasKids && (
+                <button onClick={(e) => { e.stopPropagation(); toggleExpand(project.id) }}
+                  style={{ background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'12px', fontWeight:'700', color:'#059669', display:'flex', alignItems:'center', gap:'4px' }}>
+                  {isExpanded ? '▾' : '▸'} {children.length} under
+                </button>
+              )}
+              <button onClick={(e) => { e.stopPropagation(); setCreateParent(project); setShowCreate(true) }} title="Opprett underprosjekt"
+                style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', width:'32px', height:'32px', cursor:'pointer', color:'#059669', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, lineHeight:1 }}>+</button>
+            </div>
+
+            {/* Underprosjekter */}
+            {hasKids && isExpanded && (
+              <div style={{ borderTop:'1px solid #d1fae5', background:'white', padding:'12px 16px 12px 28px' }}>
+                <div style={{ position:'relative', paddingLeft:'20px' }}>
+                  {/* Vertikal tre-linje */}
+                  <div style={{ position:'absolute', left:'8px', top:'0', bottom:'12px', width:'2px', background:'#d1fae5' }} />
+                  {children.sort((a,b) => (a.project_number||'').localeCompare(b.project_number||'')).map((child, ci) => renderHierarchyNode(child, depth + 1))}
+                </div>
+              </div>
+            )}
           </div>
-          <button onClick={() => onNavigateDetail(project.id)}
-            style={{ flex:1, display:'flex', alignItems:'center', gap:'12px', background:'white', borderRadius:'12px', border:`1px solid ${depth > 0 ? '#e9d5ff' : '#f1f5f9'}`, padding:'12px 16px', cursor:'pointer', textAlign:'left', borderLeft: depth > 0 ? '3px solid #7c3aed' : '3px solid #059669' }}
-            onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-            <div style={{ width:'36px', height:'36px', borderRadius:'10px', background: depth > 0 ? '#f5f3ff' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>{depth > 0 ? '📄' : '🏗️'}</div>
+        </div>
+      )
+    }
+
+    // ── UNDERPROSJEKT: kompakt, innrykket, med kobling-linje ──
+    return (
+      <div key={project.id} style={{ position:'relative', marginBottom:'8px' }}>
+        {/* Horisontal kobling-linje fra vertikal linje */}
+        <div style={{ position:'absolute', left:'-12px', top:'20px', width:'12px', height:'2px', background:'#d1fae5' }} />
+        <div style={{ display:'flex', alignItems:'center', gap:'0' }}>
+          <div onClick={() => onNavigateDetail(project.id)}
+            style={{ flex:1, display:'flex', alignItems:'center', gap:'12px', background: depth > 1 ? '#faf5ff' : '#f8fafc', borderRadius:'12px', border:`1px solid ${depth > 1 ? '#e9d5ff' : '#e2e8f0'}`, padding:'12px 16px', cursor:'pointer', borderLeft:`3px solid ${depth > 1 ? '#a78bfa' : '#7c3aed'}`, transition:'box-shadow 0.15s' }}
+            onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(124,58,237,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{ width:'32px', height:'32px', borderRadius:'8px', background: depth > 1 ? '#ede9fe' : '#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>📄</div>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{project.name}</div>
-              <div style={{ fontSize:'12px', color:'#94a3b8' }}>#{project.project_number}{project.client_name ? ` · ${project.client_name}` : ''}</div>
+              <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
+                <span style={{ fontSize:'11px', color:'#7c3aed', fontWeight:'600', fontFamily:'monospace' }}>#{project.project_number}</span>
+                {project.client_name && <span style={{ fontSize:'11px', color:'#64748b' }}>👤 {project.client_name}</span>}
+              </div>
             </div>
             <StatusBadge status={project.status} />
-          </button>
+            {hasKids && (
+              <button onClick={(e) => { e.stopPropagation(); toggleExpand(project.id) }}
+                style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#7c3aed' }}>
+                {isExpanded ? '▾' : '▸'} {children.length}
+              </button>
+            )}
+          </div>
           <button onClick={(e) => { e.stopPropagation(); setCreateParent(project); setShowCreate(true) }} title="Opprett underprosjekt"
-            style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'20px', padding:'8px', flexShrink:0, lineHeight:1 }}
-            onMouseEnter={e=>e.currentTarget.style.color='#059669'} onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>+</button>
+            style={{ background:'none', border:'none', cursor:'pointer', color:'#c4b5fd', fontSize:'18px', padding:'6px', flexShrink:0, lineHeight:1 }}
+            onMouseEnter={e=>e.currentTarget.style.color='#7c3aed'} onMouseLeave={e=>e.currentTarget.style.color='#c4b5fd'}>+</button>
         </div>
-        {/* Children */}
+        {/* Under-underprosjekter */}
         {hasKids && isExpanded && (
-          <div>
+          <div style={{ position:'relative', paddingLeft:'24px', marginTop:'6px' }}>
+            <div style={{ position:'absolute', left:'8px', top:'0', bottom:'12px', width:'2px', background:'#ede9fe' }} />
             {children.sort((a,b) => (a.project_number||'').localeCompare(b.project_number||'')).map(child => renderHierarchyNode(child, depth + 1))}
           </div>
         )}
