@@ -842,6 +842,7 @@ function ProsjekterPage({ onNavigateDetail }) {
 }
 
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
+  const { user } = useAuth()
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
