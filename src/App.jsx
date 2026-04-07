@@ -467,12 +467,17 @@ const db = {
     return data
   },
   async createProject(data) {
-    const { data: result, error } = await supabase.from('projects').insert(data).select().single()
+    // Clean empty strings to null for uuid/date/numeric fields
+    const clean = { ...data }
+    ;['customer_id','parent_id','start_date','end_date','budget'].forEach(k => { if (clean[k] === '' || clean[k] === undefined) clean[k] = null })
+    const { data: result, error } = await supabase.from('projects').insert(clean).select().single()
     if (error) throw error
     return result
   },
   async updateProject(id, data) {
-    const { data: result, error } = await supabase.from('projects').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+    const clean = { ...data, updated_at: new Date().toISOString() }
+    ;['customer_id','parent_id','start_date','end_date','budget'].forEach(k => { if (clean[k] === '' || clean[k] === undefined) clean[k] = null })
+    const { data: result, error } = await supabase.from('projects').update(clean).eq('id', id).select().single()
     if (error) throw error
     return result
   },
