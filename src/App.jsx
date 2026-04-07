@@ -817,7 +817,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             <option value="created_asc">Eldste først</option>
           </select>
           <div style={{ display:'flex', gap:'4px' }}>
-            {[['grid','⊞'],['list','☰'],['hierarchy','🗂️']].map(([v,icon]) => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }} title={v==='hierarchy'?'Hierarki':v==='grid'?'Rutenett':'Liste'}>{icon}</button>)}
+            {[['grid','⊞'],['list','☰'],['hierarchy','']].map(([v,icon]) => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }} title={v==='hierarchy'?'Hierarki':v==='grid'?'Rutenett':'Liste'}>{v==='hierarchy' ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5.5" y="1" width="5" height="3" rx="0.5"/><rect x="0.5" y="12" width="4" height="3" rx="0.5"/><rect x="6" y="12" width="4" height="3" rx="0.5"/><rect x="11.5" y="12" width="4" height="3" rx="0.5"/><line x1="8" y1="4" x2="8" y2="7"/><line x1="2.5" y1="7" x2="13.5" y2="7"/><line x1="2.5" y1="7" x2="2.5" y2="12"/><line x1="8" y1="7" x2="8" y2="12"/><line x1="13.5" y1="7" x2="13.5" y2="12"/></svg> : icon}</button>)}
           </div>
         </div>
         {loading ? (
