@@ -6062,6 +6062,9 @@ function AnbudsPage() {
   const [newType, setNewType] = useState(null)
   const [selected, setSelected] = useState(null)
   const [activeTab, setActiveTab] = useState('oversikt')
+  const [forespSearch, setForespSearch] = useState('')
+  const [forespStatusFilter, setForespStatusFilter] = useState('alle')
+  const [leverandorSearch, setLeverandorSearch] = useState('')
 
   const load = async () => {
     try {
@@ -6251,118 +6254,157 @@ function AnbudsPage() {
 
         {/* ═══ TAB: FORESPØRSLER ═══ */}
         {activeTab === 'foresporsel' && (<>
+          {/* Search and filter */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+            <input value={forespSearch} onChange={e=>setForespSearch(e.target.value)} placeholder="🔍  Søk forespørsler..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
+            <select value={forespStatusFilter} onChange={e=>setForespStatusFilter(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
+              <option value="alle">Alle statuser</option>
+              {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            {(forespSearch||forespStatusFilter!=='alle') && <button onClick={()=>{setForespSearch('');setForespStatusFilter('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          </div>
+
           {/* Fra byggherre */}
-          <div>
-            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#7c3aed', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📥 Fra byggherre <span style={{ background:'#f5f3ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #ddd6fe' }}>{incoming.length}</span></h2>
-            {incoming.length === 0 ? (
-              <div style={{ background:'#faf5ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #e9d5ff' }}>
-                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen innkommende forespørsler</p>
-              </div>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {incoming.map(t => {
-                  const fagCount = (t.fagfordeling||[]).length
-                  const ueSent = (t.fagfordeling||[]).filter(f => f.ueOpprettet).length
-                  return (
-                    <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #7c3aed' }}
-                      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
-                          <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
-                          <TenderStatusBadge status={t.status} />
+          {(() => {
+            const filteredIncoming = incoming.filter(t => {
+              if (forespStatusFilter !== 'alle' && t.status !== forespStatusFilter) return false
+              if (forespSearch && ![t.title, t.tender_number, t.customer_name].some(v => v?.toLowerCase().includes(forespSearch.toLowerCase()))) return false
+              return true
+            })
+            return (
+              <div>
+                <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#7c3aed', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📥 Fra byggherre <span style={{ background:'#f5f3ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #ddd6fe' }}>{filteredIncoming.length}</span></h2>
+                {filteredIncoming.length === 0 ? (
+                  <div style={{ background:'#faf5ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #e9d5ff' }}>
+                    <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{incoming.length === 0 ? 'Ingen innkommende forespørsler' : 'Ingen treff med gjeldende filter'}</p>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {filteredIncoming.map(t => {
+                      const fagCount = (t.fagfordeling||[]).length
+                      const ueSent = (t.fagfordeling||[]).filter(f => f.ueOpprettet).length
+                      return (
+                        <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #7c3aed' }}
+                          onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
+                              <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
+                              <TenderStatusBadge status={t.status} />
+                            </div>
+                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
+                              {t.customer_name && <span>👤 {t.customer_name}</span>}
+                              {t.deadline && <span>⏰ Frist {t.deadline}</span>}
+                              {fagCount > 0 && <span style={{ color:'#7c3aed' }}>🔀 {fagCount} fag fordelt{ueSent > 0 ? ` · ${ueSent} sendt til UE` : ''}</span>}
+                            </div>
+                          </div>
+                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
+                          <span style={{ color:'#94a3b8' }}>›</span>
                         </div>
-                        <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
-                          {t.customer_name && <span>👤 {t.customer_name}</span>}
-                          {t.deadline && <span>⏰ Frist {t.deadline}</span>}
-                          {fagCount > 0 && <span style={{ color:'#7c3aed' }}>🔀 {fagCount} fag fordelt{ueSent > 0 ? ` · ${ueSent} sendt til UE` : ''}</span>}
-                        </div>
-                      </div>
-                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
-                      <span style={{ color:'#94a3b8' }}>›</span>
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()}
+
           {/* Til UE */}
-          <div>
-            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#2563eb', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📤 Til underentreprenør <span style={{ background:'#eff6ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #bfdbfe' }}>{outgoing.length}</span></h2>
-            {outgoing.length === 0 ? (
-              <div style={{ background:'#eff6ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #bfdbfe' }}>
-                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen utgående anbud</p>
-              </div>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {outgoing.map(t => {
-                  const ueCount = allUEs.filter(u => u.tender_id === t.id).length
-                  const pricedCount = allUEs.filter(u => u.tender_id === t.id && u.status === 'Priset').length
-                  return (
-                    <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #2563eb' }}
-                      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
-                          <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
-                          <TenderStatusBadge status={t.status} />
+          {(() => {
+            const filteredOutgoing = outgoing.filter(t => {
+              if (forespStatusFilter !== 'alle' && t.status !== forespStatusFilter) return false
+              if (forespSearch && ![t.title, t.tender_number, t.customer_name].some(v => v?.toLowerCase().includes(forespSearch.toLowerCase()))) return false
+              return true
+            })
+            return (
+              <div>
+                <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#2563eb', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📤 Til underentreprenør <span style={{ background:'#eff6ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #bfdbfe' }}>{filteredOutgoing.length}</span></h2>
+                {filteredOutgoing.length === 0 ? (
+                  <div style={{ background:'#eff6ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #bfdbfe' }}>
+                    <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{outgoing.length === 0 ? 'Ingen utgående anbud' : 'Ingen treff med gjeldende filter'}</p>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {filteredOutgoing.map(t => {
+                      const ueCount = allUEs.filter(u => u.tender_id === t.id).length
+                      const pricedCount = allUEs.filter(u => u.tender_id === t.id && u.status === 'Priset').length
+                      return (
+                        <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #2563eb' }}
+                          onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
+                              <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
+                              <TenderStatusBadge status={t.status} />
+                            </div>
+                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
+                              {t.deadline && <span>⏰ Frist {t.deadline}</span>}
+                              {ueCount > 0 && <span style={{ color:'#2563eb' }}>🏢 {ueCount} UE invitert{pricedCount > 0 ? ` · ${pricedCount} priset` : ''}</span>}
+                              {t.awarded_ue && <span style={{ color:'#16a34a', fontWeight:'600' }}>🏆 {t.awarded_ue}</span>}
+                            </div>
+                          </div>
+                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
+                          <span style={{ color:'#94a3b8' }}>›</span>
                         </div>
-                        <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
-                          {t.deadline && <span>⏰ Frist {t.deadline}</span>}
-                          {ueCount > 0 && <span style={{ color:'#2563eb' }}>🏢 {ueCount} UE invitert{pricedCount > 0 ? ` · ${pricedCount} priset` : ''}</span>}
-                          {t.awarded_ue && <span style={{ color:'#16a34a', fontWeight:'600' }}>🏆 {t.awarded_ue}</span>}
-                        </div>
-                      </div>
-                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
-                      <span style={{ color:'#94a3b8' }}>›</span>
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()}
         </>)}
 
         {/* ═══ TAB: LEVERANDØRER ═══ */}
         {activeTab === 'leverandorer' && (<>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
             <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>👥 UE-register ({ueRegister.length} leverandører)</h2>
+            <div style={{ position:'relative', minWidth:'240px' }}>
+              <input value={leverandorSearch} onChange={e=>setLeverandorSearch(e.target.value)} placeholder="🔍  Søk firma, kontakt, e-post..." style={{ ...tInp, width:'100%' }} />
+            </div>
           </div>
-          {ueRegister.length === 0 ? (
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-              <div style={{ fontSize:'40px', marginBottom:'12px' }}>👥</div>
-              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen leverandører ennå</h3>
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>UE-er dukker opp her etter at du har invitert dem til et anbud.</p>
-            </div>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {ueRegister.map((ue, i) => (
-                <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'14px' }}>
-                  <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏢</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
-                    <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name ? `${ue.contact_name} · ` : ''}{ue.email}</div>
-                  </div>
-                  <div style={{ display:'flex', gap:'16px', flexShrink:0 }}>
-                    <div style={{ textAlign:'center' }}>
-                      <div style={{ fontWeight:'700', fontSize:'16px', color:'#0f172a' }}>{ue.tenders}</div>
-                      <div style={{ fontSize:'10px', color:'#94a3b8' }}>Anbud</div>
+          {(() => {
+            const filteredUEs = ueRegister.filter(ue => {
+              if (!leverandorSearch) return true
+              const s = leverandorSearch.toLowerCase()
+              return ue.company_name?.toLowerCase().includes(s) || ue.contact_name?.toLowerCase().includes(s) || ue.email?.toLowerCase().includes(s)
+            })
+            return filteredUEs.length === 0 ? (
+              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+                <div style={{ fontSize:'40px', marginBottom:'12px' }}>👥</div>
+                <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{ueRegister.length === 0 ? 'Ingen leverandører ennå' : 'Ingen treff'}</h3>
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{ueRegister.length === 0 ? 'UE-er dukker opp her etter at du har invitert dem til et anbud.' : 'Prøv et annet søkeord.'}</p>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {filteredUEs.map((ue, i) => (
+                  <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'14px' }}>
+                    <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏢</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
+                      <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name ? `${ue.contact_name} · ` : ''}{ue.email}</div>
                     </div>
-                    <div style={{ textAlign:'center' }}>
-                      <div style={{ fontWeight:'700', fontSize:'16px', color:'#16a34a' }}>{ue.awarded}</div>
-                      <div style={{ fontSize:'10px', color:'#94a3b8' }}>Tildelt</div>
-                    </div>
-                    {ue.pricedCount > 0 && (
+                    <div style={{ display:'flex', gap:'16px', flexShrink:0 }}>
                       <div style={{ textAlign:'center' }}>
-                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#2563eb' }}>{fmtT(ue.totalAmount / ue.pricedCount)}</div>
-                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Snitt pris</div>
+                        <div style={{ fontWeight:'700', fontSize:'16px', color:'#0f172a' }}>{ue.tenders}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Anbud</div>
                       </div>
-                    )}
+                      <div style={{ textAlign:'center' }}>
+                        <div style={{ fontWeight:'700', fontSize:'16px', color:'#16a34a' }}>{ue.awarded}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Tildelt</div>
+                      </div>
+                      {ue.pricedCount > 0 && (
+                        <div style={{ textAlign:'center' }}>
+                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#2563eb' }}>{fmtT(ue.totalAmount / ue.pricedCount)}</div>
+                          <div style={{ fontSize:'10px', color:'#94a3b8' }}>Snitt pris</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )
+          })()}
         </>)}
 
         {/* ═══ TAB: STATISTIKK ═══ */}
