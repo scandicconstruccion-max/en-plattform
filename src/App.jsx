@@ -6474,6 +6474,8 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const [showFagfordeling, setShowFagfordeling] = useState(false)
   const [fagfordeling, setFagfordeling] = useState(t.fagfordeling || [])
   const [savingFag, setSavingFag] = useState(false)
+  const [childTenders, setChildTenders] = useState([])
+  const [childUEs, setChildUEs] = useState({})
   const cfg = TENDER_STATUS[t.status]
   const proj = projects.find(p=>p.id===t.project_id)
   const { totalCost, grandTotal } = calcTender(t.chapters||[], t.global_markup)
@@ -6568,6 +6570,22 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const load = async () => {
     const { data } = await supabase.from('tender_ues').select('*').eq('tender_id', t.id).order('created_at')
     setUes(data||[])
+    // Load child tenders (from fagfordeling) for incoming anbud
+    if (t.type === 'incoming') {
+      const { data: children } = await supabase.from('tenders').select('*').eq('parent_tender_id', t.id).order('created_at')
+      setChildTenders(children || [])
+      // Load UEs for each child tender
+      if (children && children.length > 0) {
+        const childIds = children.map(c => c.id)
+        const { data: cUEs } = await supabase.from('tender_ues').select('*').in('tender_id', childIds)
+        const grouped = {}
+        ;(cUEs||[]).forEach(ue => {
+          if (!grouped[ue.tender_id]) grouped[ue.tender_id] = []
+          grouped[ue.tender_id].push(ue)
+        })
+        setChildUEs(grouped)
+      }
+    }
   }
   const refresh = async () => {
     const { data } = await supabase.from('tenders').select('*').eq('id', t.id).single()
@@ -6797,6 +6815,65 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Samlet prisbilde fra fagfordelte UE-anbud */}
+          {isIncoming && childTenders.length > 0 && (
+            <div style={{ ...tCard, border:'2px solid #bbf7d0' }}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700', color:'#059669' }}>💰 Samlet prisbilde fra UE-anbud</h3>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>Oversikt over priser mottatt fra fagfordelte UE-anbud knyttet til denne forespørselen.</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {childTenders.map(child => {
+                  const cUEs = childUEs[child.id] || []
+                  const pricedUEs = cUEs.filter(u => u.status === 'Priset').sort((a,b) => (a.total_amount||0) - (b.total_amount||0))
+                  const awarded = cUEs.find(u => u.status === 'godkjent')
+                  const bestPrice = awarded ? awarded.total_amount : (pricedUEs[0]?.total_amount || 0)
+                  const statusColor = child.status === 'Tildelt' ? '#16a34a' : pricedUEs.length > 0 ? '#2563eb' : '#94a3b8'
+                  return (
+                    <div key={child.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', border:'1px solid #f1f5f9' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{child.title.replace(`${t.title} — `, '')}</span>
+                          <TenderStatusBadge status={child.status} />
+                        </div>
+                        <div style={{ fontWeight:'800', fontSize:'16px', color: bestPrice > 0 ? '#0f172a' : '#cbd5e1' }}>{bestPrice > 0 ? fmtT(bestPrice) : '—'}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:'10px', fontSize:'12px', color:'#64748b' }}>
+                        <span>🏢 {cUEs.length} UE invitert</span>
+                        {pricedUEs.length > 0 && <span style={{ color:'#2563eb' }}>📬 {pricedUEs.length} priset</span>}
+                        {awarded && <span style={{ color:'#16a34a', fontWeight:'600' }}>🏆 {awarded.company_name}</span>}
+                        {pricedUEs.length === 0 && cUEs.length > 0 && <span style={{ color:'#d97706' }}>⏳ Venter på priser</span>}
+                        {cUEs.length === 0 && <span style={{ color:'#94a3b8' }}>Ingen UE invitert ennå</span>}
+                      </div>
+                      {pricedUEs.length > 1 && (
+                        <div style={{ marginTop:'8px', display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                          {pricedUEs.map((ue, i) => (
+                            <span key={ue.id} style={{ fontSize:'11px', background: i===0 ? '#f0fdf4' : 'white', border:`1px solid ${i===0 ? '#bbf7d0' : '#e2e8f0'}`, borderRadius:'6px', padding:'3px 8px', color: i===0 ? '#16a34a' : '#64748b' }}>
+                              {ue.company_name}: {fmtT(ue.total_amount)} {i===0 && '🏆'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Totalsum */}
+              <div style={{ marginTop:'12px', background:'#f0fdf4', borderRadius:'10px', padding:'14px 18px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Samlet UE-kostnad</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>Laveste/tildelt pris per fag</div>
+                </div>
+                <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>
+                  {fmtT(childTenders.reduce((sum, child) => {
+                    const cUEs = childUEs[child.id] || []
+                    const awarded = cUEs.find(u => u.status === 'godkjent')
+                    const pricedUEs = cUEs.filter(u => u.status === 'Priset').sort((a,b) => (a.total_amount||0) - (b.total_amount||0))
+                    return sum + (awarded ? awarded.total_amount : (pricedUEs[0]?.total_amount || 0))
+                  }, 0))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -7652,11 +7729,26 @@ function UEPrisingsPage() {
       const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
       await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString() }).eq('id', ueData.id)
       // Log UE pricing in tender activity
-      const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
+      const { data: tenderRec } = await supabase.from('tenders').select('activity_log, parent_tender_id, created_by').eq('id', tender.id).single()
       const tLog = [...(tenderRec?.activity_log || []), { action: `Pris mottatt fra ${ueData.company_name}: ${fmtT(totalAmount)}`, by: ueData.company_name, at: new Date().toISOString() }]
       await supabase.from('tenders').update({ activity_log: tLog }).eq('id', tender.id)
-      if (tender.created_by) {
-        await supabase.from('notifications').insert({ user_id:tender.created_by, title:`Ny anbудspris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul' })
+
+      // Notify tender owner
+      if (tenderRec?.created_by) {
+        await supabase.from('notifications').insert({ user_id: tenderRec.created_by, title:`📬 Anbud priset: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul', link_id: tender.id })
+      }
+
+      // Punkt 1: If this tender has a parent (came from fagfordeling), update parent tender too
+      if (tenderRec?.parent_tender_id) {
+        const { data: parentTender } = await supabase.from('tenders').select('activity_log, created_by').eq('id', tenderRec.parent_tender_id).single()
+        if (parentTender) {
+          const parentLog = [...(parentTender.activity_log || []), { action: `UE-pris mottatt for ${tender.title}: ${ueData.company_name} — ${fmtT(totalAmount)}`, by: ueData.company_name, at: new Date().toISOString() }]
+          await supabase.from('tenders').update({ activity_log: parentLog }).eq('id', tenderRec.parent_tender_id)
+          // Notify parent tender owner too
+          if (parentTender.created_by && parentTender.created_by !== tenderRec?.created_by) {
+            await supabase.from('notifications').insert({ user_id: parentTender.created_by, title:`📬 UE-pris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris ${fmtT(totalAmount)} på faggruppe-anbud fra byggherre-forespørsel.`, type:'success', link_page:'anbudsmodul', link_id: tenderRec.parent_tender_id })
+          }
+        }
       }
       setDone(true)
     } catch(e) { alert('Feil: '+e.message) }
