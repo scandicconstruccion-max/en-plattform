@@ -6942,7 +6942,14 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name} {isLowest&&'🏆'}</div>
                         {ue.contact_name && <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name} · {ue.email}</div>}
-                        {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}</div>}
+                        {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}{(ue.vedlegg||[]).length > 0 ? ` · 📎 ${ue.vedlegg.length} vedlegg` : ''}</div>}
+                        {(ue.vedlegg||[]).length > 0 && (
+                          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginTop:'4px' }}>
+                            {ue.vedlegg.map((v, vi) => (
+                              <a key={vi} href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'11px', color:'#2563eb', textDecoration:'none', background:'#eff6ff', padding:'2px 8px', borderRadius:'6px', border:'1px solid #bfdbfe' }}>📎 {v.name}</a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <span style={{ background:ucfg.bg, color:ucfg.color, border:`1px solid ${ucfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{ue.status}</span>
                       {(ue.status === 'Invitert' || ue.status === 'Åpnet') && (
@@ -7487,10 +7494,13 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
         if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
       }
       // Log invitations
-      const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
+      const { data: tenderRec } = await supabase.from('tenders').select('activity_log, status').eq('id', tender.id).single()
       const names = valid.map(u => u.company_name.trim()).join(', ')
       const log = [...(tenderRec?.activity_log || []), { action: `Invitert UE: ${names}`, by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ activity_log: log }).eq('id', tender.id)
+      // Auto-update status to Sendt if still Utkast
+      const newStatus = tenderRec?.status === 'Utkast' ? 'Sendt' : tenderRec?.status
+      if (newStatus !== tenderRec?.status) log.push({ action: `Status automatisk endret til Sendt`, by: 'System', at: new Date().toISOString() })
+      await supabase.from('tenders').update({ activity_log: log, status: newStatus }).eq('id', tender.id)
       setSent(true)
       setTimeout(()=>onSaved(), 1500)
     } catch(e) { alert('Feil: '+e.message) }
@@ -7699,6 +7709,19 @@ function UEPrisingsPage() {
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const [ueVedlegg, setUeVedlegg] = useState([])
+
+  const handleUeVedleggUpload = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return
+    try {
+      const path = `ue-vedlegg/${Date.now()}_${file.name}`
+      const { error } = await supabase.storage.from('plattform-files').upload(path, file)
+      if (error) throw error
+      const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      setUeVedlegg(prev => [...prev, { name: file.name, url: data.publicUrl, size: file.size }])
+    } catch(err) { console.error(err) }
+    e.target.value = ''
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -7727,11 +7750,27 @@ function UEPrisingsPage() {
     setSubmitting(true)
     try {
       const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
-      await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString() }).eq('id', ueData.id)
+      await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString(), vedlegg: ueVedlegg.length > 0 ? ueVedlegg : null }).eq('id', ueData.id)
       // Log UE pricing in tender activity
-      const { data: tenderRec } = await supabase.from('tenders').select('activity_log, parent_tender_id, created_by').eq('id', tender.id).single()
+      const { data: tenderRec } = await supabase.from('tenders').select('activity_log, parent_tender_id, created_by, status').eq('id', tender.id).single()
       const tLog = [...(tenderRec?.activity_log || []), { action: `Pris mottatt fra ${ueData.company_name}: ${fmtT(totalAmount)}`, by: ueData.company_name, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ activity_log: tLog }).eq('id', tender.id)
+
+      // Auto-status: Sendt → Mottatt when first price arrives
+      let newStatus = tenderRec?.status
+      if (newStatus === 'Sendt') {
+        newStatus = 'Mottatt'
+        tLog.push({ action: 'Status automatisk endret til Mottatt (første pris mottatt)', by: 'System', at: new Date().toISOString() })
+      }
+      // Auto-status: Mottatt → Under vurdering when all invited UEs have priced
+      if (newStatus === 'Mottatt') {
+        const { data: allTenderUEs } = await supabase.from('tender_ues').select('status').eq('tender_id', tender.id)
+        const allPriced = allTenderUEs && allTenderUEs.length > 0 && allTenderUEs.every(u => u.status === 'Priset')
+        if (allPriced) {
+          newStatus = 'Under vurdering'
+          tLog.push({ action: 'Status automatisk endret til Under vurdering (alle UE-er har priset)', by: 'System', at: new Date().toISOString() })
+        }
+      }
+      await supabase.from('tenders').update({ activity_log: tLog, status: newStatus }).eq('id', tender.id)
 
       // Notify tender owner
       if (tenderRec?.created_by) {
@@ -7808,6 +7847,26 @@ function UEPrisingsPage() {
             </table>
           </div>
         ))}
+
+        <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
+          <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Vedlegg (valgfritt)</h3>
+          <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#94a3b8' }}>Last opp tilbudsbrev, forsikringsbevis eller andre relevante dokumenter.</p>
+          {ueVedlegg.length > 0 && (
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'10px' }}>
+              {ueVedlegg.map((v, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 10px' }}>
+                  <span style={{ fontSize:'14px' }}>📎</span>
+                  <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', maxWidth:'180px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.name}</a>
+                  <button onClick={() => setUeVedlegg(prev => prev.filter((_, j) => j !== i))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0 2px' }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'8px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
+            📂 Last opp fil
+            <input type="file" onChange={handleUeVedleggUpload} style={{ display:'none' }} />
+          </label>
+        </div>
 
         <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
