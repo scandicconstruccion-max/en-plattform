@@ -6967,7 +6967,50 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               {/* Detaljert prissammenligning per post */}
               {pricedUes.length >= 2 && (t.chapters||[]).length > 0 && (
                 <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}>
-                  <h4 style={{ margin:'0 0 12px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📊 Prissammenligning per post</h4>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+                    <h4 style={{ margin:0, fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📊 Prissammenligning per post</h4>
+                    <button onClick={() => {
+                      // Build CSV export
+                      const rows = [['Kapittel','Post','Mengde','Enhet',...pricedUes.map(u=>u.company_name),...pricedUes.map(u=>`${u.company_name} kommentar`)]]
+                      ;(t.chapters||[]).forEach((ch, ci) => {
+                        (ch.posts||[]).forEach((post, pi) => {
+                          const row = [ch.title, post.description||'', post.qty||'', post.unit||'']
+                          pricedUes.forEach(ue => {
+                            const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
+                            const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
+                            row.push(uePost ? (parseFloat(uePost.uePrice)||0) * (parseFloat(post.qty)||1) : '')
+                          })
+                          pricedUes.forEach(ue => {
+                            const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
+                            const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
+                            row.push(uePost?.ueComment || '')
+                          })
+                          rows.push(row)
+                        })
+                        // Chapter sum row
+                        const sumRow = ['','KAPITTELSUM','','']
+                        pricedUes.forEach(ue => {
+                          const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
+                          sumRow.push(ueCh ? (ueCh.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0) : '')
+                        })
+                        pricedUes.forEach(() => sumRow.push(''))
+                        rows.push(sumRow)
+                      })
+                      // Total row
+                      const totalRow = ['','TOTAL','','']
+                      pricedUes.forEach(ue => totalRow.push(ue.total_amount||''))
+                      pricedUes.forEach(() => totalRow.push(''))
+                      rows.push(totalRow)
+                      // Generate CSV with BOM for Excel
+                      const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n')
+                      const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a'); a.href = url; a.download = `prissammenligning_${t.tender_number||'anbud'}.csv`; a.click()
+                      URL.revokeObjectURL(url)
+                    }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', color:'#475569', display:'flex', alignItems:'center', gap:'4px' }}>
+                      📥 Eksporter til Excel
+                    </button>
+                  </div>
                   {(t.chapters||[]).map((ch, ci) => (
                     <div key={ci} style={{ marginBottom:'14px' }}>
                       <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669', marginBottom:'8px' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</div>
@@ -6991,22 +7034,33 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                               const uePrices = pricedUes.map(ue => {
                                 const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
                                 const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
-                                return { ueId: ue.id, price: uePost ? (parseFloat(uePost.uePrice)||0) * (parseFloat(post.qty)||1) : 0, unitPrice: uePost ? parseFloat(uePost.uePrice)||0 : 0 }
+                                return { ueId: ue.id, price: uePost ? (parseFloat(uePost.uePrice)||0) * (parseFloat(post.qty)||1) : 0, unitPrice: uePost ? parseFloat(uePost.uePrice)||0 : 0, comment: uePost?.ueComment || '' }
                               })
                               const lowestPrice = Math.min(...uePrices.filter(p=>p.price>0).map(p=>p.price))
+                              const hasComments = uePrices.some(up => up.comment)
                               return (
-                                <tr key={pi} style={{ borderBottom:'1px solid #f8fafc' }}>
-                                  <td style={{ padding:'7px 10px', color:'#0f172a', fontWeight:'500' }}>{post.description||'—'}</td>
-                                  <td style={{ padding:'7px 6px', textAlign:'center', color:'#94a3b8' }}>{post.qty} {post.unit}</td>
-                                  {uePrices.map(up => {
-                                    const isBest = up.price > 0 && up.price === lowestPrice
-                                    return (
-                                      <td key={up.ueId} style={{ padding:'7px 10px', textAlign:'right', fontWeight: isBest ? '800' : '500', color: isBest ? '#16a34a' : '#0f172a', background: isBest ? '#f0fdf4' : 'transparent' }}>
-                                        {up.price > 0 ? fmtT(up.price) : <span style={{ color:'#cbd5e1' }}>—</span>}
-                                      </td>
-                                    )
-                                  })}
-                                </tr>
+                                <React.Fragment key={pi}>
+                                  <tr style={{ borderBottom: hasComments ? 'none' : '1px solid #f8fafc' }}>
+                                    <td style={{ padding:'7px 10px', color:'#0f172a', fontWeight:'500' }}>{post.description||'—'}</td>
+                                    <td style={{ padding:'7px 6px', textAlign:'center', color:'#94a3b8' }}>{post.qty} {post.unit}</td>
+                                    {uePrices.map(up => {
+                                      const isBest = up.price > 0 && up.price === lowestPrice
+                                      return (
+                                        <td key={up.ueId} style={{ padding:'7px 10px', textAlign:'right', fontWeight: isBest ? '800' : '500', color: isBest ? '#16a34a' : '#0f172a', background: isBest ? '#f0fdf4' : 'transparent' }}>
+                                          {up.price > 0 ? fmtT(up.price) : <span style={{ color:'#cbd5e1' }}>—</span>}
+                                        </td>
+                                      )
+                                    })}
+                                  </tr>
+                                  {hasComments && (
+                                    <tr style={{ borderBottom:'1px solid #f8fafc' }}>
+                                      <td colSpan={2} style={{ padding:'0 10px 6px', fontSize:'10px', color:'#94a3b8' }}>Kommentarer:</td>
+                                      {uePrices.map(up => (
+                                        <td key={up.ueId} style={{ padding:'0 10px 6px', fontSize:'11px', color:'#64748b', fontStyle:'italic' }}>{up.comment || ''}</td>
+                                      ))}
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               )
                             })}
                             {/* Kapittelsum-rad */}
@@ -7745,6 +7799,7 @@ function UEPrisingsPage() {
   }
 
   const updatePrice = (chId, pId, val) => setChapters(c=>c.map(ch=>ch.id===chId?{...ch,posts:ch.posts.map(p=>p.id===pId?{...p,uePrice:val}:p)}:ch))
+  const updateComment = (chId, pId, val) => setChapters(c=>c.map(ch=>ch.id===chId?{...ch,posts:ch.posts.map(p=>p.id===pId?{...p,ueComment:val}:p)}:ch))
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -7831,7 +7886,7 @@ function UEPrisingsPage() {
           <div key={ch.id} style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
             <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'14px' }}>
-              <thead><tr style={{ background:'#f8fafc' }}>{['Beskrivelse','Mengde','Enhet','Din pris/enh','Sum'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:h==='Din pris/enh'||h==='Sum'?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'12px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background:'#f8fafc' }}>{['Beskrivelse','Mengde','Enhet','Din pris/enh','Sum','Kommentar'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:h==='Din pris/enh'||h==='Sum'?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'12px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {(ch.posts||[]).map(p=>{
                   const ls=(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0)
@@ -7841,6 +7896,7 @@ function UEPrisingsPage() {
                     <td style={{ padding:'10px', color:'#475569' }}>{p.unit}</td>
                     <td style={{ padding:'6px' }}><input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'120px', textAlign:'right', borderColor:'#2563eb' }} /></td>
                     <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtT(ls)}</td>
+                    <td style={{ padding:'6px' }}><input value={p.ueComment||''} onChange={e=>updateComment(ch.id,p.id,e.target.value)} placeholder="Evt. forbehold..." style={{ ...tInp, width:'160px', fontSize:'12px' }} /></td>
                   </tr>
                 })}
               </tbody>
