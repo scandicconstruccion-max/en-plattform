@@ -839,106 +839,56 @@ function ProsjekterPage({ onNavigateDetail }) {
             {filtered.map(p => renderHierarchyNode(p, 0))}
           </div>
         ) : viewMode === 'grid' ? (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px', alignItems:'start' }}>
-            {(() => {
-              const roots = filtered.filter(p => !p.parent_id)
-              const orphanSubs = filtered.filter(p => p.parent_id && !roots.find(r => r.id === p.parent_id))
-              return [...roots, ...orphanSubs].map(rootP => {
-                const children = projects.filter(c => c.parent_id === rootP.id).sort((a,b) => (a.project_number||'').localeCompare(b.project_number||''))
-                return (
-                  <div key={rootP.id}>
-                    {/* Hovedprosjekt-kort — same size as before */}
-                    <button onClick={() => onNavigateDetail(rootP.id)}
-                      style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', width:'100%' }}
-                      onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
-                      onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
-                        <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>🏗️</div>
-                        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                          <StatusBadge status={rootP.status} />
-                          {children.length > 0 && <span style={{ fontSize:'10px', color:'#059669', background:'#ecfdf5', padding:'2px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {children.length}</span>}
-                        </div>
-                      </div>
-                      <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{rootP.name}</h3>
-                      {rootP.project_number && <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>#{rootP.project_number}</p>}
-                      <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
-                        {rootP.client_name && <span>👥 {rootP.client_name}</span>}
-                        {rootP.address && <span>📍 {rootP.address}</span>}
-                        {rootP.start_date && <span>📅 {new Date(rootP.start_date).toLocaleDateString('nb-NO')}</span>}
-                      </div>
-                    </button>
-                    {/* Underprosjekter — smaller, under parent */}
-                    {children.length > 0 && (
-                      <div style={{ marginTop:'6px', paddingLeft:'12px', borderLeft:'2px solid #d1fae5', display:'flex', flexDirection:'column', gap:'4px' }}>
-                        {children.map(sub => (
-                          <button key={sub.id} onClick={() => onNavigateDetail(sub.id)}
-                            style={{ background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'10px 14px', cursor:'pointer', textAlign:'left', borderLeft:'3px solid #7c3aed', display:'flex', alignItems:'center', gap:'10px', width:'100%', transition:'box-shadow 0.15s' }}
-                            onMouseEnter={e => e.currentTarget.style.boxShadow='0 2px 6px rgba(124,58,237,0.1)'}
-                            onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                            <div style={{ width:'28px', height:'28px', borderRadius:'7px', background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', flexShrink:0 }}>📄</div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{sub.name}</div>
-                              <span style={{ fontSize:'11px', color:'#7c3aed' }}>#{sub.project_number}</span>
-                            </div>
-                            <StatusBadge status={sub.status} />
-                          </button>
-                        ))}
-                      </div>
-                    )}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px' }}>
+            {filtered.filter(p => !p.parent_id).map(p => {
+              const childCount = projects.filter(c => c.parent_id === p.id).length
+              return (
+                <button key={p.id} onClick={() => onNavigateDetail(p.id)}
+                  style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
+                    <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>🏗️</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                      <StatusBadge status={p.status} />
+                      {childCount > 0 && <span style={{ fontSize:'10px', color:'#059669', background:'#ecfdf5', padding:'2px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {childCount}</span>}
+                    </div>
                   </div>
-                )
-              })
-            })()}
+                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{p.name}</h3>
+                  {p.project_number && <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</p>}
+                  <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
+                    {p.client_name && <span>👥 {p.client_name}</span>}
+                    {p.address && <span>📍 {p.address}</span>}
+                    {p.start_date && <span>📅 {new Date(p.start_date).toLocaleDateString('nb-NO')}</span>}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-            {(() => {
-              const roots = filtered.filter(p => !p.parent_id)
-              const orphanSubs = filtered.filter(p => p.parent_id && !roots.find(r => r.id === p.parent_id))
-              return [...roots, ...orphanSubs].map(rootP => {
-                const children = projects.filter(c => c.parent_id === rootP.id).sort((a,b) => (a.project_number||'').localeCompare(b.project_number||''))
-                return (
-                  <div key={rootP.id} style={{ marginBottom: children.length > 0 ? '12px' : '0' }}>
-                    <button onClick={() => onNavigateDetail(rootP.id)}
-                      style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px', width:'100%' }}>
-                      <div style={{ width:'38px', height:'38px', borderRadius:'10px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏗️</div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                          <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{rootP.name}</span>
-                          {rootP.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{rootP.project_number}</span>}
-                          {children.length > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {children.length}</span>}
-                        </div>
-                        <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
-                          {rootP.client_name && <span>{rootP.client_name}</span>}
-                          {rootP.address && <span>{rootP.address}</span>}
-                        </div>
-                      </div>
-                      <StatusBadge status={rootP.status} />
-                      <span style={{ color:'#cbd5e1' }}>›</span>
-                    </button>
-                    {children.length > 0 && (
-                      <div style={{ marginLeft:'28px', paddingLeft:'14px', borderLeft:'2px solid #d1fae5', marginTop:'2px' }}>
-                        {children.map(sub => (
-                          <button key={sub.id} onClick={() => onNavigateDetail(sub.id)}
-                            style={{ background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'10px 14px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'12px', width:'100%', marginBottom:'4px', borderLeft:'3px solid #7c3aed' }}>
-                            <div style={{ width:'28px', height:'28px', borderRadius:'7px', background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', flexShrink:0 }}>📄</div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                                <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'13px' }}>{sub.name}</span>
-                                <span style={{ fontSize:'11px', color:'#7c3aed' }}>#{sub.project_number}</span>
-                              </div>
-                              {sub.client_name && sub.client_name !== rootP.client_name && <div style={{ fontSize:'11px', color:'#64748b' }}>👤 {sub.client_name}</div>}
-                            </div>
-                            <StatusBadge status={sub.status} />
-                            <span style={{ color:'#c4b5fd' }}>›</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.filter(p => !p.parent_id).map(p => {
+              const childCount = projects.filter(c => c.parent_id === p.id).length
+              return (
+                <button key={p.id} onClick={() => onNavigateDetail(p.id)}
+                  style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px' }}>
+                  <div style={{ width:'38px', height:'38px', borderRadius:'10px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏗️</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
+                      {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
+                      {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {childCount}</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
+                      {p.client_name && <span>{p.client_name}</span>}
+                      {p.address && <span>{p.address}</span>}
+                    </div>
                   </div>
-                )
-              })
-            })()}
+                  <StatusBadge status={p.status} />
+                  <span style={{ color:'#cbd5e1' }}>›</span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
