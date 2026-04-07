@@ -713,11 +713,11 @@ function ProsjekterPage({ onNavigateDetail }) {
           <div style={{ background:'linear-gradient(135deg, #f8fafc 0%, #f0fdf4 100%)', borderRadius:'16px', border:'2px solid #bbf7d0', padding:'0', overflow:'hidden', boxShadow:'0 2px 12px rgba(5,150,105,0.08)' }}>
             {/* Hovedprosjekt header */}
             <div style={{ display:'flex', alignItems:'center', gap:'14px', padding:'18px 20px', cursor:'pointer' }} onClick={() => onNavigateDetail(project.id)}>
-              <div style={{ width:'48px', height:'48px', borderRadius:'14px', background:'#059669', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0, color:'white', fontWeight:'800' }}>🏗️</div>
+              <div style={{ width:'48px', height:'48px', borderRadius:'14px', background:'#ecfdf5', border:'2px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0 }}>🏗️</div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight:'800', fontSize:'17px', color:'#0f172a', marginBottom:'2px' }}>{project.name}</div>
+                <div style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a', marginBottom:'2px' }}>{project.name}</div>
                 <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-                  <span style={{ fontSize:'12px', color:'#059669', fontWeight:'600', fontFamily:'monospace' }}>#{project.project_number}</span>
+                  <span style={{ fontSize:'12px', color:'#059669', fontWeight:'500' }}>#{project.project_number}</span>
                   {project.client_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {project.client_name}</span>}
                   {project.address && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📍 {project.address}</span>}
                 </div>
@@ -725,7 +725,7 @@ function ProsjekterPage({ onNavigateDetail }) {
               <StatusBadge status={project.status} />
               {hasKids && (
                 <button onClick={(e) => { e.stopPropagation(); toggleExpand(project.id) }}
-                  style={{ background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'12px', fontWeight:'700', color:'#059669', display:'flex', alignItems:'center', gap:'4px' }}>
+                  style={{ background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#059669', display:'flex', alignItems:'center', gap:'4px' }}>
                   {isExpanded ? '▾' : '▸'} {children.length} under
                 </button>
               )}
