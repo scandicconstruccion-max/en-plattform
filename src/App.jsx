@@ -5969,10 +5969,99 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const [showInviteUE, setShowInviteUE] = useState(false)
   const [showAward, setShowAward] = useState(false)
   const [sendingReminder, setSendingReminder] = useState(null)
+  const [showFagfordeling, setShowFagfordeling] = useState(false)
+  const [fagfordeling, setFagfordeling] = useState(t.fagfordeling || [])
+  const [savingFag, setSavingFag] = useState(false)
   const cfg = TENDER_STATUS[t.status]
   const proj = projects.find(p=>p.id===t.project_id)
   const { totalCost, grandTotal } = calcTender(t.chapters||[], t.global_markup)
   const isIncoming = t.type === 'incoming'
+
+  const FAG_OPTIONS = [
+    { id:'tomrer', name:'Tømrer', emoji:'🪚' },
+    { id:'murer', name:'Murer', emoji:'🧱' },
+    { id:'betong', name:'Betongarbeider', emoji:'🏗️' },
+    { id:'maler', name:'Maler', emoji:'🎨' },
+    { id:'rorleger', name:'Rørlegger (VVS)', emoji:'🔧' },
+    { id:'elektriker', name:'Elektriker', emoji:'⚡' },
+    { id:'blikkenslager', name:'Blikkenslager', emoji:'🔩' },
+    { id:'grunnarbeid', name:'Grunnarbeid', emoji:'🪨' },
+    { id:'rigg', name:'Rigg og drift', emoji:'🚧' },
+    { id:'ventilasjon', name:'Ventilasjon', emoji:'💨' },
+    { id:'tak', name:'Taktekker', emoji:'🏠' },
+    { id:'annet', name:'Annet', emoji:'📦' },
+  ]
+
+  const addFag = (fagId) => {
+    if (fagfordeling.find(f => f.fagId === fagId)) return
+    const fag = FAG_OPTIONS.find(f => f.id === fagId)
+    setFagfordeling(prev => [...prev, { fagId, name: fag?.name || fagId, emoji: fag?.emoji || '📦', type: 'ue', beskrivelse: '', poster: [] }])
+  }
+
+  const updateFag = (fagId, field, value) => setFagfordeling(prev => prev.map(f => f.fagId === fagId ? { ...f, [field]: value } : f))
+  const removeFag = (fagId) => setFagfordeling(prev => prev.filter(f => f.fagId !== fagId))
+
+  const saveFagfordeling = async () => {
+    setSavingFag(true)
+    try {
+      const log = [...(t.activity_log || []), { action: `Fagfordeling oppdatert (${fagfordeling.length} fag)`, by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ fagfordeling, activity_log: log, updated_at: new Date().toISOString() }).eq('id', t.id)
+      setT(v => ({ ...v, fagfordeling, activity_log: log }))
+      showAlert({ message: 'Fagfordeling lagret!', subMessage: `${fagfordeling.filter(f=>f.type==='egen').length} i egen regi, ${fagfordeling.filter(f=>f.type==='ue').length} til UE`, emoji: '✅' })
+    } catch(e) { showAlert({ message: 'Feil', subMessage: e.message, type: 'error' }) }
+    finally { setSavingFag(false) }
+  }
+
+  const sendFagToUE = async (fag) => {
+    if (!(await confirm({ message: `Opprett UE-anbud for ${fag.name}?`, subMessage: 'Det opprettes et utgående anbud med poster fra denne faggruppen, klart for UE-invitasjon.', confirmLabel: 'Opprett UE-anbud' }))) return
+    try {
+      const chapters = [{ id: Date.now(), title: fag.name, markup: '', posts: fag.poster.length > 0 ? fag.poster.map((p, i) => ({ id: Date.now()+i, description: p.description || '', qty: parseFloat(p.qty)||1, unit: p.unit||'stk', unitCost: 0 })) : [{ id: Date.now()+1, description: fag.beskrivelse || fag.name, qty: 1, unit: 'rs', unitCost: 0 }] }]
+      const { error } = await supabase.from('tenders').insert({
+        title: `${t.title} — ${fag.name}`,
+        tender_number: `ANB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+        type: 'outgoing',
+        project_id: t.project_id || null,
+        parent_tender_id: t.id,
+        description: fag.beskrivelse || `${fag.name} — utsendt fra forespørsel "${t.title}"`,
+        deadline: t.deadline,
+        chapters,
+        vedlegg: t.vedlegg || [],
+        status: 'Utkast',
+        created_by: user?.id,
+        activity_log: [{ action: `Opprettet fra byggherre-forespørsel: ${t.title}`, by: user?.email, at: new Date().toISOString() }],
+      })
+      if (error) throw error
+      // Mark fag as sent
+      updateFag(fag.fagId, 'ueOpprettet', true)
+      const updatedFag = fagfordeling.map(f => f.fagId === fag.fagId ? { ...f, ueOpprettet: true } : f)
+      const log = [...(t.activity_log || []), { action: `UE-anbud opprettet for ${fag.name}`, by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ fagfordeling: updatedFag, activity_log: log }).eq('id', t.id)
+      setT(v => ({ ...v, fagfordeling: updatedFag, activity_log: log }))
+      setFagfordeling(updatedFag)
+      showAlert({ message: `UE-anbud opprettet!`, subMessage: `"${t.title} — ${fag.name}" er klar i anbudslisten for UE-invitasjon.`, emoji: '📤' })
+    } catch(e) { showAlert({ message: 'Feil', subMessage: e.message, type: 'error' }) }
+  }
+
+  const sendFagToKalkOrTilbud = async (fag) => {
+    const choice = await confirm({ message: `Send ${fag.name} til kalkulasjon eller tilbud?`, subMessage: 'Postene kopieres til valgt modul for intern prising.', confirmLabel: '📋 Generer tilbud' })
+    if (!choice) return
+    try {
+      const chapters = [{ id: Date.now(), title: fag.name, markup: '', posts: fag.poster.length > 0 ? fag.poster.map((p, i) => ({ id: Date.now()+i, description: p.description || '', qty: parseFloat(p.qty)||1, unit: p.unit||'stk', unitPriceWork: 0, unitPriceMaterial: 0 })) : [{ id: Date.now()+1, description: fag.beskrivelse || fag.name, qty: 1, unit: 'rs', unitPriceWork: 0, unitPriceMaterial: 0 }] }]
+      const { data, error } = await supabase.from('quotes').insert({
+        title: `${t.title} — ${fag.name}`, quote_number: `TB-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
+        project_id: t.project_id||null, customer_name: t.customer_name, customer_email: t.customer_email,
+        chapters, global_markup: '', status: 'Utkast', created_by: user?.id,
+      }).select().single()
+      if (error) throw error
+      updateFag(fag.fagId, 'tilbudOpprettet', true)
+      const updatedFag = fagfordeling.map(f => f.fagId === fag.fagId ? { ...f, tilbudOpprettet: true } : f)
+      const log = [...(t.activity_log || []), { action: `Tilbud generert for ${fag.name} (egen regi)`, by: user?.email, at: new Date().toISOString() }]
+      await supabase.from('tenders').update({ fagfordeling: updatedFag, activity_log: log }).eq('id', t.id)
+      setT(v => ({ ...v, fagfordeling: updatedFag, activity_log: log }))
+      setFagfordeling(updatedFag)
+      showAlert({ message: 'Tilbud opprettet!', subMessage: `"${fag.name}" er opprettet som tilbudsutkast.`, emoji: '📋' })
+    } catch(e) { showAlert({ message: 'Feil', subMessage: e.message, type: 'error' }) }
+  }
 
   const load = async () => {
     const { data } = await supabase.from('tender_ues').select('*').eq('tender_id', t.id).order('created_at')
@@ -6084,6 +6173,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Inviter UE</button>}
             {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
+            {isIncoming && <button onClick={()=>setShowFagfordeling(!showFagfordeling)} style={{ padding:'9px 14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔀 Fordel på fag</button>}
             {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
             <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
@@ -6115,6 +6205,96 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                   </a>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Fagfordeling — kun for innkommende */}
+          {isIncoming && showFagfordeling && (
+            <div style={{ ...tCard, border:'2px solid #ddd6fe' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#7c3aed' }}>🔀 Fordel på faggrupper</h3>
+                <button onClick={saveFagfordeling} disabled={savingFag} style={{ background: savingFag?'#c4b5fd':'#7c3aed', color:'white', border:'none', borderRadius:'8px', padding:'7px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>{savingFag?'Lagrer...':'💾 Lagre fordeling'}</button>
+              </div>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>Del opp forespørselen i faggrupper. Marker hver som «Egen regi» (du priser selv) eller «Til UE» (sendes ut til underentreprenør).</p>
+
+              {/* Legg til faggruppe */}
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'16px' }}>
+                {FAG_OPTIONS.filter(f => !fagfordeling.find(ff => ff.fagId === f.id)).map(f => (
+                  <button key={f.id} onClick={() => addFag(f.id)} style={{ background:'white', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', cursor:'pointer', color:'#64748b', display:'flex', alignItems:'center', gap:'4px' }}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor='#7c3aed'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
+                    {f.emoji} {f.name}
+                  </button>
+                ))}
+              </div>
+
+              {fagfordeling.length === 0 && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>Klikk på en faggruppe ovenfor for å legge den til</p>}
+
+              {/* Faggruppe-kort */}
+              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                {fagfordeling.map(fag => (
+                  <div key={fag.fagId} style={{ background: fag.type==='egen'?'#f0fdf4':'#eff6ff', borderRadius:'12px', border:`1px solid ${fag.type==='egen'?'#bbf7d0':'#bfdbfe'}`, padding:'14px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                      <span style={{ fontSize:'20px' }}>{fag.emoji}</span>
+                      <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', flex:1 }}>{fag.name}</span>
+                      {/* Type toggle */}
+                      <div style={{ display:'flex', borderRadius:'8px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
+                        <button onClick={() => updateFag(fag.fagId, 'type', 'egen')}
+                          style={{ padding:'5px 12px', border:'none', fontSize:'12px', fontWeight:'600', cursor:'pointer', background: fag.type==='egen'?'#059669':'white', color: fag.type==='egen'?'white':'#64748b' }}>🪚 Egen regi</button>
+                        <button onClick={() => updateFag(fag.fagId, 'type', 'ue')}
+                          style={{ padding:'5px 12px', border:'none', fontSize:'12px', fontWeight:'600', cursor:'pointer', background: fag.type==='ue'?'#2563eb':'white', color: fag.type==='ue'?'white':'#64748b' }}>📤 Til UE</button>
+                      </div>
+                      <button onClick={() => removeFag(fag.fagId)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px', padding:'2px' }}>×</button>
+                    </div>
+                    <textarea value={fag.beskrivelse} onChange={e => updateFag(fag.fagId, 'beskrivelse', e.target.value)} rows={2} placeholder="Beskriv arbeidet for denne faggruppen..." style={{ width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', resize:'none', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }} />
+
+                    {/* Poster for denne faggruppen */}
+                    {(fag.poster||[]).length > 0 && (
+                      <div style={{ marginTop:'8px', display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {fag.poster.map((p, pi) => (
+                          <div key={pi} style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                            <input value={p.description} onChange={e => { const np = [...(fag.poster||[])]; np[pi] = {...np[pi], description: e.target.value}; updateFag(fag.fagId, 'poster', np) }} placeholder="Beskrivelse" style={{ flex:1, padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none' }} />
+                            <input type="number" value={p.qty} onChange={e => { const np = [...(fag.poster||[])]; np[pi] = {...np[pi], qty: e.target.value}; updateFag(fag.fagId, 'poster', np) }} style={{ width:'60px', padding:'6px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none', textAlign:'right' }} />
+                            <input value={p.unit} onChange={e => { const np = [...(fag.poster||[])]; np[pi] = {...np[pi], unit: e.target.value}; updateFag(fag.fagId, 'poster', np) }} placeholder="stk" style={{ width:'50px', padding:'6px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none' }} />
+                            <button onClick={() => { const np = (fag.poster||[]).filter((_,i) => i !== pi); updateFag(fag.fagId, 'poster', np) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => updateFag(fag.fagId, 'poster', [...(fag.poster||[]), { description:'', qty:1, unit:'stk' }])} style={{ marginTop:'6px', background:'none', border:'none', cursor:'pointer', color: fag.type==='egen'?'#059669':'#2563eb', fontSize:'12px', fontWeight:'600', padding:0 }}>+ Legg til post</button>
+
+                    {/* Handlingsknapper */}
+                    <div style={{ marginTop:'10px', display:'flex', gap:'6px' }}>
+                      {fag.type === 'ue' && !fag.ueOpprettet && (
+                        <button onClick={() => sendFagToUE(fag)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>📤 Opprett UE-anbud</button>
+                      )}
+                      {fag.type === 'ue' && fag.ueOpprettet && (
+                        <span style={{ background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600' }}>✅ UE-anbud opprettet</span>
+                      )}
+                      {fag.type === 'egen' && !fag.tilbudOpprettet && (
+                        <button onClick={() => sendFagToKalkOrTilbud(fag)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>📋 Generer tilbud</button>
+                      )}
+                      {fag.type === 'egen' && fag.tilbudOpprettet && (
+                        <span style={{ background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600' }}>✅ Tilbud opprettet</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Oppsummering */}
+              {fagfordeling.length > 0 && (
+                <div style={{ marginTop:'14px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', border:'1px solid #f1f5f9' }}>
+                  <div style={{ fontSize:'13px', color:'#64748b' }}>
+                    <strong style={{ color:'#059669' }}>{fagfordeling.filter(f=>f.type==='egen').length}</strong> i egen regi · <strong style={{ color:'#2563eb' }}>{fagfordeling.filter(f=>f.type==='ue').length}</strong> til UE
+                  </div>
+                  <div style={{ display:'flex', gap:'6px' }}>
+                    {fagfordeling.filter(f=>f.type==='ue'&&!f.ueOpprettet).length > 0 && (
+                      <button onClick={async () => { for (const fag of fagfordeling.filter(f=>f.type==='ue'&&!f.ueOpprettet)) await sendFagToUE(fag) }}
+                        style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>📤 Opprett alle UE-anbud</button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
