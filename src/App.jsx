@@ -690,7 +690,7 @@ function ProsjekterPage({ onNavigateDetail }) {
           projectNumber = `P-${Date.now().toString().slice(-5)}`
         }
       }
-      await db.createProject({ ...form, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      await db.createProject({ ...form, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, customer_id: form.customer_id || null, parent_id: form.parent_id || null, created_by: user?.id })
       setShowCreate(false)
       setCreateParent(null)
       load()
@@ -886,7 +886,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
       const nextIdx = siblings.length + 1
       const parentNum = project.project_number || 'P-00000'
       const projectNumber = form.project_number || `${parentNum}-${String(nextIdx).padStart(2,'0')}`
-      await db.createProject({ ...form, parent_id: projectId, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      await db.createProject({ ...form, parent_id: projectId, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, customer_id: form.customer_id || null, created_by: user?.id })
       setShowCreateSub(false)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
