@@ -6065,6 +6065,9 @@ function AnbudsPage() {
   const [forespSearch, setForespSearch] = useState('')
   const [forespStatusFilter, setForespStatusFilter] = useState('alle')
   const [leverandorSearch, setLeverandorSearch] = useState('')
+  const [historikkSearch, setHistorikkSearch] = useState('')
+  const [historikkTender, setHistorikkTender] = useState('alle')
+  const [statistikkPeriod, setStatistikkPeriod] = useState('all')
 
   const load = async () => {
     try {
@@ -6409,94 +6412,176 @@ function AnbudsPage() {
 
         {/* ═══ TAB: STATISTIKK ═══ */}
         {activeTab === 'statistikk' && (<>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px' }}>
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-              <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Tildelingsrate</div>
-              <div style={{ fontSize:'28px', fontWeight:'800', color:'#059669' }}>{tenders.length > 0 ? Math.round(tildelt.length / tenders.length * 100) : 0}%</div>
-              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>{tildelt.length} av {tenders.length} anbud tildelt</div>
-            </div>
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-              <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Gjennomsnittlig verdi</div>
-              <div style={{ fontSize:'28px', fontWeight:'800', color:'#2563eb' }}>{fmtT(tildelt.length > 0 ? totalTildelt / tildelt.length : 0)}</div>
-              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>per tildelt anbud</div>
-            </div>
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-              <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Aktive forespørsler</div>
-              <div style={{ fontSize:'28px', fontWeight:'800', color:'#7c3aed' }}>{tenders.filter(t => !['Tildelt','Avslått','Kansellert'].includes(t.status)).length}</div>
-              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>under behandling</div>
+          {/* Period filter */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'10px' }}>
+            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>📈 Statistikk</h2>
+            <div style={{ display:'flex', gap:'4px' }}>
+              {[['all','Totalt'],['365','Siste 12 mnd'],['90','Siste 3 mnd'],['30','Siste 30 dager']].map(([v,l]) => (
+                <button key={v} onClick={()=>setStatistikkPeriod(v)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight: statistikkPeriod===v?'600':'400', background: statistikkPeriod===v?'#ecfdf5':'transparent', color: statistikkPeriod===v?'#059669':'#64748b' }}>{l}</button>
+              ))}
             </div>
           </div>
-          {/* Status-fordeling */}
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Statusfordeling</h3>
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {Object.keys(TENDER_STATUS).map(status => {
-                const count = tenders.filter(t => t.status === status).length
-                const pct = tenders.length > 0 ? (count / tenders.length * 100) : 0
-                return (
-                  <div key={status} style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-                    <span style={{ fontSize:'13px', width:'120px', color:'#475569' }}>{TENDER_STATUS[status].emoji} {status}</span>
-                    <div style={{ flex:1, height:'24px', background:'#f8fafc', borderRadius:'6px', overflow:'hidden' }}>
-                      <div style={{ height:'100%', width:`${pct}%`, background: TENDER_STATUS[status].color, borderRadius:'6px', minWidth: count > 0 ? '2px' : '0', transition:'width 0.3s' }} />
-                    </div>
-                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', width:'30px', textAlign:'right' }}>{count}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-          {/* Topp UE-er */}
-          {ueRegister.filter(u=>u.awarded>0).length > 0 && (
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏆 Topp leverandører (mest tildelt)</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {ueRegister.filter(u=>u.awarded>0).sort((a,b)=>b.awarded-a.awarded).slice(0,5).map((ue,i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px' }}>
-                    <span style={{ fontWeight:'800', fontSize:'16px', color:'#059669', width:'24px' }}>#{i+1}</span>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
-                      <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.email}</div>
-                    </div>
-                    <div style={{ textAlign:'right' }}>
-                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#16a34a' }}>{ue.awarded} tildelt</div>
-                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>av {ue.tenders} anbud</div>
-                    </div>
-                  </div>
-                ))}
+          {(() => {
+            const cutoff = statistikkPeriod === 'all' ? null : new Date(Date.now() - parseInt(statistikkPeriod)*24*60*60*1000)
+            const periodTenders = cutoff ? tenders.filter(t => new Date(t.created_at) >= cutoff) : tenders
+            const periodTildelt = periodTenders.filter(t => t.status === 'Tildelt')
+            const periodTotalTildelt = periodTildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
+            const periodActive = periodTenders.filter(t => !['Tildelt','Avslått','Kansellert'].includes(t.status))
+
+            // Monthly breakdown for bar chart (last 6 months)
+            const months = []
+            for (let i = 5; i >= 0; i--) {
+              const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1)
+              const end = new Date(d); end.setMonth(end.getMonth() + 1)
+              const label = d.toLocaleDateString('nb-NO', { month:'short', year:'2-digit' })
+              const count = tenders.filter(t => { const c = new Date(t.created_at); return c >= d && c < end }).length
+              const tildeltCount = tenders.filter(t => t.status === 'Tildelt' && new Date(t.created_at) >= d && new Date(t.created_at) < end).length
+              months.push({ label, count, tildeltCount })
+            }
+            const maxCount = Math.max(...months.map(m => m.count), 1)
+
+            return (<>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px' }}>
+                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                  <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Tildelingsrate</div>
+                  <div style={{ fontSize:'28px', fontWeight:'800', color:'#059669' }}>{periodTenders.length > 0 ? Math.round(periodTildelt.length / periodTenders.length * 100) : 0}%</div>
+                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>{periodTildelt.length} av {periodTenders.length} anbud tildelt</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                  <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Gjennomsnittlig verdi</div>
+                  <div style={{ fontSize:'28px', fontWeight:'800', color:'#2563eb' }}>{fmtT(periodTildelt.length > 0 ? periodTotalTildelt / periodTildelt.length : 0)}</div>
+                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>per tildelt anbud</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                  <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Aktive forespørsler</div>
+                  <div style={{ fontSize:'28px', fontWeight:'800', color:'#7c3aed' }}>{periodActive.length}</div>
+                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>under behandling</div>
+                </div>
               </div>
-            </div>
-          )}
+
+              {/* Monthly bar chart */}
+              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📊 Anbud per måned (siste 6 måneder)</h3>
+                <div style={{ display:'flex', alignItems:'flex-end', gap:'8px', height:'140px' }}>
+                  {months.map((m, i) => (
+                    <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'4px', height:'100%', justifyContent:'flex-end' }}>
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'2px', width:'100%' }}>
+                        {m.tildeltCount > 0 && <div style={{ fontSize:'10px', fontWeight:'700', color:'#16a34a' }}>{m.tildeltCount}</div>}
+                        <div style={{ fontSize:'10px', fontWeight:'600', color:'#0f172a' }}>{m.count}</div>
+                      </div>
+                      <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:'1px' }}>
+                        <div style={{ width:'100%', height:`${Math.max((m.count / maxCount) * 100, m.count > 0 ? 8 : 0)}px`, background:'#bfdbfe', borderRadius:'4px 4px 0 0', transition:'height 0.3s' }} />
+                        {m.tildeltCount > 0 && <div style={{ width:'100%', height:`${Math.max((m.tildeltCount / maxCount) * 100, 4)}px`, background:'#059669', borderRadius:'0 0 4px 4px', transition:'height 0.3s' }} />}
+                      </div>
+                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:'flex', gap:'16px', justifyContent:'center', marginTop:'12px' }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'11px', color:'#64748b' }}><span style={{ width:'10px', height:'10px', borderRadius:'2px', background:'#bfdbfe' }} /> Totalt</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'11px', color:'#64748b' }}><span style={{ width:'10px', height:'10px', borderRadius:'2px', background:'#059669' }} /> Tildelt</span>
+                </div>
+              </div>
+
+              {/* Status-fordeling */}
+              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Statusfordeling</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {Object.keys(TENDER_STATUS).map(status => {
+                    const count = periodTenders.filter(t => t.status === status).length
+                    const pct = periodTenders.length > 0 ? (count / periodTenders.length * 100) : 0
+                    return (
+                      <div key={status} style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                        <span style={{ fontSize:'13px', width:'120px', color:'#475569' }}>{TENDER_STATUS[status].emoji} {status}</span>
+                        <div style={{ flex:1, height:'24px', background:'#f8fafc', borderRadius:'6px', overflow:'hidden' }}>
+                          <div style={{ height:'100%', width:`${pct}%`, background: TENDER_STATUS[status].color, borderRadius:'6px', minWidth: count > 0 ? '2px' : '0', transition:'width 0.3s' }} />
+                        </div>
+                        <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', width:'30px', textAlign:'right' }}>{count}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Topp UE-er */}
+              {ueRegister.filter(u=>u.awarded>0).length > 0 && (
+                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                  <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏆 Topp leverandører (mest tildelt)</h3>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {ueRegister.filter(u=>u.awarded>0).sort((a,b)=>b.awarded-a.awarded).slice(0,5).map((ue,i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px' }}>
+                        <span style={{ fontWeight:'800', fontSize:'16px', color:'#059669', width:'24px' }}>#{i+1}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
+                          <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.email}</div>
+                        </div>
+                        <div style={{ textAlign:'right' }}>
+                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#16a34a' }}>{ue.awarded} tildelt</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>av {ue.tenders} anbud</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>)
+          })()}
         </>)}
 
         {/* ═══ TAB: HISTORIKK ═══ */}
         {activeTab === 'historikk' && (<>
-          <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>🕐 Aktivitetslogg ({historikk.length} hendelser)</h2>
-          {historikk.length === 0 ? (
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-              <div style={{ fontSize:'40px', marginBottom:'12px' }}>🕐</div>
-              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen aktivitet ennå</h3>
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Hendelser vises her etter hvert som anbud opprettes og behandles.</p>
-            </div>
-          ) : (
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
-                {historikk.slice(0, 50).map((entry, i) => (
-                  <div key={i} style={{ display:'flex', gap:'12px', padding:'10px 0', borderBottom: i < historikk.length - 1 ? '1px solid #f8fafc' : 'none' }}>
-                    <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#059669', marginTop:'6px', flexShrink:0 }} />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:'13px', color:'#0f172a' }}>{entry.action}</div>
-                      <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
-                        <span>{entry.tender} ({entry.tender_number})</span>
-                        {entry.by && <span>· {entry.by}</span>}
-                        <span>· {new Date(entry.at).toLocaleDateString('nb-NO')} {new Date(entry.at).toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' })}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>🕐 Aktivitetslogg</h2>
+          </div>
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+            <input value={historikkSearch} onChange={e=>setHistorikkSearch(e.target.value)} placeholder="🔍  Søk i hendelser..." style={{ ...tInp, maxWidth:'220px', flex:1 }} />
+            <select value={historikkTender} onChange={e=>setHistorikkTender(e.target.value)} style={{ ...tInp, maxWidth:'220px' }}>
+              <option value="alle">Alle anbud</option>
+              {tenders.map(t=><option key={t.id} value={t.id}>{t.tender_number} — {t.title}</option>)}
+            </select>
+            {(historikkSearch||historikkTender!=='alle') && <button onClick={()=>{setHistorikkSearch('');setHistorikkTender('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          </div>
+          {(() => {
+            const filteredHist = historikk.filter(entry => {
+              if (historikkTender !== 'alle' && entry.tender_id !== historikkTender) return false
+              if (historikkSearch) {
+                const s = historikkSearch.toLowerCase()
+                if (![entry.action, entry.tender, entry.tender_number, entry.by].some(v => v?.toLowerCase().includes(s))) return false
+              }
+              return true
+            })
+            return filteredHist.length === 0 ? (
+              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+                <div style={{ fontSize:'40px', marginBottom:'12px' }}>🕐</div>
+                <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{historikk.length === 0 ? 'Ingen aktivitet ennå' : 'Ingen treff'}</h3>
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{historikk.length === 0 ? 'Hendelser vises her etter hvert som anbud opprettes og behandles.' : 'Prøv å endre søk eller filter.'}</p>
               </div>
-              {historikk.length > 50 && <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'12px', color:'#94a3b8' }}>Viser de 50 nyeste av {historikk.length} hendelser</p>}
-            </div>
-          )}
+            ) : (
+              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+                <div style={{ fontSize:'12px', color:'#94a3b8', marginBottom:'12px' }}>{filteredHist.length} hendelser{filteredHist.length !== historikk.length ? ` (av ${historikk.length} totalt)` : ''}</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                  {filteredHist.slice(0, 100).map((entry, i) => {
+                    // Determine dot color by action type
+                    const dotColor = entry.action?.includes('Tildelt') ? '#16a34a' : entry.action?.includes('Pris mottatt') || entry.action?.includes('priset') ? '#2563eb' : entry.action?.includes('Invitert') || entry.action?.includes('sendt') ? '#d97706' : entry.action?.includes('Kansell') || entry.action?.includes('Slett') ? '#dc2626' : '#059669'
+                    return (
+                      <div key={i} style={{ display:'flex', gap:'12px', padding:'10px 0', borderBottom: i < filteredHist.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                        <div style={{ width:'8px', height:'8px', borderRadius:'50%', background: dotColor, marginTop:'6px', flexShrink:0 }} />
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:'13px', color:'#0f172a' }}>{entry.action}</div>
+                          <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#94a3b8', marginTop:'2px', flexWrap:'wrap' }}>
+                            <span style={{ cursor:'pointer', color:'#2563eb' }} onClick={()=>{setHistorikkTender(entry.tender_id); setHistorikkSearch('')}}>{entry.tender} ({entry.tender_number})</span>
+                            {entry.by && <span>· {entry.by}</span>}
+                            <span>· {new Date(entry.at).toLocaleDateString('nb-NO')} {new Date(entry.at).toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {filteredHist.length > 100 && <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'12px', color:'#94a3b8' }}>Viser de 100 nyeste av {filteredHist.length} hendelser</p>}
+              </div>
+            )
+          })()}
         </>)}
       </div>
       {showNew && <AnbudEditorModal type={newType} projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
@@ -6518,6 +6603,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const [savingFag, setSavingFag] = useState(false)
   const [childTenders, setChildTenders] = useState([])
   const [childUEs, setChildUEs] = useState({})
+  const [showComparison, setShowComparison] = useState(false)
   const cfg = TENDER_STATUS[t.status]
   const proj = projects.find(p=>p.id===t.project_id)
   const { totalCost, grandTotal } = calcTender(t.chapters||[], t.global_markup)
@@ -6714,6 +6800,184 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
+
+      {/* ═══ FULLSKJERM SAMMENLIGNINGSVISNING ═══ */}
+      {showComparison && pricedUes.length >= 2 && (
+        <div style={{ position:'fixed', inset:0, zIndex:90, background:'#f8fafc', overflowY:'auto' }}>
+          <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 32px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:91 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+              <button onClick={()=>setShowComparison(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', padding:'4px' }}>← Tilbake</button>
+              <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📊 Prissammenligning — {t.title}</h2>
+              <span style={{ fontSize:'12px', color:'#94a3b8' }}>{t.tender_number}</span>
+            </div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={() => {
+                // CSV export
+                const rows = [['Kapittel','Post','Mengde','Enhet',...pricedUes.map(u=>u.company_name),...pricedUes.map(u=>`${u.company_name} kommentar`),'Avvik %']]
+                ;(t.chapters||[]).forEach((ch,ci) => {
+                  (ch.posts||[]).forEach((post,pi) => {
+                    const row = [ch.title, post.description||'', post.qty||'', post.unit||'']
+                    const prices = pricedUes.map(ue => { const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]; const uePost = ueCh?(ueCh.posts||[]).find(p=>p.id===post.id)||(ueCh.posts||[])[pi]:null; return uePost?(parseFloat(uePost.uePrice)||0)*(parseFloat(post.qty)||1):0 })
+                    prices.forEach(p => row.push(p))
+                    pricedUes.forEach(ue => { const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]; const uePost = ueCh?(ueCh.posts||[]).find(p=>p.id===post.id)||(ueCh.posts||[])[pi]:null; row.push(uePost?.ueComment||'') })
+                    const validPrices = prices.filter(p=>p>0); const minP = Math.min(...validPrices); const maxP = Math.max(...validPrices)
+                    row.push(minP>0 ? Math.round((maxP-minP)/minP*100)+'%' : '')
+                    rows.push(row)
+                  })
+                })
+                rows.push(['','TOTAL','','',...pricedUes.map(u=>u.total_amount||''),...pricedUes.map(()=>''),''])
+                const csv = '\uFEFF' + rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n')
+                const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob)
+                const a = document.createElement('a'); a.href=url; a.download=`prissammenligning_${t.tender_number||'anbud'}.csv`; a.click(); URL.revokeObjectURL(url)
+              }} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>📥 Eksporter CSV</button>
+              <button onClick={()=>window.print()} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>🖨️ Skriv ut</button>
+            </div>
+          </div>
+
+          <div style={{ padding:'24px 32px', maxWidth:'1400px', margin:'0 auto' }}>
+            {/* UE-sammendragskort */}
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(pricedUes.length, 4)}, 1fr)`, gap:'14px', marginBottom:'24px' }}>
+              {pricedUes.map((ue, i) => {
+                const medals = ['🥇','🥈','🥉']
+                const diff = i > 0 && pricedUes[0].total_amount > 0 ? ((ue.total_amount - pricedUes[0].total_amount) / pricedUes[0].total_amount * 100) : 0
+                return (
+                  <div key={ue.id} style={{ background: i===0 ? 'linear-gradient(135deg, #f0fdf4, #ecfdf5)' : 'white', borderRadius:'16px', border:`2px solid ${i===0?'#bbf7d0':'#f1f5f9'}`, padding:'20px', position:'relative' }}>
+                    {i < 3 && <div style={{ position:'absolute', top:'-8px', right:'12px', fontSize:'24px' }}>{medals[i]}</div>}
+                    <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'6px' }}>#{i+1} — {i===0?'Laveste pris':''}
+                    </div>
+                    <div style={{ fontWeight:'700', fontSize:'16px', color:'#0f172a', marginBottom:'2px' }}>{ue.company_name}</div>
+                    {ue.contact_name && <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>{ue.contact_name}</div>}
+                    <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'10px' }}>{ue.email}</div>
+                    <div style={{ fontSize:'24px', fontWeight:'800', color: i===0?'#16a34a':'#0f172a' }}>{fmtT(ue.total_amount)}</div>
+                    {i > 0 && <div style={{ fontSize:'12px', color:'#dc2626', marginTop:'4px' }}>+{diff.toFixed(1)}% dyrere</div>}
+                    {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}</div>}
+                    {(ue.vedlegg||[]).length > 0 && (
+                      <div style={{ marginTop:'8px', display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                        {ue.vedlegg.map((v,vi)=><a key={vi} href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'11px', color:'#2563eb', textDecoration:'none', background:'#eff6ff', padding:'2px 8px', borderRadius:'6px', border:'1px solid #bfdbfe' }}>📎 {v.name}</a>)}
+                      </div>
+                    )}
+                    <div style={{ marginTop:'12px', display:'flex', gap:'6px' }}>
+                      <button onClick={async () => { setShowComparison(false); setShowAward(true) }} style={{ flex:1, padding:'8px 12px', background: i===0?'#059669':'white', color: i===0?'white':'#475569', border:`1px solid ${i===0?'#059669':'#e2e8f0'}`, borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>🏆 Tildel</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Detaljert sammenligning per kapittel */}
+            {(t.chapters||[]).map((ch, ci) => {
+              // Compute chapter totals per UE
+              const chTotals = pricedUes.map(ue => {
+                const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]
+                return ueCh ? (ueCh.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0) : 0
+              })
+              const minChTotal = Math.min(...chTotals.filter(v=>v>0))
+
+              return (
+                <div key={ci} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', marginBottom:'16px', overflow:'hidden' }}>
+                  <div style={{ background:'#f8fafc', padding:'14px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                    <div style={{ display:'flex', gap:'12px' }}>
+                      {pricedUes.map((ue,i) => {
+                        const isBest = chTotals[i] > 0 && chTotals[i] === minChTotal
+                        return <span key={ue.id} style={{ fontSize:'13px', fontWeight:'700', color: isBest?'#16a34a':'#0f172a', background: isBest?'#f0fdf4':'transparent', padding:'2px 10px', borderRadius:'6px' }}>{ue.company_name.length>12?ue.company_name.slice(0,12)+'…':ue.company_name}: {fmtT(chTotals[i])}</span>
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                      <thead>
+                        <tr style={{ background:'#fafafa' }}>
+                          <th style={{ padding:'10px 14px', textAlign:'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', minWidth:'200px' }}>Post</th>
+                          <th style={{ padding:'10px 8px', textAlign:'center', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', width:'80px' }}>Mengde</th>
+                          {pricedUes.map(ue => (
+                            <th key={ue.id} style={{ padding:'10px 14px', textAlign:'right', color: pricedUes[0]?.id===ue.id?'#16a34a':'#0f172a', fontWeight:'700', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', minWidth:'120px' }}>
+                              {ue.company_name.length>15?ue.company_name.slice(0,15)+'…':ue.company_name}
+                            </th>
+                          ))}
+                          <th style={{ padding:'10px 14px', textAlign:'center', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', width:'80px' }}>Avvik</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(ch.posts||[]).map((post, pi) => {
+                          const uePrices = pricedUes.map(ue => {
+                            const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]
+                            const uePost = ueCh?(ueCh.posts||[]).find(p=>p.id===post.id)||(ueCh.posts||[])[pi]:null
+                            return { ueId:ue.id, price: uePost?(parseFloat(uePost.uePrice)||0)*(parseFloat(post.qty)||1):0, comment: uePost?.ueComment||'' }
+                          })
+                          const validPrices = uePrices.filter(p=>p.price>0).map(p=>p.price)
+                          const lowestPrice = validPrices.length>0?Math.min(...validPrices):0
+                          const highestPrice = validPrices.length>0?Math.max(...validPrices):0
+                          const avvikPct = lowestPrice > 0 ? Math.round((highestPrice-lowestPrice)/lowestPrice*100) : 0
+                          const hasComments = uePrices.some(up=>up.comment)
+
+                          return (
+                            <React.Fragment key={pi}>
+                              <tr style={{ borderBottom: hasComments ? 'none' : '1px solid #f8fafc' }}>
+                                <td style={{ padding:'10px 14px', color:'#0f172a', fontWeight:'500' }}>{post.description||'—'}</td>
+                                <td style={{ padding:'10px 8px', textAlign:'center', color:'#94a3b8', fontSize:'12px' }}>{post.qty} {post.unit}</td>
+                                {uePrices.map(up => {
+                                  const isBest = up.price>0 && up.price===lowestPrice
+                                  const isWorst = up.price>0 && up.price===highestPrice && validPrices.length>1
+                                  return (
+                                    <td key={up.ueId} style={{ padding:'10px 14px', textAlign:'right', fontWeight: isBest?'800':'500', color: isBest?'#16a34a': isWorst?'#dc2626':'#0f172a', background: isBest?'#f0fdf4': isWorst&&avvikPct>30?'#fef2f2':'transparent' }}>
+                                      {up.price > 0 ? fmtT(up.price) : <span style={{ color:'#cbd5e1' }}>—</span>}
+                                    </td>
+                                  )
+                                })}
+                                <td style={{ padding:'10px 14px', textAlign:'center' }}>
+                                  {avvikPct > 0 && (
+                                    <span style={{ fontSize:'12px', fontWeight:'600', padding:'2px 8px', borderRadius:'6px', background: avvikPct>50?'#fef2f2': avvikPct>20?'#fffbeb':'#f0fdf4', color: avvikPct>50?'#dc2626': avvikPct>20?'#d97706':'#16a34a' }}>
+                                      {avvikPct}%
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                              {hasComments && (
+                                <tr style={{ borderBottom:'1px solid #f8fafc' }}>
+                                  <td colSpan={2} style={{ padding:'2px 14px 8px', fontSize:'10px', color:'#94a3b8' }}>💬</td>
+                                  {uePrices.map(up => (
+                                    <td key={up.ueId} style={{ padding:'2px 14px 8px', fontSize:'11px', color:'#64748b', fontStyle:'italic' }}>{up.comment}</td>
+                                  ))}
+                                  <td />
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
+                        {/* Kapittelsum */}
+                        <tr style={{ borderTop:'2px solid #e2e8f0', background:'#f8fafc' }}>
+                          <td style={{ padding:'10px 14px', fontWeight:'700', color:'#0f172a' }} colSpan={2}>Kapittelsum</td>
+                          {pricedUes.map((ue,i) => {
+                            const isBest = chTotals[i] > 0 && chTotals[i] === minChTotal
+                            return <td key={ue.id} style={{ padding:'10px 14px', textAlign:'right', fontWeight:'800', color: isBest?'#16a34a':'#0f172a', background: isBest?'#f0fdf4':'transparent' }}>{chTotals[i]>0?fmtT(chTotals[i]):'—'}</td>
+                          })}
+                          <td />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Total sammendrag */}
+            <div style={{ background:'linear-gradient(135deg, #f0fdf4, #ecfdf5)', borderRadius:'14px', border:'2px solid #bbf7d0', padding:'20px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'16px' }}>
+              <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>Totalt eks. mva</div>
+              <div style={{ display:'flex', gap:'24px' }}>
+                {pricedUes.map((ue,i) => (
+                  <div key={ue.id} style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>{ue.company_name}</div>
+                    <div style={{ fontSize:'20px', fontWeight:'800', color: i===0?'#16a34a':'#0f172a' }}>{fmtT(ue.total_amount)} {i===0&&'🏆'}</div>
+                    {i > 0 && pricedUes[0].total_amount > 0 && <div style={{ fontSize:'11px', color:'#dc2626' }}>+{((ue.total_amount-pricedUes[0].total_amount)/pricedUes[0].total_amount*100).toFixed(1)}%</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="no-print-anbud" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
@@ -6735,6 +6999,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Inviter UE</button>}
             {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
+            {!isIncoming && pricedUes.length >= 2 && <button onClick={()=>setShowComparison(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📊 Sammenlign UE-priser</button>}
             {isIncoming && <button onClick={()=>setShowFagfordeling(!showFagfordeling)} style={{ padding:'9px 14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔀 Fordel på fag</button>}
             {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
