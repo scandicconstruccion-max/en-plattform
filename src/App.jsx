@@ -6053,6 +6053,7 @@ function AnbudsPage() {
   const { user } = useAuth()
   const [tenders, setTenders] = useState([])
   const [projects, setProjects] = useState([])
+  const [allUEs, setAllUEs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('alle')
   const [filterType, setFilterType] = useState('alle')
@@ -6060,16 +6061,18 @@ function AnbudsPage() {
   const [showNew, setShowNew] = useState(false)
   const [newType, setNewType] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [activeTab, setActiveTab] = useState('oversikt')
 
   const load = async () => {
     try {
-      const [t, p] = await Promise.all([
+      const [t, p, ueData] = await Promise.all([
         supabase.from('tenders').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
+        supabase.from('projects').select('id,name').order('name').then(r => r.data||[]),
+        supabase.from('tender_ues').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
       ])
-      setTenders(t); setProjects(p)
+      setTenders(t); setProjects(p); setAllUEs(ueData)
 
-      // Frist-varsling: sjekk anbud med frist 3 dager eller 1 dag unna
+      // Frist-varsling
       if (user?.id) {
         const today = new Date(); today.setHours(0,0,0,0)
         for (const tender of t) {
@@ -6077,18 +6080,9 @@ function AnbudsPage() {
           const deadlineDate = new Date(tender.deadline); deadlineDate.setHours(0,0,0,0)
           const daysLeft = Math.ceil((deadlineDate - today) / (1000*60*60*24))
           if (daysLeft === 3 || daysLeft === 1) {
-            // Sjekk om varsel allerede er sendt i dag for denne fristen
-            const notifKey = `deadline_${tender.id}_${daysLeft}d_${today.toISOString().split('T')[0]}`
             const { data: existing } = await supabase.from('notifications').select('id').eq('user_id', user.id).eq('link_id', tender.id).ilike('title', `%${daysLeft} dag%`).gte('created_at', today.toISOString()).limit(1)
             if (!existing || existing.length === 0) {
-              await supabase.from('notifications').insert({
-                user_id: user.id,
-                title: `⏰ Anbudsfrist om ${daysLeft} dag${daysLeft>1?'er':''}: ${tender.title}`,
-                message: `${tender.tender_number} har frist ${tender.deadline}. ${daysLeft === 1 ? 'Fristen utløper i morgen!' : ''}`,
-                type: daysLeft === 1 ? 'warning' : 'info',
-                link_page: 'anbudsmodul',
-                link_id: tender.id,
-              })
+              await supabase.from('notifications').insert({ user_id: user.id, title: `⏰ Anbudsfrist om ${daysLeft} dag${daysLeft>1?'er':''}: ${tender.title}`, message: `${tender.tender_number} har frist ${tender.deadline}.`, type: daysLeft === 1 ? 'warning' : 'info', link_page: 'anbudsmodul', link_id: tender.id })
             }
           }
         }
@@ -6110,101 +6104,358 @@ function AnbudsPage() {
   const tildelt = tenders.filter(t => t.status === 'Tildelt')
   const totalTildelt = tildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
 
+  // UE-register helpers
+  const ueRegister = React.useMemo(() => {
+    const map = {}
+    allUEs.forEach(ue => {
+      const key = ue.email?.toLowerCase()
+      if (!key) return
+      if (!map[key]) map[key] = { company_name: ue.company_name, contact_name: ue.contact_name, email: ue.email, tenders: 0, awarded: 0, totalAmount: 0, pricedCount: 0 }
+      map[key].tenders++
+      if (ue.status === 'godkjent') map[key].awarded++
+      if (ue.total_amount) { map[key].totalAmount += ue.total_amount; map[key].pricedCount++ }
+      // Keep latest name
+      if (ue.company_name) map[key].company_name = ue.company_name
+      if (ue.contact_name) map[key].contact_name = ue.contact_name
+    })
+    return Object.values(map).sort((a,b) => b.tenders - a.tenders)
+  }, [allUEs])
+
+  // Historikk - collect activity logs from all tenders
+  const historikk = React.useMemo(() => {
+    const logs = []
+    tenders.forEach(t => {
+      (t.activity_log || []).forEach(entry => {
+        logs.push({ ...entry, tender: t.title, tender_number: t.tender_number, tender_id: t.id })
+      })
+    })
+    return logs.sort((a,b) => new Date(b.at) - new Date(a.at))
+  }, [tenders])
+
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
 
   if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
+  const tabs = [
+    { id:'oversikt', label:'Oversikt', icon:'📊' },
+    { id:'foresporsel', label:'Forespørsler', icon:'📋' },
+    { id:'leverandorer', label:'Leverandører', icon:'👥' },
+    { id:'statistikk', label:'Statistikk', icon:'📈' },
+    { id:'historikk', label:'Historikk', icon:'🕐' },
+  ]
+
+  // Render a tender row (shared between tabs)
+  const renderTenderRow = (t) => {
+    const cfg = TENDER_STATUS[t.status]
+    const proj = projects.find(p=>p.id===t.project_id)
+    const { grandTotal } = calcTender(t.chapters||[], t.global_markup)
+    const isIncoming = t.type === 'incoming'
+    const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
+    return (
+      <div key={t.id} onClick={()=>setSelected(t)}
+        style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+        onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+        <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
+            <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
+            <TenderStatusBadge status={t.status} />
+          </div>
+          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+            {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
+            {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+            {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d)`:''}</span>}
+          </div>
+        </div>
+        <div style={{ textAlign:'right', flexShrink:0 }}>
+          <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
+          <div style={{ fontSize:'11px', color:'#94a3b8' }}>eks. mva</div>
+        </div>
+        <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+      </div>
+    )
+  }
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbudsportal</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>Anbudsmodul</h1>
           </div>
           <div style={{ display:'flex', gap:'10px' }}>
             <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Fra byggherre</button>
             <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📤 Til underentreprenør</button>
           </div>
         </div>
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:'4px' }}>
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              style={{ padding:'8px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab===tab.id ? '600' : '400', background: activeTab===tab.id ? '#ecfdf5' : 'transparent', color: activeTab===tab.id ? '#059669' : '#64748b', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span style={{ fontSize:'14px' }}>{tab.icon}</span> {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
-          {[
-            { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
-            { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
-            { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
-          ].map(s => (
-            <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
-              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
-            </button>
-          ))}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
-            <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
-            <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
-            <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
-          </div>
-        </div>
 
-        {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
-            <option value="alle">Alle statuser</option>
-            {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          {(search||filterStatus!=='alle'||filterType!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
-          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} anbud</span>
-        </div>
-
-        {/* List */}
-        {filtered.length === 0 ? (
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📑</div>
-            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen anbud funnet</h3>
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{tenders.length===0?'Opprett ditt første anbud.':'Prøv å endre søk eller filter.'}</p>
+        {/* ═══ TAB: OVERSIKT ═══ */}
+        {activeTab === 'oversikt' && (<>
+          {/* Stats */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+            {[
+              { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
+              { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
+              { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
+            ].map(s => (
+              <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
+                style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+                <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
+                <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
+                <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
+              </button>
+            ))}
+            <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+              <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
+              <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
+              <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
+            </div>
           </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {filtered.map(t => {
-              const cfg = TENDER_STATUS[t.status]
-              const proj = projects.find(p=>p.id===t.project_id)
-              const { grandTotal } = calcTender(t.chapters||[], t.global_markup)
-              const isIncoming = t.type === 'incoming'
-              const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
-              return (
-                <div key={t.id} onClick={()=>setSelected(t)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
-                      <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
-                      <TenderStatusBadge status={t.status} />
-                      <span style={{ background:isIncoming?'#f5f3ff':'#eff6ff', color:isIncoming?'#7c3aed':'#2563eb', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:`1px solid ${isIncoming?'#ddd6fe':'#bfdbfe'}` }}>{isIncoming?'Innkommende':'Utgående UE'}</span>
+          {/* Filters */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
+              <option value="alle">Alle statuser</option>
+              {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            {(search||filterStatus!=='alle'||filterType!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+            <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} anbud</span>
+          </div>
+          {/* List */}
+          {filtered.length === 0 ? (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:'40px', marginBottom:'12px' }}>📑</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen anbud funnet</h3>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{tenders.length===0?'Opprett ditt første anbud.':'Prøv å endre søk eller filter.'}</p>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {filtered.map(renderTenderRow)}
+            </div>
+          )}
+        </>)}
+
+        {/* ═══ TAB: FORESPØRSLER ═══ */}
+        {activeTab === 'foresporsel' && (<>
+          {/* Fra byggherre */}
+          <div>
+            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#7c3aed', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📥 Fra byggherre <span style={{ background:'#f5f3ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #ddd6fe' }}>{incoming.length}</span></h2>
+            {incoming.length === 0 ? (
+              <div style={{ background:'#faf5ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #e9d5ff' }}>
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen innkommende forespørsler</p>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {incoming.map(t => {
+                  const fagCount = (t.fagfordeling||[]).length
+                  const ueSent = (t.fagfordeling||[]).filter(f => f.ueOpprettet).length
+                  return (
+                    <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #7c3aed' }}
+                      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
+                          <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
+                          <TenderStatusBadge status={t.status} />
+                        </div>
+                        <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
+                          {t.customer_name && <span>👤 {t.customer_name}</span>}
+                          {t.deadline && <span>⏰ Frist {t.deadline}</span>}
+                          {fagCount > 0 && <span style={{ color:'#7c3aed' }}>🔀 {fagCount} fag fordelt{ueSent > 0 ? ` · ${ueSent} sendt til UE` : ''}</span>}
+                        </div>
+                      </div>
+                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
+                      <span style={{ color:'#94a3b8' }}>›</span>
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ Frist {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d igjen)`:''}</span>}
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          {/* Til UE */}
+          <div>
+            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#2563eb', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📤 Til underentreprenør <span style={{ background:'#eff6ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #bfdbfe' }}>{outgoing.length}</span></h2>
+            {outgoing.length === 0 ? (
+              <div style={{ background:'#eff6ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #bfdbfe' }}>
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen utgående anbud</p>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {outgoing.map(t => {
+                  const ueCount = allUEs.filter(u => u.tender_id === t.id).length
+                  const pricedCount = allUEs.filter(u => u.tender_id === t.id && u.status === 'Priset').length
+                  return (
+                    <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #2563eb' }}
+                      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
+                          <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
+                          <TenderStatusBadge status={t.status} />
+                        </div>
+                        <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
+                          {t.deadline && <span>⏰ Frist {t.deadline}</span>}
+                          {ueCount > 0 && <span style={{ color:'#2563eb' }}>🏢 {ueCount} UE invitert{pricedCount > 0 ? ` · ${pricedCount} priset` : ''}</span>}
+                          {t.awarded_ue && <span style={{ color:'#16a34a', fontWeight:'600' }}>🏆 {t.awarded_ue}</span>}
+                        </div>
+                      </div>
+                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
+                      <span style={{ color:'#94a3b8' }}>›</span>
                     </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </>)}
+
+        {/* ═══ TAB: LEVERANDØRER ═══ */}
+        {activeTab === 'leverandorer' && (<>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>👥 UE-register ({ueRegister.length} leverandører)</h2>
+          </div>
+          {ueRegister.length === 0 ? (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:'40px', marginBottom:'12px' }}>👥</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen leverandører ennå</h3>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>UE-er dukker opp her etter at du har invitert dem til et anbud.</p>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {ueRegister.map((ue, i) => (
+                <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'14px' }}>
+                  <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏢</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name ? `${ue.contact_name} · ` : ''}{ue.email}</div>
                   </div>
-                  <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                  <div style={{ display:'flex', gap:'16px', flexShrink:0 }}>
+                    <div style={{ textAlign:'center' }}>
+                      <div style={{ fontWeight:'700', fontSize:'16px', color:'#0f172a' }}>{ue.tenders}</div>
+                      <div style={{ fontSize:'10px', color:'#94a3b8' }}>Anbud</div>
+                    </div>
+                    <div style={{ textAlign:'center' }}>
+                      <div style={{ fontWeight:'700', fontSize:'16px', color:'#16a34a' }}>{ue.awarded}</div>
+                      <div style={{ fontSize:'10px', color:'#94a3b8' }}>Tildelt</div>
+                    </div>
+                    {ue.pricedCount > 0 && (
+                      <div style={{ textAlign:'center' }}>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#2563eb' }}>{fmtT(ue.totalAmount / ue.pricedCount)}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Snitt pris</div>
+                      </div>
+                    )}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
                 </div>
-              )
-            })}
+              ))}
+            </div>
+          )}
+        </>)}
+
+        {/* ═══ TAB: STATISTIKK ═══ */}
+        {activeTab === 'statistikk' && (<>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px' }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+              <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Tildelingsrate</div>
+              <div style={{ fontSize:'28px', fontWeight:'800', color:'#059669' }}>{tenders.length > 0 ? Math.round(tildelt.length / tenders.length * 100) : 0}%</div>
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>{tildelt.length} av {tenders.length} anbud tildelt</div>
+            </div>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+              <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Gjennomsnittlig verdi</div>
+              <div style={{ fontSize:'28px', fontWeight:'800', color:'#2563eb' }}>{fmtT(tildelt.length > 0 ? totalTildelt / tildelt.length : 0)}</div>
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>per tildelt anbud</div>
+            </div>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+              <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Aktive forespørsler</div>
+              <div style={{ fontSize:'28px', fontWeight:'800', color:'#7c3aed' }}>{tenders.filter(t => !['Tildelt','Avslått','Kansellert'].includes(t.status)).length}</div>
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>under behandling</div>
+            </div>
           </div>
-        )}
+          {/* Status-fordeling */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Statusfordeling</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {Object.keys(TENDER_STATUS).map(status => {
+                const count = tenders.filter(t => t.status === status).length
+                const pct = tenders.length > 0 ? (count / tenders.length * 100) : 0
+                return (
+                  <div key={status} style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                    <span style={{ fontSize:'13px', width:'120px', color:'#475569' }}>{TENDER_STATUS[status].emoji} {status}</span>
+                    <div style={{ flex:1, height:'24px', background:'#f8fafc', borderRadius:'6px', overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${pct}%`, background: TENDER_STATUS[status].color, borderRadius:'6px', minWidth: count > 0 ? '2px' : '0', transition:'width 0.3s' }} />
+                    </div>
+                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', width:'30px', textAlign:'right' }}>{count}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          {/* Topp UE-er */}
+          {ueRegister.filter(u=>u.awarded>0).length > 0 && (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏆 Topp leverandører (mest tildelt)</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {ueRegister.filter(u=>u.awarded>0).sort((a,b)=>b.awarded-a.awarded).slice(0,5).map((ue,i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px' }}>
+                    <span style={{ fontWeight:'800', fontSize:'16px', color:'#059669', width:'24px' }}>#{i+1}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
+                      <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.email}</div>
+                    </div>
+                    <div style={{ textAlign:'right' }}>
+                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#16a34a' }}>{ue.awarded} tildelt</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>av {ue.tenders} anbud</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>)}
+
+        {/* ═══ TAB: HISTORIKK ═══ */}
+        {activeTab === 'historikk' && (<>
+          <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>🕐 Aktivitetslogg ({historikk.length} hendelser)</h2>
+          {historikk.length === 0 ? (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:'40px', marginBottom:'12px' }}>🕐</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen aktivitet ennå</h3>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Hendelser vises her etter hvert som anbud opprettes og behandles.</p>
+            </div>
+          ) : (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                {historikk.slice(0, 50).map((entry, i) => (
+                  <div key={i} style={{ display:'flex', gap:'12px', padding:'10px 0', borderBottom: i < historikk.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                    <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#059669', marginTop:'6px', flexShrink:0 }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:'13px', color:'#0f172a' }}>{entry.action}</div>
+                      <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
+                        <span>{entry.tender} ({entry.tender_number})</span>
+                        {entry.by && <span>· {entry.by}</span>}
+                        <span>· {new Date(entry.at).toLocaleDateString('nb-NO')} {new Date(entry.at).toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' })}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {historikk.length > 50 && <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'12px', color:'#94a3b8' }}>Viser de 50 nyeste av {historikk.length} hendelser</p>}
+            </div>
+          )}
+        </>)}
       </div>
       {showNew && <AnbudEditorModal type={newType} projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
     </div>
