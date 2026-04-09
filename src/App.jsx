@@ -2709,7 +2709,6 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
   const exportPDF = async () => {
     setExporting(true)
     try {
-      // Last jsPDF dynamisk
       if (!window.jspdf) {
         await new Promise((resolve, reject) => {
           const s = document.createElement('script')
@@ -2720,60 +2719,135 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
       }
       const { jsPDF } = window.jspdf
       const doc = new jsPDF('p', 'mm', 'a4')
-      const pw = 210, ph = 297, ml = 20, mr = 20, mt = 20, cw = pw - ml - mr
-      let y = mt
+      const pw = 210, ph = 297, ml = 16, mr = 16, cw = pw - ml - mr
+      let y = 0
 
-      const addPage = () => { doc.addPage(); y = mt }
-      const checkSpace = (needed) => { if (y + needed > ph - 40) addPage() }
+      // Farger
+      const C = {
+        primary: [5, 150, 105],       // grønn
+        primaryLight: [236, 253, 245],
+        dark: [15, 23, 42],
+        mid: [71, 85, 105],
+        light: [148, 163, 184],
+        veryLight: [241, 245, 249],
+        white: [255, 255, 255],
+        ok: [5, 150, 105],
+        avvik: [234, 88, 12],
+        na: [107, 114, 128],
+        ubehandlet: [203, 213, 225],
+        warnBg: [255, 247, 237],
+        warnBorder: [253, 186, 116],
+      }
 
-      // ── Header ──
-      doc.setFillColor(5, 150, 105)
-      doc.rect(0, 0, pw, 32, 'F')
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(18)
+      const addPage = () => { doc.addPage(); y = 16 }
+      const checkSpace = (needed) => { if (y + needed > ph - 30) addPage() }
+      const setC = (c) => doc.setTextColor(c[0], c[1], c[2])
+      const setF = (c) => doc.setFillColor(c[0], c[1], c[2])
+      const setD = (c) => doc.setDrawColor(c[0], c[1], c[2])
+
+      // ════════════════════════════════════════════════════════════
+      // HEADER — topp-banner med gradient-effekt
+      // ════════════════════════════════════════════════════════════
+      setF(C.primary)
+      doc.rect(0, 0, pw, 36, 'F')
+      // Lys stripe for dybde
+      doc.setFillColor(4, 130, 90)
+      doc.rect(0, 33, pw, 3, 'F')
+
+      setC(C.white)
+      doc.setFontSize(20)
       doc.setFont('helvetica', 'bold')
-      doc.text('SJEKKLISTE', ml, 15)
-      doc.setFontSize(10)
+      doc.text('SJEKKLISTE', ml + 2, 16)
+
+      doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
-      doc.text('En Plattform KS-system', ml, 23)
-      doc.text(new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }), pw - mr, 23, { align: 'right' })
+      doc.text('KVALITETSKONTROLL', ml + 2, 24)
 
-      y = 42
-
-      // ── Tittel og info ──
-      doc.setTextColor(15, 23, 42)
-      doc.setFontSize(16)
+      // Høyre side: bedriftsnavn + dato
+      doc.setFontSize(9)
       doc.setFont('helvetica', 'bold')
-      doc.text(checklist.title || 'Sjekkliste', ml, y)
-      y += 8
-
-      doc.setFontSize(10)
+      doc.text('En Plattform', pw - mr - 2, 14, { align: 'right' })
       doc.setFont('helvetica', 'normal')
-      doc.setTextColor(100, 116, 139)
+      doc.setFontSize(8)
+      doc.text('KS-system for bygg og anlegg', pw - mr - 2, 20, { align: 'right' })
+      doc.text(new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }), pw - mr - 2, 26, { align: 'right' })
 
+      y = 44
+
+      // ════════════════════════════════════════════════════════════
+      // PROSJEKTINFO-BOKS
+      // ════════════════════════════════════════════════════════════
       const itms = checklist.items || []
-      const chk = itms.filter(i => i.checked).length
-      const pct = itms.length > 0 ? Math.round(chk / itms.length * 100) : 0
-      const statusLabel = checklist.status === 'fullfort' ? 'Fullført' : checklist.status === 'påbegynt' ? 'Påbegynt' : 'Ikke startet'
+      const okCount = itms.filter(i => i.status === 'ok' || (i.checked && !i.status)).length
+      const avvikCount = itms.filter(i => i.status === 'avvik').length
+      const naCount = itms.filter(i => i.status === 'ikke_relevant').length
+      const ubehandlet = itms.filter(i => !i.status && !i.checked).length
+      const resolvedCount = okCount + naCount
+      const pct = itms.length > 0 ? Math.round(resolvedCount / itms.length * 100) : 0
+      const statusLabel = checklist.status === 'fullfort' ? 'Fullfort' : checklist.status === 'paabegynt' ? 'Paabegynt' : 'Ikke startet'
 
-      doc.text(`Status: ${statusLabel}  |  ${chk}/${itms.length} fullført (${pct}%)  |  Dato: ${new Date(checklist.created_at).toLocaleDateString('nb-NO')}`, ml, y)
-      y += 6
+      // Bakgrunnsboks
+      setF(C.veryLight)
+      doc.roundedRect(ml, y, cw, 38, 3, 3, 'F')
+      setD([226, 232, 240])
+      doc.roundedRect(ml, y, cw, 38, 3, 3, 'S')
+
+      // Tittel
+      setC(C.dark)
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      const titleLines = doc.splitTextToSize(checklist.title || 'Sjekkliste', cw - 12)
+      doc.text(titleLines, ml + 6, y + 8)
+
+      // Metadata-rad
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      setC(C.mid)
+      const metaY = y + (titleLines.length > 1 ? 16 : 14)
+      doc.text(`Opprettet: ${new Date(checklist.created_at).toLocaleDateString('nb-NO')}`, ml + 6, metaY)
+      doc.text(`Fremdrift: ${resolvedCount}/${itms.length} (${pct}%)`, ml + 60, metaY)
 
       // Fremdriftsbar
-      doc.setFillColor(226, 232, 240)
-      doc.roundedRect(ml, y, cw, 4, 2, 2, 'F')
+      const barY = metaY + 5, barW = cw - 12, barH = 5
+      setF([226, 232, 240])
+      doc.roundedRect(ml + 6, barY, barW, barH, 2.5, 2.5, 'F')
       if (pct > 0) {
-        doc.setFillColor(pct === 100 ? 5 : 59, pct === 100 ? 150 : 130, pct === 100 ? 105 : 246)
-        doc.roundedRect(ml, y, cw * pct / 100, 4, 2, 2, 'F')
+        setF(pct === 100 ? C.ok : C.primary)
+        doc.roundedRect(ml + 6, barY, barW * pct / 100, barH, 2.5, 2.5, 'F')
       }
-      y += 12
+      // Prosent-tekst
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'bold')
+      setC(pct > 45 ? C.white : C.dark)
+      doc.text(`${pct}%`, ml + 6 + barW * Math.max(pct, 8) / 100 - 4, barY + 3.7)
 
-      // ── Linje ──
-      doc.setDrawColor(226, 232, 240)
-      doc.line(ml, y, pw - mr, y)
-      y += 8
+      // Mini-statistikk-bokser
+      const statY = barY + 9
+      const statW = (barW - 9) / 4
+      const stats = [
+        { label: 'OK', count: okCount, color: C.ok, bg: C.primaryLight },
+        { label: 'Avvik', count: avvikCount, color: C.avvik, bg: C.warnBg },
+        { label: 'N/A', count: naCount, color: C.na, bg: [243, 244, 246] },
+        { label: 'Ubehandlet', count: ubehandlet, color: C.ubehandlet, bg: C.veryLight },
+      ]
+      stats.forEach((s, i) => {
+        const sx = ml + 6 + i * (statW + 3)
+        setF(s.bg)
+        doc.roundedRect(sx, statY, statW, 8, 1.5, 1.5, 'F')
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        setC(s.color)
+        doc.text(String(s.count), sx + 3, statY + 5.5)
+        doc.setFontSize(6)
+        doc.setFont('helvetica', 'normal')
+        doc.text(s.label, sx + (s.count > 9 ? 10 : 8), statY + 5.5)
+      })
 
-      // ── Seksjon med kontrollpunkter ──
+      y += 46
+
+      // ════════════════════════════════════════════════════════════
+      // SEKSJON + KONTROLLPUNKTER
+      // ════════════════════════════════════════════════════════════
       const secs = {}
       itms.forEach((item, idx) => {
         const sec = item.section || 'Generelt'
@@ -2781,122 +2855,209 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         secs[sec].push({ ...item, idx })
       })
 
+      let sectionNum = 0
       Object.entries(secs).forEach(([secTitle, secItems]) => {
-        checkSpace(14)
-        doc.setTextColor(15, 23, 42)
-        doc.setFontSize(12)
+        sectionNum++
+        checkSpace(16)
+
+        // Seksjons-header med nummerering
+        setF(C.primary)
+        doc.roundedRect(ml, y, cw, 9, 2, 2, 'F')
+        setC(C.white)
+        doc.setFontSize(10)
         doc.setFont('helvetica', 'bold')
-        // Seksjonslinje
-        doc.setFillColor(240, 253, 250)
-        doc.roundedRect(ml, y - 4, cw, 8, 1, 1, 'F')
-        doc.text(secTitle, ml + 4, y + 1)
-        y += 10
+        doc.text(`${sectionNum}. ${secTitle}`, ml + 5, y + 6.2)
+        // Antall items
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`${secItems.length} punkt`, pw - mr - 5, y + 6.2, { align: 'right' })
+        y += 13
 
-        secItems.forEach(item => {
-          checkSpace(item.comment ? 18 : 12)
-
-          // Status-indikator
+        secItems.forEach((item, itemIdx) => {
           const st = item.status || (item.checked ? 'ok' : null)
-          const statusLabels = { ok: 'OK', avvik: 'AVVIK', ikke_relevant: 'N/A', ikke_kontrollert: '?' }
-          const statusColors = { ok: [5,150,105], avvik: [217,119,6], ikke_relevant: [148,163,184], ikke_kontrollert: [203,213,225] }
+          const hasComment = !!item.comment
+          const hasImages = item.images?.length > 0
+          const neededH = 14 + (hasComment ? 6 : 0) + (hasImages ? 6 : 0)
+          checkSpace(neededH)
 
-          if (st && statusColors[st]) {
-            const [r,g,b] = statusColors[st]
-            doc.setFillColor(r, g, b)
-            doc.roundedRect(ml, y - 3.5, st === 'avvik' ? 12 : st === 'ikke_relevant' ? 8 : 7, 4.5, 0.8, 0.8, 'F')
-            doc.setTextColor(255, 255, 255)
-            doc.setFontSize(6)
-            doc.text(statusLabels[st], ml + 0.8, y + 0.2)
+          // Punkt-rad med alternerende bakgrunn
+          const rowBg = itemIdx % 2 === 0 ? C.white : [249, 250, 251]
+          setF(rowBg)
+          doc.roundedRect(ml, y - 1, cw, neededH - 2, 1.5, 1.5, 'F')
+
+          // Venstre kant-farge basert på status
+          const leftColor = st === 'ok' ? C.ok : st === 'avvik' ? C.avvik : st === 'ikke_relevant' ? C.na : [226, 232, 240]
+          setF(leftColor)
+          doc.rect(ml, y - 1, 2, neededH - 2, 'F')
+
+          // Status-pill
+          const pillW = st === 'avvik' ? 14 : st === 'ikke_relevant' ? 8 : st === 'ikke_kontrollert' ? 6 : 8
+          const pillLabels = { ok: 'OK', avvik: 'AVVIK', ikke_relevant: 'N/A', ikke_kontrollert: '?' }
+          const pillColors = { ok: C.ok, avvik: C.avvik, ikke_relevant: C.na, ikke_kontrollert: C.ubehandlet }
+
+          if (st && pillColors[st]) {
+            setF(pillColors[st])
+            doc.roundedRect(ml + 5, y, pillW, 5, 1.2, 1.2, 'F')
+            setC(C.white)
+            doc.setFontSize(6.5)
+            doc.setFont('helvetica', 'bold')
+            doc.text(pillLabels[st], ml + 5 + pillW / 2, y + 3.5, { align: 'center' })
           } else {
-            doc.setDrawColor(209, 213, 219)
-            doc.roundedRect(ml, y - 3.5, 4.5, 4.5, 0.8, 0.8, 'S')
+            // Tom sirkel
+            setD(C.ubehandlet)
+            doc.circle(ml + 8, y + 2.5, 2, 'S')
           }
 
-          // Punkt-tekst
+          // Punkt-tittel
           const isResolved = st === 'ok' || st === 'ikke_relevant'
-          doc.setTextColor(isResolved ? 107 : 15, isResolved ? 114 : 23, isResolved ? 128 : 42)
-          doc.setFontSize(10)
-          doc.setFont('helvetica', 'normal')
-          const lines = doc.splitTextToSize(item.title || '', cw - 18)
-          doc.text(lines, ml + 16, y)
-          y += lines.length * 5
+          setC(isResolved ? C.na : C.dark)
+          doc.setFontSize(9)
+          doc.setFont('helvetica', isResolved ? 'normal' : 'bold')
+          const tLines = doc.splitTextToSize(item.title || '', cw - 28)
+          doc.text(tLines, ml + 22, y + 3.5)
+          let iy = y + tLines.length * 4.5 + 2
 
           // Kommentar
-          if (item.comment) {
-            doc.setTextColor(148, 163, 184)
-            doc.setFontSize(8)
-            const cLines = doc.splitTextToSize('💬 ' + item.comment, cw - 20)
-            doc.text(cLines, ml + 16, y + 1)
-            y += cLines.length * 4 + 2
-          }
-
-          // Bilde-indikator
-          if (item.images?.length > 0) {
-            doc.setTextColor(100, 116, 139)
+          if (hasComment) {
+            setC(C.light)
             doc.setFontSize(7)
-            doc.text(`📷 ${item.images.length} bilde${item.images.length > 1 ? 'r' : ''} vedlagt`, ml + 16, y + 1)
-            y += 5
+            doc.setFont('helvetica', 'italic')
+            const cLines = doc.splitTextToSize(item.comment, cw - 30)
+            doc.text(cLines, ml + 22, iy)
+            iy += cLines.length * 3.5 + 1
           }
 
-          y += 3
+          // Bilder-indikator
+          if (hasImages) {
+            setC(C.mid)
+            doc.setFontSize(6.5)
+            doc.setFont('helvetica', 'normal')
+            doc.text(`${item.images.length} bilde${item.images.length > 1 ? 'r' : ''} vedlagt`, ml + 22, iy)
+          }
+
+          // Påkrevd-merke
+          if (item.required) {
+            doc.setFontSize(5.5)
+            doc.setFont('helvetica', 'bold')
+            setF(C.warnBg)
+            setD(C.warnBorder)
+            doc.roundedRect(pw - mr - 16, y, 14, 4.5, 1, 1, 'FD')
+            setC(C.avvik)
+            doc.text('PAKREVD', pw - mr - 15, y + 3.2)
+          }
+
+          y += neededH
         })
 
         y += 4
       })
 
-      // ── Signaturfelt ──
-      checkSpace(60)
+      // ════════════════════════════════════════════════════════════
+      // AVVIK-OPPSUMMERING (kun hvis det finnes avvik)
+      // ════════════════════════════════════════════════════════════
+      const avvikItems = itms.filter(i => i.status === 'avvik')
+      if (avvikItems.length > 0) {
+        checkSpace(14 + avvikItems.length * 10)
+        y += 4
+        setF(C.warnBg)
+        setD(C.warnBorder)
+        const avvBoxH = 10 + avvikItems.length * 7
+        doc.roundedRect(ml, y, cw, avvBoxH, 2, 2, 'FD')
+
+        setC(C.avvik)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`Avvik som krever oppfolging (${avvikItems.length})`, ml + 5, y + 6)
+        let ay = y + 12
+
+        avvikItems.forEach((av, i) => {
+          setC(C.dark)
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'bold')
+          doc.text(`${i + 1}.`, ml + 5, ay)
+          doc.setFont('helvetica', 'normal')
+          const avLines = doc.splitTextToSize(`${av.title}${av.comment ? ' — ' + av.comment : ''}`, cw - 18)
+          doc.text(avLines, ml + 12, ay)
+          ay += avLines.length * 4 + 2
+        })
+
+        y += avvBoxH + 4
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // SIGNATURFELT — profesjonelt 2x2 grid
+      // ════════════════════════════════════════════════════════════
+      checkSpace(65)
       y += 6
-      doc.setDrawColor(226, 232, 240)
-      doc.line(ml, y, pw - mr, y)
-      y += 10
 
-      doc.setTextColor(15, 23, 42)
-      doc.setFontSize(12)
+      setF(C.veryLight)
+      doc.roundedRect(ml, y, cw, 56, 3, 3, 'F')
+      setD([226, 232, 240])
+      doc.roundedRect(ml, y, cw, 56, 3, 3, 'S')
+
+      setC(C.dark)
+      doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('Signaturer', ml, y)
-      y += 10
+      doc.text('Signaturer', ml + 6, y + 8)
 
-      const sigW = (cw - 16) / 2
+      const sigW = (cw - 20) / 2
+      const sigStartY = y + 14
+      const sigFields = [
+        { label: 'Utfort av', x: ml + 6 },
+        { label: 'Kontrollert / godkjent av', x: ml + 6 + sigW + 8 },
+      ]
 
-      // Utført av
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(100, 116, 139)
-      doc.text('Utført av:', ml, y)
-      y += 4
-      doc.setDrawColor(15, 23, 42)
-      doc.line(ml, y + 14, ml + sigW, y + 14)
-      doc.setFontSize(8)
-      doc.setTextColor(148, 163, 184)
-      doc.text('Navn:', ml, y + 19)
-      doc.line(ml, y + 28, ml + sigW, y + 28)
-      doc.text('Dato:', ml, y + 33)
+      sigFields.forEach(sf => {
+        // Label
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'bold')
+        setC(C.mid)
+        doc.text(sf.label, sf.x, sigStartY)
 
-      // Kontrollert av
-      const sx2 = ml + sigW + 16
-      doc.setFontSize(9)
-      doc.setTextColor(100, 116, 139)
-      doc.text('Kontrollert/godkjent av:', sx2, y - 4)
-      doc.setDrawColor(15, 23, 42)
-      doc.line(sx2, y + 14, sx2 + sigW, y + 14)
-      doc.setFontSize(8)
-      doc.setTextColor(148, 163, 184)
-      doc.text('Navn:', sx2, y + 19)
-      doc.line(sx2, y + 28, sx2 + sigW, y + 28)
-      doc.text('Dato:', sx2, y + 33)
+        // Signatur-linje
+        setD(C.dark)
+        doc.line(sf.x, sigStartY + 18, sf.x + sigW, sigStartY + 18)
 
-      // ── Footer på alle sider ──
+        // Sublabels
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'normal')
+        setC(C.light)
+        doc.text('Signatur', sf.x, sigStartY + 22)
+
+        // Navn-linje
+        doc.line(sf.x, sigStartY + 32, sf.x + sigW, sigStartY + 32)
+        doc.text('Navn (blokkbokstaver)', sf.x, sigStartY + 36)
+
+        // Dato
+        doc.text('Dato: ____/____/________', sf.x, sigStartY + 42)
+      })
+
+      // ════════════════════════════════════════════════════════════
+      // FOOTER på alle sider
+      // ════════════════════════════════════════════════════════════
       const pageCount = doc.internal.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(`${checklist.title}  —  Side ${i} av ${pageCount}`, ml, ph - 10)
-        doc.text('En Plattform KS-system', pw - mr, ph - 10, { align: 'right' })
+
+        // Footer-linje
+        setD([226, 232, 240])
+        doc.line(ml, ph - 16, pw - mr, ph - 16)
+
+        // Venstre: tittel
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'normal')
+        setC(C.light)
+        doc.text(checklist.title || 'Sjekkliste', ml, ph - 11)
+
+        // Midten: side
+        doc.text(`Side ${i} av ${pageCount}`, pw / 2, ph - 11, { align: 'center' })
+
+        // Hoyre: system
+        doc.setFont('helvetica', 'bold')
+        setC(C.primary)
+        doc.text('En Plattform', pw - mr, ph - 11, { align: 'right' })
       }
 
-      // Last ned
       doc.save(`Sjekkliste - ${checklist.title || 'Ukjent'}.pdf`)
     } catch(e) {
       console.error(e)
