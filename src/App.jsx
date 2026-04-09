@@ -2705,23 +2705,6 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
 
   useEffect(() => { load() }, [checklistId])
 
-  const toggleItem = async (index) => {
-    const newItems = [...(checklist.items || [])]
-    newItems[index] = { ...newItems[index], checked: !newItems[index].checked }
-    const allDone = newItems.every(i => i.checked)
-    const newStatus = allDone ? 'fullfort' : newItems.some(i => i.checked) ? 'påbegynt' : 'ikke_startet'
-    const updated = { ...checklist, items: newItems, status: newStatus }
-    setChecklist(updated)
-    await supabase.from('checklists').update({ items: newItems, status: newStatus }).eq('id', checklistId)
-  }
-
-  const updateComment = async (index, comment) => {
-    const newItems = [...(checklist.items || [])]
-    newItems[index] = { ...newItems[index], comment }
-    setChecklist(c => ({ ...c, items: newItems }))
-    await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
-  }
-
   // ── PDF-eksport ────────────────────────────────────────────────────────
   const exportPDF = async () => {
     setExporting(true)
