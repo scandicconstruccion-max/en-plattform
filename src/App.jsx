@@ -228,11 +228,12 @@ function Dashboard({ onNavigate, user }) {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [projRes, avvikRes, fakturaRes, timeRes] = await Promise.all([
+        const [projRes, avvikRes, fakturaRes, timeRes, notifRes] = await Promise.all([
           supabase.from('projects').select('id, status', { count: 'exact' }).eq('status', 'aktiv'),
           supabase.from('deviations').select('id, status', { count: 'exact' }).in('status', ['Åpen', 'Under behandling']),
           supabase.from('invoices').select('id, status, due_date, total_amount'),
           supabase.from('time_entries').select('hours, date').gte('date', (() => { const m = new Date(); m.setDate(m.getDate() - m.getDay() + 1); return m.toISOString().split('T')[0] })()),
+          user?.id ? supabase.from('notifications').select('id', { count: 'exact' }).eq('user_id', user.id).eq('read', false) : Promise.resolve({ data: [] }),
         ])
         const today = new Date().toISOString().split('T')[0]
         const forfalt = (fakturaRes.data||[]).filter(f => f.status === 'Sendt' && f.due_date && f.due_date < today)
@@ -244,6 +245,7 @@ function Dashboard({ onNavigate, user }) {
           forfaltCount: forfalt.length,
           forfaltSum,
           timerDenneUken,
+          ulesteVarsler: notifRes.data?.length || 0,
         })
       } catch(e) { console.error('Dashboard stats error:', e) }
     }
@@ -267,7 +269,7 @@ function Dashboard({ onNavigate, user }) {
               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{showStats ? '▾' : '▸'} NØKKELTALL</span>
             </button>
             {showStats && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px' }}>
                 <button onClick={() => onNavigate('prosjekter')} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
                   <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏗️</div></div>
@@ -291,6 +293,12 @@ function Dashboard({ onNavigate, user }) {
                   <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⏱️</div></div>
                   <div style={{ fontSize: '26px', fontWeight: '800', color: '#2563eb' }}>{stats.timerDenneUken.toFixed(1)}</div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Timer denne uken</div>
+                </button>
+                <button onClick={() => onNavigate('varsler')} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${stats.ulesteVarsler > 0 ? '#ddd6fe' : '#f1f5f9'}`, padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: stats.ulesteVarsler > 0 ? '#f5f3ff' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🔔</div></div>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: stats.ulesteVarsler > 0 ? '#7c3aed' : '#94a3b8' }}>{stats.ulesteVarsler}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Uleste varsler</div>
                 </button>
               </div>
             )}
