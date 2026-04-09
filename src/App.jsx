@@ -1175,8 +1175,39 @@ function ProsjektfilerPage() {
   const [expandedCats, setExpandedCats] = useState({})
   const [showArchive, setShowArchive] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null) // file to confirm delete
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const dragCounter = React.useRef(0)
   const fileInputRef = React.useRef()
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+
+  // ── Drag-and-drop handlers for hele siden ──────────────────────────────
+  const handleDragEnter = (e) => {
+    e.preventDefault(); e.stopPropagation()
+    dragCounter.current++
+    if (e.dataTransfer?.types?.includes('Files')) setIsDraggingOver(true)
+  }
+  const handleDragLeave = (e) => {
+    e.preventDefault(); e.stopPropagation()
+    dragCounter.current--
+    if (dragCounter.current === 0) setIsDraggingOver(false)
+  }
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation() }
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation()
+    dragCounter.current = 0
+    setIsDraggingOver(false)
+    const droppedFiles = Array.from(e.dataTransfer?.files || [])
+    if (droppedFiles.length === 0) return
+    setUploadFiles(droppedFiles)
+    // Pre-fill prosjekt og kategori hvis allerede valgt
+    setUploadForm(f => ({
+      ...f,
+      project_id: f.project_id || (selectedProject !== 'all' ? selectedProject : ''),
+      category: selectedCategory || f.category || 'annet',
+      sub: selectedSub || f.sub || '',
+    }))
+    setShowUpload(true)
+  }
 
   // ── Data loading ──────────────────────────────────────────────────────────
   const loadData = async () => {
@@ -1366,7 +1397,22 @@ function ProsjektfilerPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}>
+
+      {/* Global drag-and-drop overlay */}
+      {isDraggingOver && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(5, 150, 105, 0.08)', border: '3px dashed #059669', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div style={{ background: 'white', borderRadius: '20px', padding: '32px 48px', boxShadow: '0 12px 40px rgba(0,0,0,0.15)', textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📂</div>
+            <h3 style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: '700', color: '#059669' }}>Slipp filer her</h3>
+            <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Filene legges til i opplastingsskjemaet</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
@@ -1566,31 +1612,61 @@ function ProsjektfilerPage() {
       {/* Upload Modal */}
       {showUpload && (
         <>
-          <div onClick={() => setShowUpload(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div onClick={() => { setShowUpload(false); setUploadFiles([]) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(560px, calc(100vw - 32px))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Last opp filer</h2>
               <button onClick={() => { setShowUpload(false); setUploadFiles([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
             </div>
             <form onSubmit={handleUpload} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
-              <div onClick={() => fileInputRef.current?.click()}
-                style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#059669'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                <div style={{ fontSize: '28px', marginBottom: '6px' }}>📂</div>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Klikk for å velge filer</p>
-                {uploadFiles.length > 0 && (
-                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    {uploadFiles.map((f, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '8px', padding: '7px 12px', border: '1px solid #f1f5f9' }}>
-                        <span style={{ fontSize: '13px', color: '#0f172a' }}>{getFileEmoji(f.name)} {f.name}</span>
-                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatFileSize(f.size)}</span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Drag-and-drop sone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.background = '#f0fdf4' }}
+                onDragLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc' }}
+                onDrop={(e) => {
+                  e.preventDefault(); e.stopPropagation()
+                  e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'
+                  const dropped = Array.from(e.dataTransfer?.files || [])
+                  if (dropped.length > 0) setUploadFiles(prev => [...prev, ...dropped])
+                }}
+                style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: uploadFiles.length > 0 ? '16px' : '32px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc', transition: 'border-color 0.2s, background 0.2s' }}>
+                {uploadFiles.length === 0 ? (
+                  <>
+                    <div style={{ fontSize: '36px', marginBottom: '8px' }}>📂</div>
+                    <p style={{ margin: '0 0 4px', color: '#0f172a', fontSize: '15px', fontWeight: '600' }}>Dra og slipp filer her</p>
+                    <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>eller klikk for å velge fra maskinen</p>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                      {uploadFiles.map((f, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '8px', padding: '8px 12px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                            <span style={{ fontSize: '16px', flexShrink: 0 }}>{getFileEmoji(f.name)}</span>
+                            <span style={{ fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatFileSize(f.size)}</span>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setUploadFiles(prev => prev.filter((_, idx) => idx !== i)) }}
+                              style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', width: '22px', height: '22px', cursor: 'pointer', color: '#dc2626', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
+                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '12px' }}>
+                        {uploadFiles.length} fil{uploadFiles.length > 1 ? 'er' : ''} valgt ({formatFileSize(uploadFiles.reduce((a, f) => a + f.size, 0))}) · Klikk eller dra for å legge til flere
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
-              <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={e => setUploadFiles(Array.from(e.target.files))} />
+              <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={e => {
+                const newFiles = Array.from(e.target.files || [])
+                setUploadFiles(prev => [...prev, ...newFiles])
+                e.target.value = ''
+              }} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
