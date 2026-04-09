@@ -462,6 +462,30 @@ const db = {
   }
 }
 
+// ─── SEKVENSNUMMERERING ──────────────────────────────────────────────────
+// Genererer neste nummer i sekvens: PREFIX-YYYY-0001, PREFIX-YYYY-0002, osv.
+// For prosjekter: P-0001, P-0002 (uten årstall)
+function nextSequenceNumber(existingItems, prefix, numberField, { withYear = true } = {}) {
+  if (withYear) {
+    const year = new Date().getFullYear()
+    const fullPrefix = `${prefix}-${year}-`
+    const nums = existingItems
+      .map(item => item[numberField])
+      .filter(n => n && n.startsWith(fullPrefix))
+      .map(n => parseInt(n.replace(fullPrefix, '')) || 0)
+    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1
+    return `${prefix}-${year}-${String(next).padStart(4, '0')}`
+  } else {
+    const fullPrefix = `${prefix}-`
+    const nums = existingItems
+      .map(item => item[numberField])
+      .filter(n => n && n.startsWith(fullPrefix))
+      .map(n => parseInt(n.replace(fullPrefix, '')) || 0)
+    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1
+    return `${prefix}-${String(next).padStart(4, '0')}`
+  }
+}
+
 // ─── HIERARKISK PROSJEKTSTRUKTUR ─────────────────────────────────────────
 // Bygger tre-struktur fra flat prosjektliste og gir hierarkisk dropdown
 
@@ -724,7 +748,7 @@ function ProsjekterPage({ onNavigateDetail }) {
     try {
       // Beregn depth og prosjektnummer basert på parent
       let depth = 0
-      let projectNumber = form.project_number || `P-${Date.now().toString().slice(-5)}`
+      let projectNumber = form.project_number || nextSequenceNumber(projects, 'P', 'project_number', { withYear: false })
       if (form.parent_id) {
         const parent = projects.find(p => p.id === form.parent_id)
         depth = (parent?.depth || 0) + 1
@@ -737,7 +761,7 @@ function ProsjekterPage({ onNavigateDetail }) {
       const existing = projects.find(p => p.project_number?.trim().toUpperCase() === projectNumber.trim().toUpperCase())
       if (existing) {
         // Auto-generert nummer kolliderte — legg til tidsstempel
-        projectNumber = projectNumber + '-' + Date.now().toString().slice(-3)
+        projectNumber = projectNumber + 'B'
       }
       await db.createProject({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreate(false)
@@ -939,11 +963,11 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
       const depth = (project.depth || 0) + 1
       let projectNumber = form.project_number || (project.project_number
         ? project.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
-        : `P-${Date.now().toString().slice(-5)}`)
+        : nextSequenceNumber(allProjects, 'P', 'project_number', { withYear: false }))
       // Duplikatsjekk
       const existing = allProjects.find(p => p.project_number?.trim().toUpperCase() === projectNumber.trim().toUpperCase())
       if (existing) {
-        projectNumber = projectNumber + '-' + Date.now().toString().slice(-3)
+        projectNumber = projectNumber + 'B'
       }
       await db.createProject({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreateSub(false); load()
@@ -5126,7 +5150,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
   const [step, setStep] = useState(1) // 1=info, 2=kapitler
   const [form, setForm] = useState({
     title: initial?.title || '',
-    quote_number: initial?.quote_number || `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    quote_number: initial?.quote_number || '',
     project_id: initial?.project_id || '',
     customer_name: initial?.customer_name || '',
     customer_email: initial?.customer_email || '',
@@ -5139,6 +5163,14 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     outro_text: initial?.outro_text || 'Vi håper tilbudet er av interesse og ser frem til et godt samarbeid.',
     global_markup: initial?.global_markup || 0,
   })
+  // Generer sekvensielt nummer ved nyopprettelse
+  useEffect(() => {
+    if (!isEdit && !form.quote_number) {
+      supabase.from('quotes').select('quote_number').then(({ data }) => {
+        setForm(f => ({ ...f, quote_number: nextSequenceNumber(data || [], 'TB', 'quote_number') }))
+      })
+    }
+  }, [])
   const [chapters, setChapters] = useState(initial?.chapters || [
     { id: Date.now(), title: 'Generelt', description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }
   ])
@@ -6099,8 +6131,10 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const generateQuote = async () => {
     if (!(await confirm({ message: 'Generer tilbud fra dette anbudet?', subMessage: 'Kapitlene og postene kopieres over til et nytt tilbud.', confirmLabel: 'Generer tilbud', danger: false }))) return
     try {
+      const { data: existingQuotes } = await supabase.from('quotes').select('quote_number')
+      const quoteNr = nextSequenceNumber(existingQuotes || [], 'TB', 'quote_number')
       const { data, error } = await supabase.from('quotes').insert({
-        title: t.title, quote_number: `TB-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
+        title: t.title, quote_number: quoteNr,
         project_id: t.project_id||null, customer_name: t.customer_name, customer_email: t.customer_email,
         customer_address: t.customer_address, customer_orgnr: t.customer_orgnr,
         valid_until: t.valid_until, payment_terms: '30 dager netto',
@@ -6272,12 +6306,20 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   const isIncoming = type === 'incoming'
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
-    title: initial?.title||'', tender_number: initial?.tender_number||`ANB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    title: initial?.title||'', tender_number: initial?.tender_number||'',
     project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
     deadline: initial?.deadline||'', valid_until: initial?.valid_until||'',
     description: initial?.description||'', global_markup: initial?.global_markup||0,
   })
+  // Generer sekvensielt nummer ved nyopprettelse
+  useEffect(() => {
+    if (!isEdit && !form.tender_number) {
+      supabase.from('tenders').select('tender_number').then(({ data }) => {
+        setForm(f => ({ ...f, tender_number: nextSequenceNumber(data || [], 'ANB', 'tender_number') }))
+      })
+    }
+  }, [])
   const [chapters, setChapters] = useState(initial?.chapters||[
     { id: Date.now(), title: 'Generelt', markup: 0, posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
   ])
@@ -6760,7 +6802,7 @@ function EndringsmeldingPage() {
     const isEdit = !!initial?.id
     const [form, setForm] = useState({
       title: initial?.title || '',
-      em_number: initial?.em_number || `EM-${String(endringer.length + 1).padStart(3, '0')}`,
+      em_number: initial?.em_number || nextSequenceNumber(endringer, 'EM', 'em_number', { withYear: false }),
       project_id: initial?.project_id || '',
       description: initial?.description || '',
       reason: initial?.reason || '',
@@ -7561,13 +7603,21 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit = !!initial
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
-    title: initial?.title||'', order_number: initial?.order_number||`ORD-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    title: initial?.title||'', order_number: initial?.order_number||'',
     project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
     delivery_date: initial?.delivery_date||'', payment_terms: initial?.payment_terms||'30 dager netto',
     intro_text: initial?.intro_text||'', outro_text: initial?.outro_text||'',
     global_markup: initial?.global_markup||0,
   })
+  // Generer sekvensielt nummer ved nyopprettelse
+  useEffect(() => {
+    if (!isEdit && !form.order_number) {
+      supabase.from('orders').select('order_number').then(({ data }) => {
+        setForm(f => ({ ...f, order_number: nextSequenceNumber(data || [], 'ORD', 'order_number') }))
+      })
+    }
+  }, [])
   const [chapters, setChapters] = useState(initial?.chapters||[
     { id:Date.now(), title:'Generelt', markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}] }
   ])
@@ -7702,8 +7752,10 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
     if (!q) return alert('Velg et tilbud')
     setSaving(true)
     try {
+      const { data: existingOrders } = await supabase.from('orders').select('order_number')
+      const orderNumber = nextSequenceNumber(existingOrders || [], 'ORD', 'order_number')
       const { error } = await supabase.from('orders').insert({
-        title: q.title, order_number: `ORD-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+        title: q.title, order_number: orderNumber,
         project_id: q.project_id||null, quote_id: q.id,
         customer_name: q.customer_name, customer_email: q.customer_email,
         customer_address: q.customer_address, customer_orgnr: q.customer_orgnr,
@@ -7839,7 +7891,8 @@ function EndringsmeldingModal({ order, user, existingCount, onClose, onSaved }) 
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const change_number = `EM-${String(existingCount+1).padStart(3,'0')}`
+      const { data: existingChanges } = await supabase.from('order_changes').select('change_number').eq('order_id', order.id)
+      const change_number = nextSequenceNumber(existingChanges || [], 'EM', 'change_number', { withYear: false })
       const { error } = await supabase.from('order_changes').insert({ order_id:order.id, change_number, title:form.title.trim(), description:form.description||null, amount:parseFloat(form.amount)||0, status:'Utkast', created_by:user?.id })
       if (error) throw error
       onSaved()
@@ -8309,10 +8362,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
 }
 
 function nextInvoiceNumber(invoices) {
-  const year = new Date().getFullYear()
-  const nums = invoices.filter(i=>i.invoice_number?.startsWith(`F-${year}`)).map(i=>parseInt(i.invoice_number.split('-')[2]||0))
-  const next = nums.length>0 ? Math.max(...nums)+1 : 1
-  return `F-${year}-${String(next).padStart(4,'0')}`
+  return nextSequenceNumber(invoices, 'F', 'invoice_number')
 }
 
 function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onSaved }) {
@@ -8469,9 +8519,11 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
             unitPrice:((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))*(1+(parseFloat(ch.markup)||0)/100),
             mvaRate:0.25
           })))
+      const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
+      const nextInvNr = nextSequenceNumber(existingInv || [], 'F', 'invoice_number')
       const { error } = await supabase.from('invoices').insert({
         title:`${ord.title}${mode==='partial'?` – ${partialPct}% delfaktura`:''}`,
-        invoice_number:`F-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`,
+        invoice_number: nextInvNr,
         order_id:ord.id, project_id:ord.project_id||null,
         customer_name:ord.customer_name, customer_email:ord.customer_email,
         customer_address:ord.customer_address, customer_orgnr:ord.customer_orgnr,
@@ -8549,8 +8601,10 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
         unitPrice:((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))*(1+(parseFloat(ch.markup)||0)/100),
         mvaRate:0.25
       })))
+      const { data: existingInv2 } = await supabase.from('invoices').select('invoice_number')
+      const nextInvNr2 = nextSequenceNumber(existingInv2 || [], 'F', 'invoice_number')
       const { error } = await supabase.from('invoices').insert({
-        title:q.title, invoice_number:`F-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`,
+        title:q.title, invoice_number: nextInvNr2,
         quote_id:q.id, project_id:q.project_id||null,
         customer_name:q.customer_name, customer_email:q.customer_email,
         customer_address:q.customer_address, customer_orgnr:q.customer_orgnr,
@@ -8621,8 +8675,10 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
     try {
       const selChanges = changes.filter(c=>selectedChanges.includes(c.id))
       const lines = selChanges.map(c=>({ id:Date.now()+Math.random(), description:`${c.change_number} – ${c.title}`, qty:1, unit:'stk', unitPrice:c.amount||0, mvaRate:0.25 }))
+      const { data: existingInv3 } = await supabase.from('invoices').select('invoice_number')
+      const nextInvNr3 = nextSequenceNumber(existingInv3 || [], 'F', 'invoice_number')
       const { error } = await supabase.from('invoices').insert({
-        title:`Endringsmeldinger – ${ord.title}`, invoice_number:`F-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`,
+        title:`Endringsmeldinger – ${ord.title}`, invoice_number: nextInvNr3,
         order_id:ord.id, project_id:ord.project_id||null,
         customer_name:ord.customer_name, customer_email:ord.customer_email,
         payment_terms:ord.payment_terms||'30 dager netto',
@@ -18957,11 +19013,19 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
   const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title || '',
-    kalk_number: initial?.kalk_number || `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
+    kalk_number: initial?.kalk_number || '',
     customer_name: initial?.customer_name || '',
     customer_address: initial?.customer_address || '',
     notes: initial?.notes || '',
   })
+  // Generer sekvensielt nummer ved nyopprettelse
+  useEffect(() => {
+    if (!isEdit && !form.kalk_number) {
+      supabase.from('calculations').select('kalk_number').then(({ data }) => {
+        setForm(f => ({ ...f, kalk_number: nextSequenceNumber(data || [], 'KA', 'kalk_number') }))
+      })
+    }
+  }, [])
   const [selectedFag, setSelectedFag] = useState(() => {
     if (initial?.kalkyler) return initial.kalkyler.map(k => k.fag)
     return []
@@ -19254,7 +19318,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       const kl = kalkyler.find(x => x.id === kalId)
       const bd = kl?.bygningsdeler?.find(b => b.id === bdId)
       const fag = kl ? getFaggruppe(kl.fag) : null
-      const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
+      const { data: existingTF } = await supabase.from('ue_foresporsler').select('foresporsel_nr')
+      const nr = nextSequenceNumber(existingTF || [], 'TF', 'foresporsel_nr')
 
       const { data: foresp, error } = await supabase.from('ue_foresporsler').insert({
         user_id: user?.id, calculation_id: k.id, kalkyle_fag: kl?.fag, bygningsdel_id: bdId, ue_post_id: ue.id,
@@ -19431,7 +19496,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   }
 
   const handleDuplicate = async () => {
-    const newK = { ...k, kalk_number: `KA-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`, title: k.title + ' (kopi)', status: 'Utkast', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+    const newKalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+    const newK = { ...k, kalk_number: newKalkNr, title: k.title + ' (kopi)', status: 'Utkast', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     delete newK.id
     const { error } = await supabase.from('calculations').insert(newK)
     if (error) alert('Feil: ' + error.message)
@@ -19451,7 +19518,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       })
       return { id: kalk.id, title: `${fag.emoji} ${kalk.name}`, description: '', markup: 0, posts }
     })
-    const quotePayload = { title: k.title, quote_number: `TB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`, project_id: null, customer_name: k.customer_name || '', customer_email: '', customer_address: k.customer_address || '', global_markup: 0, chapters: quoteChapters, status: 'Utkast', created_by: user?.id, source_calculation_id: k.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    const { data: existingQ } = await supabase.from('quotes').select('quote_number')
+    const quoteNr = nextSequenceNumber(existingQ || [], 'TB', 'quote_number')
+    const quotePayload = { title: k.title, quote_number: quoteNr, project_id: null, customer_name: k.customer_name || '', customer_email: '', customer_address: k.customer_address || '', global_markup: 0, chapters: quoteChapters, status: 'Utkast', created_by: user?.id, source_calculation_id: k.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     const { error } = await supabase.from('quotes').insert(quotePayload)
     if (error) { alert('Feil: ' + error.message) }
     else { await updateStatus('Tilbud sendt'); setShowTilbudPopup('created') }
@@ -20191,7 +20260,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 if (!uf.email || !uf.navn) return setToastMsg({ title: 'Mangler info', message: 'Fyll inn UE-navn og e-post', type: 'error' })
                                 if ((kalk.bygningsdeler||[]).length === 0) return setToastMsg({ title: 'Ingen poster', message: 'Legg til bygningsdeler først', type: 'error' })
                                 try {
-                                  const nr = `TF-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
+                                  const { data: existingTF2 } = await supabase.from('ue_foresporsler').select('foresporsel_nr')
+                                  const nr = nextSequenceNumber(existingTF2 || [], 'TF', 'foresporsel_nr')
                                   const fag = getFaggruppe(kalk.fag)
                                   const poster = [...(kalk.bygningsdeler||[]).map(bd => ({ id: bd.id, name: bd.name || 'Bygningsdel', mengde: bd.mengde || 1, enhet: bd.enhet || 'stk', beskrivelse: '' })), { id: 'annet', name: 'Annet / tillegg', mengde: 1, enhet: 'RS', beskrivelse: 'Øvrige kostnader nødvendig for utførelsen' }]
                                   const vedleggUrls = (uf.vedlegg||[]).map(v => ({ name: v.name, url: v.url }))
