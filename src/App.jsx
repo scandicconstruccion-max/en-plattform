@@ -14508,7 +14508,6 @@ function KunderPage() {
             + Ny kunde
           </button>
         </div>
-        </button>
       </div>
 
       {/* Stats */}
