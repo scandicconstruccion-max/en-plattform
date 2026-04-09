@@ -818,6 +818,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
   const [showDelete, setShowDelete] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
+  const [showCreateSub, setShowCreateSub] = useState(false)
   const f = { fontFamily:'system-ui, sans-serif' }
   const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding:'24px' }
 
@@ -881,7 +882,6 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
 
   const childProjects = allProjects.filter(p => p.parent_id === projectId)
   const parentProject = project.parent_id ? allProjects.find(p => p.id === project.parent_id) : null
-  const [showCreateSub, setShowCreateSub] = useState(false)
 
   const handleCreateSub = async (form) => {
     setSaving(true)
