@@ -1647,6 +1647,9 @@ function ProsjektfilerPage() {
 
 function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
   const [showPreview, setShowPreview] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [thumbUrl, setThumbUrl] = useState(null)
   const revBg    = isArchived ? '#fef2f2' : '#f0fdf4'
   const revColor = isArchived ? '#dc2626' : '#059669'
   const revBorder= isArchived ? '#fecaca' : '#bbf7d0'
@@ -1660,37 +1663,84 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
   const [textContent, setTextContent] = useState(null)
   const [loadingText, setLoadingText] = useState(false)
 
-  const getPublicUrl = () => {
-    const { data } = supabase.storage.from('plattform-files').getPublicUrl(file.file_url)
-    return data?.publicUrl
+  // Hent signert URL (fungerer med private buckets)
+  const getSignedUrl = async () => {
+    const { data, error } = await supabase.storage.from('plattform-files').createSignedUrl(file.file_url, 3600)
+    if (error || !data?.signedUrl) return null
+    return data.signedUrl
   }
+
+  // Last thumbnail for bilder (blob-basert, fungerer alltid)
+  React.useEffect(() => {
+    if (!isImage || isArchived) return
+    let cancelled = false
+    supabase.storage.from('plattform-files').download(file.file_url).then(({ data, error }) => {
+      if (!error && data && !cancelled) {
+        const url = URL.createObjectURL(data)
+        setThumbUrl(url)
+      }
+    })
+    return () => { cancelled = true }
+  }, [file.file_url])
+
+  // Cleanup blob URLs
+  React.useEffect(() => {
+    return () => {
+      if (thumbUrl) URL.revokeObjectURL(thumbUrl)
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
+    }
+  }, [])
 
   // Escape-tast for å lukke
   React.useEffect(() => {
     if (!showPreview) return
-    const handler = (e) => { if (e.key === 'Escape') setShowPreview(false) }
+    const handler = (e) => { if (e.key === 'Escape') closePreview() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [showPreview])
 
-  // Last inn tekstfiler
-  const loadTextFile = async () => {
-    if (!isText || textContent !== null) return
-    setLoadingText(true)
-    try {
-      const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
-      if (!error && data) {
-        const text = await data.text()
-        setTextContent(text)
-      }
-    } catch(e) { console.error(e) }
-    finally { setLoadingText(false) }
-  }
-
-  const openPreview = () => {
+  // Last preview-URL når modal åpnes
+  const openPreview = async () => {
     setShowPreview(true)
     setZoom(100)
-    if (isText) loadTextFile()
+    setPreviewLoading(true)
+
+    if (isText) {
+      // Tekstfiler: last innhold
+      if (textContent === null) {
+        try {
+          const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
+          if (!error && data) setTextContent(await data.text())
+        } catch(e) { console.error(e) }
+      }
+      setPreviewLoading(false)
+    } else {
+      // Bilder og PDF: bruk blob-URL for å garantere at det fungerer
+      try {
+        const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
+        if (!error && data) {
+          const url = URL.createObjectURL(data)
+          setPreviewUrl(url)
+        } else {
+          // Fallback til signert URL
+          const signed = await getSignedUrl()
+          setPreviewUrl(signed)
+        }
+      } catch(e) {
+        const signed = await getSignedUrl()
+        setPreviewUrl(signed)
+      }
+      setPreviewLoading(false)
+    }
+  }
+
+  const closePreview = () => {
+    setShowPreview(false)
+    // Cleanup blob URL når modal lukkes
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(null)
+    }
   }
 
   // Klikk på filnavn: forhåndsvisning for PDF/bilder, ellers nedlasting
@@ -1708,9 +1758,9 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
       <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />
       {/* Thumbnail for bilder */}
-      {isImage ? (
+      {isImage && thumbUrl ? (
         <div onClick={openPreview} style={{ width: '42px', height: '42px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }}>
-          <img src={getPublicUrl()} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={thumbUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
       ) : (
         <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
@@ -1796,7 +1846,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:'8px', padding:'8px 14px', cursor:'pointer', color:'white', fontSize:'13px', fontWeight:'500', display:'flex', alignItems:'center', gap:'6px' }}>
               ⬇️ Last ned
             </button>
-            <button onClick={() => setShowPreview(false)}
+            <button onClick={closePreview}
               style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:'8px', width:'36px', height:'36px', cursor:'pointer', color:'white', fontSize:'20px', display:'flex', alignItems:'center', justifyContent:'center' }}>
               ×
             </button>
@@ -1805,25 +1855,40 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
 
         {/* Innhold */}
         <div style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false) }}>
-          {isImage && (
-            <img src={getPublicUrl()} alt={file.name}
-              style={{ maxWidth: `${zoom}%`, maxHeight: zoom > 100 ? 'none' : '85vh', objectFit:'contain', borderRadius:'8px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', transition:'max-width 0.2s' }} />
-          )}
-          {isPdf && (
-            <iframe src={getPublicUrl() + '#toolbar=1&navpanes=0'} title={file.name}
-              style={{ width: `${Math.min(zoom, 100)}%`, maxWidth:'1200px', height:'88vh', border:'none', borderRadius:'8px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', background:'white' }} />
-          )}
-          {isText && (
-            <div style={{ width:'90%', maxWidth:'900px', maxHeight:'85vh', overflow:'auto', background:'white', borderRadius:'12px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
-              <div style={{ padding:'20px 24px' }}>
-                {loadingText ? (
-                  <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster innhold...</div>
-                ) : (
-                  <pre style={{ margin:0, fontSize:'13px', color:'#0f172a', fontFamily:'monospace', whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{textContent || 'Kunne ikke laste filen.'}</pre>
-                )}
-              </div>
+          onClick={(e) => { if (e.target === e.currentTarget) closePreview() }}>
+          {previewLoading ? (
+            <div style={{ textAlign:'center' }}>
+              <div style={{ width:'40px', height:'40px', border:'3px solid rgba(255,255,255,0.2)', borderTop:'3px solid white', borderRadius:'50%', margin:'0 auto 16px', animation:'spin 1s linear infinite' }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+              <p style={{ color:'rgba(255,255,255,0.7)', fontSize:'14px' }}>Laster forhåndsvisning...</p>
             </div>
+          ) : (
+            <>
+              {isImage && previewUrl && (
+                <img src={previewUrl} alt={file.name}
+                  style={{ maxWidth: `${zoom}%`, maxHeight: zoom > 100 ? 'none' : '85vh', objectFit:'contain', borderRadius:'8px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', transition:'max-width 0.2s' }} />
+              )}
+              {isPdf && previewUrl && (
+                <iframe src={previewUrl} title={file.name}
+                  style={{ width: `${Math.min(zoom, 100)}%`, maxWidth:'1200px', height:'88vh', border:'none', borderRadius:'8px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', background:'white' }} />
+              )}
+              {isText && (
+                <div style={{ width:'90%', maxWidth:'900px', maxHeight:'85vh', overflow:'auto', background:'white', borderRadius:'12px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
+                  <div style={{ padding:'20px 24px' }}>
+                    <pre style={{ margin:0, fontSize:'13px', color:'#0f172a', fontFamily:'monospace', whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{textContent || 'Kunne ikke laste filen.'}</pre>
+                  </div>
+                </div>
+              )}
+              {!previewUrl && !isText && (
+                <div style={{ textAlign:'center', color:'rgba(255,255,255,0.7)' }}>
+                  <p style={{ fontSize:'16px', marginBottom:'12px' }}>Kunne ikke laste forhåndsvisning</p>
+                  <button onClick={() => onDownload(file)}
+                    style={{ background:'white', color:'#0f172a', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+                    ⬇️ Last ned i stedet
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
