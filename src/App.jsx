@@ -14681,19 +14681,27 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
   const [editing, setEditing] = useState(false)
   const [kontakter, setKontakter] = useState([])
   const [notater, setNotater] = useState([])
+  const [ordrer, setOrdrer] = useState([])
+  const [avvik, setAvvik] = useState([])
   const [nyttNotat, setNyttNotat] = useState('')
   const [showNyKontakt, setShowNyKontakt] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('oversikt')
   const type = KUNDE_TYPE[kunde.type] || KUNDE_TYPE.bedrift
 
   const loadDetails = async () => {
     setLoading(true)
     try {
-      const [k, n] = await Promise.all([
+      const projIds = prosjekter.map(p => p.id)
+      const [k, n, ord, avv] = await Promise.all([
         supabase.from('customer_contacts').select('*').eq('customer_id', kunde.id).order('name').then(r => r.data || []),
         supabase.from('customer_notes').select('*').eq('customer_id', kunde.id).order('created_at', {ascending:false}).then(r => r.data || []),
+        supabase.from('orders').select('id,title,status,total_amount,customer_id,created_at').eq('customer_id', kunde.id).order('created_at',{ascending:false}).then(r => r.data || []),
+        projIds.length > 0
+          ? supabase.from('deviations').select('id,title,status,severity,project_id,created_at').in('project_id', projIds).order('created_at',{ascending:false}).then(r => r.data || [])
+          : Promise.resolve([]),
       ])
-      setKontakter(k); setNotater(n)
+      setKontakter(k); setNotater(n); setOrdrer(ord); setAvvik(avv)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -14722,6 +14730,41 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
     loadDetails()
   }
 
+  // ── Statistikk ──
+  const totalFakturert = fakturaer.filter(f => f.status === 'Betalt').reduce((s, f) => s + (f.total_amount || 0), 0)
+  const utestaende = fakturaer.filter(f => f.status !== 'Betalt' && f.status !== 'Kansellert').reduce((s, f) => s + (f.total_amount || 0), 0)
+  const forfalt = fakturaer.filter(f => f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0])
+  const aktiveTilbud = tilbud.filter(t => t.status === 'Sendt')
+  const aksepterteTilbud = tilbud.filter(t => t.status === 'Akseptert')
+
+  // ── Samlet historikk-tidslinje ──
+  const buildTimeline = () => {
+    const events = []
+    prosjekter.forEach(p => events.push({ date: p.created_at || p.start_date || '2020-01-01', type: 'prosjekt', icon: '🏗️', color: '#059669', title: p.name, sub: `Status: ${p.status || 'Aktiv'}` }))
+    tilbud.forEach(t => events.push({ date: t.created_at, type: 'tilbud', icon: '📋', color: '#2563eb', title: t.title, sub: `${t.status}${t.total_amount ? ' · ' + Math.round(t.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` }))
+    fakturaer.forEach(f => {
+      const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
+      events.push({ date: f.created_at, type: 'faktura', icon: '🧾', color: isOverdue ? '#dc2626' : f.status === 'Betalt' ? '#059669' : '#d97706', title: f.title, sub: `${isOverdue ? 'Forfalt' : f.status}${f.total_amount ? ' · ' + Math.round(f.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` })
+    })
+    ordrer.forEach(o => events.push({ date: o.created_at, type: 'ordre', icon: '📦', color: '#7c3aed', title: o.title, sub: `${o.status || 'Aktiv'}${o.total_amount ? ' · ' + Math.round(o.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` }))
+    avvik.forEach(a => {
+      const proj = prosjekter.find(p => p.id === a.project_id)
+      events.push({ date: a.created_at, type: 'avvik', icon: '⚠️', color: '#ea580c', title: a.title, sub: `${a.severity} · ${a.status}${proj ? ' · ' + proj.name : ''}` })
+    })
+    notater.forEach(n => events.push({ date: n.created_at, type: 'notat', icon: '📝', color: '#64748b', title: n.content?.slice(0, 80) + (n.content?.length > 80 ? '...' : ''), sub: 'Notat' }))
+    return events.sort((a, b) => new Date(b.date) - new Date(a.date))
+  }
+
+  const tabs = [
+    { id: 'oversikt', label: '📊 Oversikt' },
+    { id: 'historikk', label: '📜 Historikk' },
+    { id: 'prosjekter', label: `🏗️ Prosjekter (${prosjekter.length})` },
+    { id: 'okonomi', label: `💰 Økonomi (${tilbud.length + fakturaer.length})` },
+    { id: 'notater', label: `📝 Notater (${notater.length})` },
+  ]
+
+  const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       {/* Header */}
@@ -14746,141 +14789,275 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
             ✏️ Rediger
           </button>
         </div>
+
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft:'-32px', marginRight:'-32px', paddingLeft:'32px' }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              style={{ padding:'10px 18px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab === t.id ? '700' : '400', background:'transparent', color: activeTab === t.id ? '#059669' : '#64748b', borderBottom: activeTab === t.id ? '2px solid #059669' : '2px solid transparent', fontFamily:'system-ui,sans-serif' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'1fr 340px', gap:'20px' }}>
         {/* Venstre kolonne */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
-          {/* Kontaktinfo */}
-          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
-            <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Kontaktinformasjon</h3>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-              {[
-                ['E-post', kunde.email, `mailto:${kunde.email}`],
-                ['Telefon', kunde.phone, `tel:${kunde.phone}`],
-                ['Adresse', kunde.address, null],
-                ['Postnummer / By', [kunde.postal_code, kunde.city].filter(Boolean).join(' '), null],
-                ['Org.nummer', kunde.orgnr, null],
-                ['Faktura e-post', kunde.invoice_email, `mailto:${kunde.invoice_email}`],
-              ].filter(r => r[1]).map(([label, value, href]) => (
-                <div key={label} style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
-                  <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'3px' }}>{label}</div>
-                  {href
-                    ? <a href={href} style={{ fontSize:'14px', fontWeight:'600', color:'#059669', textDecoration:'none' }}>{value}</a>
-                    : <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{value}</div>
-                  }
+          {/* ═══ OVERSIKT TAB ═══ */}
+          {activeTab === 'oversikt' && (
+            <>
+              {/* Nøkkeltall */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px' }}>
+                {[
+                  { label: 'Totalt fakturert', value: Math.round(totalFakturert).toLocaleString('nb-NO') + ' kr', color: '#059669', bg: '#ecfdf5' },
+                  { label: 'Utestående', value: Math.round(utestaende).toLocaleString('nb-NO') + ' kr', color: utestaende > 0 ? '#d97706' : '#059669', bg: utestaende > 0 ? '#fffbeb' : '#ecfdf5' },
+                  { label: 'Aktive prosjekter', value: prosjekter.filter(p => p.status === 'aktiv').length, color: '#2563eb', bg: '#eff6ff' },
+                  { label: 'Åpne avvik', value: avvik.filter(a => a.status !== 'Lukket').length, color: avvik.filter(a => a.status !== 'Lukket').length > 0 ? '#dc2626' : '#059669', bg: avvik.filter(a => a.status !== 'Lukket').length > 0 ? '#fef2f2' : '#ecfdf5' },
+                ].map((s, i) => (
+                  <div key={i} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', textAlign:'center' }}>
+                    <div style={{ fontSize:'22px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                    <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'500', marginTop:'4px' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Kontaktinfo */}
+              <div style={card}>
+                <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Kontaktinformasjon</h3>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  {[
+                    ['E-post', kunde.email, `mailto:${kunde.email}`],
+                    ['Telefon', kunde.phone, `tel:${kunde.phone}`],
+                    ['Adresse', kunde.address, null],
+                    ['Postnummer / By', [kunde.postal_code, kunde.city].filter(Boolean).join(' '), null],
+                    ['Org.nummer', kunde.orgnr, null],
+                    ['Faktura e-post', kunde.invoice_email, `mailto:${kunde.invoice_email}`],
+                  ].filter(r => r[1]).map(([label, value, href]) => (
+                    <div key={label} style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'3px' }}>{label}</div>
+                      {href
+                        ? <a href={href} style={{ fontSize:'14px', fontWeight:'600', color:'#059669', textDecoration:'none' }}>{value}</a>
+                        : <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{value}</div>
+                      }
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            {kunde.notes && (
-              <div style={{ marginTop:'12px', background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a' }}>
-                <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'600', marginBottom:'4px' }}>MERKNAD</div>
-                <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{kunde.notes}</p>
+                {kunde.notes && (
+                  <div style={{ marginTop:'12px', background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a' }}>
+                    <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'600', marginBottom:'4px' }}>MERKNAD</div>
+                    <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{kunde.notes}</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Tilknyttede prosjekter */}
-          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
-            <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Prosjekter ({prosjekter.length})</h3>
-            {prosjekter.length === 0 ? (
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen prosjekter koblet til denne kunden ennå.</p>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {prosjekter.map(p => (
-                  <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
-                    <span style={{ fontSize:'16px' }}>🏗️</span>
-                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
-                    <span style={{ fontSize:'12px', color:'#64748b', background:'white', borderRadius:'6px', padding:'2px 8px', border:'1px solid #e2e8f0' }}>{p.status || 'Aktiv'}</span>
+              {/* Siste aktivitet (mini-tidslinje) */}
+              <div style={card}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🕐 Siste aktivitet</h3>
+                {buildTimeline().slice(0, 6).map((ev, i) => (
+                  <div key={i} style={{ display:'flex', gap:'10px', padding:'8px 0', borderBottom: i < 5 ? '1px solid #f8fafc' : 'none' }}>
+                    <span style={{ fontSize:'15px', flexShrink:0, marginTop:'1px' }}>{ev.icon}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.title}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{ev.sub} · {new Date(ev.date).toLocaleDateString('nb-NO')}</div>
+                    </div>
                   </div>
                 ))}
+                {buildTimeline().length > 6 && (
+                  <button onClick={() => setActiveTab('historikk')} style={{ background:'none', border:'none', cursor:'pointer', color:'#2563eb', fontSize:'12px', fontWeight:'600', padding:'8px 0 0', display:'block' }}>
+                    Vis all historikk ({buildTimeline().length} hendelser) →
+                  </button>
+                )}
+                {buildTimeline().length === 0 && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert ennå.</p>}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
-          {/* Tilbud */}
-          {tilbud.length > 0 && (
-            <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
-              <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Tilbud ({tilbud.length})</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {tilbud.map(t => {
-                  const statusCfg = { Utkast:{bg:'#f8fafc',color:'#64748b'}, Sendt:{bg:'#eff6ff',color:'#2563eb'}, Akseptert:{bg:'#f0fdf4',color:'#059669'}, Avslått:{bg:'#fef2f2',color:'#dc2626'} }[t.status] || {bg:'#f8fafc',color:'#64748b'}
-                  return (
-                    <div key={t.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
-                      <span style={{ fontSize:'16px' }}>📋</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
-                        <div style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(t.created_at).toLocaleDateString('nb-NO')}</div>
+          {/* ═══ HISTORIKK TAB ═══ */}
+          {activeTab === 'historikk' && (
+            <div style={card}>
+              <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📜 Komplett kundehistorikk ({buildTimeline().length} hendelser)</h3>
+              {buildTimeline().length === 0 ? (
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen historikk ennå.</p>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column' }}>
+                  {buildTimeline().map((ev, i) => (
+                    <div key={i} style={{ display:'flex', gap:'12px', paddingBottom:'14px', paddingTop: i > 0 ? '14px' : '0', borderTop: i > 0 ? '1px solid #f8fafc' : 'none' }}>
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: ev.color + '15', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px' }}>{ev.icon}</div>
+                        {i < buildTimeline().length - 1 && <div style={{ width:'2px', flex:1, background:'#f1f5f9', marginTop:'4px' }} />}
                       </div>
-                      {t.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(t.total_amount).toLocaleString('nb-NO')} kr</span>}
-                      <span style={{ background:statusCfg.bg, color:statusCfg.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{t.status}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'2px' }}>
+                          <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{ev.title}</span>
+                          <span style={{ fontSize:'11px', color:ev.color, fontWeight:'600', background: ev.color + '15', padding:'1px 8px', borderRadius:'6px', flexShrink:0 }}>{ev.type}</span>
+                        </div>
+                        <div style={{ fontSize:'12px', color:'#64748b' }}>{ev.sub}</div>
+                        <div style={{ fontSize:'11px', color:'#cbd5e1', marginTop:'2px' }}>{new Date(ev.date).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric' })}</div>
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Fakturaer */}
-          {fakturaer.length > 0 && (
-            <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
-              <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🧾 Fakturaer ({fakturaer.length})</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {fakturaer.map(f => {
-                  const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
-                  const statusColor = f.status === 'Betalt' ? '#059669' : isOverdue ? '#dc2626' : '#d97706'
-                  const statusBg = f.status === 'Betalt' ? '#f0fdf4' : isOverdue ? '#fef2f2' : '#fffbeb'
-                  return (
-                    <div key={f.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
-                      <span style={{ fontSize:'16px' }}>🧾</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.title}</div>
-                        <div style={{ fontSize:'12px', color:'#94a3b8' }}>{f.due_date ? `Forfall: ${new Date(f.due_date).toLocaleDateString('nb-NO')}` : new Date(f.created_at).toLocaleDateString('nb-NO')}</div>
+          {/* ═══ PROSJEKTER TAB ═══ */}
+          {activeTab === 'prosjekter' && (
+            <>
+              <div style={card}>
+                <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Prosjekter ({prosjekter.length})</h3>
+                {prosjekter.length === 0 ? (
+                  <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen prosjekter koblet til denne kunden.</p>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {prosjekter.map(p => (
+                      <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
+                        <span style={{ fontSize:'16px' }}>🏗️</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{p.name}</div>
+                          {avvik.filter(a => a.project_id === p.id).length > 0 && (
+                            <div style={{ fontSize:'11px', color:'#ea580c', marginTop:'2px' }}>⚠️ {avvik.filter(a => a.project_id === p.id && a.status !== 'Lukket').length} åpne avvik</div>
+                          )}
+                        </div>
+                        <span style={{ fontSize:'12px', color:'#64748b', background:'white', borderRadius:'6px', padding:'2px 8px', border:'1px solid #e2e8f0' }}>{p.status || 'Aktiv'}</span>
                       </div>
-                      {f.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(f.total_amount).toLocaleString('nb-NO')} kr</span>}
-                      <span style={{ background:statusBg, color:statusColor, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{isOverdue ? '⚠️ Forfalt' : f.status}</span>
-                    </div>
-                  )
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+              {avvik.length > 0 && (
+                <div style={card}>
+                  <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⚠️ Avvik ({avvik.length})</h3>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                    {avvik.map(a => {
+                      const proj = prosjekter.find(p => p.id === a.project_id)
+                      const sevCol = { Kritisk:'#dc2626', Hoy:'#ea580c', Medium:'#d97706', Lav:'#16a34a' }[a.severity] || '#d97706'
+                      return (
+                        <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                          <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:sevCol, flexShrink:0 }} />
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{a.title}</div>
+                            <div style={{ fontSize:'11px', color:'#94a3b8' }}>{proj?.name} · {new Date(a.created_at).toLocaleDateString('nb-NO')}</div>
+                          </div>
+                          <span style={{ fontSize:'11px', fontWeight:'600', color: a.status === 'Lukket' ? '#059669' : '#d97706', background: a.status === 'Lukket' ? '#ecfdf5' : '#fffbeb', padding:'2px 8px', borderRadius:'6px' }}>{a.status}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* Notater */}
-          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
-            <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📝 Notater</h3>
-            <div style={{ display:'flex', gap:'8px', marginBottom:'14px' }}>
-              <textarea value={nyttNotat} onChange={e => setNyttNotat(e.target.value)}
-                placeholder="Skriv et notat om kunden..."
-                rows={2} style={{ ...kundeInp, flex:1, resize:'none', fontSize:'13px' }} />
-              <button onClick={lagreNotat} disabled={!nyttNotat.trim()}
-                style={{ background: nyttNotat.trim() ? '#059669' : '#e2e8f0', color: nyttNotat.trim() ? 'white' : '#94a3b8',
-                  border:'none', borderRadius:'10px', padding:'0 16px', cursor: nyttNotat.trim() ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>
-                Lagre
-              </button>
-            </div>
-            {notater.length === 0 ? (
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen notater ennå.</p>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {notater.map(n => (
-                  <div key={n.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', display:'flex', gap:'10px' }}>
-                    <div style={{ flex:1 }}>
-                      <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#374151', lineHeight:1.5 }}>{n.content}</p>
-                      <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(n.created_at).toLocaleDateString('nb-NO', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
-                    </div>
-                    <button onClick={() => slettNotat(n.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0', alignSelf:'flex-start' }}>🗑️</button>
+          {/* ═══ ØKONOMI TAB ═══ */}
+          {activeTab === 'okonomi' && (
+            <>
+              {/* Økonomi-oppsummering */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px' }}>
+                {[
+                  { label: 'Totalt fakturert', value: Math.round(totalFakturert).toLocaleString('nb-NO') + ' kr', color: '#059669', bg: '#ecfdf5' },
+                  { label: 'Utestående', value: Math.round(utestaende).toLocaleString('nb-NO') + ' kr', color: utestaende > 0 ? '#d97706' : '#059669', bg: utestaende > 0 ? '#fffbeb' : '#ecfdf5' },
+                  { label: 'Forfalt', value: forfalt.length + ' faktura' + (forfalt.length !== 1 ? 'er' : ''), color: forfalt.length > 0 ? '#dc2626' : '#059669', bg: forfalt.length > 0 ? '#fef2f2' : '#ecfdf5' },
+                ].map((s, i) => (
+                  <div key={i} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', textAlign:'center' }}>
+                    <div style={{ fontSize:'20px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                    <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'500', marginTop:'4px' }}>{s.label}</div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+
+              {/* Tilbud */}
+              <div style={card}>
+                <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Tilbud ({tilbud.length})</h3>
+                {tilbud.length === 0 ? (
+                  <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen tilbud sendt til denne kunden.</p>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {tilbud.map(t => {
+                      const statusCfg = { Utkast:{bg:'#f8fafc',color:'#64748b'}, Sendt:{bg:'#eff6ff',color:'#2563eb'}, Akseptert:{bg:'#f0fdf4',color:'#059669'}, Avslått:{bg:'#fef2f2',color:'#dc2626'} }[t.status] || {bg:'#f8fafc',color:'#64748b'}
+                      return (
+                        <div key={t.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                          <span style={{ fontSize:'16px' }}>📋</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
+                            <div style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(t.created_at).toLocaleDateString('nb-NO')}</div>
+                          </div>
+                          {t.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(t.total_amount).toLocaleString('nb-NO')} kr</span>}
+                          <span style={{ background:statusCfg.bg, color:statusCfg.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{t.status}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Fakturaer */}
+              <div style={card}>
+                <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🧾 Fakturaer ({fakturaer.length})</h3>
+                {fakturaer.length === 0 ? (
+                  <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen fakturaer for denne kunden.</p>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {fakturaer.map(f => {
+                      const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
+                      const statusColor = f.status === 'Betalt' ? '#059669' : isOverdue ? '#dc2626' : '#d97706'
+                      const statusBg = f.status === 'Betalt' ? '#f0fdf4' : isOverdue ? '#fef2f2' : '#fffbeb'
+                      return (
+                        <div key={f.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                          <span style={{ fontSize:'16px' }}>🧾</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.title}</div>
+                            <div style={{ fontSize:'12px', color:'#94a3b8' }}>{f.due_date ? `Forfall: ${new Date(f.due_date).toLocaleDateString('nb-NO')}` : new Date(f.created_at).toLocaleDateString('nb-NO')}</div>
+                          </div>
+                          {f.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(f.total_amount).toLocaleString('nb-NO')} kr</span>}
+                          <span style={{ background:statusBg, color:statusColor, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{isOverdue ? 'Forfalt' : f.status}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ═══ NOTATER TAB ═══ */}
+          {activeTab === 'notater' && (
+            <div style={card}>
+              <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📝 Notater og korrespondanse</h3>
+              <div style={{ display:'flex', gap:'8px', marginBottom:'14px' }}>
+                <textarea value={nyttNotat} onChange={e => setNyttNotat(e.target.value)}
+                  placeholder="Skriv et notat om kunden, et møte, en telefonsamtale..."
+                  rows={3} style={{ ...kundeInp, flex:1, resize:'none', fontSize:'13px' }} />
+                <button onClick={lagreNotat} disabled={!nyttNotat.trim()}
+                  style={{ background: nyttNotat.trim() ? '#059669' : '#e2e8f0', color: nyttNotat.trim() ? 'white' : '#94a3b8',
+                    border:'none', borderRadius:'10px', padding:'0 16px', cursor: nyttNotat.trim() ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap', alignSelf:'flex-end', height:'40px' }}>
+                  Lagre
+                </button>
+              </div>
+              {notater.length === 0 ? (
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen notater ennå.</p>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {notater.map(n => (
+                    <div key={n.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', display:'flex', gap:'10px' }}>
+                      <div style={{ flex:1 }}>
+                        <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#374151', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{n.content}</p>
+                        <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(n.created_at).toLocaleDateString('nb-NO', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                      </div>
+                      <button onClick={() => slettNotat(n.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0', alignSelf:'flex-start' }}>🗑️</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Høyre kolonne — kontaktpersoner */}
+        {/* Høyre kolonne — kontaktpersoner (alltid synlig) */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+          <div style={card}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
               <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👥 Kontaktpersoner</h3>
               <button onClick={() => setShowNyKontakt(true)}
@@ -14907,6 +15084,27 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Hurtigstatistikk */}
+          <div style={card}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📈 Oppsummering</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {[
+                { label: 'Prosjekter', value: prosjekter.length, icon: '🏗️' },
+                { label: 'Tilbud sendt', value: tilbud.length, icon: '📋' },
+                { label: 'Aksepterte tilbud', value: aksepterteTilbud.length, icon: '✅' },
+                { label: 'Fakturaer', value: fakturaer.length, icon: '🧾' },
+                { label: 'Ordrer', value: ordrer.length, icon: '📦' },
+                { label: 'Avvik', value: avvik.length, icon: '⚠️' },
+                { label: 'Notater', value: notater.length, icon: '📝' },
+              ].filter(s => s.value > 0).map((s, i) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px' }}>
+                  <span style={{ color:'#64748b' }}>{s.icon} {s.label}</span>
+                  <span style={{ fontWeight:'700', color:'#0f172a' }}>{s.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
