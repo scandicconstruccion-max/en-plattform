@@ -875,10 +875,11 @@ function ProsjekterPage({ onNavigateDetail }) {
   )
 }
 
-function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
+function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user } = useAuth()
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
+  const [checklists, setChecklists] = useState([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -890,12 +891,14 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
 
   const load = async () => {
     try {
-      const [proj, allProj] = await Promise.all([
+      const [proj, allProj, clRes] = await Promise.all([
         db.getProject(projectId),
-        db.getProjects()
+        db.getProjects(),
+        supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
       ])
       setProject(proj)
       setAllProjects(allProj)
+      setChecklists(clRes.data || [])
     } catch(e){console.error(e)} finally { setLoading(false) }
   }
   useEffect(() => { load() }, [projectId])
@@ -1037,6 +1040,56 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
               </div>
             </div>
           )}
+
+          {/* Sjekklister tilknyttet prosjektet */}
+          <div style={card}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+              <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>✅ Sjekklister ({checklists.length})</h3>
+              {onNavigateChecklist && (
+                <button onClick={() => onNavigateChecklist('new', projectId)}
+                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny sjekkliste</button>
+              )}
+            </div>
+            {checklists.length === 0 ? (
+              <p style={{ color:'#94a3b8', fontSize:'13px', margin:0, textAlign:'center', padding:'16px 0' }}>Ingen sjekklister opprettet for dette prosjektet</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {checklists.map(cl => {
+                  const items = cl.items || []
+                  const total = items.length
+                  const done = items.filter(i => i.checked).length
+                  const pct = total > 0 ? Math.round(done / total * 100) : 0
+                  const statusMap = { ikke_startet: ['#f1f5f9','#475569','Ikke startet'], påbegynt: ['#eff6ff','#2563eb','Påbegynt'], fullfort: ['#ecfdf5','#059669','Fullført'] }
+                  const [sBg, sColor, sLabel] = statusMap[cl.status] || ['#f1f5f9','#475569', cl.status]
+                  return (
+                    <div key={cl.id}
+                      onClick={() => { if (onNavigateChecklist) onNavigateChecklist(cl.id) }}
+                      style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', cursor: onNavigateChecklist ? 'pointer' : 'default', border:'1px solid #f1f5f9', transition:'border-color 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor='#e2e8f0'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cl.title}</div>
+                          <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{done}/{total} punkter · {new Date(cl.created_at).toLocaleDateString('nb-NO')}</div>
+                        </div>
+                        <span style={{ background: sBg, color: sColor, padding:'2px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'600', flexShrink:0 }}>{sLabel}</span>
+                      </div>
+                      {/* Fremdriftsbar */}
+                      <div style={{ height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden' }}>
+                        <div style={{ height:'100%', borderRadius:'3px', transition:'width 0.3s',
+                          width: `${pct}%`,
+                          background: pct === 100 ? '#059669' : pct > 50 ? '#2563eb' : pct > 0 ? '#d97706' : '#e2e8f0'
+                        }} />
+                      </div>
+                      <div style={{ textAlign:'right', marginTop:'4px' }}>
+                        <span style={{ fontSize:'11px', fontWeight:'600', color: pct === 100 ? '#059669' : '#64748b' }}>{pct}%</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           <div style={card}>
             <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
@@ -21969,7 +22022,16 @@ function AppContent() {
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
         {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { window.history.pushState({ page: 'sjekkliste_detaljer', checklistId: id }, '', '#sjekkliste_detaljer'); setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
         {page === 'sjekkliste_detaljer' && <SjekklisteDetaljerPage checklistId={checklistId} onBack={() => setPage('sjekklister')} />}
-        {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} onNavigateDetail={openProject} />}
+        {page === 'prosjekt_detaljer' && <ProsjektDetaljerPage projectId={projectId} onBack={() => navigate('prosjekter')} onNavigateDetail={openProject} onNavigateChecklist={(id, projId) => {
+          if (id === 'new') {
+            // Naviger til sjekklister-siden (kunne utvides med pre-valgt prosjekt)
+            navigate('sjekklister')
+          } else {
+            window.history.pushState({ page: 'sjekkliste_detaljer', checklistId: id }, '', '#sjekkliste_detaljer')
+            setPage('sjekkliste_detaljer')
+            setChecklistId(id)
+          }
+        }} />}
         {page === 'avvik' && <AvvikPage />}
         {page === 'hms' && <HmsPage />}
         {page === 'maskiner' && <MaskinPage />}
