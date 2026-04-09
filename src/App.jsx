@@ -1432,7 +1432,7 @@ function ProsjektfilerPage() {
         <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
           style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '200px' }}>
           <option value="all">Velg prosjekt</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {projectOptions(projects)}
         </select>
       </div>
 
@@ -1648,7 +1648,7 @@ function ProsjektfilerPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
                   <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
                     <option value="">Velg prosjekt</option>
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {projectOptions(projects)}
                   </select>
                 </div>
                 <div>
@@ -2042,7 +2042,7 @@ function SjekklistePage({ onNavigateDetail }) {
               </div>
               <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '180px', background: 'white' }}>
                 <option value="all">Alle prosjekter</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {projectOptions(projects)}
               </select>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: '160px', background: 'white' }}>
                 {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -2175,7 +2175,7 @@ function SjekklistePage({ onNavigateDetail }) {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
                 <select value={newForm.project_id} onChange={e => setNewForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
                   <option value="">Velg prosjekt</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {projectOptions(projects)}
                 </select>
               </div>
               <div>
@@ -2621,7 +2621,7 @@ function AvvikPage() {
           </select>
           <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: '220px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {projectOptions(projects)}
           </select>
           {(filterStatus !== 'alle' || filterSeverity !== 'alle' || filterProject !== 'alle' || search) && (
             <button onClick={() => { setFilterStatus('alle'); setFilterSeverity('alle'); setFilterProject('alle'); setSearch('') }}
@@ -2756,7 +2756,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
               <option value="">Velg prosjekt...</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectOptions(projects)}
             </select>
           </div>
 
@@ -3101,7 +3101,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
               <option value="">Velg prosjekt...</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectOptions(projects)}
             </select>
           </div>
           <div>
@@ -3328,7 +3328,7 @@ function HmsPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth:'200px', flex:1 }} />
           <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth:'220px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {projectOptions(projects)}
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth:'160px' }}>
             <option value="alle">Alle statuser</option>
@@ -3516,7 +3516,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel / Jobbtype *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Arbeid i høyde – takarbeid" style={hmsInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><input value={ansvarlig} onChange={e=>setAnsvarlig(e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -3676,7 +3676,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="Kort beskrivelse av hendelsen" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
           <div><label style={lbl()}>Hendelsestype</label><select value={form.hendelsestype} onChange={e=>set('hendelsestype',e.target.value)} style={hmsInp}>{TYPER.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
@@ -3765,7 +3765,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={hmsInp} placeholder="Navn på risikoanalysen" /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
           <div><label style={lbl()}>Ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -3890,7 +3890,7 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Mottak stål – leveranse 14" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Leverandør</label><input value={form.leverandor} onChange={e=>set('leverandor',e.target.value)} placeholder="Firmanavn" style={hmsInp} /></div>
           <div><label style={lbl()}>Ordrenummer</label><input value={form.ordrenummer} onChange={e=>set('ordrenummer',e.target.value)} placeholder="Bestillingsnr." style={hmsInp} /></div>
@@ -4569,7 +4569,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
               <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt</label>
               <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={mInp}>
                 <option value="">Velg prosjekt...</option>
-                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                {projectOptions(projects)}
               </select>
             </div>
           )}
@@ -4672,7 +4672,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 
             <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={mInp}>{Object.keys(MASKIN_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
             {form.status==='På prosjekt' && (
-              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
             )}
             <div>{lbl('Merke')}<input value={form.brand} onChange={e=>set('brand',e.target.value)} placeholder="F.eks. Makita, Hilti, Layher..." style={mInp} /></div>
             <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={mInp} /></div>
@@ -5369,7 +5369,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tilbudstittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbud betongarbeider Blokk B" style={qInp} /></div>
               <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={qInp} /></div>
@@ -7723,7 +7723,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
               <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 {isIncoming?'Byggherre / Oppdragsgiver':'Kontakt / UE-koordinator'}</div></div>
               <div>{lbl(isIncoming?'Byggherre':'Kontaktnavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={tInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="epost@firma.no" style={tInp} /></div>
@@ -8116,7 +8116,7 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Knytt til prosjekt</label>
                 <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={tInp}>
                   <option value="">Ingen</option>
-                  {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                  {projectOptions(projects)}
                 </select>
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
@@ -8521,7 +8521,7 @@ function EndringsmeldingPage() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
               <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
-              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects)}</select></div>
             </div>
 
             <div>{lbl('Årsak til endring')}<select value={form.reason} onChange={e=>set('reason',e.target.value)} style={{ ...inp, background:'white' }}>
@@ -8771,7 +8771,7 @@ function EndringsmeldingPage() {
         </select>
         <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth:'200px', background:'white' }}>
           <option value="all">Alle prosjekter</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {projectOptions(projects)}
         </select>
       </div>
 
@@ -9377,7 +9377,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
               <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={oInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
@@ -10173,7 +10173,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
             <div>{lbl('Forfallsdato')}<input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={iInp} /></div>
             <div>{lbl('KID-nummer')}<input value={form.kid} onChange={e=>set('kid',e.target.value)} placeholder="KID / betalingsreferanse" style={iInp} /></div>
             <div>{lbl('Bankkonto')}<input value={form.bank_account} onChange={e=>set('bank_account',e.target.value)} placeholder="1234.56.78901" style={iInp} /></div>
-            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' }}>
             <div>
@@ -11898,7 +11898,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
                       <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
                         <option value="">Velg...</option>
-                        {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                        {projectOptions(projects)}
                       </select>
                     </div>
                     <div>
@@ -12482,7 +12482,7 @@ function RessursPage() {
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
             style={{ padding:'8px 12px',border:`2px solid ${filterProject!=='alle'?'#059669':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterProject!=='alle'?'700':'400',color:filterProject!=='alle'?'#059669':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
             <option value="alle">🏗️ Alle prosjekter</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            {projectOptions(projects)}
           </select>
 
           {/* Employee filter (ansatte only) */}
@@ -12929,7 +12929,7 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt</label>
             <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
               <option value="">Ingen / Generell</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectOptions(projects)}
             </select>
           </div>
           <div>
@@ -13122,7 +13122,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
             <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
               <option value="">Velg prosjekt...</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectOptions(projects)}
             </select>
             {projectId&&<div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/><span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span></div>}
           </div>
@@ -13372,7 +13372,7 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
           {step===1&&(<>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
               <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white' }}>
-                <option value="">Velg prosjekt...</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="">Velg prosjekt...</option>{projectOptions(projects)}
               </select>
             </div>
             <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
@@ -14004,7 +14004,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
           </div>
 
           <div>{lbl('Sted / Lokasjon')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Møterom A, Byggeplass..." style={cInp} /></div>
-          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
           <div>{lbl('Beskrivelse')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...cInp,resize:'none' }} placeholder="Valgfri beskrivelse..." /></div>
 
           {/* Visibility */}
@@ -14750,7 +14750,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Knytt til prosjekt</label>
             <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
               <option value="">Ingen (generell kanal)</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectOptions(projects)}
             </select>
           </div>
           <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>
@@ -16227,7 +16227,7 @@ function BefaringPage() {
           </select>
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth:'180px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            {projectOptions(projects)}
           </select>
           {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
@@ -16571,7 +16571,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
           ))}
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
@@ -16699,7 +16699,7 @@ function BildedokPage() {
           ))}
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projectOptions(projects)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterFase} onChange={e=>setFilterFase(e.target.value)} style={selStyle}><option value="alle">Alle faser</option>{BYGGEFASER.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterRom} onChange={e=>setFilterRom(e.target.value)} style={selStyle}><option value="alle">Alle rom</option>{allRooms.map(r=><option key={r} value={r}>{r}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterAnsatt} onChange={e=>setFilterAnsatt(e.target.value)} style={selStyle}><option value="alle">Alle ansatte</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
@@ -16867,7 +16867,7 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
             </div>
           </div>
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
-            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Rom / område</label><input value={rom} onChange={e=>setRom(e.target.value)} placeholder="F.eks. Bad 2. etg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notat</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
@@ -16996,7 +16996,7 @@ function FDVPage() {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...fInp,maxWidth:'180px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            {projectOptions(projects)}
           </select>
           {view==='komponenter'&&<select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...fInp,maxWidth:'150px' }}>
             <option value="alle">Alle kategorier</option>
@@ -17139,7 +17139,7 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
           <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
           <div>{lbl('Kategori')}<select value={form.category} onChange={e=>set('category',e.target.value)} style={fInp}><option value="">Velg...</option>{FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
           <div>{lbl('Plassering')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Kjeller / Rom 101" style={fInp} /></div>
-          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
           <div>{lbl('Produsent')}<input value={form.manufacturer} onChange={e=>set('manufacturer',e.target.value)} placeholder="F.eks. Nibe" style={fInp} /></div>
           <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={fInp} /></div>
           <div>{lbl('Serienummer')}<input value={form.serial_number} onChange={e=>set('serial_number',e.target.value)} style={fInp} /></div>
@@ -17204,7 +17204,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
               ))}
             </div>
           </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Koble til komponent (valgfritt)</label><select value={form.component_id} onChange={e=>set('component_id',e.target.value)} style={fInp}><option value="">Ingen</option>{filteredComponents.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mappe</label><input value={form.folder_path} onChange={e=>set('folder_path',e.target.value)} placeholder="/Ventilasjon" style={fInp} /></div>
           <div>
