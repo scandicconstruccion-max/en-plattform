@@ -2810,35 +2810,49 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         y += 10
 
         secItems.forEach(item => {
-          checkSpace(item.comment ? 16 : 10)
+          checkSpace(item.comment ? 18 : 12)
 
-          // Avkrysningsboks
-          if (item.checked) {
-            doc.setFillColor(5, 150, 105)
-            doc.roundedRect(ml, y - 3.5, 4.5, 4.5, 0.8, 0.8, 'F')
+          // Status-indikator
+          const st = item.status || (item.checked ? 'ok' : null)
+          const statusLabels = { ok: 'OK', avvik: 'AVVIK', ikke_relevant: 'N/A', ikke_kontrollert: '?' }
+          const statusColors = { ok: [5,150,105], avvik: [217,119,6], ikke_relevant: [148,163,184], ikke_kontrollert: [203,213,225] }
+
+          if (st && statusColors[st]) {
+            const [r,g,b] = statusColors[st]
+            doc.setFillColor(r, g, b)
+            doc.roundedRect(ml, y - 3.5, st === 'avvik' ? 12 : st === 'ikke_relevant' ? 8 : 7, 4.5, 0.8, 0.8, 'F')
             doc.setTextColor(255, 255, 255)
-            doc.setFontSize(8)
-            doc.text('✓', ml + 0.8, y + 0.2)
+            doc.setFontSize(6)
+            doc.text(statusLabels[st], ml + 0.8, y + 0.2)
           } else {
             doc.setDrawColor(209, 213, 219)
             doc.roundedRect(ml, y - 3.5, 4.5, 4.5, 0.8, 0.8, 'S')
           }
 
           // Punkt-tekst
-          doc.setTextColor(item.checked ? 107 : 15, item.checked ? 114 : 23, item.checked ? 128 : 42)
+          const isResolved = st === 'ok' || st === 'ikke_relevant'
+          doc.setTextColor(isResolved ? 107 : 15, isResolved ? 114 : 23, isResolved ? 128 : 42)
           doc.setFontSize(10)
           doc.setFont('helvetica', 'normal')
-          const lines = doc.splitTextToSize(item.title || '', cw - 10)
-          doc.text(lines, ml + 8, y)
+          const lines = doc.splitTextToSize(item.title || '', cw - 18)
+          doc.text(lines, ml + 16, y)
           y += lines.length * 5
 
           // Kommentar
           if (item.comment) {
             doc.setTextColor(148, 163, 184)
             doc.setFontSize(8)
-            const cLines = doc.splitTextToSize('→ ' + item.comment, cw - 12)
-            doc.text(cLines, ml + 8, y + 1)
+            const cLines = doc.splitTextToSize('💬 ' + item.comment, cw - 20)
+            doc.text(cLines, ml + 16, y + 1)
             y += cLines.length * 4 + 2
+          }
+
+          // Bilde-indikator
+          if (item.images?.length > 0) {
+            doc.setTextColor(100, 116, 139)
+            doc.setFontSize(7)
+            doc.text(`📷 ${item.images.length} bilde${item.images.length > 1 ? 'r' : ''} vedlagt`, ml + 16, y + 1)
+            y += 5
           }
 
           y += 3
@@ -2912,8 +2926,11 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
   if (!checklist) return <div style={{ ...f, textAlign: 'center', padding: '60px' }}><button onClick={onBack} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 16px', cursor: 'pointer' }}>← Tilbake</button></div>
 
   const items = checklist.items || []
-  const checked = items.filter(i => i.checked).length
-  const progress = items.length > 0 ? Math.round(checked / items.length * 100) : 0
+  // Bakoverkompatibel: checked=true → status='ok'
+  const resolved = items.filter(i => i.status === 'ok' || i.status === 'ikke_relevant' || (i.checked && !i.status))
+  const avvik = items.filter(i => i.status === 'avvik')
+  const checked = resolved.length
+  const progress = items.length > 0 ? Math.round(resolved.length / items.length * 100) : 0
 
   // Group items by section
   const sections = {}
@@ -2923,11 +2940,75 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
     sections[sec].push({ ...item, idx })
   })
 
+  // ── Status-endring for sjekkpunkt ──
+  const setItemStatus = async (index, status) => {
+    const newItems = [...items]
+    const current = newItems[index]
+    // Toggle: klikk på samme status → nullstill
+    const newStatus = current.status === status ? null : status
+    newItems[index] = { ...current, status: newStatus, checked: newStatus === 'ok' }
+    const allResolved = newItems.every(i => i.status === 'ok' || i.status === 'ikke_relevant')
+    const anyStarted = newItems.some(i => i.status)
+    const newChecklistStatus = allResolved ? 'fullfort' : anyStarted ? 'påbegynt' : 'ikke_startet'
+    setChecklist(c => ({ ...c, items: newItems, status: newChecklistStatus }))
+    await supabase.from('checklists').update({ items: newItems, status: newChecklistStatus }).eq('id', checklistId)
+  }
+
+  const updateComment = async (index, comment) => {
+    const newItems = [...items]
+    newItems[index] = { ...newItems[index], comment }
+    setChecklist(c => ({ ...c, items: newItems }))
+    await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
+  }
+
+  // ── Bilde-opplasting for sjekkpunkt ──
+  const addItemImage = async (index, file) => {
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `checklists/${checklistId}/${index}-${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+      if (upErr) throw upErr
+      const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      // Fallback: bruk signert URL
+      let imgUrl = publicUrl
+      if (!publicUrl) {
+        const { data } = await supabase.storage.from('plattform-files').createSignedUrl(path, 86400)
+        imgUrl = data?.signedUrl
+      }
+      const newItems = [...items]
+      const images = newItems[index].images || []
+      newItems[index] = { ...newItems[index], images: [...images, { url: imgUrl, path, name: file.name, date: new Date().toISOString() }] }
+      setChecklist(c => ({ ...c, items: newItems }))
+      await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
+    } catch(e) { alert('Feil ved bildeopplasting: ' + e.message) }
+  }
+
+  const removeItemImage = async (index, imgIndex) => {
+    const newItems = [...items]
+    const images = [...(newItems[index].images || [])]
+    const removed = images.splice(imgIndex, 1)
+    newItems[index] = { ...newItems[index], images }
+    setChecklist(c => ({ ...c, items: newItems }))
+    await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
+    // Prøv å slette fra storage
+    if (removed[0]?.path) {
+      try { await supabase.storage.from('plattform-files').remove([removed[0].path]) } catch(_) {}
+    }
+  }
+
   const statusBadge2 = (status) => {
     const map = { ikke_startet: ['#f1f5f9','#475569','Ikke startet'], påbegynt: ['#eff6ff','#2563eb','Påbegynt'], fullfort: ['#ecfdf5','#059669','Fullført'] }
     const [bg, color, label] = map[status] || ['#f1f5f9','#475569', status]
     return <span style={{ background: bg, color, padding: '4px 12px', borderRadius: '999px', fontSize: '13px', fontWeight: '500' }}>{label}</span>
   }
+
+  // Status-knapp styling
+  const statusButtons = [
+    { id: 'ok', label: '✓ OK', bg: '#ecfdf5', color: '#059669', activeBg: '#059669', activeColor: 'white', border: '#a7f3d0' },
+    { id: 'avvik', label: '⚠ Avvik', bg: '#fffbeb', color: '#d97706', activeBg: '#d97706', activeColor: 'white', border: '#fde68a' },
+    { id: 'ikke_relevant', label: '— Ikke relevant', bg: '#f8fafc', color: '#64748b', activeBg: '#64748b', activeColor: 'white', border: '#e2e8f0' },
+    { id: 'ikke_kontrollert', label: '? Ikke kontrollert', bg: '#f8fafc', color: '#94a3b8', activeBg: '#94a3b8', activeColor: 'white', border: '#e2e8f0' },
+  ]
 
   return (
     <div style={f}>
@@ -2939,14 +3020,15 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
               <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>{checklist.title}</h1>
               {statusBadge2(checklist.status)}
             </div>
-            <div style={{ display: 'flex', align: 'center', gap: '16px', fontSize: '13px', color: '#64748b' }}>
-              <span>📝 {checked}/{items.length} fullført</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px', color: '#64748b' }}>
+              <span>✅ {checked}/{items.length} fullført</span>
+              {avvik.length > 0 && <span style={{ color: '#d97706' }}>⚠ {avvik.length} avvik</span>}
               <span>📅 {new Date(checklist.created_at).toLocaleDateString('nb-NO')}</span>
             </div>
           </div>
           <button onClick={exportPDF} disabled={exporting}
             style={{ padding:'10px 18px', background: exporting ? '#94a3b8' : 'white', color: exporting ? 'white' : '#374151', border:'1px solid #e2e8f0', borderRadius:'10px', cursor: exporting ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600', display:'flex', alignItems:'center', gap:'8px' }}>
-            {exporting ? '⏳ Genererer...' : '📄 Eksporter PDF'}
+            {exporting ? '⏳ Genererer...' : '📄 PDF'}
           </button>
         </div>
         {/* Progress bar */}
@@ -2958,39 +3040,110 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', maxWidth: '800px' }}>
+      <div style={{ padding: '24px 32px', maxWidth: '900px' }}>
         {Object.entries(sections).map(([sectionTitle, sectionItems]) => (
-          <div key={sectionTitle} style={{ marginBottom: '24px' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: '15px', fontWeight: '700', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669', display: 'inline-block' }} />
+          <div key={sectionTitle} style={{ marginBottom: '28px' }}>
+            <h2 style={{ margin: '0 0 14px', fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>
               {sectionTitle}
             </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {sectionItems.map(item => (
-                <div key={item.idx} style={{ background: 'white', borderRadius: '12px', border: `1px solid ${item.checked ? '#d1fae5' : '#f1f5f9'}`, padding: '14px 16px', transition: 'all 0.2s' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                    <button onClick={() => toggleItem(item.idx)}
-                      style={{ width: '22px', height: '22px', borderRadius: '6px', border: `2px solid ${item.checked ? '#059669' : '#d1d5db'}`, background: item.checked ? '#059669' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px', transition: 'all 0.2s' }}>
-                      {item.checked && <span style={{ color: 'white', fontSize: '13px', fontWeight: 'bold' }}>✓</span>}
-                    </button>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: '500', color: item.checked ? '#6b7280' : '#0f172a', textDecoration: item.checked ? 'line-through' : 'none' }}>
-                        {item.title}
-                      </p>
-                      <input
-                        value={item.comment || ''}
-                        onChange={e => updateComment(item.idx, e.target.value)}
-                        placeholder="Legg til kommentar..."
-                        style={{ width: '100%', padding: '6px 10px', border: '1px solid #f1f5f9', borderRadius: '8px', fontSize: '12px', outline: 'none', background: '#f8fafc', color: '#475569', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }}
-                        onBlur={e => updateComment(item.idx, e.target.value)}
-                      />
-                    </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {sectionItems.map(item => {
+                const st = item.status || (item.checked ? 'ok' : null)
+                const borderColor = st === 'ok' ? '#a7f3d0' : st === 'avvik' ? '#fde68a' : st === 'ikke_relevant' ? '#e2e8f0' : '#f1f5f9'
+                const leftColor = st === 'ok' ? '#059669' : st === 'avvik' ? '#d97706' : st === 'ikke_relevant' ? '#94a3b8' : st === 'ikke_kontrollert' ? '#cbd5e1' : '#e2e8f0'
+                return (
+                <div key={item.idx} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${borderColor}`, borderLeft: `4px solid ${leftColor}`, padding: '16px 20px', transition: 'all 0.2s' }}>
+                  {/* Tittel + påkrevd-badge */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#0f172a', flex: 1 }}>
+                      {item.title}
+                    </p>
+                    {item.required && (
+                      <span style={{ background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', padding: '2px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', flexShrink: 0, marginLeft: '12px' }}>Påkrevd</span>
+                    )}
                   </div>
+
+                  {/* Status-knapper */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                    {statusButtons.map(btn => {
+                      const isActive = st === btn.id
+                      return (
+                        <button key={btn.id} onClick={() => setItemStatus(item.idx, btn.id)}
+                          style={{
+                            padding: '7px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s',
+                            background: isActive ? btn.activeBg : btn.bg,
+                            color: isActive ? btn.activeColor : btn.color,
+                            border: `1px solid ${isActive ? btn.activeBg : btn.border}`,
+                          }}>
+                          {btn.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Bilde-knapper + eksisterende bilder */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      + Bilde
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) addItemImage(item.idx, e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                    <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      📷 Kamera
+                      <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) addItemImage(item.idx, e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                    {(item.images?.length > 0) && (
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>{item.images.length} bilde{item.images.length > 1 ? 'r' : ''}</span>
+                    )}
+                  </div>
+
+                  {/* Bilde-miniatyrer */}
+                  {item.images?.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      {item.images.map((img, imgI) => (
+                        <div key={imgI} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                          <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(img.url, '_blank')} />
+                          <button onClick={() => removeItemImage(item.idx, imgI)}
+                            style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Kommentarfelt */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', color: '#94a3b8' }}>💬</span>
+                    <input
+                      value={item.comment || ''}
+                      onChange={e => updateComment(item.idx, e.target.value)}
+                      placeholder="Legg til kommentar..."
+                      style={{ flex: 1, padding: '7px 10px', border: '1px solid #f1f5f9', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#f8fafc', color: '#475569', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }}
+                    />
+                  </div>
+                </div>
+              )})}
+            </div>
+          </div>
+        ))}
+
+        {/* Oppsummering */}
+        {items.length > 0 && (
+          <div style={{ background: '#f8fafc', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px', marginTop: '8px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>Oppsummering</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              {[
+                { label: 'OK', count: items.filter(i => (i.status || (i.checked ? 'ok' : null)) === 'ok').length, bg: '#ecfdf5', color: '#059669' },
+                { label: 'Avvik', count: items.filter(i => i.status === 'avvik').length, bg: '#fffbeb', color: '#d97706' },
+                { label: 'Ikke relevant', count: items.filter(i => i.status === 'ikke_relevant').length, bg: '#f8fafc', color: '#64748b' },
+                { label: 'Ubehandlet', count: items.filter(i => !i.status && !i.checked).length, bg: '#f1f5f9', color: '#94a3b8' },
+              ].map((s, i) => (
+                <div key={i} style={{ background: s.bg, borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '22px', fontWeight: '800', color: s.color }}>{s.count}</div>
+                  <div style={{ fontSize: '11px', color: s.color, fontWeight: '500', marginTop: '2px' }}>{s.label}</div>
                 </div>
               ))}
             </div>
           </div>
-        ))}
+        )}
 
         {progress === 100 && (
           <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '16px', padding: '20px', textAlign: 'center', marginTop: '16px' }}>
