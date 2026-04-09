@@ -541,6 +541,11 @@ const db = {
     // Clean empty strings to null for uuid/date/numeric fields
     const clean = { ...data }
     ;['customer_id','parent_id','start_date','end_date','budget'].forEach(k => { if (clean[k] === '' || clean[k] === undefined) clean[k] = null })
+    // Check for duplicate project number
+    if (clean.project_number) {
+      const { data: existing } = await supabase.from('projects').select('id').eq('project_number', clean.project_number).limit(1)
+      if (existing && existing.length > 0) throw new Error(`Prosjektnummer "${clean.project_number}" er allerede i bruk. Velg et annet nummer.`)
+    }
     const { data: result, error } = await supabase.from('projects').insert(clean).select().single()
     if (error) throw error
     return result
@@ -548,6 +553,11 @@ const db = {
   async updateProject(id, data) {
     const clean = { ...data, updated_at: new Date().toISOString() }
     ;['customer_id','parent_id','start_date','end_date','budget'].forEach(k => { if (clean[k] === '' || clean[k] === undefined) clean[k] = null })
+    // Check for duplicate project number (exclude self)
+    if (clean.project_number) {
+      const { data: existing } = await supabase.from('projects').select('id').eq('project_number', clean.project_number).neq('id', id).limit(1)
+      if (existing && existing.length > 0) throw new Error(`Prosjektnummer "${clean.project_number}" er allerede i bruk av et annet prosjekt.`)
+    }
     const { data: result, error } = await supabase.from('projects').update(clean).eq('id', id).select().single()
     if (error) throw error
     return result
