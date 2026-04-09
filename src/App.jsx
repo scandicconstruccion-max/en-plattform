@@ -5476,14 +5476,55 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
         </div>
 
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Hvem har maskinen nå */}
           <div style={mCard}>
-            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📍 Lokasjon</h3>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📍 Lokasjon og utlån</h3>
             <div style={{ background:cfg?.bg, borderRadius:'12px', padding:'16px', textAlign:'center', border:`1px solid ${cfg?.border}` }}>
               <div style={{ fontSize:'32px', marginBottom:'8px' }}>{cfg?.emoji}</div>
               <div style={{ fontWeight:'700', color:cfg?.color, fontSize:'16px' }}>{m.status}</div>
-              {proj && <div style={{ fontSize:'13px', color:'#64748b', marginTop:'6px' }}>📍 {proj.name}</div>}
+              {proj && <div style={{ fontSize:'13px', color:'#64748b', marginTop:'6px' }}>🏗️ {proj.name}</div>}
+              {m.current_employee_name && (
+                <div style={{ fontSize:'13px', color:'#0f172a', marginTop:'8px', background:'white', borderRadius:'8px', padding:'8px 12px', border:'1px solid #f1f5f9' }}>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>UTLÅNT TIL</div>
+                  <div style={{ fontWeight:'600' }}>👤 {m.current_employee_name}</div>
+                  {m.checked_out_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Siden {new Date(m.checked_out_at).toLocaleDateString('nb-NO')}</div>}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Utlånshistorikk */}
+          {logs.length > 0 && (() => {
+            const loanLogs = logs.filter(l => l.log_type === 'checkout' || l.log_type === 'checkin' || l.employee_name)
+            if (loanLogs.length === 0) return null
+            return (
+              <div style={mCard}>
+                <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Utlånslogg ({loanLogs.length})</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {loanLogs.slice(0, 10).map((log, i) => {
+                    const isOut = log.log_type === 'checkout' || log.to_status === 'På prosjekt'
+                    const logProj = projects.find(p => p.id === log.project_id)
+                    return (
+                      <div key={log.id} style={{ padding:'8px 10px', borderRadius:'8px', background: isOut ? '#eff6ff' : '#f0fdf4', border:`1px solid ${isOut ? '#bfdbfe' : '#bbf7d0'}`, fontSize:'12px' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontWeight:'600', color: isOut ? '#2563eb' : '#059669' }}>
+                            {isOut ? '↗ Utlånt' : '↙ Returnert'}
+                          </span>
+                          <span style={{ color:'#94a3b8', fontSize:'11px' }}>{new Date(log.created_at).toLocaleDateString('nb-NO')}</span>
+                        </div>
+                        <div style={{ color:'#475569', marginTop:'2px' }}>
+                          {log.employee_name && <span>👤 {log.employee_name}</span>}
+                          {logProj && <span> → 🏗️ {logProj.name}</span>}
+                        </div>
+                        {log.notes && <div style={{ color:'#94a3b8', marginTop:'2px', fontStyle:'italic' }}>{log.notes}</div>}
+                      </div>
+                    )
+                  })}
+                  {loanLogs.length > 10 && <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8', textAlign:'center' }}>+ {loanLogs.length - 10} eldre oppføringer</p>}
+                </div>
+              </div>
+            )
+          })()}
 
           {m.next_service && (
             <div style={{ ...mCard, background:daysUntil(m.next_service)<=14?'#fef2f2':daysUntil(m.next_service)<=30?'#fffbeb':'white', border:`1px solid ${daysUntil(m.next_service)<=14?'#fecaca':daysUntil(m.next_service)<=30?'#fde68a':'#f1f5f9'}` }}>
@@ -5507,25 +5548,44 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const [newStatus, setNewStatus] = useState(maskin.status)
   const [projectId, setProjectId] = useState(maskin.current_project_id||'')
   const [employeeName, setEmployeeName] = useState('')
+  const [employees, setEmployees] = useState([])
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data }) => setEmployees(data || []))
+  }, [])
+
+  const handleEmployeeSelect = (empId) => {
+    const emp = employees.find(e => e.id === empId)
+    setEmployeeName(emp?.name || '')
+  }
 
   const handleSave = async () => {
     setSaving(true)
     try {
       const updates = { status:newStatus, updated_at:new Date().toISOString() }
       updates.current_project_id = newStatus==='På prosjekt' ? (projectId||null) : null
+      // Utlånsinfo
+      if (newStatus === 'På prosjekt') {
+        updates.current_employee_name = employeeName || null
+        updates.checked_out_at = new Date().toISOString()
+      } else {
+        updates.current_employee_name = null
+        updates.checked_out_at = null
+      }
       const { error:mErr } = await supabase.from('machines').update(updates).eq('id', maskin.id)
       if (mErr) throw mErr
 
       const proj = projects.find(p=>p.id===projectId)
       let action = `Status endret til ${newStatus}`
-      if (newStatus==='På prosjekt'&&proj) action = `Sendt til ${proj.name}`
-      else if (newStatus==='På lager') action = 'Returnert til lager'
+      if (newStatus==='På prosjekt'&&proj) action = `Utlånt til ${proj.name}${employeeName ? ' ('+employeeName+')' : ''}`
+      else if (newStatus==='På lager') action = `Returnert til lager${employeeName ? ' av '+employeeName : ''}`
       else if (newStatus==='Service') action = 'Sendt til service'
       else if (newStatus==='Utrangert') action = 'Merket som utrangert'
 
-      await supabase.from('machine_logs').insert({ machine_id:maskin.id, action, from_status:maskin.status, to_status:newStatus, project_id:newStatus==='På prosjekt'?(projectId||null):null, employee_name:employeeName||null, notes:notes||null, created_by:user?.id })
+      const logType = newStatus === 'På prosjekt' ? 'checkout' : newStatus === 'På lager' ? 'checkin' : 'status_change'
+      await supabase.from('machine_logs').insert({ machine_id:maskin.id, action, from_status:maskin.status, to_status:newStatus, project_id:newStatus==='På prosjekt'?(projectId||null):null, employee_name:employeeName||null, notes:notes||null, created_by:user?.id, log_type:logType })
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -5563,7 +5623,10 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
           )}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>👤 Ansatt (henter/leverer)</label>
-            <input value={employeeName} onChange={e=>setEmployeeName(e.target.value)} placeholder="Navn på ansatt" style={mInp} />
+            <select value={employees.find(e => e.name === employeeName)?.id || ''} onChange={e => handleEmployeeSelect(e.target.value)} style={mInp}>
+              <option value="">Velg ansatt...</option>
+              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
+            </select>
           </div>
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Merknad</label>
