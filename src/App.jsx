@@ -2691,6 +2691,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
   const [checklist, setChecklist] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const f = { fontFamily: 'system-ui, sans-serif' }
   const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', padding: '24px' }
 
@@ -2719,6 +2720,192 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
     newItems[index] = { ...newItems[index], comment }
     setChecklist(c => ({ ...c, items: newItems }))
     await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
+  }
+
+  // ── PDF-eksport ────────────────────────────────────────────────────────
+  const exportPDF = async () => {
+    setExporting(true)
+    try {
+      // Last jsPDF dynamisk
+      if (!window.jspdf) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+          s.onload = resolve; s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF('p', 'mm', 'a4')
+      const pw = 210, ph = 297, ml = 20, mr = 20, mt = 20, cw = pw - ml - mr
+      let y = mt
+
+      const addPage = () => { doc.addPage(); y = mt }
+      const checkSpace = (needed) => { if (y + needed > ph - 40) addPage() }
+
+      // ── Header ──
+      doc.setFillColor(5, 150, 105)
+      doc.rect(0, 0, pw, 32, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text('SJEKKLISTE', ml, 15)
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text('En Plattform KS-system', ml, 23)
+      doc.text(new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }), pw - mr, 23, { align: 'right' })
+
+      y = 42
+
+      // ── Tittel og info ──
+      doc.setTextColor(15, 23, 42)
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text(checklist.title || 'Sjekkliste', ml, y)
+      y += 8
+
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(100, 116, 139)
+
+      const itms = checklist.items || []
+      const chk = itms.filter(i => i.checked).length
+      const pct = itms.length > 0 ? Math.round(chk / itms.length * 100) : 0
+      const statusLabel = checklist.status === 'fullfort' ? 'Fullført' : checklist.status === 'påbegynt' ? 'Påbegynt' : 'Ikke startet'
+
+      doc.text(`Status: ${statusLabel}  |  ${chk}/${itms.length} fullført (${pct}%)  |  Dato: ${new Date(checklist.created_at).toLocaleDateString('nb-NO')}`, ml, y)
+      y += 6
+
+      // Fremdriftsbar
+      doc.setFillColor(226, 232, 240)
+      doc.roundedRect(ml, y, cw, 4, 2, 2, 'F')
+      if (pct > 0) {
+        doc.setFillColor(pct === 100 ? 5 : 59, pct === 100 ? 150 : 130, pct === 100 ? 105 : 246)
+        doc.roundedRect(ml, y, cw * pct / 100, 4, 2, 2, 'F')
+      }
+      y += 12
+
+      // ── Linje ──
+      doc.setDrawColor(226, 232, 240)
+      doc.line(ml, y, pw - mr, y)
+      y += 8
+
+      // ── Seksjon med kontrollpunkter ──
+      const secs = {}
+      itms.forEach((item, idx) => {
+        const sec = item.section || 'Generelt'
+        if (!secs[sec]) secs[sec] = []
+        secs[sec].push({ ...item, idx })
+      })
+
+      Object.entries(secs).forEach(([secTitle, secItems]) => {
+        checkSpace(14)
+        doc.setTextColor(15, 23, 42)
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        // Seksjonslinje
+        doc.setFillColor(240, 253, 250)
+        doc.roundedRect(ml, y - 4, cw, 8, 1, 1, 'F')
+        doc.text(secTitle, ml + 4, y + 1)
+        y += 10
+
+        secItems.forEach(item => {
+          checkSpace(item.comment ? 16 : 10)
+
+          // Avkrysningsboks
+          if (item.checked) {
+            doc.setFillColor(5, 150, 105)
+            doc.roundedRect(ml, y - 3.5, 4.5, 4.5, 0.8, 0.8, 'F')
+            doc.setTextColor(255, 255, 255)
+            doc.setFontSize(8)
+            doc.text('✓', ml + 0.8, y + 0.2)
+          } else {
+            doc.setDrawColor(209, 213, 219)
+            doc.roundedRect(ml, y - 3.5, 4.5, 4.5, 0.8, 0.8, 'S')
+          }
+
+          // Punkt-tekst
+          doc.setTextColor(item.checked ? 107 : 15, item.checked ? 114 : 23, item.checked ? 128 : 42)
+          doc.setFontSize(10)
+          doc.setFont('helvetica', 'normal')
+          const lines = doc.splitTextToSize(item.title || '', cw - 10)
+          doc.text(lines, ml + 8, y)
+          y += lines.length * 5
+
+          // Kommentar
+          if (item.comment) {
+            doc.setTextColor(148, 163, 184)
+            doc.setFontSize(8)
+            const cLines = doc.splitTextToSize('→ ' + item.comment, cw - 12)
+            doc.text(cLines, ml + 8, y + 1)
+            y += cLines.length * 4 + 2
+          }
+
+          y += 3
+        })
+
+        y += 4
+      })
+
+      // ── Signaturfelt ──
+      checkSpace(60)
+      y += 6
+      doc.setDrawColor(226, 232, 240)
+      doc.line(ml, y, pw - mr, y)
+      y += 10
+
+      doc.setTextColor(15, 23, 42)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Signaturer', ml, y)
+      y += 10
+
+      const sigW = (cw - 16) / 2
+
+      // Utført av
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(100, 116, 139)
+      doc.text('Utført av:', ml, y)
+      y += 4
+      doc.setDrawColor(15, 23, 42)
+      doc.line(ml, y + 14, ml + sigW, y + 14)
+      doc.setFontSize(8)
+      doc.setTextColor(148, 163, 184)
+      doc.text('Navn:', ml, y + 19)
+      doc.line(ml, y + 28, ml + sigW, y + 28)
+      doc.text('Dato:', ml, y + 33)
+
+      // Kontrollert av
+      const sx2 = ml + sigW + 16
+      doc.setFontSize(9)
+      doc.setTextColor(100, 116, 139)
+      doc.text('Kontrollert/godkjent av:', sx2, y - 4)
+      doc.setDrawColor(15, 23, 42)
+      doc.line(sx2, y + 14, sx2 + sigW, y + 14)
+      doc.setFontSize(8)
+      doc.setTextColor(148, 163, 184)
+      doc.text('Navn:', sx2, y + 19)
+      doc.line(sx2, y + 28, sx2 + sigW, y + 28)
+      doc.text('Dato:', sx2, y + 33)
+
+      // ── Footer på alle sider ──
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(8)
+        doc.setTextColor(148, 163, 184)
+        doc.text(`${checklist.title}  —  Side ${i} av ${pageCount}`, ml, ph - 10)
+        doc.text('En Plattform KS-system', pw - mr, ph - 10, { align: 'right' })
+      }
+
+      // Last ned
+      doc.save(`Sjekkliste - ${checklist.title || 'Ukjent'}.pdf`)
+    } catch(e) {
+      console.error(e)
+      alert('Feil ved PDF-generering: ' + e.message)
+    }
+    finally { setExporting(false) }
   }
 
   if (loading) return <div style={{ ...f, textAlign: 'center', padding: '60px', color: '#94a3b8' }}>Laster sjekkliste...</div>
@@ -2757,6 +2944,10 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
               <span>📅 {new Date(checklist.created_at).toLocaleDateString('nb-NO')}</span>
             </div>
           </div>
+          <button onClick={exportPDF} disabled={exporting}
+            style={{ padding:'10px 18px', background: exporting ? '#94a3b8' : 'white', color: exporting ? 'white' : '#374151', border:'1px solid #e2e8f0', borderRadius:'10px', cursor: exporting ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600', display:'flex', alignItems:'center', gap:'8px' }}>
+            {exporting ? '⏳ Genererer...' : '📄 Eksporter PDF'}
+          </button>
         </div>
         {/* Progress bar */}
         <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
