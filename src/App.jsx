@@ -1655,7 +1655,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
   const isPdf = ext === 'pdf'
   const isOffice = ['doc','docx','xls','xlsx','ppt','pptx'].includes(ext)
   const isText = ['txt','csv','json','xml','md'].includes(ext)
-  const canPreview = isImage || isPdf
+  const canPreview = isImage || isPdf || isText
   const [zoom, setZoom] = useState(100)
   const [textContent, setTextContent] = useState(null)
   const [loadingText, setLoadingText] = useState(false)
@@ -1693,22 +1693,41 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
     if (isText) loadTextFile()
   }
 
+  // Klikk på filnavn: forhåndsvisning for PDF/bilder, ellers nedlasting
+  const handleNameClick = () => {
+    if (canPreview) openPreview()
+    else onDownload(file)
+  }
+
   return (
     <>
     <div style={{ background: isArchived ? '#fef9f9' : 'white', borderRadius: '12px',
       border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: '12px 16px',
       display: 'flex', alignItems: 'center', gap: '12px', opacity: isArchived ? 0.85 : 1 }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
-      onDoubleClick={() => { if (canPreview || isText) openPreview() }}>
+      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
       <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />
-      <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
-        {getFileEmoji(file.name, file.file_type)}
-      </div>
+      {/* Thumbnail for bilder */}
+      {isImage ? (
+        <div onClick={openPreview} style={{ width: '42px', height: '42px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }}>
+          <img src={getPublicUrl()} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      ) : (
+        <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0, cursor: canPreview ? 'pointer' : 'default' }}
+          onClick={() => { if (canPreview) openPreview() }}>
+          {getFileEmoji(file.name, file.file_type)}
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : '#0f172a', fontSize: '14px',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+        <div onClick={handleNameClick}
+          style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : (canPreview ? '#2563eb' : '#0f172a'), fontSize: '14px',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
+          textDecoration: canPreview ? 'none' : 'none' }}
+          onMouseEnter={e => { if (canPreview) e.currentTarget.style.textDecoration = 'underline' }}
+          onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+          {file.name}
+        </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
           {file.revision_label && (
             <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`,
@@ -1719,6 +1738,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               {isArchived && <span>🗄️</span>}
             </span>
           )}
+          {canPreview && <span style={{ fontSize: '11px', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: '4px' }}>Klikk for å vise</span>}
           <span style={{ fontSize: '12px', color: '#94a3b8' }}>
             {file.file_size ? formatFileSize(file.file_size) : ''}
             {file.file_size && '  '}
@@ -1736,7 +1756,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
             <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
           </label>
         )}
-        {(canPreview || isText) && <button onClick={openPreview} title="Forhåndsvisning"
+        {canPreview && <button onClick={openPreview} title="Forhåndsvisning"
           style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
         <button onClick={() => onDownload(file)} title="Last ned"
           style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
@@ -1805,24 +1825,11 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               </div>
             </div>
           )}
-          {isOffice && (
-            <div style={{ background:'white', borderRadius:'16px', padding:'40px', textAlign:'center', maxWidth:'400px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
-              <div style={{ fontSize:'48px', marginBottom:'16px' }}>{getFileEmoji(file.name, file.file_type)}</div>
-              <h3 style={{ margin:'0 0 8px', color:'#0f172a', fontSize:'16px', fontWeight:'600' }}>{file.name}</h3>
-              <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
-                Forhåndsvisning av {ext.toUpperCase()}-filer støttes ikke i nettleseren. Last ned filen for å åpne den.
-              </p>
-              <button onClick={() => onDownload(file)}
-                style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
-                ⬇️ Last ned fil
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Hurtigtaster-hint */}
         <div style={{ padding:'8px 20px', textAlign:'center', flexShrink:0 }}>
-          <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)' }}>Trykk Esc for å lukke · Dobbeltklikk på fil for forhåndsvisning</span>
+          <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)' }}>Esc for å lukke · Klikk utenfor for å lukke</span>
         </div>
       </div>
     )}
