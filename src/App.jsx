@@ -2719,135 +2719,64 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
       }
       const { jsPDF } = window.jspdf
       const doc = new jsPDF('p', 'mm', 'a4')
-      const pw = 210, ph = 297, ml = 16, mr = 16, cw = pw - ml - mr
+      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
       let y = 0
 
-      // Farger
-      const C = {
-        primary: [5, 150, 105],       // grønn
-        primaryLight: [236, 253, 245],
-        dark: [15, 23, 42],
-        mid: [71, 85, 105],
-        light: [148, 163, 184],
-        veryLight: [241, 245, 249],
-        white: [255, 255, 255],
-        ok: [5, 150, 105],
-        avvik: [234, 88, 12],
-        na: [107, 114, 128],
-        ubehandlet: [203, 213, 225],
-        warnBg: [255, 247, 237],
-        warnBorder: [253, 186, 116],
-      }
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (needed) => { if (y + needed > ph - 22) addPage() }
 
-      const addPage = () => { doc.addPage(); y = 16 }
-      const checkSpace = (needed) => { if (y + needed > ph - 30) addPage() }
-      const setC = (c) => doc.setTextColor(c[0], c[1], c[2])
-      const setF = (c) => doc.setFillColor(c[0], c[1], c[2])
-      const setD = (c) => doc.setDrawColor(c[0], c[1], c[2])
+      // ── Farger (matcher UI) ──
+      const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+      const setC = (c) => doc.setTextColor(c[0],c[1],c[2])
+      const setF = (c) => doc.setFillColor(c[0],c[1],c[2])
+      const setD = (c) => doc.setDrawColor(c[0],c[1],c[2])
 
-      // ════════════════════════════════════════════════════════════
-      // HEADER — topp-banner med gradient-effekt
-      // ════════════════════════════════════════════════════════════
-      setF(C.primary)
-      doc.rect(0, 0, pw, 36, 'F')
-      // Lys stripe for dybde
-      doc.setFillColor(4, 130, 90)
-      doc.rect(0, 33, pw, 3, 'F')
-
-      setC(C.white)
-      doc.setFontSize(20)
+      // ── Header — ren hvit som UI ──
+      y = 14
+      setC(hex('#0f172a'))
+      doc.setFontSize(18)
       doc.setFont('helvetica', 'bold')
-      doc.text('SJEKKLISTE', ml + 2, 16)
+      const titleLines = doc.splitTextToSize(checklist.title || 'Sjekkliste', cw - 40)
+      doc.text(titleLines, ml, y)
+      y += titleLines.length * 7
 
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-      doc.text('KVALITETSKONTROLL', ml + 2, 24)
-
-      // Høyre side: bedriftsnavn + dato
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'bold')
-      doc.text('En Plattform', pw - mr - 2, 14, { align: 'right' })
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-      doc.text('KS-system for bygg og anlegg', pw - mr - 2, 20, { align: 'right' })
-      doc.text(new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }), pw - mr - 2, 26, { align: 'right' })
-
-      y = 44
-
-      // ════════════════════════════════════════════════════════════
-      // PROSJEKTINFO-BOKS
-      // ════════════════════════════════════════════════════════════
+      // Status-pill (som i UI)
       const itms = checklist.items || []
       const okCount = itms.filter(i => i.status === 'ok' || (i.checked && !i.status)).length
       const avvikCount = itms.filter(i => i.status === 'avvik').length
       const naCount = itms.filter(i => i.status === 'ikke_relevant').length
-      const ubehandlet = itms.filter(i => !i.status && !i.checked).length
       const resolvedCount = okCount + naCount
       const pct = itms.length > 0 ? Math.round(resolvedCount / itms.length * 100) : 0
-      const statusLabel = checklist.status === 'fullfort' ? 'Fullfort' : checklist.status === 'paabegynt' ? 'Paabegynt' : 'Ikke startet'
 
-      // Bakgrunnsboks
-      setF(C.veryLight)
-      doc.roundedRect(ml, y, cw, 38, 3, 3, 'F')
-      setD([226, 232, 240])
-      doc.roundedRect(ml, y, cw, 38, 3, 3, 'S')
+      const sBg = checklist.status === 'fullfort' ? hex('#ecfdf5') : checklist.status === 'paabegynt' ? hex('#eff6ff') : hex('#f1f5f9')
+      const sCol = checklist.status === 'fullfort' ? hex('#059669') : checklist.status === 'paabegynt' ? hex('#2563eb') : hex('#475569')
+      const sLbl = checklist.status === 'fullfort' ? 'Fullfort' : checklist.status === 'paabegynt' ? 'Paabegynt' : 'Ikke startet'
+      setF(sBg); doc.roundedRect(ml, y - 3, doc.getTextWidth(sLbl) + 8, 6, 3, 3, 'F')
+      setC(sCol); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+      doc.text(sLbl, ml + 4, y + 1)
+      y += 6
 
-      // Tittel
-      setC(C.dark)
-      doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
-      const titleLines = doc.splitTextToSize(checklist.title || 'Sjekkliste', cw - 12)
-      doc.text(titleLines, ml + 6, y + 8)
+      // Meta-info
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); setC(hex('#64748b'))
+      doc.text(`${resolvedCount}/${itms.length} fullfort  |  ${new Date(checklist.created_at).toLocaleDateString('nb-NO')}`, ml, y + 2)
+      y += 7
 
-      // Metadata-rad
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      setC(C.mid)
-      const metaY = y + (titleLines.length > 1 ? 16 : 14)
-      doc.text(`Opprettet: ${new Date(checklist.created_at).toLocaleDateString('nb-NO')}`, ml + 6, metaY)
-      doc.text(`Fremdrift: ${resolvedCount}/${itms.length} (${pct}%)`, ml + 60, metaY)
-
-      // Fremdriftsbar
-      const barY = metaY + 5, barW = cw - 12, barH = 5
-      setF([226, 232, 240])
-      doc.roundedRect(ml + 6, barY, barW, barH, 2.5, 2.5, 'F')
+      // Fremdriftsbar (matcher UI: 8px høy, avrundet)
+      setF(hex('#f1f5f9'))
+      doc.roundedRect(ml, y, cw, 3, 1.5, 1.5, 'F')
       if (pct > 0) {
-        setF(pct === 100 ? C.ok : C.primary)
-        doc.roundedRect(ml + 6, barY, barW * pct / 100, barH, 2.5, 2.5, 'F')
+        setF(pct === 100 ? hex('#059669') : hex('#3b82f6'))
+        doc.roundedRect(ml, y, Math.max(cw * pct / 100, 3), 3, 1.5, 1.5, 'F')
       }
-      // Prosent-tekst
-      doc.setFontSize(7)
-      doc.setFont('helvetica', 'bold')
-      setC(pct > 45 ? C.white : C.dark)
-      doc.text(`${pct}%`, ml + 6 + barW * Math.max(pct, 8) / 100 - 4, barY + 3.7)
+      setC(pct === 100 ? hex('#059669') : hex('#3b82f6'))
+      doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text(`${pct}%`, pw - mr, y + 2.5, { align: 'right' })
+      y += 10
 
-      // Mini-statistikk-bokser
-      const statY = barY + 9
-      const statW = (barW - 9) / 4
-      const stats = [
-        { label: 'OK', count: okCount, color: C.ok, bg: C.primaryLight },
-        { label: 'Avvik', count: avvikCount, color: C.avvik, bg: C.warnBg },
-        { label: 'N/A', count: naCount, color: C.na, bg: [243, 244, 246] },
-        { label: 'Ubehandlet', count: ubehandlet, color: C.ubehandlet, bg: C.veryLight },
-      ]
-      stats.forEach((s, i) => {
-        const sx = ml + 6 + i * (statW + 3)
-        setF(s.bg)
-        doc.roundedRect(sx, statY, statW, 8, 1.5, 1.5, 'F')
-        doc.setFontSize(9)
-        doc.setFont('helvetica', 'bold')
-        setC(s.color)
-        doc.text(String(s.count), sx + 3, statY + 5.5)
-        doc.setFontSize(6)
-        doc.setFont('helvetica', 'normal')
-        doc.text(s.label, sx + (s.count > 9 ? 10 : 8), statY + 5.5)
-      })
+      // ── Separator ──
+      setD(hex('#e2e8f0')); doc.line(ml, y, pw - mr, y); y += 8
 
-      y += 46
-
-      // ════════════════════════════════════════════════════════════
-      // SEKSJON + KONTROLLPUNKTER
-      // ════════════════════════════════════════════════════════════
+      // ── Seksjoner med kontrollpunkter ──
       const secs = {}
       itms.forEach((item, idx) => {
         const sec = item.section || 'Generelt'
@@ -2855,214 +2784,172 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         secs[sec].push({ ...item, idx })
       })
 
-      let sectionNum = 0
       Object.entries(secs).forEach(([secTitle, secItems]) => {
-        sectionNum++
         checkSpace(16)
-
-        // Seksjons-header med nummerering
-        setF(C.primary)
-        doc.roundedRect(ml, y, cw, 9, 2, 2, 'F')
-        setC(C.white)
-        doc.setFontSize(10)
+        // Seksjonstittel (bold, som i UI)
+        setC(hex('#0f172a'))
+        doc.setFontSize(13)
         doc.setFont('helvetica', 'bold')
-        doc.text(`${sectionNum}. ${secTitle}`, ml + 5, y + 6.2)
-        // Antall items
-        doc.setFontSize(7)
-        doc.setFont('helvetica', 'normal')
-        doc.text(`${secItems.length} punkt`, pw - mr - 5, y + 6.2, { align: 'right' })
-        y += 13
+        doc.text(secTitle, ml, y)
+        y += 8
 
-        secItems.forEach((item, itemIdx) => {
+        secItems.forEach(item => {
           const st = item.status || (item.checked ? 'ok' : null)
           const hasComment = !!item.comment
           const hasImages = item.images?.length > 0
-          const neededH = 14 + (hasComment ? 6 : 0) + (hasImages ? 6 : 0)
-          checkSpace(neededH)
 
-          // Punkt-rad med alternerende bakgrunn
-          const rowBg = itemIdx % 2 === 0 ? C.white : [249, 250, 251]
-          setF(rowBg)
-          doc.roundedRect(ml, y - 1, cw, neededH - 2, 1.5, 1.5, 'F')
+          // Beregn korthøyde
+          const tLines = doc.splitTextToSize(item.title || '', cw - 16)
+          let cardH = 10 + tLines.length * 4.5 + 10 // tittel + statusknapper
+          if (hasComment) { const cL = doc.splitTextToSize(item.comment, cw - 20); cardH += cL.length * 3.5 + 4 }
+          if (hasImages) cardH += 6
+          cardH += 4
 
-          // Venstre kant-farge basert på status
-          const leftColor = st === 'ok' ? C.ok : st === 'avvik' ? C.avvik : st === 'ikke_relevant' ? C.na : [226, 232, 240]
-          setF(leftColor)
-          doc.rect(ml, y - 1, 2, neededH - 2, 'F')
+          checkSpace(cardH + 4)
 
-          // Status-pill
-          const pillW = st === 'avvik' ? 14 : st === 'ikke_relevant' ? 8 : st === 'ikke_kontrollert' ? 6 : 8
-          const pillLabels = { ok: 'OK', avvik: 'AVVIK', ikke_relevant: 'N/A', ikke_kontrollert: '?' }
-          const pillColors = { ok: C.ok, avvik: C.avvik, ikke_relevant: C.na, ikke_kontrollert: C.ubehandlet }
+          // ── Kort-bakgrunn med border (matcher UI: hvit, avrundet, 1px border) ──
+          const borderCol = st === 'ok' ? '#a7f3d0' : st === 'avvik' ? '#fde68a' : st === 'ikke_relevant' ? '#e2e8f0' : '#f1f5f9'
+          const leftCol = st === 'ok' ? '#059669' : st === 'avvik' ? '#d97706' : st === 'ikke_relevant' ? '#94a3b8' : st === 'ikke_kontrollert' ? '#cbd5e1' : '#e2e8f0'
 
-          if (st && pillColors[st]) {
-            setF(pillColors[st])
-            doc.roundedRect(ml + 5, y, pillW, 5, 1.2, 1.2, 'F')
-            setC(C.white)
-            doc.setFontSize(6.5)
-            doc.setFont('helvetica', 'bold')
-            doc.text(pillLabels[st], ml + 5 + pillW / 2, y + 3.5, { align: 'center' })
-          } else {
-            // Tom sirkel
-            setD(C.ubehandlet)
-            doc.circle(ml + 8, y + 2.5, 2, 'S')
-          }
+          setF(hex('#ffffff'))
+          setD(hex(borderCol))
+          doc.roundedRect(ml, y, cw, cardH, 2.5, 2.5, 'FD')
 
-          // Punkt-tittel
-          const isResolved = st === 'ok' || st === 'ikke_relevant'
-          setC(isResolved ? C.na : C.dark)
-          doc.setFontSize(9)
-          doc.setFont('helvetica', isResolved ? 'normal' : 'bold')
-          const tLines = doc.splitTextToSize(item.title || '', cw - 28)
-          doc.text(tLines, ml + 22, y + 3.5)
-          let iy = y + tLines.length * 4.5 + 2
+          // Venstre kantlinje (4px bred, som borderLeft i UI)
+          setF(hex(leftCol))
+          doc.rect(ml, y + 1, 1.5, cardH - 2, 'F')
 
-          // Kommentar
-          if (hasComment) {
-            setC(C.light)
-            doc.setFontSize(7)
-            doc.setFont('helvetica', 'italic')
-            const cLines = doc.splitTextToSize(item.comment, cw - 30)
-            doc.text(cLines, ml + 22, iy)
-            iy += cLines.length * 3.5 + 1
-          }
+          let cy = y + 6
 
-          // Bilder-indikator
-          if (hasImages) {
-            setC(C.mid)
-            doc.setFontSize(6.5)
-            doc.setFont('helvetica', 'normal')
-            doc.text(`${item.images.length} bilde${item.images.length > 1 ? 'r' : ''} vedlagt`, ml + 22, iy)
-          }
-
-          // Påkrevd-merke
-          if (item.required) {
-            doc.setFontSize(5.5)
-            doc.setFont('helvetica', 'bold')
-            setF(C.warnBg)
-            setD(C.warnBorder)
-            doc.roundedRect(pw - mr - 16, y, 14, 4.5, 1, 1, 'FD')
-            setC(C.avvik)
-            doc.text('PAKREVD', pw - mr - 15, y + 3.2)
-          }
-
-          y += neededH
-        })
-
-        y += 4
-      })
-
-      // ════════════════════════════════════════════════════════════
-      // AVVIK-OPPSUMMERING (kun hvis det finnes avvik)
-      // ════════════════════════════════════════════════════════════
-      const avvikItems = itms.filter(i => i.status === 'avvik')
-      if (avvikItems.length > 0) {
-        checkSpace(14 + avvikItems.length * 10)
-        y += 4
-        setF(C.warnBg)
-        setD(C.warnBorder)
-        const avvBoxH = 10 + avvikItems.length * 7
-        doc.roundedRect(ml, y, cw, avvBoxH, 2, 2, 'FD')
-
-        setC(C.avvik)
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'bold')
-        doc.text(`Avvik som krever oppfolging (${avvikItems.length})`, ml + 5, y + 6)
-        let ay = y + 12
-
-        avvikItems.forEach((av, i) => {
-          setC(C.dark)
-          doc.setFontSize(8)
+          // ── Tittel + Påkrevd-badge ──
+          setC(hex('#0f172a'))
+          doc.setFontSize(10)
           doc.setFont('helvetica', 'bold')
-          doc.text(`${i + 1}.`, ml + 5, ay)
-          doc.setFont('helvetica', 'normal')
-          const avLines = doc.splitTextToSize(`${av.title}${av.comment ? ' — ' + av.comment : ''}`, cw - 18)
-          doc.text(avLines, ml + 12, ay)
-          ay += avLines.length * 4 + 2
+          doc.text(tLines, ml + 6, cy)
+          cy += tLines.length * 4.5
+
+          if (item.required) {
+            const reqX = pw - mr - 18
+            setF(hex('#fff7ed')); setD(hex('#fed7aa'))
+            doc.roundedRect(reqX, y + 3, 16, 5, 1.2, 1.2, 'FD')
+            setC(hex('#ea580c')); doc.setFontSize(6); doc.setFont('helvetica', 'bold')
+            doc.text('Pakrevd', reqX + 8, y + 6.5, { align: 'center' })
+          }
+
+          cy += 3
+
+          // ── Status-knapper (pills som i UI) ──
+          const pills = [
+            { id: 'ok', label: 'OK', bg: '#ecfdf5', color: '#059669', activeBg: '#059669' },
+            { id: 'avvik', label: 'Avvik', bg: '#fffbeb', color: '#d97706', activeBg: '#d97706' },
+            { id: 'ikke_relevant', label: 'Ikke relevant', bg: '#f8fafc', color: '#64748b', activeBg: '#64748b' },
+            { id: 'ikke_kontrollert', label: 'Ikke kontrollert', bg: '#f8fafc', color: '#94a3b8', activeBg: '#94a3b8' },
+          ]
+          let px = ml + 6
+          pills.forEach(pill => {
+            const isActive = st === pill.id
+            const pillW = doc.getTextWidth(pill.label) + 6
+            setF(hex(isActive ? pill.activeBg : pill.bg))
+            setD(hex(isActive ? pill.activeBg : '#e2e8f0'))
+            doc.roundedRect(px, cy - 3, pillW, 5.5, 1.2, 1.2, 'FD')
+            setC(isActive ? hex('#ffffff') : hex(pill.color))
+            doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+            doc.text(pill.label, px + 3, cy + 0.5)
+            px += pillW + 2.5
+          })
+          cy += 7
+
+          // ── Bilde-info ──
+          if (hasImages) {
+            setC(hex('#475569')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+            doc.text(`+ Bilde (${item.images.length})`, ml + 6, cy)
+            cy += 5
+          }
+
+          // ── Kommentar ──
+          if (hasComment) {
+            setC(hex('#94a3b8')); doc.setFontSize(7.5); doc.setFont('helvetica', 'italic')
+            const cLines = doc.splitTextToSize(item.comment, cw - 20)
+            doc.text(cLines, ml + 6, cy)
+            cy += cLines.length * 3.5 + 2
+          }
+
+          y += cardH + 3
         })
 
-        y += avvBoxH + 4
-      }
-
-      // ════════════════════════════════════════════════════════════
-      // SIGNATURFELT — profesjonelt 2x2 grid
-      // ════════════════════════════════════════════════════════════
-      checkSpace(65)
-      y += 6
-
-      setF(C.veryLight)
-      doc.roundedRect(ml, y, cw, 56, 3, 3, 'F')
-      setD([226, 232, 240])
-      doc.roundedRect(ml, y, cw, 56, 3, 3, 'S')
-
-      setC(C.dark)
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Signaturer', ml + 6, y + 8)
-
-      const sigW = (cw - 20) / 2
-      const sigStartY = y + 14
-      const sigFields = [
-        { label: 'Utfort av', x: ml + 6 },
-        { label: 'Kontrollert / godkjent av', x: ml + 6 + sigW + 8 },
-      ]
-
-      sigFields.forEach(sf => {
-        // Label
-        doc.setFontSize(8)
-        doc.setFont('helvetica', 'bold')
-        setC(C.mid)
-        doc.text(sf.label, sf.x, sigStartY)
-
-        // Signatur-linje
-        setD(C.dark)
-        doc.line(sf.x, sigStartY + 18, sf.x + sigW, sigStartY + 18)
-
-        // Sublabels
-        doc.setFontSize(7)
-        doc.setFont('helvetica', 'normal')
-        setC(C.light)
-        doc.text('Signatur', sf.x, sigStartY + 22)
-
-        // Navn-linje
-        doc.line(sf.x, sigStartY + 32, sf.x + sigW, sigStartY + 32)
-        doc.text('Navn (blokkbokstaver)', sf.x, sigStartY + 36)
-
-        // Dato
-        doc.text('Dato: ____/____/________', sf.x, sigStartY + 42)
+        y += 5
       })
 
-      // ════════════════════════════════════════════════════════════
-      // FOOTER på alle sider
-      // ════════════════════════════════════════════════════════════
+      // ── Oppsummering (matcher UI: 4-grid) ──
+      checkSpace(28)
+      y += 2
+      setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+      doc.roundedRect(ml, y, cw, 22, 2.5, 2.5, 'FD')
+
+      setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text('Oppsummering', ml + 5, y + 6)
+
+      const ubehandlet = itms.filter(i => !i.status && !i.checked).length
+      const sumStats = [
+        { label: 'OK', count: okCount, bg: '#ecfdf5', color: '#059669' },
+        { label: 'Avvik', count: avvikCount, bg: '#fffbeb', color: '#d97706' },
+        { label: 'N/A', count: naCount, bg: '#f8fafc', color: '#64748b' },
+        { label: 'Ubehandlet', count: ubehandlet, bg: '#f1f5f9', color: '#94a3b8' },
+      ]
+      const boxW = (cw - 18) / 4
+      sumStats.forEach((s, i) => {
+        const bx = ml + 5 + i * (boxW + 2)
+        setF(hex(s.bg)); doc.roundedRect(bx, y + 9, boxW, 10, 1.5, 1.5, 'F')
+        setC(hex(s.color)); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text(String(s.count), bx + 4, y + 16)
+        doc.setFontSize(6); doc.setFont('helvetica', 'normal')
+        doc.text(s.label, bx + (s.count > 9 ? 12 : 10), y + 16)
+      })
+
+      y += 28
+
+      // ── Signaturfelt (clean, matcher hvit UI-stil) ──
+      checkSpace(55)
+      y += 4
+      setF(hex('#ffffff')); setD(hex('#e2e8f0'))
+      doc.roundedRect(ml, y, cw, 48, 2.5, 2.5, 'FD')
+
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text('Signaturer', ml + 5, y + 7)
+
+      const sigW = (cw - 18) / 2
+      const sigY = y + 13
+      const sigCols = [
+        { label: 'Utfort av', x: ml + 5 },
+        { label: 'Kontrollert / godkjent av', x: ml + 5 + sigW + 8 },
+      ]
+      sigCols.forEach(sc => {
+        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text(sc.label, sc.x, sigY)
+        setD(hex('#0f172a'))
+        doc.line(sc.x, sigY + 16, sc.x + sigW, sigY + 16)
+        setC(hex('#94a3b8')); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal')
+        doc.text('Signatur', sc.x, sigY + 20)
+        doc.line(sc.x, sigY + 28, sc.x + sigW, sigY + 28)
+        doc.text('Navn (blokkbokstaver)', sc.x, sigY + 32)
+        doc.text('Dato: ____/____/________', sc.x, sigY + 37)
+      })
+
+      // ── Footer ──
       const pageCount = doc.internal.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
-
-        // Footer-linje
-        setD([226, 232, 240])
-        doc.line(ml, ph - 16, pw - mr, ph - 16)
-
-        // Venstre: tittel
-        doc.setFontSize(7)
-        doc.setFont('helvetica', 'normal')
-        setC(C.light)
-        doc.text(checklist.title || 'Sjekkliste', ml, ph - 11)
-
-        // Midten: side
-        doc.text(`Side ${i} av ${pageCount}`, pw / 2, ph - 11, { align: 'center' })
-
-        // Hoyre: system
-        doc.setFont('helvetica', 'bold')
-        setC(C.primary)
-        doc.text('En Plattform', pw - mr, ph - 11, { align: 'right' })
+        setD(hex('#f1f5f9')); doc.line(ml, ph - 14, pw - mr, ph - 14)
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+        setC(hex('#94a3b8'))
+        doc.text(checklist.title || '', ml, ph - 9)
+        doc.text(`Side ${i}/${pageCount}`, pw / 2, ph - 9, { align: 'center' })
+        doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
+        doc.text('En Plattform', pw - mr, ph - 9, { align: 'right' })
       }
 
       doc.save(`Sjekkliste - ${checklist.title || 'Ukjent'}.pdf`)
-    } catch(e) {
-      console.error(e)
-      alert('Feil ved PDF-generering: ' + e.message)
-    }
+    } catch(e) { console.error(e); alert('Feil ved PDF-generering: ' + e.message) }
     finally { setExporting(false) }
   }
 
