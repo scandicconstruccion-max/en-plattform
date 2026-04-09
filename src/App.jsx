@@ -1653,11 +1653,44 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
   const ext = file.name?.split('.').pop()?.toLowerCase() || ''
   const isImage = ['jpg','jpeg','png','gif','webp','svg'].includes(ext)
   const isPdf = ext === 'pdf'
+  const isOffice = ['doc','docx','xls','xlsx','ppt','pptx'].includes(ext)
+  const isText = ['txt','csv','json','xml','md'].includes(ext)
   const canPreview = isImage || isPdf
+  const [zoom, setZoom] = useState(100)
+  const [textContent, setTextContent] = useState(null)
+  const [loadingText, setLoadingText] = useState(false)
 
   const getPublicUrl = () => {
     const { data } = supabase.storage.from('plattform-files').getPublicUrl(file.file_url)
     return data?.publicUrl
+  }
+
+  // Escape-tast for å lukke
+  React.useEffect(() => {
+    if (!showPreview) return
+    const handler = (e) => { if (e.key === 'Escape') setShowPreview(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [showPreview])
+
+  // Last inn tekstfiler
+  const loadTextFile = async () => {
+    if (!isText || textContent !== null) return
+    setLoadingText(true)
+    try {
+      const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
+      if (!error && data) {
+        const text = await data.text()
+        setTextContent(text)
+      }
+    } catch(e) { console.error(e) }
+    finally { setLoadingText(false) }
+  }
+
+  const openPreview = () => {
+    setShowPreview(true)
+    setZoom(100)
+    if (isText) loadTextFile()
   }
 
   return (
@@ -1666,7 +1699,8 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
       border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: '12px 16px',
       display: 'flex', alignItems: 'center', gap: '12px', opacity: isArchived ? 0.85 : 1 }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+      onDoubleClick={() => { if (canPreview || isText) openPreview() }}>
       <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />
       <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
@@ -1702,7 +1736,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
             <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
           </label>
         )}
-        {canPreview && <button onClick={() => setShowPreview(true)} title="Forhåndsvisning"
+        {(canPreview || isText) && <button onClick={openPreview} title="Forhåndsvisning"
           style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
         <button onClick={() => onDownload(file)} title="Last ned"
           style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
@@ -1710,22 +1744,85 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
           style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
       </div>
     </div>
-    {/* Forhåndsvisning modal */}
+
+    {/* ── Forhåndsvisning fullskjerm-modal ── */}
     {showPreview && (
-      <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)' }} onClick={() => setShowPreview(false)} />
-        <div style={{ position:'relative', background:'white', borderRadius:'16px', maxWidth:'90vw', maxHeight:'90vh', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', display:'flex', flexDirection:'column' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
-            <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{file.name}</span>
-            <div style={{ display:'flex', gap:'8px' }}>
-              <button onClick={() => onDownload(file)} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', cursor:'pointer' }}>⬇️ Last ned</button>
-              <button onClick={() => setShowPreview(false)} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+      <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', flexDirection:'column', background:'rgba(0,0,0,0.75)', fontFamily:'system-ui, sans-serif' }}>
+        {/* Topplinje */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 20px', background:'rgba(0,0,0,0.5)', backdropFilter:'blur(8px)', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+            <span style={{ fontSize:'18px' }}>{getFileEmoji(file.name, file.file_type)}</span>
+            <div>
+              <div style={{ fontWeight:'600', fontSize:'14px', color:'white' }}>{file.name}</div>
+              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.6)', display:'flex', gap:'12px', marginTop:'2px' }}>
+                {file.file_size && <span>{formatFileSize(file.file_size)}</span>}
+                <span>{new Date(file.created_at).toLocaleDateString('nb-NO')}</span>
+                {file.revision_label && <span>{file.revision_label}</span>}
+                {file.description && <span>{file.description}</span>}
+              </div>
             </div>
           </div>
-          <div style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', background:'#f8fafc', minHeight:'400px' }}>
-            {isImage && <img src={getPublicUrl()} alt={file.name} style={{ maxWidth:'100%', maxHeight:'80vh', objectFit:'contain' }} />}
-            {isPdf && <iframe src={getPublicUrl()} style={{ width:'800px', height:'80vh', border:'none' }} title={file.name} />}
+          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            {/* Zoom-kontroller for bilder og PDF */}
+            {(isImage || isPdf) && (
+              <div style={{ display:'flex', alignItems:'center', gap:'4px', background:'rgba(255,255,255,0.15)', borderRadius:'8px', padding:'4px 8px' }}>
+                <button onClick={() => setZoom(z => Math.max(25, z - 25))} style={{ background:'none', border:'none', color:'white', cursor:'pointer', fontSize:'16px', padding:'2px 6px' }}>−</button>
+                <span style={{ color:'white', fontSize:'12px', fontWeight:'600', minWidth:'42px', textAlign:'center' }}>{zoom}%</span>
+                <button onClick={() => setZoom(z => Math.min(300, z + 25))} style={{ background:'none', border:'none', color:'white', cursor:'pointer', fontSize:'16px', padding:'2px 6px' }}>+</button>
+                <button onClick={() => setZoom(100)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', cursor:'pointer', fontSize:'11px', padding:'2px 6px' }}>Reset</button>
+              </div>
+            )}
+            <button onClick={() => onDownload(file)}
+              style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:'8px', padding:'8px 14px', cursor:'pointer', color:'white', fontSize:'13px', fontWeight:'500', display:'flex', alignItems:'center', gap:'6px' }}>
+              ⬇️ Last ned
+            </button>
+            <button onClick={() => setShowPreview(false)}
+              style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:'8px', width:'36px', height:'36px', cursor:'pointer', color:'white', fontSize:'20px', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              ×
+            </button>
           </div>
+        </div>
+
+        {/* Innhold */}
+        <div style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false) }}>
+          {isImage && (
+            <img src={getPublicUrl()} alt={file.name}
+              style={{ maxWidth: `${zoom}%`, maxHeight: zoom > 100 ? 'none' : '85vh', objectFit:'contain', borderRadius:'8px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', transition:'max-width 0.2s' }} />
+          )}
+          {isPdf && (
+            <iframe src={getPublicUrl() + '#toolbar=1&navpanes=0'} title={file.name}
+              style={{ width: `${Math.min(zoom, 100)}%`, maxWidth:'1200px', height:'88vh', border:'none', borderRadius:'8px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', background:'white' }} />
+          )}
+          {isText && (
+            <div style={{ width:'90%', maxWidth:'900px', maxHeight:'85vh', overflow:'auto', background:'white', borderRadius:'12px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
+              <div style={{ padding:'20px 24px' }}>
+                {loadingText ? (
+                  <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster innhold...</div>
+                ) : (
+                  <pre style={{ margin:0, fontSize:'13px', color:'#0f172a', fontFamily:'monospace', whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{textContent || 'Kunne ikke laste filen.'}</pre>
+                )}
+              </div>
+            </div>
+          )}
+          {isOffice && (
+            <div style={{ background:'white', borderRadius:'16px', padding:'40px', textAlign:'center', maxWidth:'400px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
+              <div style={{ fontSize:'48px', marginBottom:'16px' }}>{getFileEmoji(file.name, file.file_type)}</div>
+              <h3 style={{ margin:'0 0 8px', color:'#0f172a', fontSize:'16px', fontWeight:'600' }}>{file.name}</h3>
+              <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
+                Forhåndsvisning av {ext.toUpperCase()}-filer støttes ikke i nettleseren. Last ned filen for å åpne den.
+              </p>
+              <button onClick={() => onDownload(file)}
+                style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+                ⬇️ Last ned fil
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Hurtigtaster-hint */}
+        <div style={{ padding:'8px 20px', textAlign:'center', flexShrink:0 }}>
+          <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)' }}>Trykk Esc for å lukke · Dobbeltklikk på fil for forhåndsvisning</span>
         </div>
       </div>
     )}
