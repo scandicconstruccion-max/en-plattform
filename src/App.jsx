@@ -1320,9 +1320,21 @@ function ProsjektfilerPage() {
     finally { setUploading(false) }
   }
 
+  // ── Ny revisjon med endringsmerknad ─────────────────────────────────────
+  const [revisionTarget, setRevisionTarget] = useState(null) // { baseFile, newFile }
+  const [revisionNote, setRevisionNote] = useState('')
+
   const handleNewRevision = async (e, baseFile) => {
     const file = e.target.files?.[0]
     if (!file) return
+    // Åpne revisjonsmerknad-modal i stedet for å laste opp direkte
+    setRevisionTarget({ baseFile, newFile: file })
+    setRevisionNote('')
+  }
+
+  const confirmNewRevision = async () => {
+    if (!revisionTarget) return
+    const { baseFile, newFile } = revisionTarget
     setUploading(true)
     try {
       const docGroup = baseFile.document_group || baseFile.id
@@ -1330,28 +1342,42 @@ function ProsjektfilerPage() {
       const newLabel = nextRevision(allRevisions)
 
       // 1. Arkiver gammel revisjon
-      // NOTE: requires archived + document_group columns in Supabase
       const { error: archErr } = await supabase.from('project_files')
         .update({ archived: true, document_group: docGroup })
         .eq('id', baseFile.id)
       if (archErr) {
-        alert('Feil: Kunne ikke arkivere gammel revisjon.\n\nKjør denne SQL-en i Supabase:\n\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS document_group text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_label text DEFAULT \'Rev01\';\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS sub_folder text;')
+        alert('Feil: Kunne ikke arkivere gammel revisjon.\n\nKjør denne SQL-en i Supabase:\n\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS document_group text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_label text DEFAULT \'Rev01\';\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS sub_folder text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_note text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_log jsonb DEFAULT \'[]\'::jsonb;')
         return
       }
 
       // 2. Last opp ny fil til storage
-      const ext = file.name.split('.').pop()
+      const ext = newFile.name.split('.').pop()
       const path = `projects/${baseFile.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+      const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, newFile)
       if (upErr) throw new Error('Filopplasting feilet: ' + upErr.message)
 
-      // 3. Lagre ny revisjon i database
+      // 3. Bygg endringslogg — kopier eksisterende + legg til ny
+      const existingLog = baseFile.revision_log || []
+      const newLog = [
+        ...existingLog,
+        {
+          revision: newLabel,
+          previous_revision: baseFile.revision_label || 'Rev01',
+          date: new Date().toISOString(),
+          user_email: user?.email || 'Ukjent',
+          note: revisionNote.trim() || 'Ny revisjon lastet opp',
+          file_size: newFile.size,
+          prev_file_size: baseFile.file_size || null,
+        }
+      ]
+
+      // 4. Lagre ny revisjon i database
       const { error: insErr } = await supabase.from('project_files').insert({
         name: baseFile.name,
         project_id: baseFile.project_id,
         file_url: path,
         file_type: ext,
-        file_size: file.size,
+        file_size: newFile.size,
         category: baseFile.category,
         sub_folder: baseFile.sub_folder || null,
         description: baseFile.description || null,
@@ -1360,12 +1386,16 @@ function ProsjektfilerPage() {
         revision_label: newLabel,
         document_group: docGroup,
         archived: false,
+        revision_note: revisionNote.trim() || null,
+        revision_log: newLog,
       })
       if (insErr) throw new Error('Lagring feilet: ' + insErr.message)
 
+      setRevisionTarget(null)
+      setRevisionNote('')
       await loadData()
     } catch(e) { alert(e.message) }
-    finally { setUploading(false); e.target.value = '' }
+    finally { setUploading(false) }
   }
 
   const handleDownload = async (file) => {
@@ -1609,6 +1639,38 @@ function ProsjektfilerPage() {
         </div>
       )}
 
+      {/* ── Revisjonsmerknad-modal ── */}
+      {revisionTarget && (
+        <>
+          <div onClick={() => setRevisionTarget(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(480px, calc(100vw - 32px))', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', fontFamily:'system-ui, sans-serif' }}>
+            <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9' }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny revisjon</h2>
+            </div>
+            <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+              <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bbf7d0' }}>
+                <div style={{ fontSize:'13px', color:'#059669', fontWeight:'600', marginBottom:'4px' }}>{revisionTarget.baseFile.name}</div>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>
+                  Gjeldende: {revisionTarget.baseFile.revision_label || 'Rev01'} → Ny fil: {revisionTarget.newFile.name} ({formatFileSize(revisionTarget.newFile.size)})
+                </div>
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Hva er endret? *</label>
+                <textarea value={revisionNote} onChange={e => setRevisionNote(e.target.value)} placeholder="Beskriv endringene i denne revisjonen, f.eks. «Oppdatert vindusplassering i 2. etasje» eller «Ny beregning etter RIB-kommentarer»"
+                  rows={3} style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui, sans-serif' }} autoFocus />
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px' }}>
+                <button onClick={() => setRevisionTarget(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={confirmNewRevision} disabled={uploading}
+                  style={{ padding:'10px 24px', background: uploading ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600' }}>
+                  {uploading ? 'Laster opp...' : '🔄 Last opp revisjon'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Upload Modal */}
       {showUpload && (
         <>
@@ -1723,6 +1785,7 @@ function ProsjektfilerPage() {
 
 function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
   const [showPreview, setShowPreview] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [thumbUrl, setThumbUrl] = useState(null)
@@ -1871,7 +1934,40 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
             {new Date(file.created_at).toLocaleDateString('nb-NO')}
             {file.description ? `  ·  ${file.description}` : ''}
           </span>
+          {file.revision_note && <span style={{ fontSize: '11px', color: '#7c3aed', background: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>📝 {file.revision_note}</span>}
+          {(file.revision_log?.length > 0) && (
+            <button onClick={(e) => { e.stopPropagation(); setShowHistory(!showHistory) }}
+              style={{ fontSize: '11px', color: '#2563eb', background: '#eff6ff', padding: '1px 8px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: '500' }}>
+              📋 {file.revision_log.length} revisjon{file.revision_log.length > 1 ? 'er' : ''}
+            </button>
+          )}
         </div>
+        {/* Endringslogg inline */}
+        {showHistory && file.revision_log?.length > 0 && (
+          <div style={{ marginTop: '8px', background: '#f8fafc', borderRadius: '8px', padding: '10px 12px', border: '1px solid #f1f5f9' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.04em' }}>ENDRINGSLOGG</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {[...file.revision_log].reverse().map((entry, i) => (
+                <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '12px' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i === 0 ? '#059669' : '#cbd5e1', marginTop: '5px', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: '600', color: '#059669' }}>{entry.revision}</span>
+                      <span style={{ color: '#94a3b8' }}>{new Date(entry.date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={{ color: '#64748b' }}>{entry.user_email?.split('@')[0]}</span>
+                    </div>
+                    <div style={{ color: '#374151', marginTop: '2px', lineHeight: 1.4 }}>{entry.note}</div>
+                    {entry.file_size && entry.prev_file_size && (
+                      <div style={{ color: '#94a3b8', marginTop: '2px', fontSize: '11px' }}>
+                        Filstørrelse: {formatFileSize(entry.prev_file_size)} → {formatFileSize(entry.file_size)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
         {supportsRevision && !isArchived && onNewRevision && (
