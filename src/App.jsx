@@ -3649,6 +3649,227 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
     onBack()
   }
 
+  // ── PDF-eksport ────────────────────────────────────────────────────────
+  const [exporting, setExporting] = useState(false)
+
+  const exportAvvikPDF = async () => {
+    setExporting(true)
+    try {
+      if (!window.jspdf) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+          s.onload = resolve; s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF('p', 'mm', 'a4')
+      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
+      let y = 0
+
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (n) => { if (y + n > ph - 22) addPage() }
+      const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+      const setC = (c) => doc.setTextColor(c[0],c[1],c[2])
+      const setF = (c) => doc.setFillColor(c[0],c[1],c[2])
+      const setD = (c) => doc.setDrawColor(c[0],c[1],c[2])
+
+      const sevColors = { Kritisk: '#dc2626', Hoy: '#ea580c', Medium: '#d97706', Lav: '#16a34a' }
+      const sevBg = { Kritisk: '#fef2f2', Hoy: '#fff7ed', Medium: '#fffbeb', Lav: '#f0fdf4' }
+      const statColors = { 'Aapen': '#dc2626', 'Under behandling': '#d97706', 'Lukket': '#16a34a' }
+
+      // ── Alvorlighets-stripe øverst ──
+      const sevCol = sevColors[dev.severity] || '#d97706'
+      setF(hex(sevCol))
+      doc.rect(0, 0, pw, 4, 'F')
+
+      y = 14
+
+      // ── Tittel-seksjon ──
+      setC(hex('#94a3b8'))
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.text('AVVIKSRAPPORT', ml, y)
+      doc.setFont('helvetica', 'normal')
+      doc.text(new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }), pw - mr, y, { align: 'right' })
+      y += 8
+
+      setC(hex('#0f172a'))
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      const tLines = doc.splitTextToSize(dev.title || 'Avvik', cw - 40)
+      doc.text(tLines, ml, y)
+      y += tLines.length * 7 + 2
+
+      // ── Badges: alvorlighet + status ──
+      const sevPillW = doc.getTextWidth(dev.severity || 'Medium') + 8
+      setF(hex(sevBg[dev.severity] || '#fffbeb'))
+      doc.roundedRect(ml, y - 3.5, sevPillW, 6, 3, 3, 'F')
+      setC(hex(sevCol))
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+      doc.text(dev.severity || 'Medium', ml + 4, y)
+
+      const statusLbl = dev.status || 'Aapen'
+      const statCol = statColors[statusLbl] || '#d97706'
+      const statPillW = doc.getTextWidth(statusLbl) + 8
+      setF(hex(statusLbl === 'Lukket' ? '#f0fdf4' : statusLbl === 'Under behandling' ? '#fffbeb' : '#fef2f2'))
+      doc.roundedRect(ml + sevPillW + 4, y - 3.5, statPillW, 6, 3, 3, 'F')
+      setC(hex(statCol))
+      doc.text(statusLbl, ml + sevPillW + 8, y)
+
+      y += 10
+
+      // ── Info-grid ──
+      setD(hex('#f1f5f9'))
+      setF(hex('#f8fafc'))
+      doc.roundedRect(ml, y, cw, 28, 2.5, 2.5, 'FD')
+
+      const infoFields = [
+        ['Prosjekt', proj?.name || '—'],
+        ['Sted / Lokasjon', dev.location || '—'],
+        ['Ansvarlig', dev.assigned_to_name || '—'],
+        ['Registrert', new Date(dev.created_at).toLocaleDateString('nb-NO')],
+      ]
+      const colW = cw / 2
+      infoFields.forEach((f, i) => {
+        const ix = ml + 6 + (i % 2) * colW
+        const iy = y + 6 + Math.floor(i / 2) * 13
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+        doc.text(f[0].toUpperCase(), ix, iy)
+        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        doc.text(f[1], ix, iy + 5)
+      })
+      y += 34
+
+      // ── Beskrivelse ──
+      if (dev.description) {
+        checkSpace(20)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Beskrivelse', ml, y)
+        y += 6
+        setD(hex('#f1f5f9')); setF(hex('#ffffff'))
+        const descLines = doc.splitTextToSize(dev.description, cw - 12)
+        const descH = descLines.length * 4.5 + 10
+        doc.roundedRect(ml, y, cw, descH, 2.5, 2.5, 'FD')
+        setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        doc.text(descLines, ml + 6, y + 6)
+        y += descH + 6
+      }
+
+      // ── Bilder ──
+      if (imageUrls.length > 0) {
+        checkSpace(20)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text(`Fotodokumentasjon (${imageUrls.length})`, ml, y)
+        y += 6
+
+        // Last inn bilder som base64
+        for (let i = 0; i < imageUrls.length; i++) {
+          try {
+            checkSpace(65)
+            const resp = await fetch(imageUrls[i])
+            const blob = await resp.blob()
+            const base64 = await new Promise(resolve => {
+              const reader = new FileReader()
+              reader.onload = () => resolve(reader.result)
+              reader.readAsDataURL(blob)
+            })
+
+            // Beregn bildedimensjoner (maks 170mm bred, maks 55mm høy)
+            const imgW = Math.min(cw, 170)
+            const imgH = 55
+
+            setD(hex('#e2e8f0'))
+            doc.roundedRect(ml, y, imgW + 2, imgH + 2, 2, 2, 'S')
+            doc.addImage(base64, 'JPEG', ml + 1, y + 1, imgW, imgH)
+            y += imgH + 6
+
+            // Bildetekst
+            setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+            doc.text(`Bilde ${i + 1} av ${imageUrls.length}`, ml, y)
+            y += 6
+          } catch(e) {
+            // Hvis bildet ikke kan lastes, vis placeholder
+            setC(hex('#94a3b8')); doc.setFontSize(8)
+            doc.text(`[Bilde ${i + 1} kunne ikke lastes inn]`, ml, y)
+            y += 6
+          }
+        }
+      }
+
+      // ── Tiltak / Lukkekommentar ──
+      if (dev.close_comment || dev.status === 'Lukket') {
+        checkSpace(25)
+        setC(hex('#16a34a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Korrigerende tiltak / Lukking', ml, y)
+        y += 6
+
+        setF(hex('#f0fdf4')); setD(hex('#bbf7d0'))
+        const tiltakTxt = dev.close_comment || 'Avviket er lukket uten kommentar.'
+        const tiltakLines = doc.splitTextToSize(tiltakTxt, cw - 12)
+        const tiltakH = tiltakLines.length * 4.5 + 10
+        doc.roundedRect(ml, y, cw, tiltakH, 2.5, 2.5, 'FD')
+
+        setC(hex('#166534')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        doc.text(tiltakLines, ml + 6, y + 6)
+        y += tiltakH + 2
+
+        if (dev.closed_at) {
+          setC(hex('#4ade80')); doc.setFontSize(7)
+          doc.text(`Lukket: ${new Date(dev.closed_at).toLocaleDateString('nb-NO')}`, ml + 6, y + 2)
+          y += 6
+        }
+      }
+
+      // ── Signatur-seksjon ──
+      checkSpace(55)
+      y += 8
+      setF(hex('#ffffff')); setD(hex('#e2e8f0'))
+      doc.roundedRect(ml, y, cw, 46, 2.5, 2.5, 'FD')
+
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text('Signaturer', ml + 5, y + 7)
+
+      const sigW = (cw - 18) / 2
+      const sigY = y + 12
+      const sigCols = [
+        { label: 'Utfort av / Registrert av', x: ml + 5 },
+        { label: 'Kontrollert / Godkjent av', x: ml + 5 + sigW + 8 },
+      ]
+      sigCols.forEach(sc => {
+        setC(hex('#64748b')); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold')
+        doc.text(sc.label, sc.x, sigY)
+        setD(hex('#0f172a'))
+        doc.line(sc.x, sigY + 14, sc.x + sigW, sigY + 14)
+        setC(hex('#94a3b8')); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal')
+        doc.text('Signatur', sc.x, sigY + 18)
+        doc.line(sc.x, sigY + 25, sc.x + sigW, sigY + 25)
+        doc.text('Navn / Dato', sc.x, sigY + 29)
+      })
+
+      // ── Footer ──
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        // Alvorlighets-stripe nederst også
+        setF(hex(sevCol))
+        doc.rect(0, ph - 3, pw, 3, 'F')
+        // Tekst
+        setD(hex('#f1f5f9')); doc.line(ml, ph - 14, pw - mr, ph - 14)
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+        setC(hex('#94a3b8'))
+        doc.text(`Avviksrapport: ${dev.title}`, ml, ph - 8)
+        doc.text(`Side ${i}/${pageCount}`, pw / 2, ph - 8, { align: 'center' })
+        doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
+        doc.text('En Plattform', pw - mr, ph - 8, { align: 'right' })
+      }
+
+      doc.save(`Avviksrapport - ${dev.title || 'Avvik'}.pdf`)
+    } catch(e) { console.error(e); alert('Feil ved PDF-generering: ' + e.message) }
+    finally { setExporting(false) }
+  }
+
   const statusFlow = ['Åpen', 'Under behandling', 'Lukket']
   const currentIdx = statusFlow.indexOf(dev.status)
 
@@ -3680,6 +3901,10 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <button onClick={exportAvvikPDF} disabled={exporting}
+              style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '500', color: exporting ? '#94a3b8' : '#374151' }}>
+              {exporting ? '⏳...' : '📄 PDF'}
+            </button>
             <button onClick={() => setShowEdit(true)} style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>✏️ Rediger</button>
             <button onClick={handleDelete} style={{ padding: '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: '13px' }}>🗑️</button>
           </div>
