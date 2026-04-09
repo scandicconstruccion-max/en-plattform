@@ -223,17 +223,80 @@ function Dashboard({ onNavigate, user }) {
   const dateStr = `${days[d.getDay()]} ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`
   const { displayName } = useAuth()
   const firstName = displayName
+  const [stats, setStats] = useState(null)
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const [projRes, avvikRes, fakturaRes, timeRes] = await Promise.all([
+          supabase.from('projects').select('id, status', { count: 'exact' }).eq('status', 'aktiv'),
+          supabase.from('deviations').select('id, status', { count: 'exact' }).in('status', ['Åpen', 'Under behandling']),
+          supabase.from('invoices').select('id, status, due_date, total_amount'),
+          supabase.from('time_entries').select('hours, date').gte('date', (() => { const m = new Date(); m.setDate(m.getDate() - m.getDay() + 1); return m.toISOString().split('T')[0] })()),
+        ])
+        const today = new Date().toISOString().split('T')[0]
+        const forfalt = (fakturaRes.data||[]).filter(f => f.status === 'Sendt' && f.due_date && f.due_date < today)
+        const forfaltSum = forfalt.reduce((a,f) => a + (f.total_amount||0), 0)
+        const timerDenneUken = (timeRes.data||[]).reduce((a,t) => a + (parseFloat(t.hours)||0), 0)
+        setStats({
+          activeProjects: projRes.data?.length || 0,
+          openAvvik: avvikRes.data?.length || 0,
+          forfaltCount: forfalt.length,
+          forfaltSum,
+          timerDenneUken,
+        })
+      } catch(e) { console.error('Dashboard stats error:', e) }
+    }
+    loadStats()
+  }, [])
+
+  const [showStats, setShowStats] = useState(false)
+
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen tilbake, {firstName}</h1>
         <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>{dateStr}</p>
       </div>
-      <style>{`
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
-        @media (min-width: 1200px) { .dashboard-grid-single { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
-      `}</style>
+
       <div style={{ padding: '24px 32px' }}>
+        {/* Nøkkeltall med toggle */}
+        {stats && (
+          <div style={{ marginBottom: '24px' }}>
+            <button onClick={() => setShowStats(!showStats)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: showStats ? '14px' : '0' }}>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{showStats ? '▾' : '▸'} NØKKELTALL</span>
+            </button>
+            {showStats && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+                <button onClick={() => onNavigate('prosjekter')} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏗️</div></div>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: '#059669' }}>{stats.activeProjects}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Aktive prosjekter</div>
+                </button>
+                <button onClick={() => onNavigate('avvik')} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${stats.openAvvik > 0 ? '#fecaca' : '#f1f5f9'}`, padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: stats.openAvvik > 0 ? '#fef2f2' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⚠️</div></div>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: stats.openAvvik > 0 ? '#dc2626' : '#94a3b8' }}>{stats.openAvvik}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Åpne avvik</div>
+                </button>
+                <button onClick={() => onNavigate('faktura')} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${stats.forfaltCount > 0 ? '#fde68a' : '#f1f5f9'}`, padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: stats.forfaltCount > 0 ? '#fffbeb' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>💰</div></div>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: stats.forfaltCount > 0 ? '#d97706' : '#94a3b8' }}>{stats.forfaltCount}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Forfalte fakturaer{stats.forfaltSum > 0 ? ` · ${Math.round(stats.forfaltSum).toLocaleString('nb-NO')} kr` : ''}</div>
+                </button>
+                <button onClick={() => onNavigate('timelister')} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⏱️</div></div>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: '#2563eb' }}>{stats.timerDenneUken.toFixed(1)}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Timer denne uken</div>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#0f172a', marginBottom: '24px', marginTop: 0 }}>Moduler</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {moduleSections.map((section, i) => (
