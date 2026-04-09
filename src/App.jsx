@@ -582,23 +582,41 @@ function ContactSection({ title, items, onChange }) {
 
 function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allProjects }) {
   const [form, setForm] = useState(initial || emptyProsjekt)
+  const [pnrError, setPnrError] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const g2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }
   const sec = (label) => <h3 style={{ margin:'8px 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a', borderBottom:'1px solid #f1f5f9', paddingBottom:'8px' }}>{label}</h3>
   // Filtrer ut seg selv fra overordnet-listen (kan ikke være sitt eget parent)
   const parentProjects = (allProjects || []).filter(p => p.id !== initial?.id)
 
+  // Live duplikatsjekk av prosjektnummer
+  const checkPnr = (val) => {
+    set('project_number', val)
+    if (!val || !val.trim()) { setPnrError(''); return }
+    const trimmed = val.trim().toUpperCase()
+    const duplicate = (allProjects || []).find(p =>
+      p.project_number?.trim().toUpperCase() === trimmed && p.id !== initial?.id
+    )
+    setPnrError(duplicate ? `Prosjektnummer «${duplicate.project_number}» er allerede i bruk av «${duplicate.name}»` : '')
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (pnrError) return
+    onSave(form)
+  }
+
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
       <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(680px, calc(100vw - 32px))', maxHeight:'90vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', fontFamily:'system-ui, sans-serif' }}>
-        <form onSubmit={e => { e.preventDefault(); onSave(form) }} style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
+        <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
           {/* Header med lagre-knapp */}
           <div style={{ padding:'14px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
             <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>{title}</h2>
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-              <button type="submit" disabled={saving} style={{ padding:'8px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving ? 'Lagrer...' : 'Lagre'}</button>
+              <button type="submit" disabled={saving || !!pnrError} style={{ padding:'8px 20px', background: (saving || pnrError) ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: (saving || pnrError) ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>{saving ? 'Lagrer...' : 'Lagre'}</button>
             </div>
           </div>
           {/* Scrollbart innhold */}
@@ -607,7 +625,13 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
             <div style={g2}>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Prosjektnavn *"><FInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="Skriv inn prosjektnavn" required /></FLabel></div>
               <FLabel label="Status"><FSelect value={form.status} onChange={v => set('status', v)} options={statusOpts} /></FLabel>
-              <FLabel label="Prosjektnummer"><FInput value={form.project_number} onChange={e => set('project_number', e.target.value)} placeholder="Tildeles automatisk" /></FLabel>
+              <div>
+                <FLabel label="Prosjektnummer">
+                  <input value={form.project_number || ''} onChange={e => checkPnr(e.target.value)} placeholder="Tildeles automatisk"
+                    style={{ width:'100%', padding:'9px 12px', border: pnrError ? '1px solid #f87171' : '1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background: pnrError ? '#fef2f2' : 'white' }} />
+                </FLabel>
+                {pnrError && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#dc2626', lineHeight:1.3 }}>{pnrError}</p>}
+              </div>
               <div style={{ gridColumn:'1/-1' }}>
                 <FLabel label="Overordnet prosjekt">
                   <ProjectSelect value={form.parent_id} onChange={v => set('parent_id', v)} projects={parentProjects} placeholder="Ingen (toppnivå-prosjekt)" />
@@ -708,6 +732,12 @@ function ProsjekterPage({ onNavigateDetail }) {
           const siblings = projects.filter(p => p.parent_id === form.parent_id)
           projectNumber = parent.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
         }
+      }
+      // Duplikatsjekk — siste forsvarslinje
+      const existing = projects.find(p => p.project_number?.trim().toUpperCase() === projectNumber.trim().toUpperCase())
+      if (existing) {
+        // Auto-generert nummer kolliderte — legg til tidsstempel
+        projectNumber = projectNumber + '-' + Date.now().toString().slice(-3)
       }
       await db.createProject({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreate(false)
@@ -907,9 +937,14 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
     try {
       const siblings = allProjects.filter(p => p.parent_id === projectId)
       const depth = (project.depth || 0) + 1
-      const projectNumber = project.project_number
+      let projectNumber = form.project_number || (project.project_number
         ? project.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
-        : `P-${Date.now().toString().slice(-5)}`
+        : `P-${Date.now().toString().slice(-5)}`)
+      // Duplikatsjekk
+      const existing = allProjects.find(p => p.project_number?.trim().toUpperCase() === projectNumber.trim().toUpperCase())
+      if (existing) {
+        projectNumber = projectNumber + '-' + Date.now().toString().slice(-3)
+      }
       await db.createProject({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreateSub(false); load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
