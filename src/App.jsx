@@ -222,12 +222,87 @@ function Dashboard({ onNavigate, user }) {
   const d = new Date()
   const dateStr = `${days[d.getDay()]} ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`
   const { displayName } = useAuth()
+  const { unread } = useNotif()
   const firstName = displayName
+
+  // Nøkkeltall — alltid lukket som default
+  const [showStats, setShowStats] = useState(false)
+  const [stats, setStats] = useState(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+
+  const loadStats = async () => {
+    if (stats) { setShowStats(true); return } // Allerede lastet
+    setLoadingStats(true)
+    try {
+      const now = new Date()
+      const weekStart = new Date(now)
+      weekStart.setDate(now.getDate() - now.getDay() + 1)
+      weekStart.setHours(0,0,0,0)
+
+      const [projRes, avvikRes, fakturaRes, timerRes] = await Promise.all([
+        supabase.from('projects').select('id, status').then(r => r.data || []),
+        supabase.from('deviations').select('id, status').then(r => r.data || []),
+        supabase.from('invoices').select('id, status, due_date').then(r => r.data || []),
+        supabase.from('timesheets').select('id, hours, date').gte('date', weekStart.toISOString().split('T')[0]).then(r => r.data || []),
+      ])
+
+      const activeProjects = projRes.filter(p => p.status === 'aktiv').length
+      const openAvvik = avvikRes.filter(a => a.status === 'Åpen' || a.status === 'Under behandling').length
+      const overdueInvoices = fakturaRes.filter(f => f.status === 'Sendt' && f.due_date && new Date(f.due_date) < now).length
+      const weekHours = timerRes.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0)
+
+      setStats({ activeProjects, openAvvik, overdueInvoices, weekHours, unreadNotifs: unread })
+    } catch(e) { console.error('Dashboard stats error:', e) }
+    finally { setLoadingStats(false); setShowStats(true) }
+  }
+
+  const toggleStats = () => {
+    if (showStats) { setShowStats(false) }
+    else { loadStats() }
+  }
+
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen tilbake, {firstName}</h1>
-        <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>{dateStr}</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen tilbake, {firstName}</h1>
+            <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>{dateStr}</p>
+          </div>
+          <button onClick={toggleStats}
+            style={{ padding: '8px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', background: showStats ? '#f8fafc' : 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {showStats ? '▲ Skjul nøkkeltall' : '▼ Vis nøkkeltall'}
+          </button>
+        </div>
+
+        {/* Nøkkeltall-kort */}
+        {showStats && (
+          <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
+            {loadingStats || !stats ? (
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '14px' }}>Laster nøkkeltall...</div>
+            ) : [
+              { label: 'Aktive prosjekter', value: stats.activeProjects, icon: '🏗️', color: '#059669', bg: '#ecfdf5', onClick: () => onNavigate('prosjekter') },
+              { label: 'Åpne avvik', value: stats.openAvvik, icon: '⚠️', color: stats.openAvvik > 0 ? '#dc2626' : '#059669', bg: stats.openAvvik > 0 ? '#fef2f2' : '#ecfdf5', onClick: () => onNavigate('avvik') },
+              { label: 'Forfalt faktura', value: stats.overdueInvoices, icon: '🧾', color: stats.overdueInvoices > 0 ? '#dc2626' : '#059669', bg: stats.overdueInvoices > 0 ? '#fef2f2' : '#ecfdf5', onClick: () => onNavigate('faktura') },
+              { label: 'Timer denne uken', value: Math.round(stats.weekHours * 10) / 10, icon: '⏱️', color: '#2563eb', bg: '#eff6ff', onClick: () => onNavigate('timelister') },
+              { label: 'Uleste varsler', value: unread, icon: '🔔', color: unread > 0 ? '#d97706' : '#059669', bg: unread > 0 ? '#fffbeb' : '#ecfdf5', onClick: () => onNavigate('varsler') },
+            ].map((stat, i) => (
+              <button key={i} onClick={stat.onClick}
+                style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '16px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>{stat.icon}</div>
+                  {typeof stat.value === 'number' && stat.value > 0 && stat.color === '#dc2626' && (
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />
+                  )}
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: '800', color: stat.color, marginBottom: '2px' }}>{stat.value}</div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>{stat.label}</div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <style>{`
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
