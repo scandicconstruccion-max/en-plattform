@@ -5177,6 +5177,36 @@ const MASKIN_KATEGORIER = {
   ],
 }
 
+// Automatisk sertifikatkrav basert på maskintype
+const MASKIN_CERT_KRAV = {
+  'Gravemaskin': ['Maskinførerbevis'],
+  'Hjullaster': ['Maskinførerbevis'],
+  'Dumper': ['Maskinførerbevis'],
+  'Minidumper': ['Maskinførerbevis'],
+  'Truck': ['Truck-sertifikat'],
+  'Teleskoptruck': ['Truck-sertifikat'],
+  'Kompaktlaster': ['Maskinførerbevis'],
+  'Vals': ['Maskinførerbevis'],
+  'Asfaltlegger': ['Maskinførerbevis'],
+  'Traktor': ['Maskinførerbevis'],
+  'Kran': ['Kranførerbevis'],
+  'Mobilkran': ['Kranførerbevis'],
+  'Rullestillas': ['Stillaskurs'],
+  'Fasadestillas': ['Stillaskurs'],
+  'Hengestillas': ['Stillaskurs', 'Fallsikring'],
+  'Klaffestillas': ['Stillaskurs'],
+  'Sakselift': ['Maskinførerbevis', 'Fallsikring'],
+  'Teleskoplift': ['Maskinførerbevis', 'Fallsikring'],
+  'Personheis': ['Fallsikring'],
+  'Stativkran': ['Kranførerbevis'],
+}
+
+function getRequiredCerts(machine) {
+  // Bruk maskinens egne krav først, ellers hent fra automatisk mapping
+  if (machine.required_certificates?.length > 0) return machine.required_certificates
+  return MASKIN_CERT_KRAV[machine.type] || []
+}
+
 const mInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
 const mCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
@@ -5444,6 +5474,25 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
             {m.notes && <p style={{ margin:'12px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>{m.notes}</p>}
           </div>
 
+          {/* Sertifikatkrav */}
+          {(() => {
+            const certs = getRequiredCerts(m)
+            if (certs.length === 0) return null
+            return (
+              <div style={mCard}>
+                <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📜 Kompetansekrav</h3>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                  {certs.map(cert => (
+                    <span key={cert} style={{ padding:'5px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'600', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe' }}>{cert}</span>
+                  ))}
+                </div>
+                <p style={{ margin:'10px 0 0', fontSize:'12px', color:'#64748b', lineHeight:1.4 }}>
+                  Operatør må ha gyldige sertifikater ovenfor for å bruke denne maskinen. Sertifikater sjekkes automatisk ved utlån.
+                </p>
+              </div>
+            )
+          })()}
+
           <div style={mCard}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📜 Hendelseslogg ({logs.length})</h3>
             {logs.length===0 ? (
@@ -5551,14 +5600,28 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const [employees, setEmployees] = useState([])
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [certWarning, setCertWarning] = useState(null)
+
+  const requiredCerts = getRequiredCerts(maskin)
 
   useEffect(() => {
     supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data }) => setEmployees(data || []))
   }, [])
 
-  const handleEmployeeSelect = (empId) => {
+  const handleEmployeeSelect = async (empId) => {
     const emp = employees.find(e => e.id === empId)
     setEmployeeName(emp?.name || '')
+    setCertWarning(null)
+
+    // Sjekk sertifikater hvis maskinen har krav
+    if (emp && requiredCerts.length > 0) {
+      const { data: empCerts } = await supabase.from('employee_certificates').select('name, expiry_date').eq('employee_id', empId)
+      const validCerts = (empCerts || []).filter(c => !c.expiry_date || new Date(c.expiry_date) > new Date()).map(c => c.name)
+      const missing = requiredCerts.filter(req => !validCerts.includes(req))
+      if (missing.length > 0) {
+        setCertWarning({ employee: emp.name, missing, valid: validCerts })
+      }
+    }
   }
 
   const handleSave = async () => {
@@ -5627,6 +5690,31 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
               <option value="">Velg ansatt...</option>
               {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
             </select>
+
+            {/* Sertifikatkrav og advarsel */}
+            {requiredCerts.length > 0 && (
+              <div style={{ marginTop:'8px' }}>
+                <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>Krever sertifikat:</div>
+                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                  {requiredCerts.map(cert => (
+                    <span key={cert} style={{ padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'600', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe' }}>{cert}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {certWarning && (
+              <div style={{ marginTop:'8px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'10px 14px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#dc2626', marginBottom:'4px' }}>Manglende sertifikater</div>
+                <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.5 }}>
+                  {certWarning.employee} mangler: {certWarning.missing.map((c, i) => (
+                    <span key={c} style={{ fontWeight:'700' }}>{i > 0 ? ', ' : ''}{c}</span>
+                  ))}
+                </div>
+                <div style={{ fontSize:'11px', color:'#dc2626', marginTop:'6px', fontStyle:'italic' }}>
+                  Du kan fortsatt låne ut maskinen, men ansatt oppfyller ikke kompetansekravene.
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Merknad</label>
@@ -5650,12 +5738,28 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
     year: initial?.year||'', current_project_id: initial?.current_project_id||'',
     last_service: initial?.last_service||'', next_service: initial?.next_service||'',
     notes: initial?.notes||'', status: initial?.status||'På lager',
+    required_certificates: initial?.required_certificates || [],
   })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
   // When category changes, reset type
   const setCategory = (cat) => setForm(f=>({...f, category:cat, type:''}))
+
+  // When type changes, auto-fill cert krav
+  const setType = (type) => {
+    const autoCerts = MASKIN_CERT_KRAV[type] || []
+    setForm(f => ({ ...f, type, required_certificates: autoCerts.length > 0 ? autoCerts : f.required_certificates }))
+  }
+
+  const toggleCert = (cert) => {
+    setForm(f => ({
+      ...f,
+      required_certificates: f.required_certificates.includes(cert)
+        ? f.required_certificates.filter(c => c !== cert)
+        : [...f.required_certificates, cert]
+    }))
+  }
 
   const availableTypes = form.category ? MASKIN_KATEGORIER[form.category]||[] : []
 
@@ -5671,6 +5775,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
         current_project_id:form.status==='På prosjekt'?(form.current_project_id||null):null,
         last_service:form.last_service||null, next_service:form.next_service||null,
         notes:form.notes||null, status:form.status, updated_at:new Date().toISOString(),
+        required_certificates: form.required_certificates.length > 0 ? form.required_certificates : null,
         created_by:user?.id,
       }
       if (isEdit) {
@@ -5715,7 +5820,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
             {/* Maskintype — avhengig av kategori */}
             <div>
               {lbl('Maskintype')}
-              <select value={form.type} onChange={e=>set('type',e.target.value)} style={mInp} disabled={!form.category}>
+              <select value={form.type} onChange={e=>setType(e.target.value)} style={mInp} disabled={!form.category}>
                 <option value="">Velg type...</option>
                 {availableTypes.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
@@ -5731,6 +5836,31 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
             <div>{lbl('Årsmodell')}<input type="number" value={form.year} onChange={e=>set('year',e.target.value)} placeholder="2022" min="1980" max="2030" style={mInp} /></div>
             <div>{lbl('Siste service')}<input type="date" value={form.last_service} onChange={e=>set('last_service',e.target.value)} style={mInp} /></div>
             <div>{lbl('Neste service')}<input type="date" value={form.next_service} onChange={e=>set('next_service',e.target.value)} style={mInp} /></div>
+
+            {/* Sertifikatkrav */}
+            <div style={{ gridColumn:'1/-1' }}>
+              {lbl('Krav til sertifikat / kompetanse')}
+              {form.required_certificates.length > 0 && MASKIN_CERT_KRAV[form.type] && (
+                <div style={{ fontSize:'11px', color:'#059669', marginBottom:'6px' }}>Auto-fylt basert på maskintype «{form.type}»</div>
+              )}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                {CERT_TYPES.filter(c => c !== 'Annet').map(cert => {
+                  const isSelected = form.required_certificates.includes(cert)
+                  return (
+                    <button key={cert} type="button" onClick={() => toggleCert(cert)}
+                      style={{ padding:'5px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer', transition:'all 0.15s',
+                        background: isSelected ? '#eff6ff' : '#f8fafc',
+                        color: isSelected ? '#2563eb' : '#64748b',
+                        border: `1px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
+                      }}>
+                      {isSelected ? '✓ ' : ''}{cert}
+                    </button>
+                  )
+                })}
+              </div>
+              {form.required_certificates.length === 0 && <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>Ingen sertifikatkrav — alle kan bruke denne maskinen</p>}
+            </div>
+
             <div style={{ gridColumn:'1/-1' }}>{lbl('Merknad')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Eventuelle merknader om maskinen..." style={{ ...mInp, resize:'none' }} /></div>
           </div>
           <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
