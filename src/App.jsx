@@ -3408,15 +3408,26 @@ function AvvikPage() {
 function AvvikModal({ projects, user, onClose, onSaved, initial }) {
   const [form, setForm] = useState(initial || {
     title: '', description: '', location: '', severity: 'Medium',
-    project_id: '', assigned_to: '',
+    project_id: '', assigned_to: '', assigned_to_user_id: '',
   })
+  const [employees, setEmployees] = useState([])
   const [images, setImages] = useState([])
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = React.useRef()
 
+  // Hent ansatte for dropdown
+  useEffect(() => {
+    supabase.from('employees').select('id, user_id, name, email, role').order('name').then(({ data }) => setEmployees(data || []))
+  }, [])
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+
+  const handleAssigneeChange = (employeeId) => {
+    const emp = employees.find(e => e.id === employeeId)
+    setForm(f => ({ ...f, assigned_to: emp?.name || '', assigned_to_user_id: emp?.user_id || '', assigned_to_email: emp?.email || '' }))
+  }
 
   const handleFiles = (files) => {
     const imgs = Array.from(files).filter(f => f.type.startsWith('image/'))
@@ -3436,6 +3447,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         const { error } = await supabase.storage.from('plattform-files').upload(path, img)
         if (!error) imageUrls.push(path)
       }
+      const projName = projects.find(p => p.id === form.project_id)?.name || ''
       const { error } = await supabase.from('deviations').insert({
         title: form.title.trim(),
         description: form.description,
@@ -3443,15 +3455,29 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         severity: form.severity,
         project_id: form.project_id || null,
         assigned_to_name: form.assigned_to || null,
+        assigned_to_user_id: form.assigned_to_user_id || null,
         status: 'Åpen',
         images: imageUrls,
         created_by: user?.id,
       })
       if (error) throw error
-      // Varsle prosjektleder om nytt avvik
+
+      // Varsle prosjektleder
       if (form.project_id) {
-        await notifyProjectManager(form.project_id, `Nytt avvik registrert: ${form.title.trim()}`, `Alvorlighet: ${form.severity||'–'}${form.location ? ' · Sted: '+form.location : ''}`, 'warning', 'avvik')
+        await notifyProjectManager(form.project_id, `Nytt avvik: ${form.title.trim()}`, `Alvorlighet: ${form.severity||'–'}${form.location ? ' · Sted: '+form.location : ''} · Prosjekt: ${projName}`, 'warning', 'avvik')
       }
+
+      // Varsle ansvarlig person (hvis valgt, og ikke samme som innlogget bruker)
+      if (form.assigned_to_user_id && form.assigned_to_user_id !== user?.id) {
+        await supabase.from('notifications').insert({
+          user_id: form.assigned_to_user_id,
+          title: `Du er tildelt et avvik: ${form.title.trim()}`,
+          message: `Alvorlighet: ${form.severity} · ${projName}${form.location ? ' · Sted: '+form.location : ''}. Avviket krever din oppfølging.`,
+          type: 'warning',
+          link_page: 'avvik',
+        })
+      }
+
       onSaved()
     } catch (e) { alert('Feil: ' + e.message) }
     finally { setUploading(false) }
@@ -3508,7 +3534,11 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Ansvarlig person</label>
-              <input value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} placeholder="Navn på ansvarlig" style={inp} />
+              <select value={employees.find(e => e.user_id === form.assigned_to_user_id)?.id || ''} onChange={e => handleAssigneeChange(e.target.value)}
+                style={inp}>
+                <option value="">Velg ansvarlig...</option>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
+              </select>
             </div>
           </div>
 
@@ -3593,6 +3623,22 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       if (error) throw error
       setDev(data)
       setShowClose(false)
+
+      // Varsle ansvarlig person om statusendring
+      if (dev.assigned_to_user_id && dev.assigned_to_user_id !== user?.id) {
+        const statusLabels = { 'Under behandling': 'satt til under behandling', 'Lukket': 'lukket', 'Åpen': 'gjenåpnet' }
+        await supabase.from('notifications').insert({
+          user_id: dev.assigned_to_user_id,
+          title: `Avvik ${statusLabels[newStatus] || 'oppdatert'}: ${dev.title}`,
+          message: `${proj?.name || 'Ukjent prosjekt'}${dev.location ? ' · '+dev.location : ''}${newStatus === 'Lukket' && closeComment ? ' · Kommentar: '+closeComment : ''}`,
+          type: newStatus === 'Lukket' ? 'success' : 'info',
+          link_page: 'avvik',
+        })
+      }
+      // Varsle prosjektleder også
+      if (dev.project_id) {
+        await notifyProjectManager(dev.project_id, `Avvik ${newStatus.toLowerCase()}: ${dev.title}`, `Status endret til ${newStatus}${dev.location ? ' · Sted: '+dev.location : ''}`, newStatus === 'Lukket' ? 'success' : 'info', 'avvik')
+      }
     } catch (e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
   }
