@@ -266,6 +266,7 @@ const statusConfig = {
   pause:     { label: 'På pause',  bg: '#fffbeb', color: '#d97706' },
   fullfort:  { label: 'Fullført',  bg: '#f1f5f9', color: '#475569' },
   avbrutt:   { label: 'Avbrutt',   bg: '#fef2f2', color: '#dc2626' },
+  arkivert:  { label: 'Arkivert',  bg: '#f5f3ff', color: '#7c3aed' },
 }
 
 function StatusBadge({ status }) {
@@ -493,8 +494,9 @@ function flattenProjectTree(nodes, depth = 0) {
   return result
 }
 
-function projectOptions(projects) {
-  const tree = buildProjectTree(projects)
+function projectOptions(projects, includeArchived = false) {
+  const filtered = includeArchived ? projects : projects.filter(p => p.status !== 'arkivert')
+  const tree = buildProjectTree(filtered)
   // Sorter toppnivå alfabetisk
   tree.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nb'))
   return flattenProjectTree(tree)
@@ -520,7 +522,7 @@ function ProjectSelect({ value, onChange, projects, required, placeholder, style
 }
 
 // ─── PROSJEKTER PAGE ──────────────────────────────────────────────────────
-const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'}]
+const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'},{value:'arkivert',label:'Arkivert'}]
 
 const emptyProsjekt = {
   name:'', project_number:'', description:'', status:'planlagt',
@@ -662,21 +664,25 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [sortBy, setSortBy] = useState('created_desc')
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const f = { fontFamily:'system-ui, sans-serif' }
   const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
+  const archivedCount = projects.filter(p => p.status === 'arkivert').length
+  const activeProjects = showArchived ? projects : projects.filter(p => p.status !== 'arkivert')
+
   const filtered = React.useMemo(() => {
-    const list = projects.filter(p => {
+    const list = activeProjects.filter(p => {
       const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.client_name?.toLowerCase().includes(search.toLowerCase())
       const mst = statusFilter === 'all' || p.status === statusFilter
       return ms && mst
     })
     // Ved hierarkisk visning (list): bruk trestruktur
     if (viewMode === 'list' && !search) {
-      return projectOptions(list)
+      return projectOptions(list, showArchived)
     }
     return list.sort((a, b) => {
       switch (sortBy) {
@@ -687,7 +693,7 @@ function ProsjekterPage({ onNavigateDetail }) {
         default: return 0
       }
     })
-  }, [projects, search, statusFilter, sortBy, viewMode])
+  }, [activeProjects, search, statusFilter, sortBy, viewMode, showArchived])
 
   const handleCreate = async (form) => {
     setSaving(true)
@@ -715,13 +721,13 @@ function ProsjekterPage({ onNavigateDetail }) {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{projects.length} prosjekter totalt</p>
+            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
           </div>
           <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
         </div>
       </div>
       <div style={{ padding:'24px 32px' }}>
-        <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap', alignItems:'center' }}>
           <div style={{ position:'relative', flex:1, minWidth:'200px' }}>
             <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter prosjekt..." style={{ ...inp, paddingLeft:'36px' }} />
@@ -737,6 +743,12 @@ function ProsjekterPage({ onNavigateDetail }) {
             <option value="created_desc">Nyeste først</option>
             <option value="created_asc">Eldste først</option>
           </select>
+          {archivedCount > 0 && (
+            <button onClick={() => setShowArchived(!showArchived)}
+              style={{ padding:'8px 14px', borderRadius:'10px', border: showArchived ? '1px solid #7c3aed' : '1px solid #e2e8f0', background: showArchived ? '#f5f3ff' : 'white', cursor:'pointer', fontSize:'13px', fontWeight:'500', color: showArchived ? '#7c3aed' : '#64748b', display:'flex', alignItems:'center', gap:'6px' }}>
+              📦 {showArchived ? 'Skjul arkiverte' : `Vis arkiverte (${archivedCount})`}
+            </button>
+          )}
           <div style={{ display:'flex', gap:'4px' }}>
             {['grid','list'].map(v => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }}>{v==='grid'?'⊞':'☰'}</button>)}
           </div>
@@ -855,6 +867,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
     } catch(e) { alert('Feil: ' + e.message) }
   }
 
+  const handleArchive = async () => {
+    try {
+      await db.updateProject(projectId, { status: 'arkivert' })
+      onBack()
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
   if (!project) return <div style={{ ...f, textAlign:'center', padding:'60px' }}><p>Prosjekt ikke funnet</p><button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 16px', cursor:'pointer' }}>← Tilbake</button></div>
 
@@ -917,11 +936,22 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500', color:'#059669' }}>+ Underprosjekt</button>
+            {project.status === 'arkivert' ? (
+              <button onClick={async () => { await db.updateProject(projectId, { status: 'fullfort' }); load() }}
+                style={{ padding:'9px 16px', border:'1px solid #7c3aed', borderRadius:'10px', background:'#faf5ff', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#7c3aed' }}>📦 Gjenopprett</button>
+            ) : (
+              <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500', color:'#059669' }}>+ Underprosjekt</button>
+            )}
             <button onClick={() => setShowEdit(true)} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>✏️ Rediger</button>
             <button onClick={() => setShowDelete(true)} style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
           </div>
         </div>
+        {project.status === 'arkivert' && (
+          <div style={{ marginTop:'12px', background:'#f5f3ff', border:'1px solid #e9d5ff', borderRadius:'10px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'16px' }}>📦</span>
+            <span style={{ fontSize:'13px', color:'#7c3aed', fontWeight:'500' }}>Dette prosjektet er arkivert. Det vises ikke i dropdowns eller oversikter med mindre «Vis arkiverte» er aktivert.</span>
+          </div>
+        )}
       </div>
 
       <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
@@ -996,12 +1026,36 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
-          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'16px', padding:'24px', width:'min(400px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif' }}>
-            <h3 style={{ margin:'0 0 12px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Slett prosjekt</h3>
-            <p style={{ margin:'0 0 20px', color:'#475569' }}>Er du sikker på at du vil slette <strong>{project.name}</strong>?</p>
-            <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px' }}>
-              <button onClick={() => setShowDelete(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Avbryt</button>
-              <button onClick={handleDelete} style={{ padding:'9px 18px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Slett</button>
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', padding:'28px', width:'min(440px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif' }}>
+            <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Hva vil du gjøre med prosjektet?</h3>
+            <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}><strong>{project.name}</strong>{project.project_number ? ` (${project.project_number})` : ''}</p>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'20px' }}>
+              <button onClick={handleArchive}
+                style={{ padding:'16px 18px', borderRadius:'14px', border:'1px solid #e9d5ff', background:'#faf5ff', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'flex-start', gap:'14px' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor='#c084fc'}
+                onMouseLeave={e => e.currentTarget.style.borderColor='#e9d5ff'}>
+                <span style={{ fontSize:'24px', flexShrink:0, marginTop:'2px' }}>📦</span>
+                <div>
+                  <div style={{ fontWeight:'700', color:'#7c3aed', fontSize:'14px', marginBottom:'4px' }}>Arkiver prosjekt</div>
+                  <div style={{ fontSize:'13px', color:'#64748b', lineHeight:1.4 }}>Prosjektet skjules fra oversikten og dropdowns, men all data beholdes. Du kan gjenopprette det senere.</div>
+                </div>
+              </button>
+
+              <button onClick={handleDelete}
+                style={{ padding:'16px 18px', borderRadius:'14px', border:'1px solid #fecaca', background:'#fef2f2', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'flex-start', gap:'14px' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor='#f87171'}
+                onMouseLeave={e => e.currentTarget.style.borderColor='#fecaca'}>
+                <span style={{ fontSize:'24px', flexShrink:0, marginTop:'2px' }}>🗑️</span>
+                <div>
+                  <div style={{ fontWeight:'700', color:'#dc2626', fontSize:'14px', marginBottom:'4px' }}>Slett permanent</div>
+                  <div style={{ fontSize:'13px', color:'#64748b', lineHeight:1.4 }}>Prosjektet og all tilknyttet data slettes permanent. Dette kan ikke angres.</div>
+                </div>
+              </button>
+            </div>
+
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setShowDelete(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             </div>
           </div>
         </>
