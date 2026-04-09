@@ -14374,6 +14374,66 @@ function KunderPage() {
   const [filterType, setFilterType] = useState('alle')
   const [selected, setSelected] = useState(null)
   const [showNew, setShowNew] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [importData, setImportData] = useState(null)
+  const [importErrors, setImportErrors] = useState([])
+  const [importing, setImporting] = useState(false)
+  const csvInputRef = React.useRef()
+
+  const exportCSV = () => {
+    const headers = ['Navn','Type','Org.nr','E-post','Telefon','Faktura e-post','Adresse','Postnr','By','Merknad']
+    const rows = kunder.map(k => [k.name, k.type, k.orgnr, k.email, k.phone, k.invoice_email, k.address, k.postal_code, k.city, k.notes].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(';'))
+    const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `Kunderegister-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target.result
+      const sep = text.includes(';') ? ';' : ','
+      const lines = text.split('\n').map(l => l.split(sep).map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim()))
+      if (lines.length < 2) { alert('Filen er tom eller har feil format'); return }
+      const headers = lines[0].map(h => h.toLowerCase())
+      const nameIdx = headers.findIndex(h => h.includes('navn') || h === 'name')
+      if (nameIdx === -1) { alert('Fant ikke Navn-kolonne i CSV-filen'); return }
+      const fieldMap = {
+        name: nameIdx, type: headers.findIndex(h => h.includes('type')),
+        orgnr: headers.findIndex(h => h.includes('org')),
+        email: headers.findIndex(h => (h.includes('e-post') || h.includes('email')) && !h.includes('faktura')),
+        phone: headers.findIndex(h => h.includes('telefon') || h.includes('phone') || h.includes('tlf')),
+        invoice_email: headers.findIndex(h => h.includes('faktura')),
+        address: headers.findIndex(h => h.includes('adresse') || h.includes('address')),
+        postal_code: headers.findIndex(h => h.includes('postnr') || h.includes('postal')),
+        city: headers.findIndex(h => h.includes('by') || h.includes('sted') || h.includes('city')),
+        notes: headers.findIndex(h => h.includes('merknad') || h.includes('notat')),
+      }
+      const rows = lines.slice(1).filter(l => l[nameIdx]?.trim()).map(l => {
+        const row = {}; Object.entries(fieldMap).forEach(([key, idx]) => { if (idx >= 0) row[key] = l[idx] || '' }); return row
+      })
+      const errors = []
+      rows.forEach((r, i) => {
+        if (kunder.find(k => k.name?.toLowerCase() === r.name?.toLowerCase())) errors.push({ row: i+2, msg: `"${r.name}" finnes allerede` })
+        if (r.orgnr && kunder.find(k => k.orgnr && k.orgnr === r.orgnr)) errors.push({ row: i+2, msg: `Org.nr ${r.orgnr} finnes allerede` })
+      })
+      setImportData(rows); setImportErrors(errors); setShowImport(true)
+    }
+    reader.readAsText(file, 'UTF-8'); e.target.value = ''
+  }
+
+  const confirmImport = async () => {
+    if (!importData?.length) return; setImporting(true)
+    try {
+      const clean = importData.filter(r => r.name?.trim()).map(r => ({ name: r.name?.trim(), type: r.type || 'bedrift', orgnr: r.orgnr || null, email: r.email || null, phone: r.phone || null, invoice_email: r.invoice_email || null, address: r.address || null, postal_code: r.postal_code || null, city: r.city || null, notes: r.notes || null, created_by: user?.id }))
+      const { error } = await supabase.from('customers').insert(clean)
+      if (error) throw error; setShowImport(false); setImportData(null); setImportErrors([]); load()
+    } catch(e) { alert('Feil ved import: ' + e.message) } finally { setImporting(false) }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -14435,9 +14495,19 @@ function KunderPage() {
           <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
           <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{kunder.length} registrerte kunder</p>
         </div>
-        <button onClick={() => setShowNew(true)}
-          style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>
-          + Ny kunde
+        <div style={{ display:'flex', gap:'8px' }}>
+          <button onClick={exportCSV} style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>
+            Eksporter CSV
+          </button>
+          <label style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151', display:'flex', alignItems:'center' }}>
+            Importer CSV
+            <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
+          </label>
+          <button onClick={() => setShowNew(true)}
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>
+            + Ny kunde
+          </button>
+        </div>
         </button>
       </div>
 
@@ -14537,7 +14607,71 @@ function KunderPage() {
         )}
       </div>
 
-      {showNew && <KundeModal user={user} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
+      {/* Import-modal */}
+      {showImport && importData && (
+        <>
+          <div onClick={() => { setShowImport(false); setImportData(null); setImportErrors([]) }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(640px, calc(100vw - 32px))', maxHeight:'90vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Importer kunder fra CSV</h2>
+              <button onClick={() => { setShowImport(false); setImportData(null) }} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
+              <div style={{ background:'#ecfdf5', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', border:'1px solid #a7f3d0' }}>
+                <span style={{ fontSize:'13px', color:'#059669', fontWeight:'600' }}>{importData.length} kunder funnet i filen</span>
+              </div>
+
+              {importErrors.length > 0 && (
+                <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', border:'1px solid #fde68a' }}>
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#d97706', marginBottom:'6px' }}>Mulige duplikater ({importErrors.length})</div>
+                  {importErrors.slice(0, 5).map((err, i) => (
+                    <div key={i} style={{ fontSize:'12px', color:'#92400e', marginBottom:'2px' }}>Rad {err.row}: {err.msg}</div>
+                  ))}
+                  {importErrors.length > 5 && <div style={{ fontSize:'12px', color:'#92400e', fontStyle:'italic' }}>+ {importErrors.length - 5} til...</div>}
+                </div>
+              )}
+
+              {/* Forhåndsvisning */}
+              <div style={{ border:'1px solid #f1f5f9', borderRadius:'10px', overflow:'hidden', maxHeight:'300px', overflowY:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                  <thead>
+                    <tr style={{ background:'#f8fafc' }}>
+                      {['Navn','Type','Org.nr','E-post','Telefon','By'].map(h => <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#64748b', borderBottom:'1px solid #f1f5f9', fontSize:'11px' }}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importData.slice(0, 20).map((r, i) => {
+                      const hasDup = importErrors.some(e => e.row === i + 2)
+                      return (
+                        <tr key={i} style={{ background: hasDup ? '#fffbeb' : i % 2 === 0 ? 'white' : '#fafafa' }}>
+                          <td style={{ padding:'6px 10px', fontWeight:'600', color:'#0f172a' }}>{r.name}{hasDup && <span style={{ color:'#d97706', fontSize:'10px', marginLeft:'4px' }}>dup</span>}</td>
+                          <td style={{ padding:'6px 10px', color:'#64748b' }}>{r.type || '—'}</td>
+                          <td style={{ padding:'6px 10px', color:'#64748b' }}>{r.orgnr || '—'}</td>
+                          <td style={{ padding:'6px 10px', color:'#64748b' }}>{r.email || '—'}</td>
+                          <td style={{ padding:'6px 10px', color:'#64748b' }}>{r.phone || '—'}</td>
+                          <td style={{ padding:'6px 10px', color:'#64748b' }}>{r.city || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {importData.length > 20 && <div style={{ padding:'8px', textAlign:'center', fontSize:'12px', color:'#94a3b8', background:'#f8fafc' }}>+ {importData.length - 20} rader til...</div>}
+              </div>
+            </div>
+            <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+              <span style={{ fontSize:'12px', color:'#94a3b8' }}>{importErrors.length > 0 ? `${importErrors.length} advarsler — duplikater importeres likevel` : 'Ingen duplikater funnet'}</span>
+              <div style={{ display:'flex', gap:'10px' }}>
+                <button onClick={() => { setShowImport(false); setImportData(null) }} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={confirmImport} disabled={importing} style={{ padding:'10px 24px', background: importing ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600' }}>
+                  {importing ? 'Importerer...' : `Importer ${importData.length} kunder`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showNew && <KundeModal user={user} existingKunder={kunder} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
     </div>
   )
 }
@@ -14783,7 +14917,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
   )
 }
 
-function KundeModal({ user, initial, onClose, onSaved }) {
+function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
   const isEdit = !!initial
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -14798,7 +14932,25 @@ function KundeModal({ user, initial, onClose, onSaved }) {
     notes: initial?.notes || '',
   })
   const [saving, setSaving] = useState(false)
+  const [dupWarning, setDupWarning] = useState(null)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Live duplikatsjekk
+  const checkDuplicate = (field, value) => {
+    set(field, value)
+    if (!value?.trim()) { setDupWarning(null); return }
+    const trimmed = value.trim().toLowerCase()
+    let dup = null
+    if (field === 'name') {
+      dup = existingKunder.find(k => k.name?.toLowerCase() === trimmed && k.id !== initial?.id)
+      if (dup) setDupWarning(`Kunde med navn "${dup.name}" finnes allerede`)
+      else setDupWarning(null)
+    } else if (field === 'orgnr' && value.trim()) {
+      dup = existingKunder.find(k => k.orgnr === value.trim() && k.id !== initial?.id)
+      if (dup) setDupWarning(`Org.nr ${value.trim()} tilhorer allerede "${dup.name}"`)
+      else setDupWarning(null)
+    }
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -14847,8 +14999,11 @@ function KundeModal({ user, initial, onClose, onSaved }) {
             </div>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-            <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={kundeInp} /></div>
-            <div>{lbl('Organisasjonsnummer')}<input value={form.orgnr} onChange={e => set('orgnr', e.target.value)} placeholder="9 siffer" style={kundeInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>
+              {lbl('Navn *')}<input value={form.name} onChange={e => checkDuplicate('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={{ ...kundeInp, borderColor: dupWarning && form.name ? '#f87171' : '#e2e8f0' }} />
+              {dupWarning && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#dc2626' }}>{dupWarning}</p>}
+            </div>
+            <div>{lbl('Organisasjonsnummer')}<input value={form.orgnr} onChange={e => checkDuplicate('orgnr', e.target.value)} placeholder="9 siffer" style={kundeInp} /></div>
             <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="kontakt@bedrift.no" style={kundeInp} /></div>
             <div>{lbl('Telefon')}<input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+47 000 00 000" style={kundeInp} /></div>
             <div>{lbl('Faktura e-post')}<input type="email" value={form.invoice_email} onChange={e => set('invoice_email', e.target.value)} placeholder="faktura@bedrift.no" style={kundeInp} /></div>
