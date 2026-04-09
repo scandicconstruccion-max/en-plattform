@@ -223,88 +223,17 @@ function Dashboard({ onNavigate, user }) {
   const dateStr = `${days[d.getDay()]} ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`
   const { displayName } = useAuth()
   const firstName = displayName
-  const [stats, setStats] = useState(null)
-
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const [projRes, avvikRes, fakturaRes, timeRes, notifRes] = await Promise.all([
-          supabase.from('projects').select('id, status', { count: 'exact' }).eq('status', 'aktiv'),
-          supabase.from('deviations').select('id, status', { count: 'exact' }).in('status', ['Åpen', 'Under behandling']),
-          supabase.from('invoices').select('id, status, due_date, total_amount'),
-          supabase.from('time_entries').select('hours, date').gte('date', (() => { const m = new Date(); m.setDate(m.getDate() - m.getDay() + 1); return m.toISOString().split('T')[0] })()),
-          user?.id ? supabase.from('notifications').select('id', { count: 'exact' }).eq('user_id', user.id).eq('read', false) : Promise.resolve({ data: [] }),
-        ])
-        const today = new Date().toISOString().split('T')[0]
-        const forfalt = (fakturaRes.data||[]).filter(f => f.status === 'Sendt' && f.due_date && f.due_date < today)
-        const forfaltSum = forfalt.reduce((a,f) => a + (f.total_amount||0), 0)
-        const timerDenneUken = (timeRes.data||[]).reduce((a,t) => a + (parseFloat(t.hours)||0), 0)
-        setStats({
-          activeProjects: projRes.data?.length || 0,
-          openAvvik: avvikRes.data?.length || 0,
-          forfaltCount: forfalt.length,
-          forfaltSum,
-          timerDenneUken,
-          ulesteVarsler: notifRes.data?.length || 0,
-        })
-      } catch(e) { console.error('Dashboard stats error:', e) }
-    }
-    loadStats()
-  }, [])
-
-  const [showStats, setShowStats] = useState(false)
-
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen tilbake, {firstName}</h1>
         <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>{dateStr}</p>
       </div>
-
+      <style>{`
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+        @media (min-width: 1200px) { .dashboard-grid-single { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
+      `}</style>
       <div style={{ padding: '24px 32px' }}>
-        {/* Nøkkeltall med toggle */}
-        {stats && (
-          <div style={{ marginBottom: '24px' }}>
-            <button onClick={() => setShowStats(!showStats)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: showStats ? '14px' : '0' }}>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{showStats ? '▾' : '▸'} NØKKELTALL</span>
-            </button>
-            {showStats && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px' }}>
-                <button onClick={() => onNavigate('prosjekter')} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏗️</div></div>
-                  <div style={{ fontSize: '26px', fontWeight: '800', color: '#059669' }}>{stats.activeProjects}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Aktive prosjekter</div>
-                </button>
-                <button onClick={() => onNavigate('avvik')} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${stats.openAvvik > 0 ? '#fecaca' : '#f1f5f9'}`, padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: stats.openAvvik > 0 ? '#fef2f2' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⚠️</div></div>
-                  <div style={{ fontSize: '26px', fontWeight: '800', color: stats.openAvvik > 0 ? '#dc2626' : '#94a3b8' }}>{stats.openAvvik}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Åpne avvik</div>
-                </button>
-                <button onClick={() => onNavigate('faktura')} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${stats.forfaltCount > 0 ? '#fde68a' : '#f1f5f9'}`, padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: stats.forfaltCount > 0 ? '#fffbeb' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>💰</div></div>
-                  <div style={{ fontSize: '26px', fontWeight: '800', color: stats.forfaltCount > 0 ? '#d97706' : '#94a3b8' }}>{stats.forfaltCount}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Forfalte fakturaer{stats.forfaltSum > 0 ? ` · ${Math.round(stats.forfaltSum).toLocaleString('nb-NO')} kr` : ''}</div>
-                </button>
-                <button onClick={() => onNavigate('timelister')} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⏱️</div></div>
-                  <div style={{ fontSize: '26px', fontWeight: '800', color: '#2563eb' }}>{stats.timerDenneUken.toFixed(1)}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Timer denne uken</div>
-                </button>
-                <button onClick={() => onNavigate('varsler')} style={{ background: 'white', borderRadius: '14px', border: `1px solid ${stats.ulesteVarsler > 0 ? '#ddd6fe' : '#f1f5f9'}`, padding: '18px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                  <div style={{ marginBottom: '10px' }}><div style={{ width: '40px', height: '40px', borderRadius: '10px', background: stats.ulesteVarsler > 0 ? '#f5f3ff' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🔔</div></div>
-                  <div style={{ fontSize: '26px', fontWeight: '800', color: stats.ulesteVarsler > 0 ? '#7c3aed' : '#94a3b8' }}>{stats.ulesteVarsler}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Uleste varsler</div>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
         <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#0f172a', marginBottom: '24px', marginTop: 0 }}>Moduler</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {moduleSections.map((section, i) => (
@@ -505,27 +434,6 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
 }
 
 // ─── DB HELPERS ───────────────────────────────────────────────────────────
-// Helper to render project options with hierarchy indication in <select> dropdowns
-function projectOptions(projects) {
-  if (!projects || projects.length === 0) return null
-  // Build tree
-  const roots = projects.filter(p => !p.parent_id)
-  const getChildren = (pid) => projects.filter(p => p.parent_id === pid).sort((a,b) => (a.project_number||'').localeCompare(b.project_number||''))
-  const result = []
-  const render = (proj, depth) => {
-    const prefix = depth > 0 ? '└ '.padStart(depth * 2 + 2, '  ') : ''
-    result.push(<option key={proj.id} value={proj.id}>{prefix}{proj.name}{proj.project_number ? ` (${proj.project_number})` : ''}</option>)
-    getChildren(proj.id).forEach(child => render(child, depth + 1))
-  }
-  roots.sort((a,b) => (a.name||'').localeCompare(b.name||'','nb')).forEach(r => render(r, 0))
-  // Also include orphans (parent_id points to deleted project)
-  const allRenderedIds = new Set(result.map(r => r.key))
-  projects.filter(p => p.parent_id && !projects.find(pp => pp.id === p.parent_id)).forEach(p => {
-    if (!allRenderedIds.has(p.id)) result.push(<option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)
-  })
-  return result
-}
-
 const db = {
   async getProjects() {
     const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
@@ -538,27 +446,12 @@ const db = {
     return data
   },
   async createProject(data) {
-    // Clean empty strings to null for uuid/date/numeric fields
-    const clean = { ...data }
-    ;['customer_id','parent_id','start_date','end_date','budget'].forEach(k => { if (clean[k] === '' || clean[k] === undefined) clean[k] = null })
-    // Check for duplicate project number
-    if (clean.project_number) {
-      const { data: existing } = await supabase.from('projects').select('id').eq('project_number', clean.project_number).limit(1)
-      if (existing && existing.length > 0) throw new Error(`Prosjektnummer "${clean.project_number}" er allerede i bruk. Velg et annet nummer.`)
-    }
-    const { data: result, error } = await supabase.from('projects').insert(clean).select().single()
+    const { data: result, error } = await supabase.from('projects').insert(data).select().single()
     if (error) throw error
     return result
   },
   async updateProject(id, data) {
-    const clean = { ...data, updated_at: new Date().toISOString() }
-    ;['customer_id','parent_id','start_date','end_date','budget'].forEach(k => { if (clean[k] === '' || clean[k] === undefined) clean[k] = null })
-    // Check for duplicate project number (exclude self)
-    if (clean.project_number) {
-      const { data: existing } = await supabase.from('projects').select('id').eq('project_number', clean.project_number).neq('id', id).limit(1)
-      if (existing && existing.length > 0) throw new Error(`Prosjektnummer "${clean.project_number}" er allerede i bruk av et annet prosjekt.`)
-    }
-    const { data: result, error } = await supabase.from('projects').update(clean).eq('id', id).select().single()
+    const { data: result, error } = await supabase.from('projects').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
     if (error) throw error
     return result
   },
@@ -567,18 +460,77 @@ const db = {
     if (error) throw error
   }
 }
+
+// ─── HIERARKISK PROSJEKTSTRUKTUR ─────────────────────────────────────────
+// Bygger tre-struktur fra flat prosjektliste og gir hierarkisk dropdown
+
+function buildProjectTree(projects) {
+  const map = {}
+  const roots = []
+  // Sorter slik at foreldre kommer først
+  const sorted = [...projects].sort((a, b) => (a.depth || 0) - (b.depth || 0))
+  sorted.forEach(p => { map[p.id] = { ...p, children: [] } })
+  sorted.forEach(p => {
+    if (p.parent_id && map[p.parent_id]) {
+      map[p.parent_id].children.push(map[p.id])
+    } else {
+      roots.push(map[p.id])
+    }
+  })
+  return roots
+}
+
+function flattenProjectTree(nodes, depth = 0) {
+  const result = []
+  for (const node of nodes) {
+    result.push({ ...node, _depth: depth })
+    if (node.children?.length > 0) {
+      // Sorter barn alfabetisk
+      const sortedChildren = [...node.children].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nb'))
+      result.push(...flattenProjectTree(sortedChildren, depth + 1))
+    }
+  }
+  return result
+}
+
+function projectOptions(projects) {
+  const tree = buildProjectTree(projects)
+  // Sorter toppnivå alfabetisk
+  tree.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nb'))
+  return flattenProjectTree(tree)
+}
+
+function ProjectSelect({ value, onChange, projects, required, placeholder, style, allowEmpty = true, emptyLabel }) {
+  const options = React.useMemo(() => projectOptions(projects || []), [projects])
+  const indent = (depth) => {
+    if (depth === 0) return ''
+    return '\u00A0\u00A0'.repeat(depth) + '└ '
+  }
+  return (
+    <select value={value || ''} onChange={e => onChange(e.target.value)} required={required}
+      style={style || { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }}>
+      {allowEmpty && <option value="">{placeholder || emptyLabel || 'Velg prosjekt...'}</option>}
+      {options.map(p => (
+        <option key={p.id} value={p.id}>
+          {indent(p._depth)}{p.name}{p.project_number ? ` (${p.project_number})` : ''}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 // ─── PROSJEKTER PAGE ──────────────────────────────────────────────────────
 const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'}]
 
 const emptyProsjekt = {
   name:'', project_number:'', description:'', status:'planlagt',
+  parent_id:'', depth: 0,
   address_street:'', address_postal:'', address_city:'',
   start_date:'', end_date:'', budget:'',
   client_name:'', client_contact:'', client_email:'', client_phone:'',
   resident_name:'', resident_phone:'', resident_email:'',
   project_manager_name:'', project_manager_email:'', project_manager_phone:'', customer_id:'',
   subcontractors:[], architects:[], consultants:[],
-  parent_id: null,
 }
 
 function FLabel({ label, children }) {
@@ -626,28 +578,13 @@ function ContactSection({ title, items, onChange }) {
   )
 }
 
-function ProsjektModal({ title, initial, onSave, onClose, saving, parentProject }) {
-  const [form, setForm] = useState(() => {
-    const base = initial || { ...emptyProsjekt }
-    if (parentProject && !initial) {
-      // Pre-fill from parent for sub-projects
-      base.parent_id = parentProject.id
-      base.address_street = parentProject.address_street || ''
-      base.address_postal = parentProject.address_postal || ''
-      base.address_city = parentProject.address_city || ''
-      base.client_name = parentProject.client_name || ''
-      base.client_contact = parentProject.client_contact || ''
-      base.client_email = parentProject.client_email || ''
-      base.client_phone = parentProject.client_phone || ''
-      base.project_manager_name = parentProject.project_manager_name || ''
-      base.project_manager_email = parentProject.project_manager_email || ''
-      base.project_manager_phone = parentProject.project_manager_phone || ''
-    }
-    return base
-  })
+function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allProjects }) {
+  const [form, setForm] = useState(initial || emptyProsjekt)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const g2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }
   const sec = (label) => <h3 style={{ margin:'8px 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a', borderBottom:'1px solid #f1f5f9', paddingBottom:'8px' }}>{label}</h3>
+  // Filtrer ut seg selv fra overordnet-listen (kan ikke være sitt eget parent)
+  const parentProjects = (allProjects || []).filter(p => p.id !== initial?.id)
 
   return (
     <>
@@ -664,20 +601,17 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, parentProject 
           </div>
           {/* Scrollbart innhold */}
           <div style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'20px' }}>
-            {parentProject && (
-              <div style={{ background:'#f5f3ff', borderRadius:'12px', padding:'12px 16px', border:'1px solid #ddd6fe', display:'flex', alignItems:'center', gap:'10px' }}>
-                <span style={{ fontSize:'18px' }}>📂</span>
-                <div>
-                  <div style={{ fontSize:'12px', color:'#7c3aed', fontWeight:'600' }}>Underprosjekt av</div>
-                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{parentProject.name} <span style={{ color:'#94a3b8', fontWeight:'400' }}>#{parentProject.project_number}</span></div>
-                </div>
-              </div>
-            )}
             {sec('Grunnleggende')}
             <div style={g2}>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Prosjektnavn *"><FInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="Skriv inn prosjektnavn" required /></FLabel></div>
               <FLabel label="Status"><FSelect value={form.status} onChange={v => set('status', v)} options={statusOpts} /></FLabel>
               <FLabel label="Prosjektnummer"><FInput value={form.project_number} onChange={e => set('project_number', e.target.value)} placeholder="Tildeles automatisk" /></FLabel>
+              <div style={{ gridColumn:'1/-1' }}>
+                <FLabel label="Overordnet prosjekt">
+                  <ProjectSelect value={form.parent_id} onChange={v => set('parent_id', v)} projects={parentProjects} placeholder="Ingen (toppnivå-prosjekt)" />
+                </FLabel>
+                {form.parent_id && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#059669' }}>Dette blir et underprosjekt. Prosjektnummer genereres automatisk.</p>}
+              </div>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Gateadresse"><FInput value={form.address_street} onChange={e => set('address_street', e.target.value)} placeholder="Gatenavn og nummer" /></FLabel></div>
               <FLabel label="Postnummer"><FInput value={form.address_postal} onChange={e => set('address_postal', e.target.value)} placeholder="0000" /></FLabel>
               <FLabel label="Poststed"><FInput value={form.address_city} onChange={e => set('address_city', e.target.value)} placeholder="By" /></FLabel>
@@ -719,6 +653,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, parentProject 
 }
 
 function ProsjekterPage({ onNavigateDetail }) {
+  const { user } = useAuth()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -726,31 +661,23 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [viewMode, setViewMode] = useState('grid')
   const [sortBy, setSortBy] = useState('created_desc')
   const [showCreate, setShowCreate] = useState(false)
-  const [createParent, setCreateParent] = useState(null) // parent project when creating sub-project
   const [saving, setSaving] = useState(false)
-  const [expandedIds, setExpandedIds] = useState({})
   const f = { fontFamily:'system-ui, sans-serif' }
   const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
-  // Build hierarchy helpers
-  const rootProjects = React.useMemo(() => projects.filter(p => !p.parent_id), [projects])
-  const getChildren = (parentId) => projects.filter(p => p.parent_id === parentId)
-  const hasChildren = (parentId) => projects.some(p => p.parent_id === parentId)
-  const countAllDescendants = (parentId) => {
-    const direct = projects.filter(p => p.parent_id === parentId)
-    return direct.reduce((sum, child) => sum + 1 + countAllDescendants(child.id), 0)
-  }
-
-  // For grid/list views, show all projects (flat) or only roots depending on mode
   const filtered = React.useMemo(() => {
-    const list = (viewMode === 'hierarchy' ? rootProjects : projects).filter(p => {
+    const list = projects.filter(p => {
       const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.client_name?.toLowerCase().includes(search.toLowerCase())
       const mst = statusFilter === 'all' || p.status === statusFilter
       return ms && mst
     })
+    // Ved hierarkisk visning (list): bruk trestruktur
+    if (viewMode === 'list' && !search) {
+      return projectOptions(list)
+    }
     return list.sort((a, b) => {
       switch (sortBy) {
         case 'name_asc':   return (a.name||'').localeCompare(b.name||'', 'nb')
@@ -760,122 +687,26 @@ function ProsjekterPage({ onNavigateDetail }) {
         default: return 0
       }
     })
-  }, [projects, rootProjects, search, statusFilter, sortBy, viewMode])
-
-  const generateSubNumber = (parentNumber, existingChildren) => {
-    const nextIdx = existingChildren.length + 1
-    return `${parentNumber}-${String(nextIdx).padStart(2,'0')}`
-  }
+  }, [projects, search, statusFilter, sortBy, viewMode])
 
   const handleCreate = async (form) => {
     setSaving(true)
     try {
-      let projectNumber = form.project_number
-      if (!projectNumber) {
-        if (form.parent_id) {
-          const parent = projects.find(p => p.id === form.parent_id)
-          const siblings = getChildren(form.parent_id)
-          projectNumber = generateSubNumber(parent?.project_number || 'P-00000', siblings)
-        } else {
-          projectNumber = `P-${Date.now().toString().slice(-5)}`
+      // Beregn depth og prosjektnummer basert på parent
+      let depth = 0
+      let projectNumber = form.project_number || `P-${Date.now().toString().slice(-5)}`
+      if (form.parent_id) {
+        const parent = projects.find(p => p.id === form.parent_id)
+        depth = (parent?.depth || 0) + 1
+        if (!form.project_number && parent?.project_number) {
+          const siblings = projects.filter(p => p.parent_id === form.parent_id)
+          projectNumber = parent.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
         }
       }
-      await db.createProject({ ...form, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, customer_id: form.customer_id || null, parent_id: form.parent_id || null, created_by: user?.id })
+      await db.createProject({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreate(false)
-      setCreateParent(null)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
-  }
-
-  const toggleExpand = (id) => setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }))
-
-  // Recursive hierarchy renderer — redesigned for clear visual hierarchy
-  const renderHierarchyNode = (project, depth = 0) => {
-    const children = getChildren(project.id)
-    const isExpanded = expandedIds[project.id]
-    const hasKids = children.length > 0
-    const isRoot = depth === 0
-
-    if (isRoot) {
-      // ── HOVEDPROSJEKT: stort, fremtredende kort ──
-      return (
-        <div key={project.id} style={{ marginBottom:'20px' }}>
-          <div style={{ background:'linear-gradient(135deg, #f8fafc 0%, #f0fdf4 100%)', borderRadius:'16px', border:'2px solid #bbf7d0', padding:'0', overflow:'hidden', boxShadow:'0 2px 12px rgba(5,150,105,0.08)' }}>
-            {/* Hovedprosjekt header */}
-            <div style={{ display:'flex', alignItems:'center', gap:'14px', padding:'18px 20px', cursor:'pointer' }} onClick={() => onNavigateDetail(project.id)}>
-              <div style={{ width:'48px', height:'48px', borderRadius:'14px', background:'#ecfdf5', border:'2px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0 }}>🏗️</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a', marginBottom:'2px' }}>{project.name}</div>
-                <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-                  <span style={{ fontSize:'12px', color:'#059669', fontWeight:'500' }}>#{project.project_number}</span>
-                  {project.client_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {project.client_name}</span>}
-                  {project.address && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📍 {project.address}</span>}
-                </div>
-              </div>
-              <StatusBadge status={project.status} />
-              {hasKids && (
-                <button onClick={(e) => { e.stopPropagation(); toggleExpand(project.id) }}
-                  style={{ background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#059669', display:'flex', alignItems:'center', gap:'4px' }}>
-                  {isExpanded ? '▾' : '▸'} {children.length} under
-                </button>
-              )}
-              <button onClick={(e) => { e.stopPropagation(); setCreateParent(project); setShowCreate(true) }} title="Opprett underprosjekt"
-                style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', width:'32px', height:'32px', cursor:'pointer', color:'#059669', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, lineHeight:1 }}>+</button>
-            </div>
-
-            {/* Underprosjekter */}
-            {hasKids && isExpanded && (
-              <div style={{ borderTop:'1px solid #d1fae5', background:'white', padding:'12px 16px 12px 28px' }}>
-                <div style={{ position:'relative', paddingLeft:'20px' }}>
-                  {/* Vertikal tre-linje */}
-                  <div style={{ position:'absolute', left:'8px', top:'0', bottom:'12px', width:'2px', background:'#d1fae5' }} />
-                  {children.sort((a,b) => (a.project_number||'').localeCompare(b.project_number||'')).map((child, ci) => renderHierarchyNode(child, depth + 1))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )
-    }
-
-    // ── UNDERPROSJEKT: kompakt, innrykket, med kobling-linje ──
-    return (
-      <div key={project.id} style={{ position:'relative', marginBottom:'8px' }}>
-        {/* Horisontal kobling-linje fra vertikal linje */}
-        <div style={{ position:'absolute', left:'-12px', top:'20px', width:'12px', height:'2px', background:'#d1fae5' }} />
-        <div style={{ display:'flex', alignItems:'center', gap:'0' }}>
-          <div onClick={() => onNavigateDetail(project.id)}
-            style={{ flex:1, display:'flex', alignItems:'center', gap:'12px', background: depth > 1 ? '#faf5ff' : '#f8fafc', borderRadius:'12px', border:`1px solid ${depth > 1 ? '#e9d5ff' : '#e2e8f0'}`, padding:'12px 16px', cursor:'pointer', borderLeft:`3px solid ${depth > 1 ? '#a78bfa' : '#7c3aed'}`, transition:'box-shadow 0.15s' }}
-            onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(124,58,237,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-            <div style={{ width:'32px', height:'32px', borderRadius:'8px', background: depth > 1 ? '#ede9fe' : '#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>📄</div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{project.name}</div>
-              <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
-                <span style={{ fontSize:'11px', color:'#7c3aed', fontWeight:'600', fontFamily:'monospace' }}>#{project.project_number}</span>
-                {project.client_name && <span style={{ fontSize:'11px', color:'#64748b' }}>👤 {project.client_name}</span>}
-              </div>
-            </div>
-            <StatusBadge status={project.status} />
-            {hasKids && (
-              <button onClick={(e) => { e.stopPropagation(); toggleExpand(project.id) }}
-                style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#7c3aed' }}>
-                {isExpanded ? '▾' : '▸'} {children.length}
-              </button>
-            )}
-          </div>
-          <button onClick={(e) => { e.stopPropagation(); setCreateParent(project); setShowCreate(true) }} title="Opprett underprosjekt"
-            style={{ background:'none', border:'none', cursor:'pointer', color:'#c4b5fd', fontSize:'18px', padding:'6px', flexShrink:0, lineHeight:1 }}
-            onMouseEnter={e=>e.currentTarget.style.color='#7c3aed'} onMouseLeave={e=>e.currentTarget.style.color='#c4b5fd'}>+</button>
-        </div>
-        {/* Under-underprosjekter */}
-        {hasKids && isExpanded && (
-          <div style={{ position:'relative', paddingLeft:'24px', marginTop:'6px' }}>
-            <div style={{ position:'absolute', left:'8px', top:'0', bottom:'12px', width:'2px', background:'#ede9fe' }} />
-            {children.sort((a,b) => (a.project_number||'').localeCompare(b.project_number||'')).map(child => renderHierarchyNode(child, depth + 1))}
-          </div>
-        )}
-      </div>
-    )
   }
 
   return (
@@ -886,7 +717,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
             <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{projects.length} prosjekter totalt</p>
           </div>
-          <button onClick={() => { setCreateParent(null); setShowCreate(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
+          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
         </div>
       </div>
       <div style={{ padding:'24px 32px' }}>
@@ -907,7 +738,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             <option value="created_asc">Eldste først</option>
           </select>
           <div style={{ display:'flex', gap:'4px' }}>
-            {[['grid','⊞'],['list','☰'],['hierarchy','']].map(([v,icon]) => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }} title={v==='hierarchy'?'Hierarki':v==='grid'?'Rutenett':'Liste'}>{v==='hierarchy' ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5.5" y="1" width="5" height="3" rx="0.5"/><rect x="0.5" y="12" width="4" height="3" rx="0.5"/><rect x="6" y="12" width="4" height="3" rx="0.5"/><rect x="11.5" y="12" width="4" height="3" rx="0.5"/><line x1="8" y1="4" x2="8" y2="7"/><line x1="2.5" y1="7" x2="13.5" y2="7"/><line x1="2.5" y1="7" x2="2.5" y2="12"/><line x1="8" y1="7" x2="8" y2="12"/><line x1="13.5" y1="7" x2="13.5" y2="12"/></svg> : icon}</button>)}
+            {['grid','list'].map(v => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }}>{v==='grid'?'⊞':'☰'}</button>)}
           </div>
         </div>
         {loading ? (
@@ -919,65 +750,61 @@ function ProsjekterPage({ onNavigateDetail }) {
             <p style={{ color:'#64748b', margin:'0 0 20px' }}>{search ? 'Ingen matcher søket' : 'Opprett ditt første prosjekt'}</p>
             {!search && <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>}
           </div>
-        ) : viewMode === 'hierarchy' ? (
-          <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px' }}>
-            {filtered.map(p => renderHierarchyNode(p, 0))}
-          </div>
         ) : viewMode === 'grid' ? (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px' }}>
-            {filtered.filter(p => !p.parent_id).map(p => {
-              const childCount = countAllDescendants(p.id)
+            {filtered.map(p => {
+              const childCount = projects.filter(c => c.parent_id === p.id).length
+              const parentName = p.parent_id ? projects.find(pp => pp.id === p.parent_id)?.name : null
               return (
-                <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                  style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}
-                  onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
-                  onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
-                    <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>🏗️</div>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                      <StatusBadge status={p.status} />
-                      {childCount > 0 && <span style={{ fontSize:'10px', color:'#059669', background:'#ecfdf5', padding:'2px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {childCount}</span>}
-                    </div>
-                  </div>
-                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{p.name}</h3>
-                  {p.project_number && <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</p>}
-                  <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
-                    {p.client_name && <span>👥 {p.client_name}</span>}
-                    {p.address && <span>📍 {p.address}</span>}
-                    {p.start_date && <span>📅 {new Date(p.start_date).toLocaleDateString('nb-NO')}</span>}
-                  </div>
-                </button>
-              )
-            })}
+              <button key={p.id} onClick={() => onNavigateDetail(p.id)}
+                style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px', cursor:'pointer', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'14px' }}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: p.parent_id ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px' }}>{p.parent_id ? '📂' : '🏗️'}</div>
+                  <StatusBadge status={p.status} />
+                </div>
+                {parentName && <p style={{ margin:'0 0 4px', fontSize:'11px', color:'#059669', fontWeight:'500' }}>↳ {parentName}</p>}
+                <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>{p.name}</h3>
+                {p.project_number && <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</p>}
+                <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'13px', color:'#64748b' }}>
+                  {p.client_name && <span>👥 {p.client_name}</span>}
+                  {p.address && <span>📍 {p.address}</span>}
+                  {p.start_date && <span>📅 {new Date(p.start_date).toLocaleDateString('nb-NO')}</span>}
+                  {childCount > 0 && <span style={{ color:'#059669', fontWeight:'500' }}>📁 {childCount} underprosjekt{childCount > 1 ? 'er' : ''}</span>}
+                </div>
+              </button>
+            )})}
           </div>
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {filtered.filter(p => !p.parent_id).map(p => {
-              const childCount = countAllDescendants(p.id)
+          <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+            {filtered.map(p => {
+              const depth = p._depth || p.depth || 0
+              const childCount = projects.filter(c => c.parent_id === p.id).length
               return (
-                <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                  style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px' }}>
-                  <div style={{ width:'38px', height:'38px', borderRadius:'10px', background:'#ecfdf5', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏗️</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                      <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
-                      {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
-                      {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 7px', borderRadius:'999px', fontWeight:'600' }}>📂 {childCount}</span>}
-                    </div>
-                    <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
-                      {p.client_name && <span>{p.client_name}</span>}
-                      {p.address && <span>{p.address}</span>}
-                    </div>
+              <button key={p.id} onClick={() => onNavigateDetail(p.id)}
+                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px', marginLeft: depth * 28 }}>
+                {depth > 0 && <span style={{ color:'#d1d5db', fontSize:'14px', flexShrink:0 }}>└</span>}
+                <div style={{ width:'38px', height:'38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
+                    {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
+                    {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 8px', borderRadius:'999px' }}>{childCount} under</span>}
                   </div>
-                  <StatusBadge status={p.status} />
-                  <span style={{ color:'#cbd5e1' }}>›</span>
-                </button>
-              )
-            })}
+                  <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
+                    {p.client_name && <span>{p.client_name}</span>}
+                    {p.address && <span>{p.address}</span>}
+                  </div>
+                </div>
+                <StatusBadge status={p.status} />
+                <span style={{ color:'#cbd5e1' }}>›</span>
+              </button>
+            )})}
           </div>
         )}
       </div>
-      {showCreate && <ProsjektModal title={createParent ? `Nytt underprosjekt av ${createParent.name}` : 'Nytt prosjekt'} parentProject={createParent} onSave={handleCreate} onClose={() => { setShowCreate(false); setCreateParent(null) }} saving={saving} />}
+      {showCreate && <ProsjektModal title="Nytt prosjekt" onSave={handleCreate} onClose={() => setShowCreate(false)} saving={saving} projects={projects} />}
     </div>
   )
 }
@@ -985,29 +812,23 @@ function ProsjekterPage({ onNavigateDetail }) {
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
   const { user } = useAuth()
   const [project, setProject] = useState(null)
+  const [allProjects, setAllProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
-  const [showCreateSub, setShowCreateSub] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
-  const [subProjects, setSubProjects] = useState([])
-  const [parentProject, setParentProject] = useState(null)
   const f = { fontFamily:'system-ui, sans-serif' }
   const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding:'24px' }
 
   const load = async () => {
     try {
-      const proj = await db.getProject(projectId)
+      const [proj, allProj] = await Promise.all([
+        db.getProject(projectId),
+        db.getProjects()
+      ])
       setProject(proj)
-      // Load sub-projects
-      const { data: subs } = await supabase.from('projects').select('*').eq('parent_id', projectId).order('project_number')
-      setSubProjects(subs || [])
-      // Load parent if exists
-      if (proj?.parent_id) {
-        const { data: parent } = await supabase.from('projects').select('id, name, project_number').eq('id', proj.parent_id).single()
-        setParentProject(parent)
-      }
+      setAllProjects(allProj)
     } catch(e){console.error(e)} finally { setLoading(false) }
   }
   useEffect(() => { load() }, [projectId])
@@ -1015,21 +836,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
   const handleUpdate = async (form) => {
     setSaving(true)
     try {
-      await db.updateProject(projectId, { ...form, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', ') || form.address, budget: form.budget ? parseFloat(form.budget) : null })
+      let depth = 0
+      if (form.parent_id) {
+        const parent = allProjects.find(p => p.id === form.parent_id)
+        depth = (parent?.depth || 0) + 1
+      }
+      await db.updateProject(projectId, { ...form, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', ') || form.address, budget: form.budget ? parseFloat(form.budget) : null })
       setShowEdit(false); load()
-    } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
-  }
-
-  const handleCreateSub = async (form) => {
-    setSaving(true)
-    try {
-      const siblings = subProjects
-      const nextIdx = siblings.length + 1
-      const parentNum = project.project_number || 'P-00000'
-      const projectNumber = form.project_number || `${parentNum}-${String(nextIdx).padStart(2,'0')}`
-      await db.createProject({ ...form, parent_id: projectId, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, customer_id: form.customer_id || null, created_by: user?.id })
-      setShowCreateSub(false)
-      load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
   }
 
@@ -1064,23 +877,37 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
     </div>
   ) : <p style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center', padding:'20px', margin:0 }}>{empty}</p>
 
-  const initEdit = { ...project, address_street: project.address_street||'', address_postal: project.address_postal||'', address_city: project.address_city||'', budget: project.budget||'', subcontractors: project.subcontractors||[], architects: project.architects||[], consultants: project.consultants||[] }
+  const initEdit = { ...project, parent_id: project.parent_id||'', address_street: project.address_street||'', address_postal: project.address_postal||'', address_city: project.address_city||'', budget: project.budget||'', subcontractors: project.subcontractors||[], architects: project.architects||[], consultants: project.consultants||[] }
+
+  const childProjects = allProjects.filter(p => p.parent_id === projectId)
+  const parentProject = project.parent_id ? allProjects.find(p => p.id === project.parent_id) : null
+  const [showCreateSub, setShowCreateSub] = useState(false)
+
+  const handleCreateSub = async (form) => {
+    setSaving(true)
+    try {
+      const siblings = allProjects.filter(p => p.parent_id === projectId)
+      const depth = (project.depth || 0) + 1
+      const projectNumber = project.project_number
+        ? project.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
+        : `P-${Date.now().toString().slice(-5)}`
+      await db.createProject({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      setShowCreateSub(false); load()
+    } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
+  }
 
   return (
     <div style={f}>
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake til prosjekter</button>
         {parentProject && (
-          <div style={{ marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', fontSize:'13px', color:'#7c3aed' }}>
-            <span>📂</span>
-            <span style={{ color:'#94a3b8' }}>Underprosjekt av</span>
-            <strong>{parentProject.name}</strong>
-            <span style={{ color:'#94a3b8' }}>#{parentProject.project_number}</span>
+          <div style={{ marginBottom:'8px', fontSize:'13px', color:'#64748b' }}>
+            Overordnet: <button onClick={() => { if (onNavigateDetail) onNavigateDetail(parentProject.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize:'13px', padding:0 }}>{parentProject.name} ({parentProject.project_number})</button>
           </div>
         )}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'16px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f5f3ff' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📄' : '🏗️'}</div>
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📂' : '🏗️'}</div>
             <div>
               <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                 <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
@@ -1090,7 +917,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>+ Underprosjekt</button>
+            <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500', color:'#059669' }}>+ Underprosjekt</button>
             <button onClick={() => setShowEdit(true)} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>✏️ Rediger</button>
             <button onClick={() => setShowDelete(true)} style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
           </div>
@@ -1099,6 +926,29 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
 
       <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+          {/* Underprosjekter-seksjon */}
+          {childProjects.length > 0 && (
+            <div style={card}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>📁 Underprosjekter ({childProjects.length})</h3>
+                <button onClick={() => setShowCreateSub(true)} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {childProjects.map(cp => (
+                  <div key={cp.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer' }}
+                    onClick={() => { if (onNavigateDetail) onNavigateDetail(cp.id) }}>
+                    <div style={{ width:'34px', height:'34px', borderRadius:'8px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>📂</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{cp.name}</div>
+                      {cp.project_number && <div style={{ fontSize:'12px', color:'#94a3b8' }}>#{cp.project_number}</div>}
+                    </div>
+                    <StatusBadge status={cp.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={card}>
             <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
@@ -1108,31 +958,6 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
             </div>
             {project.description && <p style={{ margin:'16px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{project.description}</p>}
           </div>
-
-          {/* Underprosjekter */}
-          {subProjects.length > 0 && (
-            <div style={card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#7c3aed' }}>📂 Underprosjekter ({subProjects.length})</h3>
-                <button onClick={() => setShowCreateSub(true)} style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Nytt</button>
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {subProjects.map(sub => (
-                  <button key={sub.id} onClick={() => onNavigateDetail(sub.id)}
-                    style={{ display:'flex', alignItems:'center', gap:'12px', background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'12px 16px', cursor:'pointer', textAlign:'left', width:'100%', transition:'box-shadow 0.15s' }}
-                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(124,58,237,0.12)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                    <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>📄</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{sub.name}</div>
-                      <div style={{ fontSize:'12px', color:'#94a3b8' }}>#{sub.project_number}{sub.client_name && sub.client_name !== project.client_name ? ` · ${sub.client_name}` : ''}</div>
-                    </div>
-                    <StatusBadge status={sub.status} />
-                    <span style={{ color:'#c4b5fd' }}>›</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div style={card}>
             <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'16px', marginLeft:'-24px', marginRight:'-24px', paddingLeft:'24px' }}>
@@ -1166,8 +991,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail }) {
         </div>
       </div>
 
-      {showEdit && <ProsjektModal title="Rediger prosjekt" initial={initEdit} onSave={handleUpdate} onClose={() => setShowEdit(false)} saving={saving} />}
-      {showCreateSub && <ProsjektModal title={`Nytt underprosjekt av ${project.name}`} parentProject={project} onSave={handleCreateSub} onClose={() => setShowCreateSub(false)} saving={saving} />}
+      {showEdit && <ProsjektModal title="Rediger prosjekt" initial={initEdit} onSave={handleUpdate} onClose={() => setShowEdit(false)} saving={saving} projects={allProjects} />}
+      {showCreateSub && <ProsjektModal title={`Nytt underprosjekt under ${project.name}`} initial={{ ...emptyProsjekt, parent_id: projectId, client_name: project.client_name, client_contact: project.client_contact, client_email: project.client_email, client_phone: project.client_phone }} onSave={handleCreateSub} onClose={() => setShowCreateSub(false)} saving={saving} projects={allProjects} />}
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
@@ -1442,7 +1267,7 @@ function ProsjektfilerPage() {
         <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
           style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '200px' }}>
           <option value="all">Velg prosjekt</option>
-          {projectOptions(projects)}
+          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
         </select>
       </div>
 
@@ -1658,7 +1483,7 @@ function ProsjektfilerPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
                   <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
                     <option value="">Velg prosjekt</option>
-                    {projectOptions(projects)}
+                    {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2052,7 +1877,7 @@ function SjekklistePage({ onNavigateDetail }) {
               </div>
               <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '180px', background: 'white' }}>
                 <option value="all">Alle prosjekter</option>
-                {projectOptions(projects)}
+                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: '160px', background: 'white' }}>
                 {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -2185,7 +2010,7 @@ function SjekklistePage({ onNavigateDetail }) {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
                 <select value={newForm.project_id} onChange={e => setNewForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
                   <option value="">Velg prosjekt</option>
-                  {projectOptions(projects)}
+                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                 </select>
               </div>
               <div>
@@ -2631,7 +2456,7 @@ function AvvikPage() {
           </select>
           <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: '220px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           {(filterStatus !== 'alle' || filterSeverity !== 'alle' || filterProject !== 'alle' || search) && (
             <button onClick={() => { setFilterStatus('alle'); setFilterSeverity('alle'); setFilterProject('alle'); setSearch('') }}
@@ -2766,7 +2591,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
               <option value="">Velg prosjekt...</option>
-              {projectOptions(projects)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
 
@@ -3111,7 +2936,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
               <option value="">Velg prosjekt...</option>
-              {projectOptions(projects)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -3338,7 +3163,7 @@ function HmsPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth:'200px', flex:1 }} />
           <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth:'220px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth:'160px' }}>
             <option value="alle">Alle statuser</option>
@@ -3526,7 +3351,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel / Jobbtype *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Arbeid i høyde – takarbeid" style={hmsInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><input value={ansvarlig} onChange={e=>setAnsvarlig(e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -3686,7 +3511,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="Kort beskrivelse av hendelsen" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Hendelsestype</label><select value={form.hendelsestype} onChange={e=>set('hendelsestype',e.target.value)} style={hmsInp}>{TYPER.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
@@ -3775,7 +3600,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={hmsInp} placeholder="Navn på risikoanalysen" /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
           <div><label style={lbl()}>Ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -3900,7 +3725,7 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Mottak stål – leveranse 14" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Leverandør</label><input value={form.leverandor} onChange={e=>set('leverandor',e.target.value)} placeholder="Firmanavn" style={hmsInp} /></div>
           <div><label style={lbl()}>Ordrenummer</label><input value={form.ordrenummer} onChange={e=>set('ordrenummer',e.target.value)} placeholder="Bestillingsnr." style={hmsInp} /></div>
@@ -4579,7 +4404,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
               <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt</label>
               <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={mInp}>
                 <option value="">Velg prosjekt...</option>
-                {projectOptions(projects)}
+                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
             </div>
           )}
@@ -4682,7 +4507,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 
             <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={mInp}>{Object.keys(MASKIN_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
             {form.status==='På prosjekt' && (
-              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projectOptions(projects)}</select></div>
+              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             )}
             <div>{lbl('Merke')}<input value={form.brand} onChange={e=>set('brand',e.target.value)} placeholder="F.eks. Makita, Hilti, Layher..." style={mInp} /></div>
             <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={mInp} /></div>
@@ -4800,56 +4625,6 @@ function ConfirmProvider({ children }) {
 const useConfirm = () => React.useContext(ConfirmContext)
 // ─── END CONFIRM DIALOG ───────────────────────────────────────────────────────
 
-// ─── ALERT DIALOG (replaces browser alert()) ─────────────────────────────────
-const AlertContext = React.createContext(null)
-
-function AlertProvider({ children }) {
-  const [dialog, setDialog] = React.useState(null)
-  const cbRef = React.useRef(null)
-
-  const showAlert = React.useCallback((opts) => {
-    const options = typeof opts === 'string' ? { message: opts } : opts
-    return new Promise((resolve) => {
-      cbRef.current = resolve
-      setDialog(options)
-    })
-  }, [])
-
-  const close = () => {
-    setDialog(null)
-    const cb = cbRef.current
-    cbRef.current = null
-    if (cb) cb()
-  }
-
-  return (
-    <AlertContext.Provider value={showAlert}>
-      {children}
-      {dialog && (
-        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={close} />
-          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
-            <div style={{ padding:'28px 24px 0', textAlign:'center' }}>
-              <div style={{ fontSize:'44px', marginBottom:'14px' }}>{dialog.emoji || (dialog.type === 'error' ? '❌' : dialog.type === 'warning' ? '⚠️' : '✅')}</div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{dialog.message}</h3>
-              {dialog.subMessage && <p style={{ margin:'0', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{dialog.subMessage}</p>}
-            </div>
-            <div style={{ display:'flex', justifyContent:'center', padding:'24px' }}>
-              <button onClick={close}
-                style={{ padding:'11px 36px', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700', color:'white', background: dialog.type === 'error' ? '#dc2626' : '#059669' }}>
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </AlertContext.Provider>
-  )
-}
-
-const useAlert = () => React.useContext(AlertContext)
-// ─── END ALERT DIALOG ─────────────────────────────────────────────────────────
-
 // Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
 async function notifyProjectManager(projectId, title, message, type, linkPage) {
   if (!projectId) return
@@ -4891,7 +4666,7 @@ function NotifBell({ onNavigate }) {
               {notifs.length === 0 ? (
                 <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>Ingen varsler ennå</div>
               ) : notifs.map(n => (
-                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page, n.link_id) }}
+                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page) }}
                   style={{ padding: '12px 18px', borderBottom: '1px solid #f8fafc', background: n.read ? 'white' : '#f0fdf4', cursor: 'pointer', display: 'flex', gap: '10px', alignItems: 'flex-start' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = n.read ? 'white' : '#f0fdf4'}>
                   <span style={{ fontSize: '18px', flexShrink: 0 }}>{typeIcon(n.type)}</span>
@@ -5257,47 +5032,6 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   )
 }
 
-// ── Intro Text with Templates ────────────────────────────────────────────────
-function IntroTextWithTemplates({ value, onChange, userId, inputStyle }) {
-  const [templates, setTemplates] = useState([])
-  const [showSaveMal, setShowSaveMal] = useState(false)
-  const [malName, setMalName] = useState('')
-  useEffect(() => {
-    supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name').then(({data}) => setTemplates(data||[])).catch(()=>{})
-  }, [])
-  const saveMal = async () => {
-    if (!malName.trim() || !value.trim()) return
-    await supabase.from('text_templates').insert({ name: malName.trim(), type: 'tilbud_intro', content: value, created_by: userId })
-    const {data} = await supabase.from('text_templates').select('*').eq('type','tilbud_intro').order('name')
-    setTemplates(data||[])
-    setMalName(''); setShowSaveMal(false)
-  }
-  const deleteMal = async (id) => {
-    await supabase.from('text_templates').delete().eq('id', id)
-    setTemplates(t => t.filter(x => x.id !== id))
-  }
-  return <>
-    <div style={{ display:'flex', gap:'6px', marginBottom:'6px', flexWrap:'wrap' }}>
-      {templates.map(t => (
-        <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer' }}>
-          <span onClick={() => onChange(t.content)} style={{ color:'#059669', fontWeight:'600' }}>{t.name}</span>
-          <button onClick={() => deleteMal(t.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'11px', padding:'0 2px', lineHeight:1 }}>×</button>
-        </span>
-      ))}
-      {!showSaveMal ? (
-        <button onClick={() => setShowSaveMal(true)} style={{ background:'#f8fafc', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', cursor:'pointer', color:'#94a3b8' }}>💾 Lagre som mal</button>
-      ) : (
-        <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
-          <input value={malName} onChange={e=>setMalName(e.target.value)} placeholder="Malnavn..." style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', width:'120px', outline:'none' }} onKeyDown={e=>e.key==='Enter'&&saveMal()} />
-          <button onClick={saveMal} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', cursor:'pointer', fontWeight:'600' }}>Lagre</button>
-          <button onClick={() => setShowSaveMal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
-        </span>
-      )}
-    </div>
-    <textarea value={value} onChange={e=>onChange(e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...inputStyle, resize:'none' }} />
-  </>
-}
-
 function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit = !!initial
   const [step, setStep] = useState(1) // 1=info, 2=kapitler
@@ -5317,13 +5051,13 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     global_markup: initial?.global_markup || 0,
   })
   const [chapters, setChapters] = useState(initial?.chapters || [
-    { id: Date.now(), title: 'Generelt', description: '', markup: '', posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }
+    { id: Date.now(), title: 'Generelt', description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }
   ])
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   // Chapter helpers
-  const addChapter = () => setChapters(c => [...c, { id: Date.now(), title: `Kapittel ${c.length+1}`, description: '', markup: '', posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }])
+  const addChapter = () => setChapters(c => [...c, { id: Date.now(), title: `Kapittel ${c.length+1}`, description: '', markup: 0, posts: [{ id: Date.now()+1, description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] }])
   const removeChapter = (id) => setChapters(c => c.filter(x => x.id !== id))
   const updateChapter = (id, f, v) => setChapters(c => c.map(x => x.id === id ? { ...x, [f]: v } : x))
   const addPost = (chId) => setChapters(c => c.map(x => x.id === chId ? { ...x, posts: [...x.posts, { id: Date.now(), description: '', qty: 1, unit: 'stk', unitPriceWork: 0, unitPriceMaterial: 0 }] } : x))
@@ -5379,7 +5113,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tilbudstittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbud betongarbeider Blokk B" style={qInp} /></div>
               <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={qInp} /></div>
@@ -5389,11 +5123,8 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={qInp} /></div>
               <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={qInp} /></div>
               <div>{lbl('Leveringstid')}<input value={form.delivery_time} onChange={e=>set('delivery_time',e.target.value)} placeholder="F.eks. 3–4 uker" style={qInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" max="100" style={qInp} /></div>
-              <div style={{ gridColumn:'1/-1' }}>
-                {lbl('Innledende tekst')}
-                <IntroTextWithTemplates value={form.intro_text} onChange={v => set('intro_text', v)} userId={user?.id} inputStyle={qInp} />
-              </div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={qInp} /></div>
+              <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Takk for henvendelse. Vi tillater oss å fremme følgende tilbud..." style={{ ...qInp, resize:'none' }} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Avsluttende tekst')}<textarea value={form.outro_text} onChange={e=>set('outro_text',e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} /></div>
             </div>
           )}
@@ -5409,7 +5140,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                     <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
                       <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
                       <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px', color: ch.markup ? '#0f172a' : '#94a3b8' }} title="Påslag %" />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px' }} title="Påslag %" />
                       <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
                       {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
                     </div>
@@ -5430,16 +5161,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                               <tr key={p.id}>
                                 <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv arbeid/materiale" style={{ ...qInp, minWidth:'180px' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right' }} /></td>
-                                <td style={{ padding:'6px 4px' }}>
-                                  <select value={['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke'].includes(p.unit) ? p.unit : (p.unit ? '_custom' : '')} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...qInp, width:'75px', appearance:'auto' }}>
-                                    <option value="">Velg</option>
-                                    {['stk','m²','m³','lm','m','rs','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
-                                    <option value="_custom">Annet…</option>
-                                  </select>
-                                  {!['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke',''].includes(p.unit) && (
-                                    <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...qInp, width:'75px', marginTop:'4px' }} />
-                                  )}
-                                </td>
+                                <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...qInp, width:'60px' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...qInp, width:'110px', textAlign:'right' }} /></td>
                                 <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(lineSum)}</td>
@@ -5637,20 +5359,13 @@ function GodkjenningsPage() {
       await supabase.from('approval_tokens').update({ status: 'approved', signed_name: signedName.trim(), approved_at: now }).eq('id', tokenData.id)
       await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.approvedStatus, accepted_at: now, updated_at: now }).eq('id', tokenData.record_id)
 
-      // Add activity log for orders
-      if (tokenData.module === 'order') {
-        const { data: orderRec } = await supabase.from('orders').select('activity_log').eq('id', tokenData.record_id).single()
-        const log = [...(orderRec?.activity_log || []), { action: `Bekreftet av ${signedName.trim()}`, by: tokenData.recipient_email || signedName.trim(), at: now }]
-        await supabase.from('orders').update({ activity_log: log, confirmed_at: now }).eq('id', tokenData.record_id)
-      }
-
       if (tokenData.created_by) {
         await supabase.from('notifications').insert({
           user_id: tokenData.created_by,
           title: cfg.notifTitle(record),
           message: `Signert av ${signedName.trim()}${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
           type: 'success',
-          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module === 'order' ? 'ordre' : tokenData.module === 'change_order' ? 'endringsmelding' : tokenData.module,
+          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
           link_id: tokenData.record_id,
         })
       }
@@ -5668,20 +5383,13 @@ function GodkjenningsPage() {
       await supabase.from('approval_tokens').update({ status: 'rejected', signed_name: signedName.trim()||null, reject_comment: rejectComment.trim()||null, rejected_at: now }).eq('id', tokenData.id)
       await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.rejectedStatus, updated_at: now }).eq('id', tokenData.record_id)
 
-      // Add activity log for orders
-      if (tokenData.module === 'order') {
-        const { data: orderRec } = await supabase.from('orders').select('activity_log').eq('id', tokenData.record_id).single()
-        const log = [...(orderRec?.activity_log || []), { action: `Avslått av ${signedName.trim() || 'kunde'}${rejectComment.trim() ? ': ' + rejectComment.trim() : ''}`, by: tokenData.recipient_email || 'kunde', at: now }]
-        await supabase.from('orders').update({ activity_log: log }).eq('id', tokenData.record_id)
-      }
-
       if (tokenData.created_by) {
         await supabase.from('notifications').insert({
           user_id: tokenData.created_by,
           title: cfg.notifTitleReject(record),
           message: rejectComment.trim() || `Avslått av mottaker${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
           type: 'warning',
-          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module === 'order' ? 'ordre' : tokenData.module === 'change_order' ? 'endringsmelding' : tokenData.module,
+          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
           link_id: tokenData.record_id,
         })
       }
@@ -6097,7 +5805,6 @@ const TENDER_STATUS = {
   'Under vurdering': { bg: '#fffbeb', color: '#d97706', border: '#fde68a', emoji: '🔍' },
   'Tildelt':         { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   'Avslått':         { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
-  'Kansellert':      { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', emoji: '🚫' },
 }
 
 const UE_STATUS = {
@@ -6134,7 +5841,6 @@ function AnbudsPage() {
   const { user } = useAuth()
   const [tenders, setTenders] = useState([])
   const [projects, setProjects] = useState([])
-  const [allUEs, setAllUEs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('alle')
   const [filterType, setFilterType] = useState('alle')
@@ -6142,38 +5848,14 @@ function AnbudsPage() {
   const [showNew, setShowNew] = useState(false)
   const [newType, setNewType] = useState(null)
   const [selected, setSelected] = useState(null)
-  const [activeTab, setActiveTab] = useState('oversikt')
-  const [forespSearch, setForespSearch] = useState('')
-  const [forespStatusFilter, setForespStatusFilter] = useState('alle')
-  const [leverandorSearch, setLeverandorSearch] = useState('')
-  const [historikkSearch, setHistorikkSearch] = useState('')
-  const [historikkTender, setHistorikkTender] = useState('alle')
-  const [statistikkPeriod, setStatistikkPeriod] = useState('all')
 
   const load = async () => {
     try {
-      const [t, p, ueData] = await Promise.all([
+      const [t, p] = await Promise.all([
         supabase.from('tenders').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data||[]),
-        supabase.from('tender_ues').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
+        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
       ])
-      setTenders(t); setProjects(p); setAllUEs(ueData)
-
-      // Frist-varsling
-      if (user?.id) {
-        const today = new Date(); today.setHours(0,0,0,0)
-        for (const tender of t) {
-          if (!tender.deadline || tender.status === 'Tildelt' || tender.status === 'Avslått' || tender.status === 'Kansellert') continue
-          const deadlineDate = new Date(tender.deadline); deadlineDate.setHours(0,0,0,0)
-          const daysLeft = Math.ceil((deadlineDate - today) / (1000*60*60*24))
-          if (daysLeft === 3 || daysLeft === 1) {
-            const { data: existing } = await supabase.from('notifications').select('id').eq('user_id', user.id).eq('link_id', tender.id).ilike('title', `%${daysLeft} dag%`).gte('created_at', today.toISOString()).limit(1)
-            if (!existing || existing.length === 0) {
-              await supabase.from('notifications').insert({ user_id: user.id, title: `⏰ Anbudsfrist om ${daysLeft} dag${daysLeft>1?'er':''}: ${tender.title}`, message: `${tender.tender_number} har frist ${tender.deadline}.`, type: daysLeft === 1 ? 'warning' : 'info', link_page: 'anbudsmodul', link_id: tender.id })
-            }
-          }
-        }
-      }
+      setTenders(t); setProjects(p)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -6191,479 +5873,101 @@ function AnbudsPage() {
   const tildelt = tenders.filter(t => t.status === 'Tildelt')
   const totalTildelt = tildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
 
-  // UE-register helpers
-  const ueRegister = React.useMemo(() => {
-    const map = {}
-    allUEs.forEach(ue => {
-      const key = ue.email?.toLowerCase()
-      if (!key) return
-      if (!map[key]) map[key] = { company_name: ue.company_name, contact_name: ue.contact_name, email: ue.email, tenders: 0, awarded: 0, totalAmount: 0, pricedCount: 0 }
-      map[key].tenders++
-      if (ue.status === 'godkjent') map[key].awarded++
-      if (ue.total_amount) { map[key].totalAmount += ue.total_amount; map[key].pricedCount++ }
-      // Keep latest name
-      if (ue.company_name) map[key].company_name = ue.company_name
-      if (ue.contact_name) map[key].contact_name = ue.contact_name
-    })
-    return Object.values(map).sort((a,b) => b.tenders - a.tenders)
-  }, [allUEs])
-
-  // Historikk - collect activity logs from all tenders
-  const historikk = React.useMemo(() => {
-    const logs = []
-    tenders.forEach(t => {
-      (t.activity_log || []).forEach(entry => {
-        logs.push({ ...entry, tender: t.title, tender_number: t.tender_number, tender_id: t.id })
-      })
-    })
-    return logs.sort((a,b) => new Date(b.at) - new Date(a.at))
-  }, [tenders])
-
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
 
   if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
-  const tabs = [
-    { id:'oversikt', label:'Oversikt', icon:'📊' },
-    { id:'foresporsel', label:'Forespørsler', icon:'📋' },
-    { id:'leverandorer', label:'Leverandører', icon:'👥' },
-    { id:'statistikk', label:'Statistikk', icon:'📈' },
-    { id:'historikk', label:'Historikk', icon:'🕐' },
-  ]
-
-  // Render a tender row (shared between tabs)
-  const renderTenderRow = (t) => {
-    const cfg = TENDER_STATUS[t.status]
-    const proj = projects.find(p=>p.id===t.project_id)
-    const { grandTotal } = calcTender(t.chapters||[], t.global_markup)
-    const isIncoming = t.type === 'incoming'
-    const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
-    return (
-      <div key={t.id} onClick={()=>setSelected(t)}
-        style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
-        onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-        <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
-            <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
-            <TenderStatusBadge status={t.status} />
-          </div>
-          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-            {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
-            {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-            {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d)`:''}</span>}
-          </div>
-        </div>
-        <div style={{ textAlign:'right', flexShrink:0 }}>
-          <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
-          <div style={{ fontSize:'11px', color:'#94a3b8' }}>eks. mva</div>
-        </div>
-        <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
-      </div>
-    )
-  }
-
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>Anbudsmodul</h1>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbudsportal</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>
           </div>
           <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Fra byggherre</button>
-            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📤 Til underentreprenør</button>
+            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Ny forespørsel</button>
+            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📤 Send til UE</button>
           </div>
-        </div>
-        {/* Tabs */}
-        <div style={{ display:'flex', gap:'4px' }}>
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              style={{ padding:'8px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab===tab.id ? '600' : '400', background: activeTab===tab.id ? '#ecfdf5' : 'transparent', color: activeTab===tab.id ? '#059669' : '#64748b', display:'flex', alignItems:'center', gap:'6px' }}>
-              <span style={{ fontSize:'14px' }}>{tab.icon}</span> {tab.label}
-            </button>
-          ))}
         </div>
       </div>
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
-
-        {/* ═══ TAB: OVERSIKT ═══ */}
-        {activeTab === 'oversikt' && (<>
-          {/* Stats */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
-            {[
-              { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
-              { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
-              { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
-            ].map(s => (
-              <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
-                style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-                <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
-                <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
-                <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
-              </button>
-            ))}
-            <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
-              <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
-              <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
-              <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
-            </div>
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+          {[
+            { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
+            { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
+            { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
+          ].map(s => (
+            <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
+              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
+              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
+            </button>
+          ))}
+          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+            <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
+            <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
+            <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
           </div>
-          {/* Filters */}
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
-              <option value="alle">Alle statuser</option>
-              {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-            {(search||filterStatus!=='alle'||filterType!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
-            <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} anbud</span>
+        </div>
+
+        {/* Filters */}
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          {(search||filterStatus!=='alle'||filterType!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} anbud</span>
+        </div>
+
+        {/* List */}
+        {filtered.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>📑</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen anbud funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{tenders.length===0?'Opprett ditt første anbud.':'Prøv å endre søk eller filter.'}</p>
           </div>
-          {/* List */}
-          {filtered.length === 0 ? (
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-              <div style={{ fontSize:'40px', marginBottom:'12px' }}>📑</div>
-              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen anbud funnet</h3>
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{tenders.length===0?'Opprett ditt første anbud.':'Prøv å endre søk eller filter.'}</p>
-            </div>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {filtered.map(renderTenderRow)}
-            </div>
-          )}
-        </>)}
-
-        {/* ═══ TAB: FORESPØRSLER ═══ */}
-        {activeTab === 'foresporsel' && (<>
-          {/* Search and filter */}
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-            <input value={forespSearch} onChange={e=>setForespSearch(e.target.value)} placeholder="🔍  Søk forespørsler..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
-            <select value={forespStatusFilter} onChange={e=>setForespStatusFilter(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
-              <option value="alle">Alle statuser</option>
-              {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-            {(forespSearch||forespStatusFilter!=='alle') && <button onClick={()=>{setForespSearch('');setForespStatusFilter('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
-          </div>
-
-          {/* Fra byggherre */}
-          {(() => {
-            const filteredIncoming = incoming.filter(t => {
-              if (forespStatusFilter !== 'alle' && t.status !== forespStatusFilter) return false
-              if (forespSearch && ![t.title, t.tender_number, t.customer_name].some(v => v?.toLowerCase().includes(forespSearch.toLowerCase()))) return false
-              return true
-            })
-            return (
-              <div>
-                <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#7c3aed', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📥 Fra byggherre <span style={{ background:'#f5f3ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #ddd6fe' }}>{filteredIncoming.length}</span></h2>
-                {filteredIncoming.length === 0 ? (
-                  <div style={{ background:'#faf5ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #e9d5ff' }}>
-                    <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{incoming.length === 0 ? 'Ingen innkommende forespørsler' : 'Ingen treff med gjeldende filter'}</p>
-                  </div>
-                ) : (
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                    {filteredIncoming.map(t => {
-                      const fagCount = (t.fagfordeling||[]).length
-                      const ueSent = (t.fagfordeling||[]).filter(f => f.ueOpprettet).length
-                      return (
-                        <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #7c3aed' }}
-                          onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                          <div style={{ flex:1 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
-                              <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
-                              <TenderStatusBadge status={t.status} />
-                            </div>
-                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
-                              {t.customer_name && <span>👤 {t.customer_name}</span>}
-                              {t.deadline && <span>⏰ Frist {t.deadline}</span>}
-                              {fagCount > 0 && <span style={{ color:'#7c3aed' }}>🔀 {fagCount} fag fordelt{ueSent > 0 ? ` · ${ueSent} sendt til UE` : ''}</span>}
-                            </div>
-                          </div>
-                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
-                          <span style={{ color:'#94a3b8' }}>›</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-
-          {/* Til UE */}
-          {(() => {
-            const filteredOutgoing = outgoing.filter(t => {
-              if (forespStatusFilter !== 'alle' && t.status !== forespStatusFilter) return false
-              if (forespSearch && ![t.title, t.tender_number, t.customer_name].some(v => v?.toLowerCase().includes(forespSearch.toLowerCase()))) return false
-              return true
-            })
-            return (
-              <div>
-                <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#2563eb', margin:'0 0 12px', display:'flex', alignItems:'center', gap:'8px' }}>📤 Til underentreprenør <span style={{ background:'#eff6ff', padding:'2px 10px', borderRadius:'999px', fontSize:'12px', border:'1px solid #bfdbfe' }}>{filteredOutgoing.length}</span></h2>
-                {filteredOutgoing.length === 0 ? (
-                  <div style={{ background:'#eff6ff', borderRadius:'12px', padding:'24px', textAlign:'center', border:'1px solid #bfdbfe' }}>
-                    <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{outgoing.length === 0 ? 'Ingen utgående anbud' : 'Ingen treff med gjeldende filter'}</p>
-                  </div>
-                ) : (
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                    {filteredOutgoing.map(t => {
-                      const ueCount = allUEs.filter(u => u.tender_id === t.id).length
-                      const pricedCount = allUEs.filter(u => u.tender_id === t.id && u.status === 'Priset').length
-                      return (
-                        <div key={t.id} onClick={()=>setSelected(t)} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', borderLeft:'3px solid #2563eb' }}
-                          onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                          <div style={{ flex:1 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{t.title}</span>
-                              <span style={{ fontSize:'11px', color:'#94a3b8' }}>{t.tender_number}</span>
-                              <TenderStatusBadge status={t.status} />
-                            </div>
-                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b' }}>
-                              {t.deadline && <span>⏰ Frist {t.deadline}</span>}
-                              {ueCount > 0 && <span style={{ color:'#2563eb' }}>🏢 {ueCount} UE invitert{pricedCount > 0 ? ` · ${pricedCount} priset` : ''}</span>}
-                              {t.awarded_ue && <span style={{ color:'#16a34a', fontWeight:'600' }}>🏆 {t.awarded_ue}</span>}
-                            </div>
-                          </div>
-                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fmtT(t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal)}</div>
-                          <span style={{ color:'#94a3b8' }}>›</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-        </>)}
-
-        {/* ═══ TAB: LEVERANDØRER ═══ */}
-        {activeTab === 'leverandorer' && (<>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>👥 UE-register ({ueRegister.length} leverandører)</h2>
-            <div style={{ position:'relative', minWidth:'240px' }}>
-              <input value={leverandorSearch} onChange={e=>setLeverandorSearch(e.target.value)} placeholder="🔍  Søk firma, kontakt, e-post..." style={{ ...tInp, width:'100%' }} />
-            </div>
-          </div>
-          {(() => {
-            const filteredUEs = ueRegister.filter(ue => {
-              if (!leverandorSearch) return true
-              const s = leverandorSearch.toLowerCase()
-              return ue.company_name?.toLowerCase().includes(s) || ue.contact_name?.toLowerCase().includes(s) || ue.email?.toLowerCase().includes(s)
-            })
-            return filteredUEs.length === 0 ? (
-              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-                <div style={{ fontSize:'40px', marginBottom:'12px' }}>👥</div>
-                <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{ueRegister.length === 0 ? 'Ingen leverandører ennå' : 'Ingen treff'}</h3>
-                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{ueRegister.length === 0 ? 'UE-er dukker opp her etter at du har invitert dem til et anbud.' : 'Prøv et annet søkeord.'}</p>
-              </div>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {filteredUEs.map((ue, i) => (
-                  <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'14px' }}>
-                    <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🏢</div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
-                      <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name ? `${ue.contact_name} · ` : ''}{ue.email}</div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(t => {
+              const cfg = TENDER_STATUS[t.status]
+              const proj = projects.find(p=>p.id===t.project_id)
+              const { grandTotal } = calcTender(t.chapters||[], t.global_markup)
+              const isIncoming = t.type === 'incoming'
+              const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
+              return (
+                <div key={t.id} onClick={()=>setSelected(t)}
+                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
+                      <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+                      <TenderStatusBadge status={t.status} />
+                      <span style={{ background:isIncoming?'#f5f3ff':'#eff6ff', color:isIncoming?'#7c3aed':'#2563eb', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:`1px solid ${isIncoming?'#ddd6fe':'#bfdbfe'}` }}>{isIncoming?'Innkommende':'Utgående UE'}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'16px', flexShrink:0 }}>
-                      <div style={{ textAlign:'center' }}>
-                        <div style={{ fontWeight:'700', fontSize:'16px', color:'#0f172a' }}>{ue.tenders}</div>
-                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Anbud</div>
-                      </div>
-                      <div style={{ textAlign:'center' }}>
-                        <div style={{ fontWeight:'700', fontSize:'16px', color:'#16a34a' }}>{ue.awarded}</div>
-                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Tildelt</div>
-                      </div>
-                      {ue.pricedCount > 0 && (
-                        <div style={{ textAlign:'center' }}>
-                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#2563eb' }}>{fmtT(ue.totalAmount / ue.pricedCount)}</div>
-                          <div style={{ fontSize:'10px', color:'#94a3b8' }}>Snitt pris</div>
-                        </div>
-                      )}
+                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                      {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
+                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ Frist {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d igjen)`:''}</span>}
                     </div>
                   </div>
-                ))}
-              </div>
-            )
-          })()}
-        </>)}
-
-        {/* ═══ TAB: STATISTIKK ═══ */}
-        {activeTab === 'statistikk' && (<>
-          {/* Period filter */}
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'10px' }}>
-            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>📈 Statistikk</h2>
-            <div style={{ display:'flex', gap:'4px' }}>
-              {[['all','Totalt'],['365','Siste 12 mnd'],['90','Siste 3 mnd'],['30','Siste 30 dager']].map(([v,l]) => (
-                <button key={v} onClick={()=>setStatistikkPeriod(v)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight: statistikkPeriod===v?'600':'400', background: statistikkPeriod===v?'#ecfdf5':'transparent', color: statistikkPeriod===v?'#059669':'#64748b' }}>{l}</button>
-              ))}
-            </div>
-          </div>
-          {(() => {
-            const cutoff = statistikkPeriod === 'all' ? null : new Date(Date.now() - parseInt(statistikkPeriod)*24*60*60*1000)
-            const periodTenders = cutoff ? tenders.filter(t => new Date(t.created_at) >= cutoff) : tenders
-            const periodTildelt = periodTenders.filter(t => t.status === 'Tildelt')
-            const periodTotalTildelt = periodTildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
-            const periodActive = periodTenders.filter(t => !['Tildelt','Avslått','Kansellert'].includes(t.status))
-
-            // Monthly breakdown for bar chart (last 6 months)
-            const months = []
-            for (let i = 5; i >= 0; i--) {
-              const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1)
-              const end = new Date(d); end.setMonth(end.getMonth() + 1)
-              const label = d.toLocaleDateString('nb-NO', { month:'short', year:'2-digit' })
-              const count = tenders.filter(t => { const c = new Date(t.created_at); return c >= d && c < end }).length
-              const tildeltCount = tenders.filter(t => t.status === 'Tildelt' && new Date(t.created_at) >= d && new Date(t.created_at) < end).length
-              months.push({ label, count, tildeltCount })
-            }
-            const maxCount = Math.max(...months.map(m => m.count), 1)
-
-            return (<>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px' }}>
-                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                  <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Tildelingsrate</div>
-                  <div style={{ fontSize:'28px', fontWeight:'800', color:'#059669' }}>{periodTenders.length > 0 ? Math.round(periodTildelt.length / periodTenders.length * 100) : 0}%</div>
-                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>{periodTildelt.length} av {periodTenders.length} anbud tildelt</div>
-                </div>
-                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                  <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Gjennomsnittlig verdi</div>
-                  <div style={{ fontSize:'28px', fontWeight:'800', color:'#2563eb' }}>{fmtT(periodTildelt.length > 0 ? periodTotalTildelt / periodTildelt.length : 0)}</div>
-                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>per tildelt anbud</div>
-                </div>
-                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                  <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>Aktive forespørsler</div>
-                  <div style={{ fontSize:'28px', fontWeight:'800', color:'#7c3aed' }}>{periodActive.length}</div>
-                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>under behandling</div>
-                </div>
-              </div>
-
-              {/* Monthly bar chart */}
-              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📊 Anbud per måned (siste 6 måneder)</h3>
-                <div style={{ display:'flex', alignItems:'flex-end', gap:'8px', height:'140px' }}>
-                  {months.map((m, i) => (
-                    <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'4px', height:'100%', justifyContent:'flex-end' }}>
-                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'2px', width:'100%' }}>
-                        {m.tildeltCount > 0 && <div style={{ fontSize:'10px', fontWeight:'700', color:'#16a34a' }}>{m.tildeltCount}</div>}
-                        <div style={{ fontSize:'10px', fontWeight:'600', color:'#0f172a' }}>{m.count}</div>
-                      </div>
-                      <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:'1px' }}>
-                        <div style={{ width:'100%', height:`${Math.max((m.count / maxCount) * 100, m.count > 0 ? 8 : 0)}px`, background:'#bfdbfe', borderRadius:'4px 4px 0 0', transition:'height 0.3s' }} />
-                        {m.tildeltCount > 0 && <div style={{ width:'100%', height:`${Math.max((m.tildeltCount / maxCount) * 100, 4)}px`, background:'#059669', borderRadius:'0 0 4px 4px', transition:'height 0.3s' }} />}
-                      </div>
-                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>{m.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display:'flex', gap:'16px', justifyContent:'center', marginTop:'12px' }}>
-                  <span style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'11px', color:'#64748b' }}><span style={{ width:'10px', height:'10px', borderRadius:'2px', background:'#bfdbfe' }} /> Totalt</span>
-                  <span style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'11px', color:'#64748b' }}><span style={{ width:'10px', height:'10px', borderRadius:'2px', background:'#059669' }} /> Tildelt</span>
-                </div>
-              </div>
-
-              {/* Status-fordeling */}
-              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Statusfordeling</h3>
-                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                  {Object.keys(TENDER_STATUS).map(status => {
-                    const count = periodTenders.filter(t => t.status === status).length
-                    const pct = periodTenders.length > 0 ? (count / periodTenders.length * 100) : 0
-                    return (
-                      <div key={status} style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-                        <span style={{ fontSize:'13px', width:'120px', color:'#475569' }}>{TENDER_STATUS[status].emoji} {status}</span>
-                        <div style={{ flex:1, height:'24px', background:'#f8fafc', borderRadius:'6px', overflow:'hidden' }}>
-                          <div style={{ height:'100%', width:`${pct}%`, background: TENDER_STATUS[status].color, borderRadius:'6px', minWidth: count > 0 ? '2px' : '0', transition:'width 0.3s' }} />
-                        </div>
-                        <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', width:'30px', textAlign:'right' }}>{count}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Topp UE-er */}
-              {ueRegister.filter(u=>u.awarded>0).length > 0 && (
-                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                  <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏆 Topp leverandører (mest tildelt)</h3>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                    {ueRegister.filter(u=>u.awarded>0).sort((a,b)=>b.awarded-a.awarded).slice(0,5).map((ue,i) => (
-                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px' }}>
-                        <span style={{ fontWeight:'800', fontSize:'16px', color:'#059669', width:'24px' }}>#{i+1}</span>
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{ue.company_name}</div>
-                          <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.email}</div>
-                        </div>
-                        <div style={{ textAlign:'right' }}>
-                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#16a34a' }}>{ue.awarded} tildelt</div>
-                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>av {ue.tenders} anbud</div>
-                        </div>
-                      </div>
-                    ))}
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
                   </div>
+                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
                 </div>
-              )}
-            </>)
-          })()}
-        </>)}
-
-        {/* ═══ TAB: HISTORIKK ═══ */}
-        {activeTab === 'historikk' && (<>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-            <h2 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0 }}>🕐 Aktivitetslogg</h2>
+              )
+            })}
           </div>
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-            <input value={historikkSearch} onChange={e=>setHistorikkSearch(e.target.value)} placeholder="🔍  Søk i hendelser..." style={{ ...tInp, maxWidth:'220px', flex:1 }} />
-            <select value={historikkTender} onChange={e=>setHistorikkTender(e.target.value)} style={{ ...tInp, maxWidth:'220px' }}>
-              <option value="alle">Alle anbud</option>
-              {tenders.map(t=><option key={t.id} value={t.id}>{t.tender_number} — {t.title}</option>)}
-            </select>
-            {(historikkSearch||historikkTender!=='alle') && <button onClick={()=>{setHistorikkSearch('');setHistorikkTender('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
-          </div>
-          {(() => {
-            const filteredHist = historikk.filter(entry => {
-              if (historikkTender !== 'alle' && entry.tender_id !== historikkTender) return false
-              if (historikkSearch) {
-                const s = historikkSearch.toLowerCase()
-                if (![entry.action, entry.tender, entry.tender_number, entry.by].some(v => v?.toLowerCase().includes(s))) return false
-              }
-              return true
-            })
-            return filteredHist.length === 0 ? (
-              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-                <div style={{ fontSize:'40px', marginBottom:'12px' }}>🕐</div>
-                <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{historikk.length === 0 ? 'Ingen aktivitet ennå' : 'Ingen treff'}</h3>
-                <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{historikk.length === 0 ? 'Hendelser vises her etter hvert som anbud opprettes og behandles.' : 'Prøv å endre søk eller filter.'}</p>
-              </div>
-            ) : (
-              <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px' }}>
-                <div style={{ fontSize:'12px', color:'#94a3b8', marginBottom:'12px' }}>{filteredHist.length} hendelser{filteredHist.length !== historikk.length ? ` (av ${historikk.length} totalt)` : ''}</div>
-                <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
-                  {filteredHist.slice(0, 100).map((entry, i) => {
-                    // Determine dot color by action type
-                    const dotColor = entry.action?.includes('Tildelt') ? '#16a34a' : entry.action?.includes('Pris mottatt') || entry.action?.includes('priset') ? '#2563eb' : entry.action?.includes('Invitert') || entry.action?.includes('sendt') ? '#d97706' : entry.action?.includes('Kansell') || entry.action?.includes('Slett') ? '#dc2626' : '#059669'
-                    return (
-                      <div key={i} style={{ display:'flex', gap:'12px', padding:'10px 0', borderBottom: i < filteredHist.length - 1 ? '1px solid #f8fafc' : 'none' }}>
-                        <div style={{ width:'8px', height:'8px', borderRadius:'50%', background: dotColor, marginTop:'6px', flexShrink:0 }} />
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontSize:'13px', color:'#0f172a' }}>{entry.action}</div>
-                          <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#94a3b8', marginTop:'2px', flexWrap:'wrap' }}>
-                            <span style={{ cursor:'pointer', color:'#2563eb' }} onClick={()=>{setHistorikkTender(entry.tender_id); setHistorikkSearch('')}}>{entry.tender} ({entry.tender_number})</span>
-                            {entry.by && <span>· {entry.by}</span>}
-                            <span>· {new Date(entry.at).toLocaleDateString('nb-NO')} {new Date(entry.at).toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' })}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                {filteredHist.length > 100 && <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'12px', color:'#94a3b8' }}>Viser de 100 nyeste av {filteredHist.length} hendelser</p>}
-              </div>
-            )
-          })()}
-        </>)}
+        )}
       </div>
       {showNew && <AnbudEditorModal type={newType} projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
     </div>
@@ -6672,129 +5976,19 @@ function AnbudsPage() {
 
 function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const confirm = useConfirm()
-  const showAlert = useAlert()
   const [t, setT] = useState(init)
   const [ues, setUes] = useState([])
   const [editing, setEditing] = useState(false)
   const [showInviteUE, setShowInviteUE] = useState(false)
   const [showAward, setShowAward] = useState(false)
-  const [sendingReminder, setSendingReminder] = useState(null)
-  const [showFagfordeling, setShowFagfordeling] = useState(false)
-  const [fagfordeling, setFagfordeling] = useState(t.fagfordeling || [])
-  const [savingFag, setSavingFag] = useState(false)
-  const [childTenders, setChildTenders] = useState([])
-  const [childUEs, setChildUEs] = useState({})
-  const [showComparison, setShowComparison] = useState(false)
   const cfg = TENDER_STATUS[t.status]
   const proj = projects.find(p=>p.id===t.project_id)
   const { totalCost, grandTotal } = calcTender(t.chapters||[], t.global_markup)
   const isIncoming = t.type === 'incoming'
 
-  const FAG_OPTIONS = [
-    { id:'tomrer', name:'Tømrer', emoji:'🪚' },
-    { id:'murer', name:'Murer', emoji:'🧱' },
-    { id:'betong', name:'Betongarbeider', emoji:'🏗️' },
-    { id:'maler', name:'Maler', emoji:'🎨' },
-    { id:'rorleger', name:'Rørlegger (VVS)', emoji:'🔧' },
-    { id:'elektriker', name:'Elektriker', emoji:'⚡' },
-    { id:'blikkenslager', name:'Blikkenslager', emoji:'🔩' },
-    { id:'grunnarbeid', name:'Grunnarbeid', emoji:'🪨' },
-    { id:'rigg', name:'Rigg og drift', emoji:'🚧' },
-    { id:'ventilasjon', name:'Ventilasjon', emoji:'💨' },
-    { id:'tak', name:'Taktekker', emoji:'🏠' },
-    { id:'annet', name:'Annet', emoji:'📦' },
-  ]
-
-  const addFag = (fagId) => {
-    if (fagfordeling.find(f => f.fagId === fagId)) return
-    const fag = FAG_OPTIONS.find(f => f.id === fagId)
-    setFagfordeling(prev => [...prev, { fagId, name: fag?.name || fagId, emoji: fag?.emoji || '📦', type: 'ue', beskrivelse: '', poster: [] }])
-  }
-
-  const updateFag = (fagId, field, value) => setFagfordeling(prev => prev.map(f => f.fagId === fagId ? { ...f, [field]: value } : f))
-  const removeFag = (fagId) => setFagfordeling(prev => prev.filter(f => f.fagId !== fagId))
-
-  const saveFagfordeling = async () => {
-    setSavingFag(true)
-    try {
-      const log = [...(t.activity_log || []), { action: `Fagfordeling oppdatert (${fagfordeling.length} fag)`, by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ fagfordeling, activity_log: log, updated_at: new Date().toISOString() }).eq('id', t.id)
-      setT(v => ({ ...v, fagfordeling, activity_log: log }))
-      showAlert({ message: 'Fagfordeling lagret!', subMessage: `${fagfordeling.filter(f=>f.type==='egen').length} i egen regi, ${fagfordeling.filter(f=>f.type==='ue').length} til UE`, emoji: '✅' })
-    } catch(e) { showAlert({ message: 'Feil', subMessage: e.message, type: 'error' }) }
-    finally { setSavingFag(false) }
-  }
-
-  const sendFagToUE = async (fag) => {
-    if (!(await confirm({ message: `Opprett UE-anbud for ${fag.name}?`, subMessage: 'Det opprettes et utgående anbud med poster fra denne faggruppen, klart for UE-invitasjon.', confirmLabel: 'Opprett UE-anbud' }))) return
-    try {
-      const chapters = [{ id: Date.now(), title: fag.name, markup: '', posts: fag.poster.length > 0 ? fag.poster.map((p, i) => ({ id: Date.now()+i, description: p.description || '', qty: parseFloat(p.qty)||1, unit: p.unit||'stk', unitCost: 0 })) : [{ id: Date.now()+1, description: fag.beskrivelse || fag.name, qty: 1, unit: 'rs', unitCost: 0 }] }]
-      const { error } = await supabase.from('tenders').insert({
-        title: `${t.title} — ${fag.name}`,
-        tender_number: `ANB-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`,
-        type: 'outgoing',
-        project_id: t.project_id || null,
-        parent_tender_id: t.id,
-        description: fag.beskrivelse || `${fag.name} — utsendt fra forespørsel "${t.title}"`,
-        deadline: t.deadline,
-        chapters,
-        vedlegg: t.vedlegg || [],
-        status: 'Utkast',
-        created_by: user?.id,
-        activity_log: [{ action: `Opprettet fra byggherre-forespørsel: ${t.title}`, by: user?.email, at: new Date().toISOString() }],
-      })
-      if (error) throw error
-      // Mark fag as sent
-      updateFag(fag.fagId, 'ueOpprettet', true)
-      const updatedFag = fagfordeling.map(f => f.fagId === fag.fagId ? { ...f, ueOpprettet: true } : f)
-      const log = [...(t.activity_log || []), { action: `UE-anbud opprettet for ${fag.name}`, by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ fagfordeling: updatedFag, activity_log: log }).eq('id', t.id)
-      setT(v => ({ ...v, fagfordeling: updatedFag, activity_log: log }))
-      setFagfordeling(updatedFag)
-      showAlert({ message: `UE-anbud opprettet!`, subMessage: `"${t.title} — ${fag.name}" er klar i anbudslisten for UE-invitasjon.`, emoji: '📤' })
-    } catch(e) { showAlert({ message: 'Feil', subMessage: e.message, type: 'error' }) }
-  }
-
-  const sendFagToKalkOrTilbud = async (fag) => {
-    const choice = await confirm({ message: `Send ${fag.name} til kalkulasjon eller tilbud?`, subMessage: 'Postene kopieres til valgt modul for intern prising.', confirmLabel: '📋 Generer tilbud' })
-    if (!choice) return
-    try {
-      const chapters = [{ id: Date.now(), title: fag.name, markup: '', posts: fag.poster.length > 0 ? fag.poster.map((p, i) => ({ id: Date.now()+i, description: p.description || '', qty: parseFloat(p.qty)||1, unit: p.unit||'stk', unitPriceWork: 0, unitPriceMaterial: 0 })) : [{ id: Date.now()+1, description: fag.beskrivelse || fag.name, qty: 1, unit: 'rs', unitPriceWork: 0, unitPriceMaterial: 0 }] }]
-      const { data, error } = await supabase.from('quotes').insert({
-        title: `${t.title} — ${fag.name}`, quote_number: `TB-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
-        project_id: t.project_id||null, customer_name: t.customer_name, customer_email: t.customer_email,
-        chapters, global_markup: '', status: 'Utkast', created_by: user?.id,
-      }).select().single()
-      if (error) throw error
-      updateFag(fag.fagId, 'tilbudOpprettet', true)
-      const updatedFag = fagfordeling.map(f => f.fagId === fag.fagId ? { ...f, tilbudOpprettet: true } : f)
-      const log = [...(t.activity_log || []), { action: `Tilbud generert for ${fag.name} (egen regi)`, by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ fagfordeling: updatedFag, activity_log: log }).eq('id', t.id)
-      setT(v => ({ ...v, fagfordeling: updatedFag, activity_log: log }))
-      setFagfordeling(updatedFag)
-      showAlert({ message: 'Tilbud opprettet!', subMessage: `"${fag.name}" er opprettet som tilbudsutkast.`, emoji: '📋' })
-    } catch(e) { showAlert({ message: 'Feil', subMessage: e.message, type: 'error' }) }
-  }
-
   const load = async () => {
     const { data } = await supabase.from('tender_ues').select('*').eq('tender_id', t.id).order('created_at')
     setUes(data||[])
-    // Load child tenders (from fagfordeling) for incoming anbud
-    if (t.type === 'incoming') {
-      const { data: children } = await supabase.from('tenders').select('*').eq('parent_tender_id', t.id).order('created_at')
-      setChildTenders(children || [])
-      // Load UEs for each child tender
-      if (children && children.length > 0) {
-        const childIds = children.map(c => c.id)
-        const { data: cUEs } = await supabase.from('tender_ues').select('*').in('tender_id', childIds)
-        const grouped = {}
-        ;(cUEs||[]).forEach(ue => {
-          if (!grouped[ue.tender_id]) grouped[ue.tender_id] = []
-          grouped[ue.tender_id].push(ue)
-        })
-        setChildUEs(grouped)
-      }
-    }
   }
   const refresh = async () => {
     const { data } = await supabase.from('tenders').select('*').eq('id', t.id).single()
@@ -6803,9 +5997,8 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   useEffect(() => { load() }, [])
 
   const updateStatus = async (status) => {
-    const log = [...(t.activity_log || []), { action: `Status endret til ${status}`, by: user?.email, at: new Date().toISOString() }]
-    await supabase.from('tenders').update({ status, activity_log: log, updated_at: new Date().toISOString() }).eq('id', t.id)
-    setT(v=>({...v, status, activity_log: log}))
+    await supabase.from('tenders').update({ status, updated_at: new Date().toISOString() }).eq('id', t.id)
+    setT(v=>({...v, status}))
   }
 
   const handleDelete = async () => {
@@ -6830,236 +6023,15 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
       }).select().single()
       if (error) throw error
       await supabase.from('tenders').update({ generated_quote_id: data.id }).eq('id', t.id)
-      const log = [...(t.activity_log || []), { action: 'Tilbud generert fra anbud', by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ activity_log: log }).eq('id', t.id)
-      await showAlert({ message: 'Tilbud opprettet!', subMessage: `Tilbud "${data.title}" (${data.quote_number}) er opprettet som utkast. Du sendes nå til tilbudsmodulen.`, emoji: '📋' })
-      // Navigate to tilbud page
-      window.history.pushState({ page: 'tilbud' }, '', '#tilbud')
-      window.location.hash = '#tilbud'
-      window.location.reload()
-    } catch(e) { showAlert({ message: 'Feil ved generering', subMessage: e.message, type: 'error' }) }
+      alert('✅ Tilbud opprettet! Gå til Tilbud-modulen for å se det.')
+    } catch(e) { alert('Feil: '+e.message) }
   }
 
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
 
-  const sendReminder = async (ue) => {
-    if (sendingReminder) return
-    setSendingReminder(ue.id)
-    try {
-      const pricingUrl = `${window.location.origin}/anbud-pris?token=${ue.token}`
-      const deadlineText = t.deadline ? `<p style="color:#dc2626;font-weight:700;font-size:14px">⏰ Frist: ${t.deadline}</p>` : ''
-      const html = `
-        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-          <div style="background:#fffbeb;border-radius:12px;padding:16px;border:1px solid #fde68a;margin-bottom:20px">
-            <p style="margin:0;color:#92400e;font-weight:700;font-size:15px">📩 Påminnelse — Anbudsforespørsel</p>
-          </div>
-          <h1 style="color:#0f172a;font-size:20px;margin-bottom:8px">${t.title}</h1>
-          <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${t.tender_number}</strong></p>
-          ${deadlineText}
-          <p style="color:#475569;font-size:14px;line-height:1.6">Vi minner om at vi fortsatt venter på ditt tilbud. Vennligst fyll inn dine priser via lenken nedenfor.</p>
-          ${(t.vedlegg||[]).length > 0 ? '<div style="background:#f8fafc;border-radius:12px;padding:14px;margin:16px 0;border:1px solid #f1f5f9"><p style="margin:0 0 6px;font-weight:700;font-size:13px;color:#0f172a">📎 Vedlegg</p>' + t.vedlegg.map(v => `<a href="${v.url}" style="display:block;color:#2563eb;font-size:13px;margin-bottom:3px;text-decoration:none">📎 ${v.name}</a>`).join('') + '</div>' : ''}
-          <div style="text-align:center;margin:28px 0">
-            <a href="${pricingUrl}" style="background:#d97706;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📝 Fyll inn priser</a>
-          </div>
-          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-          <p style="color:#94a3b8;font-size:12px">Påminnelse sendt via En Plattform KS-system</p>
-        </div>`
-      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-        method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: ue.email, subject:`Påminnelse: Anbudsforespørsel ${t.tender_number} – ${t.title}`, html })
-      })
-      if (!fnRes.ok) { const d = await fnRes.json(); throw new Error(d.error||'E-post feilet') }
-      const log = [...(t.activity_log || []), { action: `Påminnelse sendt til ${ue.company_name}`, by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ activity_log: log }).eq('id', t.id)
-      setT(v => ({ ...v, activity_log: log }))
-      showAlert({ message: 'Påminnelse sendt!', subMessage: `E-post sendt til ${ue.company_name} (${ue.email})`, emoji: '📩' })
-    } catch(e) {
-      showAlert({ message: 'Kunne ikke sende påminnelse', subMessage: e.message, type: 'error' })
-    }
-    finally { setSendingReminder(null) }
-  }
-
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
-
-      {/* ═══ FULLSKJERM SAMMENLIGNINGSVISNING ═══ */}
-      {showComparison && pricedUes.length >= 2 && (
-        <div style={{ position:'fixed', inset:0, zIndex:90, background:'#f8fafc', overflowY:'auto' }}>
-          <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 32px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:91 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-              <button onClick={()=>setShowComparison(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', padding:'4px' }}>← Tilbake</button>
-              <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📊 Prissammenligning — {t.title}</h2>
-              <span style={{ fontSize:'12px', color:'#94a3b8' }}>{t.tender_number}</span>
-            </div>
-            <div style={{ display:'flex', gap:'8px' }}>
-              <button onClick={() => {
-                // CSV export
-                const rows = [['Kapittel','Post','Mengde','Enhet',...pricedUes.map(u=>u.company_name),...pricedUes.map(u=>`${u.company_name} kommentar`),'Avvik %']]
-                ;(t.chapters||[]).forEach((ch,ci) => {
-                  (ch.posts||[]).forEach((post,pi) => {
-                    const row = [ch.title, post.description||'', post.qty||'', post.unit||'']
-                    const prices = pricedUes.map(ue => { const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]; const uePost = ueCh?(ueCh.posts||[]).find(p=>p.id===post.id)||(ueCh.posts||[])[pi]:null; return uePost?(parseFloat(uePost.uePrice)||0)*(parseFloat(post.qty)||1):0 })
-                    prices.forEach(p => row.push(p))
-                    pricedUes.forEach(ue => { const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]; const uePost = ueCh?(ueCh.posts||[]).find(p=>p.id===post.id)||(ueCh.posts||[])[pi]:null; row.push(uePost?.ueComment||'') })
-                    const validPrices = prices.filter(p=>p>0); const minP = Math.min(...validPrices); const maxP = Math.max(...validPrices)
-                    row.push(minP>0 ? Math.round((maxP-minP)/minP*100)+'%' : '')
-                    rows.push(row)
-                  })
-                })
-                rows.push(['','TOTAL','','',...pricedUes.map(u=>u.total_amount||''),...pricedUes.map(()=>''),''])
-                const csv = '\uFEFF' + rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n')
-                const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob)
-                const a = document.createElement('a'); a.href=url; a.download=`prissammenligning_${t.tender_number||'anbud'}.csv`; a.click(); URL.revokeObjectURL(url)
-              }} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>📥 Eksporter CSV</button>
-              <button onClick={()=>window.print()} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>🖨️ Skriv ut</button>
-            </div>
-          </div>
-
-          <div style={{ padding:'24px 32px', maxWidth:'1400px', margin:'0 auto' }}>
-            {/* UE-sammendragskort */}
-            <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(pricedUes.length, 4)}, 1fr)`, gap:'14px', marginBottom:'24px' }}>
-              {pricedUes.map((ue, i) => {
-                const medals = ['🥇','🥈','🥉']
-                const diff = i > 0 && pricedUes[0].total_amount > 0 ? ((ue.total_amount - pricedUes[0].total_amount) / pricedUes[0].total_amount * 100) : 0
-                return (
-                  <div key={ue.id} style={{ background: i===0 ? 'linear-gradient(135deg, #f0fdf4, #ecfdf5)' : 'white', borderRadius:'16px', border:`2px solid ${i===0?'#bbf7d0':'#f1f5f9'}`, padding:'20px', position:'relative' }}>
-                    {i < 3 && <div style={{ position:'absolute', top:'-8px', right:'12px', fontSize:'24px' }}>{medals[i]}</div>}
-                    <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'6px' }}>#{i+1} — {i===0?'Laveste pris':''}
-                    </div>
-                    <div style={{ fontWeight:'700', fontSize:'16px', color:'#0f172a', marginBottom:'2px' }}>{ue.company_name}</div>
-                    {ue.contact_name && <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>{ue.contact_name}</div>}
-                    <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'10px' }}>{ue.email}</div>
-                    <div style={{ fontSize:'24px', fontWeight:'800', color: i===0?'#16a34a':'#0f172a' }}>{fmtT(ue.total_amount)}</div>
-                    {i > 0 && <div style={{ fontSize:'12px', color:'#dc2626', marginTop:'4px' }}>+{diff.toFixed(1)}% dyrere</div>}
-                    {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}</div>}
-                    {(ue.vedlegg||[]).length > 0 && (
-                      <div style={{ marginTop:'8px', display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                        {ue.vedlegg.map((v,vi)=><a key={vi} href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'11px', color:'#2563eb', textDecoration:'none', background:'#eff6ff', padding:'2px 8px', borderRadius:'6px', border:'1px solid #bfdbfe' }}>📎 {v.name}</a>)}
-                      </div>
-                    )}
-                    <div style={{ marginTop:'12px', display:'flex', gap:'6px' }}>
-                      <button onClick={async () => { setShowComparison(false); setShowAward(true) }} style={{ flex:1, padding:'8px 12px', background: i===0?'#059669':'white', color: i===0?'white':'#475569', border:`1px solid ${i===0?'#059669':'#e2e8f0'}`, borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>🏆 Tildel</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Detaljert sammenligning per kapittel */}
-            {(t.chapters||[]).map((ch, ci) => {
-              // Compute chapter totals per UE
-              const chTotals = pricedUes.map(ue => {
-                const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]
-                return ueCh ? (ueCh.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0) : 0
-              })
-              const minChTotal = Math.min(...chTotals.filter(v=>v>0))
-
-              return (
-                <div key={ci} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', marginBottom:'16px', overflow:'hidden' }}>
-                  <div style={{ background:'#f8fafc', padding:'14px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
-                    <div style={{ display:'flex', gap:'12px' }}>
-                      {pricedUes.map((ue,i) => {
-                        const isBest = chTotals[i] > 0 && chTotals[i] === minChTotal
-                        return <span key={ue.id} style={{ fontSize:'13px', fontWeight:'700', color: isBest?'#16a34a':'#0f172a', background: isBest?'#f0fdf4':'transparent', padding:'2px 10px', borderRadius:'6px' }}>{ue.company_name.length>12?ue.company_name.slice(0,12)+'…':ue.company_name}: {fmtT(chTotals[i])}</span>
-                      })}
-                    </div>
-                  </div>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
-                      <thead>
-                        <tr style={{ background:'#fafafa' }}>
-                          <th style={{ padding:'10px 14px', textAlign:'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', minWidth:'200px' }}>Post</th>
-                          <th style={{ padding:'10px 8px', textAlign:'center', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', width:'80px' }}>Mengde</th>
-                          {pricedUes.map(ue => (
-                            <th key={ue.id} style={{ padding:'10px 14px', textAlign:'right', color: pricedUes[0]?.id===ue.id?'#16a34a':'#0f172a', fontWeight:'700', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', minWidth:'120px' }}>
-                              {ue.company_name.length>15?ue.company_name.slice(0,15)+'…':ue.company_name}
-                            </th>
-                          ))}
-                          <th style={{ padding:'10px 14px', textAlign:'center', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9', width:'80px' }}>Avvik</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(ch.posts||[]).map((post, pi) => {
-                          const uePrices = pricedUes.map(ue => {
-                            const ueCh = (ue.chapters||[]).find(c=>c.id===ch.id)||(ue.chapters||[])[ci]
-                            const uePost = ueCh?(ueCh.posts||[]).find(p=>p.id===post.id)||(ueCh.posts||[])[pi]:null
-                            return { ueId:ue.id, price: uePost?(parseFloat(uePost.uePrice)||0)*(parseFloat(post.qty)||1):0, comment: uePost?.ueComment||'' }
-                          })
-                          const validPrices = uePrices.filter(p=>p.price>0).map(p=>p.price)
-                          const lowestPrice = validPrices.length>0?Math.min(...validPrices):0
-                          const highestPrice = validPrices.length>0?Math.max(...validPrices):0
-                          const avvikPct = lowestPrice > 0 ? Math.round((highestPrice-lowestPrice)/lowestPrice*100) : 0
-                          const hasComments = uePrices.some(up=>up.comment)
-
-                          return (
-                            <React.Fragment key={pi}>
-                              <tr style={{ borderBottom: hasComments ? 'none' : '1px solid #f8fafc' }}>
-                                <td style={{ padding:'10px 14px', color:'#0f172a', fontWeight:'500' }}>{post.description||'—'}</td>
-                                <td style={{ padding:'10px 8px', textAlign:'center', color:'#94a3b8', fontSize:'12px' }}>{post.qty} {post.unit}</td>
-                                {uePrices.map(up => {
-                                  const isBest = up.price>0 && up.price===lowestPrice
-                                  const isWorst = up.price>0 && up.price===highestPrice && validPrices.length>1
-                                  return (
-                                    <td key={up.ueId} style={{ padding:'10px 14px', textAlign:'right', fontWeight: isBest?'800':'500', color: isBest?'#16a34a': isWorst?'#dc2626':'#0f172a', background: isBest?'#f0fdf4': isWorst&&avvikPct>30?'#fef2f2':'transparent' }}>
-                                      {up.price > 0 ? fmtT(up.price) : <span style={{ color:'#cbd5e1' }}>—</span>}
-                                    </td>
-                                  )
-                                })}
-                                <td style={{ padding:'10px 14px', textAlign:'center' }}>
-                                  {avvikPct > 0 && (
-                                    <span style={{ fontSize:'12px', fontWeight:'600', padding:'2px 8px', borderRadius:'6px', background: avvikPct>50?'#fef2f2': avvikPct>20?'#fffbeb':'#f0fdf4', color: avvikPct>50?'#dc2626': avvikPct>20?'#d97706':'#16a34a' }}>
-                                      {avvikPct}%
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                              {hasComments && (
-                                <tr style={{ borderBottom:'1px solid #f8fafc' }}>
-                                  <td colSpan={2} style={{ padding:'2px 14px 8px', fontSize:'10px', color:'#94a3b8' }}>💬</td>
-                                  {uePrices.map(up => (
-                                    <td key={up.ueId} style={{ padding:'2px 14px 8px', fontSize:'11px', color:'#64748b', fontStyle:'italic' }}>{up.comment}</td>
-                                  ))}
-                                  <td />
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          )
-                        })}
-                        {/* Kapittelsum */}
-                        <tr style={{ borderTop:'2px solid #e2e8f0', background:'#f8fafc' }}>
-                          <td style={{ padding:'10px 14px', fontWeight:'700', color:'#0f172a' }} colSpan={2}>Kapittelsum</td>
-                          {pricedUes.map((ue,i) => {
-                            const isBest = chTotals[i] > 0 && chTotals[i] === minChTotal
-                            return <td key={ue.id} style={{ padding:'10px 14px', textAlign:'right', fontWeight:'800', color: isBest?'#16a34a':'#0f172a', background: isBest?'#f0fdf4':'transparent' }}>{chTotals[i]>0?fmtT(chTotals[i]):'—'}</td>
-                          })}
-                          <td />
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )
-            })}
-
-            {/* Total sammendrag */}
-            <div style={{ background:'linear-gradient(135deg, #f0fdf4, #ecfdf5)', borderRadius:'14px', border:'2px solid #bbf7d0', padding:'20px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'16px' }}>
-              <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>Totalt eks. mva</div>
-              <div style={{ display:'flex', gap:'24px' }}>
-                {pricedUes.map((ue,i) => (
-                  <div key={ue.id} style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>{ue.company_name}</div>
-                    <div style={{ fontSize:'20px', fontWeight:'800', color: i===0?'#16a34a':'#0f172a' }}>{fmtT(ue.total_amount)} {i===0&&'🏆'}</div>
-                    {i > 0 && pricedUes[0].total_amount > 0 && <div style={{ fontSize:'11px', color:'#dc2626' }}>+{((ue.total_amount-pricedUes[0].total_amount)/pricedUes[0].total_amount*100).toFixed(1)}%</div>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="no-print-anbud" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
           <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
@@ -7080,190 +6052,17 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Inviter UE</button>}
             {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
-            {!isIncoming && pricedUes.length >= 2 && <button onClick={()=>setShowComparison(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📊 Sammenlign UE-priser</button>}
-            {isIncoming && <button onClick={()=>setShowFagfordeling(!showFagfordeling)} style={{ padding:'9px 14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔀 Fordel på fag</button>}
             {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
             <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <style>{`@media print { .no-print-anbud{display:none!important} .print-full-anbud{grid-template-columns:1fr!important} }`}</style>
-      <div className="print-full-anbud" style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Description */}
           {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
-
-          {/* Vedlegg */}
-          {(t.vedlegg||[]).length > 0 && (
-            <div style={tCard}>
-              <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Vedlegg ({t.vedlegg.length})</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {t.vedlegg.map((v, i) => (
-                  <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'12px 16px', textDecoration:'none', transition:'box-shadow 0.15s' }}
-                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                    <span style={{ fontSize:'24px' }}>{v.name.match(/\.(pdf)$/i) ? '📄' : v.name.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? '🖼️' : v.name.match(/\.(dwg|dxf)$/i) ? '📐' : v.name.match(/\.(xlsx?|csv)$/i) ? '📊' : '📎'}</span>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:'14px', fontWeight:'600', color:'#2563eb' }}>{v.name}</div>
-                      {v.size && <div style={{ fontSize:'11px', color:'#94a3b8' }}>{(v.size/1024).toFixed(0)} KB</div>}
-                    </div>
-                    <span style={{ fontSize:'13px', color:'#94a3b8' }}>↗</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Fagfordeling — kun for innkommende */}
-          {isIncoming && showFagfordeling && (
-            <div style={{ ...tCard, border:'2px solid #ddd6fe' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
-                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#7c3aed' }}>🔀 Fordel på faggrupper</h3>
-                <button onClick={saveFagfordeling} disabled={savingFag} style={{ background: savingFag?'#c4b5fd':'#7c3aed', color:'white', border:'none', borderRadius:'8px', padding:'7px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>{savingFag?'Lagrer...':'💾 Lagre fordeling'}</button>
-              </div>
-              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>Del opp forespørselen i faggrupper. Marker hver som «Egen regi» (du priser selv) eller «Til UE» (sendes ut til underentreprenør).</p>
-
-              {/* Legg til faggruppe */}
-              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'16px' }}>
-                {FAG_OPTIONS.filter(f => !fagfordeling.find(ff => ff.fagId === f.id)).map(f => (
-                  <button key={f.id} onClick={() => addFag(f.id)} style={{ background:'white', border:'1px dashed #e2e8f0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', cursor:'pointer', color:'#64748b', display:'flex', alignItems:'center', gap:'4px' }}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor='#7c3aed'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
-                    {f.emoji} {f.name}
-                  </button>
-                ))}
-              </div>
-
-              {fagfordeling.length === 0 && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>Klikk på en faggruppe ovenfor for å legge den til</p>}
-
-              {/* Faggruppe-kort */}
-              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                {fagfordeling.map(fag => (
-                  <div key={fag.fagId} style={{ background: fag.type==='egen'?'#f0fdf4':'#eff6ff', borderRadius:'12px', border:`1px solid ${fag.type==='egen'?'#bbf7d0':'#bfdbfe'}`, padding:'14px 16px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
-                      <span style={{ fontSize:'20px' }}>{fag.emoji}</span>
-                      <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', flex:1 }}>{fag.name}</span>
-                      {/* Type toggle */}
-                      <div style={{ display:'flex', borderRadius:'8px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
-                        <button onClick={() => updateFag(fag.fagId, 'type', 'egen')}
-                          style={{ padding:'5px 12px', border:'none', fontSize:'12px', fontWeight:'600', cursor:'pointer', background: fag.type==='egen'?'#059669':'white', color: fag.type==='egen'?'white':'#64748b' }}>🪚 Egen regi</button>
-                        <button onClick={() => updateFag(fag.fagId, 'type', 'ue')}
-                          style={{ padding:'5px 12px', border:'none', fontSize:'12px', fontWeight:'600', cursor:'pointer', background: fag.type==='ue'?'#2563eb':'white', color: fag.type==='ue'?'white':'#64748b' }}>📤 Til UE</button>
-                      </div>
-                      <button onClick={() => removeFag(fag.fagId)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px', padding:'2px' }}>×</button>
-                    </div>
-                    <textarea value={fag.beskrivelse} onChange={e => updateFag(fag.fagId, 'beskrivelse', e.target.value)} rows={2} placeholder="Beskriv arbeidet for denne faggruppen..." style={{ width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', resize:'none', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }} />
-
-                    {/* Poster for denne faggruppen */}
-                    {(fag.poster||[]).length > 0 && (
-                      <div style={{ marginTop:'8px', display:'flex', flexDirection:'column', gap:'4px' }}>
-                        {fag.poster.map((p, pi) => (
-                          <div key={pi} style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                            <input value={p.description} onChange={e => { const np = [...(fag.poster||[])]; np[pi] = {...np[pi], description: e.target.value}; updateFag(fag.fagId, 'poster', np) }} placeholder="Beskrivelse" style={{ flex:1, padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none' }} />
-                            <input type="number" value={p.qty} onChange={e => { const np = [...(fag.poster||[])]; np[pi] = {...np[pi], qty: e.target.value}; updateFag(fag.fagId, 'poster', np) }} style={{ width:'60px', padding:'6px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none', textAlign:'right' }} />
-                            <input value={p.unit} onChange={e => { const np = [...(fag.poster||[])]; np[pi] = {...np[pi], unit: e.target.value}; updateFag(fag.fagId, 'poster', np) }} placeholder="stk" style={{ width:'50px', padding:'6px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none' }} />
-                            <button onClick={() => { const np = (fag.poster||[]).filter((_,i) => i !== pi); updateFag(fag.fagId, 'poster', np) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>×</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <button onClick={() => updateFag(fag.fagId, 'poster', [...(fag.poster||[]), { description:'', qty:1, unit:'stk' }])} style={{ marginTop:'6px', background:'none', border:'none', cursor:'pointer', color: fag.type==='egen'?'#059669':'#2563eb', fontSize:'12px', fontWeight:'600', padding:0 }}>+ Legg til post</button>
-
-                    {/* Handlingsknapper */}
-                    <div style={{ marginTop:'10px', display:'flex', gap:'6px' }}>
-                      {fag.type === 'ue' && !fag.ueOpprettet && (
-                        <button onClick={() => sendFagToUE(fag)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>📤 Opprett UE-anbud</button>
-                      )}
-                      {fag.type === 'ue' && fag.ueOpprettet && (
-                        <span style={{ background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600' }}>✅ UE-anbud opprettet</span>
-                      )}
-                      {fag.type === 'egen' && !fag.tilbudOpprettet && (
-                        <button onClick={() => sendFagToKalkOrTilbud(fag)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>📋 Generer tilbud</button>
-                      )}
-                      {fag.type === 'egen' && fag.tilbudOpprettet && (
-                        <span style={{ background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600' }}>✅ Tilbud opprettet</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Oppsummering */}
-              {fagfordeling.length > 0 && (
-                <div style={{ marginTop:'14px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', border:'1px solid #f1f5f9' }}>
-                  <div style={{ fontSize:'13px', color:'#64748b' }}>
-                    <strong style={{ color:'#059669' }}>{fagfordeling.filter(f=>f.type==='egen').length}</strong> i egen regi · <strong style={{ color:'#2563eb' }}>{fagfordeling.filter(f=>f.type==='ue').length}</strong> til UE
-                  </div>
-                  <div style={{ display:'flex', gap:'6px' }}>
-                    {fagfordeling.filter(f=>f.type==='ue'&&!f.ueOpprettet).length > 0 && (
-                      <button onClick={async () => { for (const fag of fagfordeling.filter(f=>f.type==='ue'&&!f.ueOpprettet)) await sendFagToUE(fag) }}
-                        style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>📤 Opprett alle UE-anbud</button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Samlet prisbilde fra fagfordelte UE-anbud */}
-          {isIncoming && childTenders.length > 0 && (
-            <div style={{ ...tCard, border:'2px solid #bbf7d0' }}>
-              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700', color:'#059669' }}>💰 Samlet prisbilde fra UE-anbud</h3>
-              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>Oversikt over priser mottatt fra fagfordelte UE-anbud knyttet til denne forespørselen.</p>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {childTenders.map(child => {
-                  const cUEs = childUEs[child.id] || []
-                  const pricedUEs = cUEs.filter(u => u.status === 'Priset').sort((a,b) => (a.total_amount||0) - (b.total_amount||0))
-                  const awarded = cUEs.find(u => u.status === 'godkjent')
-                  const bestPrice = awarded ? awarded.total_amount : (pricedUEs[0]?.total_amount || 0)
-                  const statusColor = child.status === 'Tildelt' ? '#16a34a' : pricedUEs.length > 0 ? '#2563eb' : '#94a3b8'
-                  return (
-                    <div key={child.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', border:'1px solid #f1f5f9' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                          <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{child.title.replace(`${t.title} — `, '')}</span>
-                          <TenderStatusBadge status={child.status} />
-                        </div>
-                        <div style={{ fontWeight:'800', fontSize:'16px', color: bestPrice > 0 ? '#0f172a' : '#cbd5e1' }}>{bestPrice > 0 ? fmtT(bestPrice) : '—'}</div>
-                      </div>
-                      <div style={{ display:'flex', gap:'10px', fontSize:'12px', color:'#64748b' }}>
-                        <span>🏢 {cUEs.length} UE invitert</span>
-                        {pricedUEs.length > 0 && <span style={{ color:'#2563eb' }}>📬 {pricedUEs.length} priset</span>}
-                        {awarded && <span style={{ color:'#16a34a', fontWeight:'600' }}>🏆 {awarded.company_name}</span>}
-                        {pricedUEs.length === 0 && cUEs.length > 0 && <span style={{ color:'#d97706' }}>⏳ Venter på priser</span>}
-                        {cUEs.length === 0 && <span style={{ color:'#94a3b8' }}>Ingen UE invitert ennå</span>}
-                      </div>
-                      {pricedUEs.length > 1 && (
-                        <div style={{ marginTop:'8px', display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                          {pricedUEs.map((ue, i) => (
-                            <span key={ue.id} style={{ fontSize:'11px', background: i===0 ? '#f0fdf4' : 'white', border:`1px solid ${i===0 ? '#bbf7d0' : '#e2e8f0'}`, borderRadius:'6px', padding:'3px 8px', color: i===0 ? '#16a34a' : '#64748b' }}>
-                              {ue.company_name}: {fmtT(ue.total_amount)} {i===0 && '🏆'}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-              {/* Totalsum */}
-              <div style={{ marginTop:'12px', background:'#f0fdf4', borderRadius:'10px', padding:'14px 18px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div>
-                  <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Samlet UE-kostnad</div>
-                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>Laveste/tildelt pris per fag</div>
-                </div>
-                <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>
-                  {fmtT(childTenders.reduce((sum, child) => {
-                    const cUEs = childUEs[child.id] || []
-                    const awarded = cUEs.find(u => u.status === 'godkjent')
-                    const pricedUEs = cUEs.filter(u => u.status === 'Priset').sort((a,b) => (a.total_amount||0) - (b.total_amount||0))
-                    return sum + (awarded ? awarded.total_amount : (pricedUEs[0]?.total_amount || 0))
-                  }, 0))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Chapters / kalkyle */}
           {(t.chapters||[]).length > 0 && (
@@ -7316,12 +6115,10 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏢 UE-er og innkomne priser</h3>
               {pricedUes.length > 0 && (
                 <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bbf7d0', marginBottom:'14px', fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>
-                  🏆 Laveste totalpris: {pricedUes[0].company_name} — {fmtT(pricedUes[0].total_amount)}
+                  🏆 Laveste pris: {pricedUes[0].company_name} — {fmtT(pricedUes[0].total_amount)}
                 </div>
               )}
-
-              {/* Oversiktsliste per UE */}
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {ues.map(ue => {
                   const ucfg = UE_STATUS[ue.status]
                   const isLowest = pricedUes[0]?.id === ue.id
@@ -7330,271 +6127,29 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{ue.company_name} {isLowest&&'🏆'}</div>
                         {ue.contact_name && <div style={{ fontSize:'12px', color:'#64748b' }}>{ue.contact_name} · {ue.email}</div>}
-                        {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}{(ue.vedlegg||[]).length > 0 ? ` · 📎 ${ue.vedlegg.length} vedlegg` : ''}</div>}
-                        {(ue.vedlegg||[]).length > 0 && (
-                          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginTop:'4px' }}>
-                            {ue.vedlegg.map((v, vi) => (
-                              <a key={vi} href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'11px', color:'#2563eb', textDecoration:'none', background:'#eff6ff', padding:'2px 8px', borderRadius:'6px', border:'1px solid #bfdbfe' }}>📎 {v.name}</a>
-                            ))}
-                          </div>
-                        )}
+                        {ue.submitted_at && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Innlevert {new Date(ue.submitted_at).toLocaleDateString('nb-NO')}</div>}
                       </div>
                       <span style={{ background:ucfg.bg, color:ucfg.color, border:`1px solid ${ucfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{ue.status}</span>
-                      {(ue.status === 'Invitert' || ue.status === 'Åpnet') && (
-                        <button onClick={() => sendReminder(ue)} disabled={sendingReminder===ue.id}
-                          style={{ background: sendingReminder===ue.id ? '#fef3c7' : '#fffbeb', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'5px 12px', cursor: sendingReminder===ue.id ? 'not-allowed' : 'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>
-                          {sendingReminder===ue.id ? '⏳ Sender...' : '📩 Purr'}
-                        </button>
-                      )}
                       {ue.total_amount && <div style={{ fontWeight:'800', fontSize:'15px', color:isLowest?'#16a34a':'#0f172a', minWidth:'100px', textAlign:'right' }}>{fmtT(ue.total_amount)}</div>}
                     </div>
                   )
                 })}
               </div>
-
-              {/* Detaljert prissammenligning per post */}
-              {pricedUes.length >= 2 && (t.chapters||[]).length > 0 && (
-                <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
-                    <h4 style={{ margin:0, fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📊 Prissammenligning per post</h4>
-                    <button onClick={() => {
-                      // Build CSV export
-                      const rows = [['Kapittel','Post','Mengde','Enhet',...pricedUes.map(u=>u.company_name),...pricedUes.map(u=>`${u.company_name} kommentar`)]]
-                      ;(t.chapters||[]).forEach((ch, ci) => {
-                        (ch.posts||[]).forEach((post, pi) => {
-                          const row = [ch.title, post.description||'', post.qty||'', post.unit||'']
-                          pricedUes.forEach(ue => {
-                            const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
-                            const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
-                            row.push(uePost ? (parseFloat(uePost.uePrice)||0) * (parseFloat(post.qty)||1) : '')
-                          })
-                          pricedUes.forEach(ue => {
-                            const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
-                            const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
-                            row.push(uePost?.ueComment || '')
-                          })
-                          rows.push(row)
-                        })
-                        // Chapter sum row
-                        const sumRow = ['','KAPITTELSUM','','']
-                        pricedUes.forEach(ue => {
-                          const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
-                          sumRow.push(ueCh ? (ueCh.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0) : '')
-                        })
-                        pricedUes.forEach(() => sumRow.push(''))
-                        rows.push(sumRow)
-                      })
-                      // Total row
-                      const totalRow = ['','TOTAL','','']
-                      pricedUes.forEach(ue => totalRow.push(ue.total_amount||''))
-                      pricedUes.forEach(() => totalRow.push(''))
-                      rows.push(totalRow)
-                      // Generate CSV with BOM for Excel
-                      const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n')
-                      const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement('a'); a.href = url; a.download = `prissammenligning_${t.tender_number||'anbud'}.csv`; a.click()
-                      URL.revokeObjectURL(url)
-                    }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', color:'#475569', display:'flex', alignItems:'center', gap:'4px' }}>
-                      📥 Eksporter til Excel
-                    </button>
-                  </div>
-                  {(t.chapters||[]).map((ch, ci) => (
-                    <div key={ci} style={{ marginBottom:'14px' }}>
-                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669', marginBottom:'8px' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</div>
-                      <div style={{ overflowX:'auto' }}>
-                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px', minWidth:'500px' }}>
-                          <thead>
-                            <tr style={{ background:'#f8fafc' }}>
-                              <th style={{ padding:'8px 10px', textAlign:'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', minWidth:'160px' }}>Post</th>
-                              <th style={{ padding:'8px 6px', textAlign:'center', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', width:'60px' }}>Mengde</th>
-                              {pricedUes.map(ue => (
-                                <th key={ue.id} style={{ padding:'8px 10px', textAlign:'right', color: pricedUes[0]?.id===ue.id ? '#16a34a' : '#0f172a', fontWeight:'700', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', minWidth:'100px' }}>
-                                  {ue.company_name.length > 15 ? ue.company_name.slice(0,15)+'…' : ue.company_name}
-                                  {pricedUes[0]?.id===ue.id && ' 🏆'}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(ch.posts||[]).map((post, pi) => {
-                              // Find each UE's price for this post
-                              const uePrices = pricedUes.map(ue => {
-                                const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
-                                const uePost = ueCh ? (ueCh.posts||[]).find(p => p.id === post.id) || (ueCh.posts||[])[pi] : null
-                                return { ueId: ue.id, price: uePost ? (parseFloat(uePost.uePrice)||0) * (parseFloat(post.qty)||1) : 0, unitPrice: uePost ? parseFloat(uePost.uePrice)||0 : 0, comment: uePost?.ueComment || '' }
-                              })
-                              const lowestPrice = Math.min(...uePrices.filter(p=>p.price>0).map(p=>p.price))
-                              const hasComments = uePrices.some(up => up.comment)
-                              return (
-                                <React.Fragment key={pi}>
-                                  <tr style={{ borderBottom: hasComments ? 'none' : '1px solid #f8fafc' }}>
-                                    <td style={{ padding:'7px 10px', color:'#0f172a', fontWeight:'500' }}>{post.description||'—'}</td>
-                                    <td style={{ padding:'7px 6px', textAlign:'center', color:'#94a3b8' }}>{post.qty} {post.unit}</td>
-                                    {uePrices.map(up => {
-                                      const isBest = up.price > 0 && up.price === lowestPrice
-                                      return (
-                                        <td key={up.ueId} style={{ padding:'7px 10px', textAlign:'right', fontWeight: isBest ? '800' : '500', color: isBest ? '#16a34a' : '#0f172a', background: isBest ? '#f0fdf4' : 'transparent' }}>
-                                          {up.price > 0 ? fmtT(up.price) : <span style={{ color:'#cbd5e1' }}>—</span>}
-                                        </td>
-                                      )
-                                    })}
-                                  </tr>
-                                  {hasComments && (
-                                    <tr style={{ borderBottom:'1px solid #f8fafc' }}>
-                                      <td colSpan={2} style={{ padding:'0 10px 6px', fontSize:'10px', color:'#94a3b8' }}>Kommentarer:</td>
-                                      {uePrices.map(up => (
-                                        <td key={up.ueId} style={{ padding:'0 10px 6px', fontSize:'11px', color:'#64748b', fontStyle:'italic' }}>{up.comment || ''}</td>
-                                      ))}
-                                    </tr>
-                                  )}
-                                </React.Fragment>
-                              )
-                            })}
-                            {/* Kapittelsum-rad */}
-                            <tr style={{ borderTop:'2px solid #e2e8f0', background:'#f8fafc' }}>
-                              <td style={{ padding:'8px 10px', fontWeight:'700', color:'#0f172a' }} colSpan={2}>Kapittelsum</td>
-                              {pricedUes.map(ue => {
-                                const ueCh = (ue.chapters||[]).find(c => c.id === ch.id) || (ue.chapters||[])[ci]
-                                const chTotal = ueCh ? (ueCh.posts||[]).reduce((a,p) => a + (parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0), 0) : 0
-                                const allChTotals = pricedUes.map(u2 => { const c2 = (u2.chapters||[]).find(c=>c.id===ch.id)||(u2.chapters||[])[ci]; return c2?(c2.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0):0 }).filter(v=>v>0)
-                                const isBest = chTotal > 0 && chTotal === Math.min(...allChTotals)
-                                return <td key={ue.id} style={{ padding:'8px 10px', textAlign:'right', fontWeight:'800', color: isBest ? '#16a34a' : '#0f172a', background: isBest ? '#f0fdf4' : 'transparent' }}>{chTotal > 0 ? fmtT(chTotal) : '—'}</td>
-                              })}
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                  {/* Totalrad */}
-                  <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px' }}>
-                    <span style={{ fontWeight:'700', fontSize:'13px', color:'#16a34a' }}>Totalt</span>
-                    <div style={{ display:'flex', gap:'20px' }}>
-                      {pricedUes.map(ue => (
-                        <div key={ue.id} style={{ textAlign:'right' }}>
-                          <div style={{ fontSize:'11px', color:'#64748b' }}>{ue.company_name}</div>
-                          <div style={{ fontWeight:'800', fontSize:'15px', color: pricedUes[0]?.id===ue.id ? '#16a34a' : '#0f172a' }}>{fmtT(ue.total_amount)} {pricedUes[0]?.id===ue.id && '🏆'}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
-
-          {/* Aktivitetslogg */}
-          <div style={tCard}>
-            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
-            {(!t.activity_log || t.activity_log.length === 0) ? (
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert ennå</p>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
-                {(t.activity_log || []).slice().reverse().map((log, i) => {
-                  const isFirst = i === 0
-                  return (
-                    <div key={i} style={{ display:'flex', gap:'12px', alignItems:'flex-start', position:'relative', paddingLeft:'22px', paddingBottom:'14px' }}>
-                      <div style={{ position:'absolute', left:'6px', top:'0', bottom:'0', width:'2px', background: i === (t.activity_log.length - 1) ? 'transparent' : '#e2e8f0' }} />
-                      <div style={{ position:'absolute', left:'0', top:'3px', width:'14px', height:'14px', borderRadius:'50%', background: isFirst ? '#059669' : '#e2e8f0', border:'2px solid white', zIndex:1 }} />
-                      <div style={{ flex:1 }}>
-                        <span style={{ fontSize:'13px', fontWeight:'600', color: isFirst ? '#059669' : '#374151' }}>{log.action}</span>
-                        <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
-                          {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
-                          {log.by && <span> · {log.by}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Sidebar */}
-        <div className="no-print-anbud" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={tCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-              {(() => {
-                // Define allowed transitions based on current status and type
-                const currentIdx = Object.keys(TENDER_STATUS).indexOf(t.status)
-                const hasPricedUEs = pricedUes.length > 0
-                const hasUEs = ues.length > 0
-
-                return Object.keys(TENDER_STATUS).map(s => {
-                  const isCurrent = t.status === s
-                  const targetIdx = Object.keys(TENDER_STATUS).indexOf(s)
-
-                  // Determine if this transition is allowed/warned
-                  let blocked = false
-                  let warning = null
-
-                  if (s === 'Tildelt' && !isIncoming && !hasPricedUEs) {
-                    blocked = true
-                    warning = 'Ingen UE har levert pris ennå'
-                  }
-                  if (s === 'Tildelt' && !isIncoming) {
-                    // Should use TildelModal instead
-                    blocked = true
-                    warning = hasPricedUEs ? 'Bruk «🏆 Tildel anbud»-knappen ovenfor' : 'Ingen UE har levert pris ennå'
-                  }
-                  if (s === 'Mottatt' && !isIncoming && !hasUEs) {
-                    warning = 'Ingen UE er invitert'
-                  }
-                  if (s === 'Under vurdering' && !isIncoming && !hasPricedUEs) {
-                    warning = 'Ingen priser er mottatt ennå'
-                  }
-                  // Don't allow going backwards to Utkast if already sent
-                  if (s === 'Utkast' && currentIdx > 0) {
-                    blocked = true
-                  }
-                  // Kansellert is always available but requires confirmation
-                  if (s === 'Kansellert' && t.status !== 'Kansellert') {
-                    warning = 'Anbudet kanselleres og kan ikke gjenåpnes'
-                  }
-                  // Don't allow changes from Kansellert except to Utkast
-                  if (t.status === 'Kansellert' && s !== 'Utkast' && s !== 'Kansellert') {
-                    blocked = true
-                    warning = 'Anbudet er kansellert'
-                  }
-                  // Allow reopening from Kansellert to Utkast
-                  if (t.status === 'Kansellert' && s === 'Utkast') {
-                    blocked = false
-                    warning = 'Gjenåpner anbudet som utkast'
-                  }
-
-                  const handleClick = async () => {
-                    if (blocked) {
-                      if (warning) showAlert({ message: 'Kan ikke endre status', subMessage: warning, type: 'warning', emoji: '⚠️' })
-                      return
-                    }
-                    if (s === 'Kansellert') {
-                      if (!(await confirm({ message: 'Kansellere anbudet?', subMessage: 'Anbudet markeres som kansellert. Du kan gjenåpne det senere ved å sette status tilbake til Utkast.', confirmLabel: '🚫 Kanseller', danger: true }))) return
-                    } else if (warning) {
-                      if (!(await confirm({ message: `Sett status til "${s}"?`, subMessage: `⚠️ ${warning}. Vil du fortsette likevel?`, confirmLabel: `Ja, sett ${s}`, danger: false }))) return
-                    }
-                    updateStatus(s)
-                  }
-
-                  return (
-                    <button key={s} onClick={handleClick} disabled={isCurrent}
-                      style={{
-                        padding:'9px 14px', borderRadius:'10px', width:'100%', textAlign:'left', fontSize:'13px',
-                        border: `1px solid ${isCurrent ? TENDER_STATUS[s].border : blocked ? '#f1f5f9' : '#e2e8f0'}`,
-                        background: isCurrent ? TENDER_STATUS[s].bg : blocked ? '#fafafa' : 'white',
-                        color: isCurrent ? TENDER_STATUS[s].color : blocked ? '#cbd5e1' : '#475569',
-                        fontWeight: isCurrent ? '700' : '400',
-                        cursor: isCurrent ? 'default' : blocked ? 'not-allowed' : 'pointer',
-                        opacity: blocked && !isCurrent ? 0.6 : 1,
-                      }}>
-                      {isCurrent ? '✓ ' : ''}{TENDER_STATUS[s].emoji} {s}
-                      {blocked && !isCurrent && warning && <span style={{ display:'block', fontSize:'10px', color:'#94a3b8', marginTop:'2px' }}>🔒 {warning}</span>}
-                    </button>
-                  )
-                })
-              })()}
+              {Object.keys(TENDER_STATUS).map(s => (
+                <button key={s} onClick={()=>updateStatus(s)} disabled={t.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${t.status===s?TENDER_STATUS[s].border:'#e2e8f0'}`, background:t.status===s?TENDER_STATUS[s].bg:'white', color:t.status===s?TENDER_STATUS[s].color:'#475569', fontWeight:t.status===s?'700':'400', fontSize:'13px', cursor:t.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {t.status===s?'✓ ':''}{TENDER_STATUS[s].emoji} {s}
+                </button>
+              ))}
             </div>
           </div>
           <div style={tCard}>
@@ -7632,75 +6187,28 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
     project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
     deadline: initial?.deadline||'', valid_until: initial?.valid_until||'',
-    description: initial?.description||'', global_markup: initial?.global_markup||'',
+    description: initial?.description||'', global_markup: initial?.global_markup||0,
   })
   const [chapters, setChapters] = useState(initial?.chapters||[
-    { id: Date.now(), title: 'Generelt', markup: '', posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
+    { id: Date.now(), title: 'Generelt', markup: 0, posts: [{ id: Date.now()+1, description:'', qty:1, unit:'stk', unitCost:0 }] }
   ])
-  const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
   const [saving, setSaving] = useState(false)
-  const [showKalkImport, setShowKalkImport] = useState(false)
-  const [availableKalks, setAvailableKalks] = useState([])
-
-  const loadKalks = async () => {
-    const { data } = await supabase.from('calculations').select('id, title, kalk_number, kalkyler, status').order('updated_at', { ascending: false })
-    setAvailableKalks(data || [])
-    setShowKalkImport(true)
-  }
-
-  const importFromKalk = (kalk) => {
-    const newChapters = (kalk.kalkyler || []).map((k, i) => {
-      const posts = (k.bygningsdeler || []).map(bd => ({
-        id: Date.now() + Math.random(),
-        description: bd.name || bd.bygningsdel || '',
-        qty: parseFloat(bd.mengde) || 1,
-        unit: bd.enhet || 'stk',
-        unitCost: 0,
-      }))
-      return {
-        id: Date.now() + i,
-        title: k.name || `Fagkalkyle ${i + 1}`,
-        markup: '',
-        posts: posts.length > 0 ? posts : [{ id: Date.now() + 999 + i, description: '', qty: 1, unit: 'stk', unitCost: 0 }],
-      }
-    })
-    if (newChapters.length > 0) {
-      setChapters(newChapters)
-      if (!form.title && kalk.title) set('title', kalk.title)
-    }
-    setShowKalkImport(false)
-  }
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
-  const addChapter = () => setChapters(c=>[...c,{ id:Date.now(), title:`Kapittel ${c.length+1}`, markup:'', posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitCost:0}] }])
+  const addChapter = () => setChapters(c=>[...c,{ id:Date.now(), title:`Kapittel ${c.length+1}`, markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitCost:0}] }])
   const removeChapter = (id) => setChapters(c=>c.filter(x=>x.id!==id))
   const updateChapter = (id,f,v) => setChapters(c=>c.map(x=>x.id===id?{...x,[f]:v}:x))
   const addPost = (chId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:[...x.posts,{id:Date.now(),description:'',qty:1,unit:'stk',unitCost:0}]}:x))
   const removePost = (chId,pId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.filter(p=>p.id!==pId)}:x))
   const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
 
-  const handleVedleggUpload = async (e) => {
-    const file = e.target.files?.[0]; if (!file) return
-    try {
-      const path = `anbud-vedlegg/${Date.now()}_${file.name}`
-      const { error } = await supabase.storage.from('plattform-files').upload(path, file)
-      if (error) throw error
-      const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
-      setVedlegg(prev => [...prev, { name: file.name, url: data.publicUrl, size: file.size }])
-    } catch(err) { console.error(err) }
-    e.target.value = ''
-  }
-
   const handleSave = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, type, chapters, vedlegg, project_id: form.project_id||null, updated_at: new Date().toISOString() }
+      const payload = { ...form, type, chapters, project_id: form.project_id||null, updated_at: new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('tenders').update(payload).eq('id',initial.id); if(error) throw error }
-      else {
-        const log = [{ action: 'Anbud opprettet', by: user?.email, at: new Date().toISOString() }]
-        const {error}=await supabase.from('tenders').insert({...payload, status:'Utkast', created_by:user?.id, activity_log: log }); if(error) throw error
-      }
+      else { const {error}=await supabase.from('tenders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -7733,7 +6241,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
               <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 {isIncoming?'Byggherre / Oppdragsgiver':'Kontakt / UE-koordinator'}</div></div>
               <div>{lbl(isIncoming?'Byggherre':'Kontaktnavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={tInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="epost@firma.no" style={tInp} /></div>
@@ -7742,27 +6250,8 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Frister og betingelser</div></div>
               <div>{lbl('Anbudsfrist')}<input type="date" value={form.deadline} onChange={e=>set('deadline',e.target.value)} style={tInp} /></div>
               <div>{lbl('Gyldig til')}<input type="date" value={form.valid_until} onChange={e=>set('valid_until',e.target.value)} style={tInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" max="100" style={tInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" max="100" style={tInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Beskrivelse / Omfang')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={4} placeholder="Beskriv arbeidet, omfang, krav og betingelser..." style={{ ...tInp, resize:'none' }} /></div>
-              {/* Vedlegg */}
-              <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>📎 Vedlegg / Dokumenter</div>
-                <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>Last opp tegninger, beskrivelser, kravspesifikasjoner eller andre dokumenter som UE trenger for å prise.</p>
-                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
-                  {vedlegg.map((v, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'6px 12px' }}>
-                      <span style={{ fontSize:'16px' }}>{v.name.match(/\.(pdf)$/i) ? '📄' : v.name.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? '🖼️' : v.name.match(/\.(dwg|dxf)$/i) ? '📐' : v.name.match(/\.(xlsx?|csv)$/i) ? '📊' : '📎'}</span>
-                      <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'13px', color:'#2563eb', textDecoration:'none', fontWeight:'500', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.name}</a>
-                      {v.size && <span style={{ fontSize:'11px', color:'#94a3b8' }}>({(v.size/1024).toFixed(0)} KB)</span>}
-                      <button onClick={() => setVedlegg(prev => prev.filter((_, j) => j !== i))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0 2px' }}>×</button>
-                    </div>
-                  ))}
-                </div>
-                <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'10px 18px', cursor:'pointer', color:'#64748b', fontSize:'13px', fontWeight:'600' }}>
-                  📎 Last opp fil
-                  <input type="file" style={{ display:'none' }} onChange={handleVedleggUpload} accept=".pdf,.png,.jpg,.jpeg,.gif,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.zip" />
-                </label>
-              </div>
             </div>
           )}
           {step===2 && (
@@ -7787,16 +6276,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                             return <tr key={p.id}>
                               <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...tInp, minWidth:'180px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...tInp, width:'70px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}>
-                                <select value={['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke'].includes(p.unit) ? p.unit : (p.unit ? '_custom' : '')} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...tInp, width:'75px', appearance:'auto' }}>
-                                  <option value="">Velg</option>
-                                  {['stk','m²','m³','lm','m','rs','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
-                                  <option value="_custom">Annet…</option>
-                                </select>
-                                {!['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke',''].includes(p.unit) && (
-                                  <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...tInp, width:'75px', marginTop:'4px' }} />
-                                )}
-                              </td>
+                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...tInp, width:'60px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitCost} onChange={e=>updatePost(ch.id,p.id,'unitCost',e.target.value)} style={{ ...tInp, width:'120px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtT(ls)}</td>
                               <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
@@ -7813,38 +6293,6 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                 )
               })}
               <button onClick={addChapter} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'14px', padding:'16px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'14px', width:'100%' }}>+ Legg til kapittel</button>
-              <button onClick={loadKalks} style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'14px', padding:'14px 16px', cursor:'pointer', color:'#7c3aed', fontWeight:'600', fontSize:'14px', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px' }}>🧮 Importer poster fra kalkulasjon</button>
-
-              {showKalkImport && (
-                <div style={{ background:'white', borderRadius:'14px', border:'2px solid #ddd6fe', padding:'16px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
-                    <h4 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#7c3aed' }}>🧮 Velg kalkulasjon å importere fra</h4>
-                    <button onClick={() => setShowKalkImport(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'18px' }}>×</button>
-                  </div>
-                  {availableKalks.length === 0 ? (
-                    <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'16px 0' }}>Ingen kalkulasjoner funnet</p>
-                  ) : (
-                    <div style={{ display:'flex', flexDirection:'column', gap:'6px', maxHeight:'300px', overflowY:'auto' }}>
-                      {availableKalks.map(k => {
-                        const antall = (k.kalkyler||[]).reduce((a, kl) => a + (kl.bygningsdeler||[]).length, 0)
-                        return (
-                          <button key={k.id} onClick={() => importFromKalk(k)}
-                            style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left', width:'100%' }}
-                            onMouseEnter={e=>e.currentTarget.style.background='#f5f3ff'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                            <div>
-                              <div style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{k.title}</div>
-                              <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{k.kalk_number} · {(k.kalkyler||[]).length} fag · {antall} bygningsdel{antall!==1?'er':''} · {k.status}</div>
-                            </div>
-                            <span style={{ color:'#7c3aed', fontSize:'13px', fontWeight:'600' }}>Importer →</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  <p style={{ margin:'10px 0 0', fontSize:'11px', color:'#94a3b8' }}>Alle bygningsdeler importeres som poster. Kostpris settes til 0 — UE fyller inn sin pris.</p>
-                </div>
-              )}
-
               <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'18px 24px', border:'1px solid #bbf7d0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div><div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Total kalkylepris eks. mva</div>{parseFloat(form.global_markup)>0&&<div style={{ fontSize:'12px', color:'#94a3b8' }}>Inkl. generelt påslag {form.global_markup}%</div>}</div>
                 <div style={{ fontSize:'24px', fontWeight:'800', color:'#0f172a' }}>{fmtT(grandTotal)}</div>
@@ -7869,37 +6317,6 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
   const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'' }])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const [previousUEs, setPreviousUEs] = useState([])
-  const [showRegister, setShowRegister] = useState(false)
-  const [registerSearch, setRegisterSearch] = useState('')
-
-  // Load previously used UEs from tender_ues table
-  useEffect(() => {
-    supabase.from('tender_ues').select('company_name, contact_name, email').order('created_at', { ascending: false }).then(({ data }) => {
-      if (!data) return
-      // Deduplicate by email
-      const seen = new Set()
-      const unique = data.filter(u => {
-        if (!u.email || seen.has(u.email.toLowerCase())) return false
-        seen.add(u.email.toLowerCase())
-        return true
-      })
-      setPreviousUEs(unique)
-    })
-  }, [])
-
-  const addFromRegister = (prev) => {
-    // Check if already added
-    if (ues.some(u => u.email.toLowerCase() === prev.email.toLowerCase())) return
-    setUes(u => [...u.filter(x => x.company_name || x.email), { id: Date.now(), company_name: prev.company_name, contact_name: prev.contact_name || '', email: prev.email }])
-    setRegisterSearch('')
-  }
-
-  const filteredRegister = previousUEs.filter(p => {
-    if (!registerSearch) return true
-    const s = registerSearch.toLowerCase()
-    return p.company_name?.toLowerCase().includes(s) || p.email?.toLowerCase().includes(s) || p.contact_name?.toLowerCase().includes(s)
-  })
 
   const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'' }])
   const removeUE = (id) => setUes(u=>u.filter(x=>x.id!==id))
@@ -7921,7 +6338,6 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
             <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>
             ${tender.description?`<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">${tender.description}</p></div>`:''}
             ${tender.deadline?`<p style="color:#dc2626;font-weight:600;font-size:14px">⏰ Anbudsfrist: ${tender.deadline}</p>`:''}
-            ${(tender.vedlegg||[]).length > 0 ? '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0;border:1px solid #f1f5f9"><p style="margin:0 0 8px;font-weight:700;font-size:14px;color:#0f172a">📎 Vedlegg</p>' + tender.vedlegg.map(v => `<a href="${v.url}" style="display:block;color:#2563eb;font-size:13px;margin-bottom:4px;text-decoration:none">📎 ${v.name}</a>`).join('') + '</div>' : ''}
             <p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for følgende poster.</p>
             <div style="text-align:center;margin:32px 0">
               <a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📝 Fyll inn priser</a>
@@ -7935,14 +6351,6 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
         })
         if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
       }
-      // Log invitations
-      const { data: tenderRec } = await supabase.from('tenders').select('activity_log, status').eq('id', tender.id).single()
-      const names = valid.map(u => u.company_name.trim()).join(', ')
-      const log = [...(tenderRec?.activity_log || []), { action: `Invitert UE: ${names}`, by: user?.email, at: new Date().toISOString() }]
-      // Auto-update status to Sendt if still Utkast
-      const newStatus = tenderRec?.status === 'Utkast' ? 'Sendt' : tenderRec?.status
-      if (newStatus !== tenderRec?.status) log.push({ action: `Status automatisk endret til Sendt`, by: 'System', at: new Date().toISOString() })
-      await supabase.from('tenders').update({ activity_log: log, status: newStatus }).eq('id', tender.id)
       setSent(true)
       setTimeout(()=>onSaved(), 1500)
     } catch(e) { alert('Feil: '+e.message) }
@@ -7969,39 +6377,6 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
               <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', fontSize:'13px', color:'#1d4ed8' }}>
                 📋 <strong>{tender.title}</strong> — {tender.tender_number}{tender.deadline?` · Frist: ${tender.deadline}`:''}
               </div>
-
-              {/* UE-register */}
-              {previousUEs.length > 0 && (
-                <div>
-                  <button onClick={() => setShowRegister(!showRegister)}
-                    style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'10px', padding:'10px 16px', cursor:'pointer', color:'#7c3aed', fontWeight:'600', fontSize:'13px', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
-                    📇 {showRegister ? 'Skjul' : 'Velg fra'} tidligere UE-er ({previousUEs.length})
-                  </button>
-                  {showRegister && (
-                    <div style={{ marginTop:'8px', background:'#faf5ff', borderRadius:'10px', border:'1px solid #e9d5ff', padding:'12px' }}>
-                      <input value={registerSearch} onChange={e => setRegisterSearch(e.target.value)} placeholder="🔍 Søk firma, kontakt, e-post..." style={{ ...tInp, marginBottom:'8px', fontSize:'13px' }} />
-                      <div style={{ maxHeight:'180px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'4px' }}>
-                        {filteredRegister.slice(0, 20).map((prev, i) => {
-                          const alreadyAdded = ues.some(u => u.email.toLowerCase() === prev.email.toLowerCase())
-                          return (
-                            <button key={i} onClick={() => !alreadyAdded && addFromRegister(prev)} disabled={alreadyAdded}
-                              style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderRadius:'8px', border:'1px solid #f1f5f9', background: alreadyAdded ? '#f1f5f9' : 'white', cursor: alreadyAdded ? 'default' : 'pointer', textAlign:'left', width:'100%', opacity: alreadyAdded ? 0.5 : 1 }}
-                              onMouseEnter={e => { if (!alreadyAdded) e.currentTarget.style.background='#f5f3ff' }} onMouseLeave={e => { if (!alreadyAdded) e.currentTarget.style.background='white' }}>
-                              <div>
-                                <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{prev.company_name}</div>
-                                <div style={{ fontSize:'11px', color:'#64748b' }}>{prev.contact_name ? `${prev.contact_name} · ` : ''}{prev.email}</div>
-                              </div>
-                              <span style={{ fontSize:'12px', color: alreadyAdded ? '#94a3b8' : '#7c3aed', fontWeight:'600' }}>{alreadyAdded ? '✓ Lagt til' : '+ Legg til'}</span>
-                            </button>
-                          )
-                        })}
-                        {filteredRegister.length === 0 && <p style={{ margin:0, color:'#94a3b8', fontSize:'12px', textAlign:'center', padding:'8px 0' }}>Ingen treff</p>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {ues.map((ue,i)=>(
                 <div key={ue.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
@@ -8039,53 +6414,8 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
     if (!ue) return alert('Velg en UE')
     setSaving(true)
     try {
-      const { data: tenderRec } = await supabase.from('tenders').select('activity_log').eq('id', tender.id).single()
-      const log = [...(tenderRec?.activity_log || []), { action: `Tildelt til ${ue.company_name} — ${fmtT(ue.total_amount||0)}`, by: user?.email, at: new Date().toISOString() }]
-      await supabase.from('tenders').update({ status:'Tildelt', awarded_ue:ue.company_name, awarded_amount:ue.total_amount, project_id:projectId||null, activity_log: log, updated_at:new Date().toISOString() }).eq('id', tender.id)
-      await supabase.from('tender_ues').update({ status:'godkjent' }).eq('id', selectedUE)
+      await supabase.from('tenders').update({ status:'Tildelt', awarded_ue:ue.company_name, awarded_amount:ue.total_amount, project_id:projectId||null, updated_at:new Date().toISOString() }).eq('id', tender.id)
       await supabase.from('tender_ues').update({ status:'Avslått' }).eq('tender_id', tender.id).neq('id', selectedUE)
-
-      // Send e-post til vinnende UE
-      const winHtml = `
-        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-          <div style="background:#f0fdf4;border-radius:12px;padding:20px;border:1px solid #bbf7d0;margin-bottom:20px;text-align:center">
-            <div style="font-size:48px;margin-bottom:8px">🏆</div>
-            <h1 style="margin:0;color:#16a34a;font-size:22px">Gratulerer – du er tildelt oppdraget!</h1>
-          </div>
-          <h2 style="color:#0f172a;font-size:18px;margin:0 0 8px">${tender.title}</h2>
-          <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>
-          <div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0;border:1px solid #f1f5f9">
-            <div style="font-size:13px;color:#64748b;margin-bottom:4px">Din pris</div>
-            <div style="font-size:24px;font-weight:800;color:#0f172a">${fmtT(ue.total_amount||0)}</div>
-            <div style="font-size:12px;color:#94a3b8">eks. mva</div>
-          </div>
-          <p style="color:#475569;font-size:14px;line-height:1.6">Vi bekrefter at ditt tilbud er valgt. Vi vil kontakte deg for videre detaljer og avtale oppstart.</p>
-          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
-        </div>`
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-        method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: ue.email, subject:`🏆 Tildelt: ${tender.title} (${tender.tender_number})`, html: winHtml })
-      })
-
-      // Send avslags-e-post til de andre UE-ene
-      const losers = ues.filter(u => u.id !== selectedUE && u.email)
-      for (const loser of losers) {
-        const loseHtml = `
-          <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-            <h2 style="color:#0f172a;font-size:18px;margin:0 0 8px">Angående anbudsforespørsel: ${tender.title}</h2>
-            <p style="color:#64748b;font-size:14px">Anbudsnummer: ${tender.tender_number}</p>
-            <p style="color:#475569;font-size:14px;line-height:1.6">Vi takker for ditt tilbud og din interesse. Etter en helhetsvurdering har vi valgt å gå videre med en annen leverandør for dette oppdraget.</p>
-            <p style="color:#475569;font-size:14px;line-height:1.6">Vi setter stor pris på samarbeidet og håper på muligheten til å jobbe sammen ved en senere anledning.</p>
-            <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-            <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
-          </div>`
-        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-          method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-          body: JSON.stringify({ to: loser.email, subject:`Angående anbudsforespørsel: ${tender.title}`, html: loseHtml })
-        }).catch(() => {}) // don't fail if rejection email fails
-      }
-
       if (user?.id) {
         await supabase.from('notifications').insert({ user_id:user.id, title:`Anbud tildelt: ${tender.title}`, message:`Tildelt til ${ue.company_name} for ${fmtT(ue.total_amount||0)}`, type:'success', link_page:'anbudsmodul' })
       }
@@ -8126,7 +6456,7 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Knytt til prosjekt</label>
                 <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={tInp}>
                   <option value="">Ingen</option>
-                  {projectOptions(projects)}
+                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                 </select>
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
@@ -8151,19 +6481,6 @@ function UEPrisingsPage() {
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
-  const [ueVedlegg, setUeVedlegg] = useState([])
-
-  const handleUeVedleggUpload = async (e) => {
-    const file = e.target.files?.[0]; if (!file) return
-    try {
-      const path = `ue-vedlegg/${Date.now()}_${file.name}`
-      const { error } = await supabase.storage.from('plattform-files').upload(path, file)
-      if (error) throw error
-      const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
-      setUeVedlegg(prev => [...prev, { name: file.name, url: data.publicUrl, size: file.size }])
-    } catch(err) { console.error(err) }
-    e.target.value = ''
-  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -8187,50 +6504,14 @@ function UEPrisingsPage() {
   }
 
   const updatePrice = (chId, pId, val) => setChapters(c=>c.map(ch=>ch.id===chId?{...ch,posts:ch.posts.map(p=>p.id===pId?{...p,uePrice:val}:p)}:ch))
-  const updateComment = (chId, pId, val) => setChapters(c=>c.map(ch=>ch.id===chId?{...ch,posts:ch.posts.map(p=>p.id===pId?{...p,ueComment:val}:p)}:ch))
 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
       const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
-      await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString(), vedlegg: ueVedlegg.length > 0 ? ueVedlegg : null }).eq('id', ueData.id)
-      // Log UE pricing in tender activity
-      const { data: tenderRec } = await supabase.from('tenders').select('activity_log, parent_tender_id, created_by, status').eq('id', tender.id).single()
-      const tLog = [...(tenderRec?.activity_log || []), { action: `Pris mottatt fra ${ueData.company_name}: ${fmtT(totalAmount)}`, by: ueData.company_name, at: new Date().toISOString() }]
-
-      // Auto-status: Sendt → Mottatt when first price arrives
-      let newStatus = tenderRec?.status
-      if (newStatus === 'Sendt') {
-        newStatus = 'Mottatt'
-        tLog.push({ action: 'Status automatisk endret til Mottatt (første pris mottatt)', by: 'System', at: new Date().toISOString() })
-      }
-      // Auto-status: Mottatt → Under vurdering when all invited UEs have priced
-      if (newStatus === 'Mottatt') {
-        const { data: allTenderUEs } = await supabase.from('tender_ues').select('status').eq('tender_id', tender.id)
-        const allPriced = allTenderUEs && allTenderUEs.length > 0 && allTenderUEs.every(u => u.status === 'Priset')
-        if (allPriced) {
-          newStatus = 'Under vurdering'
-          tLog.push({ action: 'Status automatisk endret til Under vurdering (alle UE-er har priset)', by: 'System', at: new Date().toISOString() })
-        }
-      }
-      await supabase.from('tenders').update({ activity_log: tLog, status: newStatus }).eq('id', tender.id)
-
-      // Notify tender owner
-      if (tenderRec?.created_by) {
-        await supabase.from('notifications').insert({ user_id: tenderRec.created_by, title:`📬 Anbud priset: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul', link_id: tender.id })
-      }
-
-      // Punkt 1: If this tender has a parent (came from fagfordeling), update parent tender too
-      if (tenderRec?.parent_tender_id) {
-        const { data: parentTender } = await supabase.from('tenders').select('activity_log, created_by').eq('id', tenderRec.parent_tender_id).single()
-        if (parentTender) {
-          const parentLog = [...(parentTender.activity_log || []), { action: `UE-pris mottatt for ${tender.title}: ${ueData.company_name} — ${fmtT(totalAmount)}`, by: ueData.company_name, at: new Date().toISOString() }]
-          await supabase.from('tenders').update({ activity_log: parentLog }).eq('id', tenderRec.parent_tender_id)
-          // Notify parent tender owner too
-          if (parentTender.created_by && parentTender.created_by !== tenderRec?.created_by) {
-            await supabase.from('notifications').insert({ user_id: parentTender.created_by, title:`📬 UE-pris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris ${fmtT(totalAmount)} på faggruppe-anbud fra byggherre-forespørsel.`, type:'success', link_page:'anbudsmodul', link_id: tenderRec.parent_tender_id })
-          }
-        }
+      await supabase.from('tender_ues').update({ status:'Priset', chapters, total_amount:totalAmount, submitted_at:new Date().toISOString() }).eq('id', ueData.id)
+      if (tender.created_by) {
+        await supabase.from('notifications').insert({ user_id:tender.created_by, title:`Ny anbудspris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul' })
       }
       setDone(true)
     } catch(e) { alert('Feil: '+e.message) }
@@ -8258,23 +6539,13 @@ function UEPrisingsPage() {
             </div>
           </div>
           {tender.description && <p style={{ margin:'16px 0 0', fontSize:'14px', color:'#475569', lineHeight:1.6, background:'#f8fafc', borderRadius:'10px', padding:'12px 16px' }}>{tender.description}</p>}
-          {(tender.vedlegg||[]).length > 0 && (
-            <div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
-              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>📎 Vedlegg fra oppdragsgiver</div>
-              {tender.vedlegg.map((v, i) => (
-                <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'13px', color:'#2563eb', textDecoration:'none', marginBottom:'4px', fontWeight:'500' }}>
-                  {v.name.match(/\.(pdf)$/i) ? '📄' : '📎'} {v.name}
-                </a>
-              ))}
-            </div>
-          )}
         </div>
 
         {chapters.map((ch,ci)=>(
           <div key={ch.id} style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
             <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'14px' }}>
-              <thead><tr style={{ background:'#f8fafc' }}>{['Beskrivelse','Mengde','Enhet','Din pris/enh','Sum','Kommentar'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:h==='Din pris/enh'||h==='Sum'?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'12px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background:'#f8fafc' }}>{['Beskrivelse','Mengde','Enhet','Din pris/enh','Sum'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:h==='Din pris/enh'||h==='Sum'?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'12px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {(ch.posts||[]).map(p=>{
                   const ls=(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0)
@@ -8284,33 +6555,12 @@ function UEPrisingsPage() {
                     <td style={{ padding:'10px', color:'#475569' }}>{p.unit}</td>
                     <td style={{ padding:'6px' }}><input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'120px', textAlign:'right', borderColor:'#2563eb' }} /></td>
                     <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtT(ls)}</td>
-                    <td style={{ padding:'6px' }}><input value={p.ueComment||''} onChange={e=>updateComment(ch.id,p.id,e.target.value)} placeholder="Evt. forbehold..." style={{ ...tInp, width:'160px', fontSize:'12px' }} /></td>
                   </tr>
                 })}
               </tbody>
             </table>
           </div>
         ))}
-
-        <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Vedlegg (valgfritt)</h3>
-          <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#94a3b8' }}>Last opp tilbudsbrev, forsikringsbevis eller andre relevante dokumenter.</p>
-          {ueVedlegg.length > 0 && (
-            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'10px' }}>
-              {ueVedlegg.map((v, i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 10px' }}>
-                  <span style={{ fontSize:'14px' }}>📎</span>
-                  <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', maxWidth:'180px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.name}</a>
-                  <button onClick={() => setUeVedlegg(prev => prev.filter((_, j) => j !== i))} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'0 2px' }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'8px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
-            📂 Last opp fil
-            <input type="file" onChange={handleUeVedleggUpload} style={{ display:'none' }} />
-          </label>
-        </div>
 
         <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
@@ -8374,7 +6624,6 @@ const EM_STATUS = {
 
 function EndringsmeldingPage() {
   const { user } = useAuth()
-  const showAlert = useAlert()
   const [endringer, setEndringer] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -8402,10 +6651,7 @@ function EndringsmeldingPage() {
   useEffect(() => { load() }, [])
 
   const filtered = endringer.filter(em => {
-    if (statusFilter === '_godkjent') {
-      // "Godkjent beløp" filter: show Godkjent + Fakturert
-      if (em.status !== 'Godkjent' && em.status !== 'Fakturert') return false
-    } else if (statusFilter !== 'all' && em.status !== statusFilter) return false
+    if (statusFilter !== 'all' && em.status !== statusFilter) return false
     if (projectFilter !== 'all' && em.project_id !== projectFilter) return false
     if (search && !em.title?.toLowerCase().includes(search.toLowerCase()) && !em.em_number?.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -8531,7 +6777,7 @@ function EndringsmeldingPage() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
               <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
-              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects)}</select></div>
+              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             </div>
 
             <div>{lbl('Årsak til endring')}<select value={form.reason} onChange={e=>set('reason',e.target.value)} style={{ ...inp, background:'white' }}>
@@ -8602,13 +6848,9 @@ function EndringsmeldingPage() {
     )
   }
 
-  const [sendingEmId, setSendingEmId] = useState(null)
-
   // ── Send til kunde ─────────────────────────────────────────────────────────
   const sendToCustomer = async (em) => {
-    if (!em.customer_email) return showAlert({ message: 'E-post mangler', subMessage: 'Legg til kundens e-postadresse først.', type: 'warning', emoji: '⚠️' })
-    if (sendingEmId) return // prevent double-click
-    setSendingEmId(em.id)
+    if (!em.customer_email) return alert('Legg til kundens e-post først')
     try {
       const proj = projects.find(p => p.id === em.project_id)
 
@@ -8654,10 +6896,8 @@ function EndringsmeldingPage() {
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
       await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }).eq('id', em.id)
-      showAlert({ message: 'Sendt!', subMessage: 'Endringsmeldingen er sendt til kunde på e-post.', emoji: '✅' })
       load()
-    } catch(e) { showAlert({ message: 'Feil ved utsendelse', subMessage: e.message, type: 'error' }) }
-    finally { setSendingEmId(null) }
+    } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
   }
 
   // ── Detail View ────────────────────────────────────────────────────────────
@@ -8752,20 +6992,14 @@ function EndringsmeldingPage() {
       {/* Statistikk */}
       <div style={{ padding:'16px 32px', display:'flex', gap:'12px' }}>
         {[
-          { label:'Totalt', value: endringer.length, color:'#0f172a', filterVal:'all' },
-          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b', filterVal:'Utkast' },
-          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb', filterVal:'Sendt' },
-          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a', filterVal:'Godkjent' },
-          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669', filterVal:'_godkjent_beløp' },
-          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706', filterVal:'_klar_fakturering' },
+          { label:'Totalt', value: endringer.length, color:'#0f172a' },
+          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b' },
+          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb' },
+          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a' },
+          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669' },
+          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706' },
         ].map((s,i) => (
-          <div key={i} onClick={() => {
-            if (s.filterVal === 'all') { setStatusFilter('all') }
-            else if (s.filterVal === '_godkjent_beløp') { setStatusFilter(statusFilter==='_godkjent'?'all':'_godkjent') }
-            else if (s.filterVal === '_klar_fakturering') { setStatusFilter(statusFilter==='Godkjent'?'all':'Godkjent') }
-            else { setStatusFilter(statusFilter===s.filterVal?'all':s.filterVal) }
-          }}
-          style={{ background: (statusFilter===s.filterVal || (s.filterVal==='_godkjent_beløp'&&statusFilter==='_godkjent') || (s.filterVal==='_klar_fakturering'&&statusFilter==='Godkjent'&&i===5)) ? '#f0fdf4' : 'white', borderRadius:'12px', border:`1px solid ${(statusFilter===s.filterVal || (s.filterVal==='_godkjent_beløp'&&statusFilter==='_godkjent') || (s.filterVal==='_klar_fakturering'&&statusFilter==='Godkjent'&&i===5)) ? '#bbf7d0' : '#f1f5f9'}`, padding:'12px 16px', flex:1, textAlign:'center', cursor:'pointer', transition:'all 0.15s' }}>
+          <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'12px 16px', flex:1, textAlign:'center' }}>
             <div style={{ fontSize:'18px', fontWeight:'800', color:s.color }}>{s.value}</div>
             <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.label}</div>
           </div>
@@ -8781,7 +7015,7 @@ function EndringsmeldingPage() {
         </select>
         <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth:'200px', background:'white' }}>
           <option value="all">Alle prosjekter</option>
-          {projectOptions(projects)}
+          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
         </select>
       </div>
 
@@ -8818,12 +7052,12 @@ function EndringsmeldingPage() {
                   </div>
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
                     {(em.status === 'Utkast' || em.status === 'Under forhandling') && (
-                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde" disabled={sendingEmId===em.id}
-                        style={{ background: sendingEmId===em.id ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor: sendingEmId===em.id ? 'not-allowed' : 'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>{sendingEmId===em.id ? '⏳ Sender...' : '📧 Send'}</button>
+                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde"
+                        style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
                     )}
                     {em.status === 'Sendt' && (
-                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse" disabled={sendingEmId===em.id}
-                        style={{ background: sendingEmId===em.id ? '#fef3c7' : '#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor: sendingEmId===em.id ? 'not-allowed' : 'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>{sendingEmId===em.id ? '⏳ Sender...' : '📩 Purr'}</button>
+                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
+                        style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
                     )}
                     <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
                     <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
@@ -8896,7 +7130,6 @@ function EndringsmeldingPage() {
       </div>
 
       {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
-
     </div>
   )
 }
@@ -8904,7 +7137,7 @@ function EndringsmeldingPage() {
 function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
-function OrdrePage({ openOrderId, onOpenHandled }) {
+function OrdrePage() {
   const { user } = useAuth()
   const [orders, setOrders] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -8924,12 +7157,6 @@ function OrdrePage({ openOrderId, onOpenHandled }) {
         supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
       ])
       setOrders(o); setQuotes(q); setProjects(p)
-      // Auto-open order from notification
-      if (openOrderId) {
-        const target = o.find(x => x.id === openOrderId)
-        if (target) setSelected(target)
-        if (onOpenHandled) onOpenHandled()
-      }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -9041,7 +7268,6 @@ function OrdrePage({ openOrderId, onOpenHandled }) {
 
 function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const confirm = useConfirm()
-  const showAlert = useAlert()
   const [o, setO] = useState(init)
   const [changes, setChanges] = useState([])
   const [editing, setEditing] = useState(false)
@@ -9060,15 +7286,12 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     const { data } = await supabase.from('orders').select('*').eq('id',o.id).single()
     if (data) setO(data)
   }
-  useEffect(() => { loadChanges(); refresh() }, [])
+  useEffect(() => { loadChanges() }, [])
 
   const updateStatus = async (status) => {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status==='Bekreftet') updates.confirmed_at = new Date().toISOString()
     if (status==='Fullført') updates.completed_at = new Date().toISOString()
-    // Activity log
-    const log = [...(o.activity_log || []), { action: status === 'Fullført' ? 'Fullført og klar for fakturering' : `Status endret til ${status}`, by: user?.email, at: new Date().toISOString() }]
-    updates.activity_log = log
     await supabase.from('orders').update(updates).eq('id',o.id)
     setO(v=>({...v,...updates}))
   }
@@ -9079,57 +7302,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     onBack()
   }
 
-  const handleCompleteAndInvoice = async () => {
-    // 1. Set status to Fullført
-    const updates = { status: 'Fullført', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-    const log = [...(o.activity_log || []), { action: 'Fullført og sendt til fakturering', by: user?.email, at: new Date().toISOString() }]
-    updates.activity_log = log
-    await supabase.from('orders').update(updates).eq('id',o.id)
-    setO(v=>({...v,...updates}))
-
-    // 2. Auto-create invoice from order
-    try {
-      const invoiceLines = (o.chapters||[]).flatMap(ch =>
-        (ch.posts||[]).map(p => ({
-          id: Date.now() + Math.random(),
-          description: `${ch.title}: ${p.description || ''}`.trim(),
-          qty: parseFloat(p.qty)||1,
-          unit: p.unit||'stk',
-          unitPrice: ((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0)) * (1 + (parseFloat(ch.markup)||0)/100),
-          mvaRate: 0.25,
-        }))
-      )
-      // Add global markup as separate line if applicable
-      if (parseFloat(o.global_markup) > 0) {
-        const subTotal = invoiceLines.reduce((a,l) => a + (l.qty * l.unitPrice), 0)
-        invoiceLines.push({ id: Date.now()+999, description: `Generelt påslag ${o.global_markup}%`, qty: 1, unit: 'rs', unitPrice: subTotal * (parseFloat(o.global_markup)/100), mvaRate: 0.25 })
-      }
-      // Add change orders
-      const approvedChanges = changes.filter(c => c.status === 'Godkjent')
-      approvedChanges.forEach(c => {
-        invoiceLines.push({ id: Date.now()+Math.random(), description: `Endringsmelding: ${c.title}`, qty: 1, unit: 'rs', unitPrice: c.amount||0, mvaRate: 0.25 })
-      })
-
-      const invNum = `FKT-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
-      const { error } = await supabase.from('invoices').insert({
-        title: `Faktura – ${o.title}`,
-        invoice_number: invNum,
-        project_id: o.project_id || null,
-        order_id: o.id,
-        customer_name: o.customer_name, customer_email: o.customer_email,
-        customer_address: o.customer_address, customer_orgnr: o.customer_orgnr,
-        invoice_date: new Date().toISOString().split('T')[0],
-        payment_terms: o.payment_terms || '30 dager netto',
-        due_date: addDays(new Date().toISOString().split('T')[0], paymentDays(o.payment_terms)),
-        lines: invoiceLines,
-        status: 'Utkast',
-        created_by: user?.id,
-      })
-      if (error) throw error
-      showAlert({ message: 'Fullført og faktura opprettet!', subMessage: `Faktura ${invNum} er opprettet som utkast i faktura-modulen.`, emoji: '🧾' })
-    } catch(e) {
-      showAlert({ message: 'Ordre fullført', subMessage: `Status satt til Fullført, men faktura kunne ikke opprettes automatisk: ${e.message}`, type: 'warning', emoji: '⚠️' })
-    }
+  const createInvoice = async () => {
+    alert('Gå til Faktura-modulen og velg "Fra ordre" for å opprette faktura.')
   }
 
   return (
@@ -9154,6 +7328,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send bekreftelse</button>}
+            {o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Opprett faktura</button>}
             <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄 Endringsmelding</button>
             <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>
@@ -9249,33 +7424,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               </div>
             </div>
           )}
-
-          {/* Aktivitetslogg */}
-          <div style={oCard}>
-            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
-            {(!o.activity_log || o.activity_log.length === 0) ? (
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert ennå</p>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
-                {(o.activity_log || []).slice().reverse().map((log, i) => {
-                  const isFirst = i === 0
-                  return (
-                    <div key={i} style={{ display:'flex', gap:'12px', alignItems:'flex-start', position:'relative', paddingLeft:'22px', paddingBottom:'14px' }}>
-                      <div style={{ position:'absolute', left:'6px', top:'0', bottom:'0', width:'2px', background: i === (o.activity_log.length - 1) ? 'transparent' : '#e2e8f0' }} />
-                      <div style={{ position:'absolute', left:'0', top:'3px', width:'14px', height:'14px', borderRadius:'50%', background: isFirst ? '#059669' : '#e2e8f0', border:'2px solid white', zIndex:1 }} />
-                      <div style={{ flex:1 }}>
-                        <span style={{ fontSize:'13px', fontWeight:'600', color: isFirst ? '#059669' : '#374151' }}>{log.action}</span>
-                        <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
-                          {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
-                          {log.by && <span> · {log.by}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Sidebar */}
@@ -9283,16 +7431,12 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           <div style={oCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-              {Object.keys(ORDER_STATUS).map(s=>{
-                const isFullfort = s === 'Fullført'
-                const label = isFullfort ? '🧾 Fullført og fakturer' : `${ORDER_STATUS[s].emoji} ${s}`
-                return (
-                  <button key={s} onClick={() => isFullfort ? handleCompleteAndInvoice() : updateStatus(s)} disabled={o.status===s}
-                    style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${o.status===s?ORDER_STATUS[s].border:'#e2e8f0'}`, background: isFullfort && o.status!==s ? 'linear-gradient(135deg,#059669,#0891b2)' : o.status===s?ORDER_STATUS[s].bg:'white', color: isFullfort && o.status!==s ? 'white' : o.status===s?ORDER_STATUS[s].color:'#475569', fontWeight: o.status===s || isFullfort ?'700':'400', fontSize:'13px', cursor:o.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
-                    {o.status===s?'✓ ':''}{label}
-                  </button>
-                )
-              })}
+              {Object.keys(ORDER_STATUS).map(s=>(
+                <button key={s} onClick={()=>updateStatus(s)} disabled={o.status===s}
+                  style={{ padding:'9px 14px', borderRadius:'10px', border:`1px solid ${o.status===s?ORDER_STATUS[s].border:'#e2e8f0'}`, background:o.status===s?ORDER_STATUS[s].bg:'white', color:o.status===s?ORDER_STATUS[s].color:'#475569', fontWeight:o.status===s?'700':'400', fontSize:'13px', cursor:o.status===s?'default':'pointer', textAlign:'left', width:'100%' }}>
+                  {o.status===s?'✓ ':''}{ORDER_STATUS[s].emoji} {s}
+                </button>
+              ))}
             </div>
           </div>
           <div style={oCard}>
@@ -9336,12 +7480,12 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
     global_markup: initial?.global_markup||0,
   })
   const [chapters, setChapters] = useState(initial?.chapters||[
-    { id:Date.now(), title:'Generelt', markup:'', posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}] }
+    { id:Date.now(), title:'Generelt', markup:0, posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}] }
   ])
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
-  const addChapter = () => setChapters(c=>[...c,{id:Date.now(),title:`Kapittel ${c.length+1}`,markup:'',posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}])
+  const addChapter = () => setChapters(c=>[...c,{id:Date.now(),title:`Kapittel ${c.length+1}`,markup:0,posts:[{id:Date.now()+1,description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}])
   const removeChapter = (id) => setChapters(c=>c.filter(x=>x.id!==id))
   const updateChapter = (id,f,v) => setChapters(c=>c.map(x=>x.id===id?{...x,[f]:v}:x))
   const addPost = (chId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:[...x.posts,{id:Date.now(),description:'',qty:1,unit:'stk',unitPriceWork:0,unitPriceMaterial:0}]}:x))
@@ -9387,7 +7531,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
               <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={oInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
@@ -9396,7 +7540,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Betingelser</div></div>
               <div>{lbl('Leveringsdato')}<input type="date" value={form.delivery_date} onChange={e=>set('delivery_date',e.target.value)} style={oInp} /></div>
               <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={oInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="Generelt påslag %" min="0" style={oInp} /></div>
+              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" style={oInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Ordrebekreftelse for..." style={{ ...oInp, resize:'none' }} /></div>
             </div>
           )}
@@ -9409,7 +7553,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                     <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
                       <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
                       <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px', color: ch.markup ? '#0f172a' : '#94a3b8' }} title="Påslag %" />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px' }} title="Påslag %" />
                       <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
                       {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
                     </div>
@@ -9422,16 +7566,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                             return <tr key={p.id}>
                               <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}>
-                                  <select value={['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke'].includes(p.unit) ? p.unit : (p.unit ? '_custom' : '')} onChange={e => { if (e.target.value === '_custom') { updatePost(ch.id,p.id,'unit','') } else { updatePost(ch.id,p.id,'unit',e.target.value) }}} style={{ ...oInp, width:'75px', appearance:'auto' }}>
-                                    <option value="">Velg</option>
-                                    {['stk','m²','m³','lm','m','rs','kg','tonn','time','dag','pakke'].map(u=><option key={u} value={u}>{u}</option>)}
-                                    <option value="_custom">Annet…</option>
-                                  </select>
-                                  {!['m²','rs','lm','stk','m³','m','kg','tonn','time','dag','pakke',''].includes(p.unit) && (
-                                    <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="Enhet" style={{ ...oInp, width:'75px', marginTop:'4px' }} />
-                                  )}
-                              </td>
+                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...oInp, width:'55px' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
                               <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtO(ls)}</td>
@@ -9565,7 +7700,7 @@ function SendOrdreModal({ order, user, onClose, onSent }) {
       })
       const d = await fnRes.json()
       if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
-      await supabase.from('orders').update({ status:'Sendt', updated_at:new Date().toISOString(), customer_email:email, activity_log: [...(order.activity_log||[]), { action:'Sendt til kunde', by:user?.email, at:new Date().toISOString(), to:email }] }).eq('id',order.id)
+      await supabase.from('orders').update({ status:'Sendt', updated_at:new Date().toISOString(), customer_email:email }).eq('id',order.id)
       setSent(true); setTimeout(()=>onSent(),1500)
     } catch(e) { alert('Kunne ikke sende: '+e.message) }
     finally { setSending(false) }
@@ -9711,7 +7846,7 @@ function FakturaPage() {
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,client_name,client_email,client_contact,client_phone,address_street,address_postal,address_city,customer_id').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
       ])
       setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p)
     } catch(e) { console.error(e) }
@@ -10107,37 +8242,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   })
   const [lines, setLines] = useState(initial?.lines||[{ id:Date.now(), description:'', qty:1, unit:'stk', unitPrice:0, mvaRate:0.25 }])
   const [saving, setSaving] = useState(false)
-  const set = (k,v) => {
-    setForm(f=>({...f,[k]:v}))
-    // Auto-fill customer info when project is selected
-    if (k === 'project_id' && v) {
-      const proj = projects.find(p => p.id === v)
-      if (proj) {
-        const addr = [proj.address_street, proj.address_postal, proj.address_city].filter(Boolean).join(', ')
-        setForm(f => ({
-          ...f,
-          project_id: v,
-          customer_name: f.customer_name || proj.client_name || '',
-          customer_email: f.customer_email || proj.client_email || '',
-          customer_address: f.customer_address || addr || '',
-        }))
-        // Also look up customer record for orgnr
-        if (proj.customer_id) {
-          supabase.from('customers').select('name,email,orgnr,address').eq('id', proj.customer_id).single().then(({ data: cust }) => {
-            if (cust) {
-              setForm(f => ({
-                ...f,
-                customer_name: f.customer_name || cust.name || '',
-                customer_email: f.customer_email || cust.email || '',
-                customer_orgnr: f.customer_orgnr || cust.orgnr || '',
-                customer_address: f.customer_address || cust.address || addr || '',
-              }))
-            }
-          })
-        }
-      }
-    }
-  }
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
   // Auto-calc due date when payment terms change
   const setPaymentTerms = (v) => { set('payment_terms',v); set('due_date', addDays(form.invoice_date, paymentDays(v))) }
@@ -10168,6 +8273,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
             <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
@@ -10183,7 +8289,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
             <div>{lbl('Forfallsdato')}<input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={iInp} /></div>
             <div>{lbl('KID-nummer')}<input value={form.kid} onChange={e=>set('kid',e.target.value)} placeholder="KID / betalingsreferanse" style={iInp} /></div>
             <div>{lbl('Bankkonto')}<input value={form.bank_account} onChange={e=>set('bank_account',e.target.value)} placeholder="1234.56.78901" style={iInp} /></div>
-            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' }}>
             <div>
@@ -10451,15 +8557,15 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
         </div>
         <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
           <div>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg endringsmeldinger knyttet til</label>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg ordre</label>
             <select value={selectedOrder} onChange={e=>{ setSelectedOrder(e.target.value); if(e.target.value) loadChanges(e.target.value) }} style={iInp}>
-              <option value="">Velg endringsmelding...</option>
-              {orders.map(o=><option key={o.id} value={o.id}>{o.title}</option>)}
+              <option value="">Velg ordre...</option>
+              {orders.map(o=><option key={o.id} value={o.id}>{o.order_number} – {o.title}</option>)}
             </select>
           </div>
           {changes.length>0 && (
             <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg endringsmeldinger å fakturere</label>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Godkjente endringsmeldinger</label>
               {changes.map(c=>(
                 <div key={c.id} onClick={()=>toggleChange(c.id)}
                   style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:selectedChanges.includes(c.id)?'#f0fdf4':'#f8fafc', borderRadius:'10px', border:`1px solid ${selectedChanges.includes(c.id)?'#bbf7d0':'#f1f5f9'}`, cursor:'pointer', marginBottom:'6px' }}>
@@ -11908,7 +10014,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
                       <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
                         <option value="">Velg...</option>
-                        {projectOptions(projects)}
+                        {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                       </select>
                     </div>
                     <div>
@@ -12492,7 +10598,7 @@ function RessursPage() {
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
             style={{ padding:'8px 12px',border:`2px solid ${filterProject!=='alle'?'#059669':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterProject!=='alle'?'700':'400',color:filterProject!=='alle'?'#059669':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
             <option value="alle">🏗️ Alle prosjekter</option>
-            {projectOptions(projects)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
 
           {/* Employee filter (ansatte only) */}
@@ -12939,7 +11045,7 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt</label>
             <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
               <option value="">Ingen / Generell</option>
-              {projectOptions(projects)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -13132,7 +11238,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
             <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
               <option value="">Velg prosjekt...</option>
-              {projectOptions(projects)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
             {projectId&&<div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/><span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span></div>}
           </div>
@@ -13382,7 +11488,7 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
           {step===1&&(<>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
               <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white' }}>
-                <option value="">Velg prosjekt...</option>{projectOptions(projects)}
+                <option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
             </div>
             <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
@@ -14014,7 +12120,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
           </div>
 
           <div>{lbl('Sted / Lokasjon')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Møterom A, Byggeplass..." style={cInp} /></div>
-          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div>{lbl('Beskrivelse')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...cInp,resize:'none' }} placeholder="Valgfri beskrivelse..." /></div>
 
           {/* Visibility */}
@@ -14760,7 +12866,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Knytt til prosjekt</label>
             <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
               <option value="">Ingen (generell kanal)</option>
-              {projectOptions(projects)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
           <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>
@@ -16237,7 +14343,7 @@ function BefaringPage() {
           </select>
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth:'180px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
@@ -16581,7 +14687,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
           ))}
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
@@ -16709,7 +14815,7 @@ function BildedokPage() {
           ))}
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projectOptions(projects)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterFase} onChange={e=>setFilterFase(e.target.value)} style={selStyle}><option value="alle">Alle faser</option>{BYGGEFASER.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterRom} onChange={e=>setFilterRom(e.target.value)} style={selStyle}><option value="alle">Alle rom</option>{allRooms.map(r=><option key={r} value={r}>{r}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterAnsatt} onChange={e=>setFilterAnsatt(e.target.value)} style={selStyle}><option value="alle">Alle ansatte</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
@@ -16877,7 +14983,7 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
             </div>
           </div>
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
-            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Rom / område</label><input value={rom} onChange={e=>setRom(e.target.value)} placeholder="F.eks. Bad 2. etg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notat</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
@@ -17006,7 +15112,7 @@ function FDVPage() {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...fInp,maxWidth:'180px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           {view==='komponenter'&&<select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...fInp,maxWidth:'150px' }}>
             <option value="alle">Alle kategorier</option>
@@ -17149,7 +15255,7 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
           <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
           <div>{lbl('Kategori')}<select value={form.category} onChange={e=>set('category',e.target.value)} style={fInp}><option value="">Velg...</option>{FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
           <div>{lbl('Plassering')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Kjeller / Rom 101" style={fInp} /></div>
-          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div>{lbl('Produsent')}<input value={form.manufacturer} onChange={e=>set('manufacturer',e.target.value)} placeholder="F.eks. Nibe" style={fInp} /></div>
           <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={fInp} /></div>
           <div>{lbl('Serienummer')}<input value={form.serial_number} onChange={e=>set('serial_number',e.target.value)} style={fInp} /></div>
@@ -17214,7 +15320,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
               ))}
             </div>
           </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Koble til komponent (valgfritt)</label><select value={form.component_id} onChange={e=>set('component_id',e.target.value)} style={fInp}><option value="">Ingen</option>{filteredComponents.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mappe</label><input value={form.folder_path} onChange={e=>set('folder_path',e.target.value)} placeholder="/Ventilasjon" style={fInp} /></div>
           <div>
@@ -23225,11 +21331,9 @@ function AppContent() {
   }
 
   const [page, setPage] = React.useState(getPageFromHash)
-  const [pendingLinkId, setPendingLinkId] = React.useState(null)
 
-  const navigate = (p, linkId) => {
-    setPendingLinkId(linkId || null)
-    if (p === page && !linkId) return
+  const navigate = (p) => {
+    if (p === page) return
     window.history.pushState({ page: p }, '', '#' + p)
     setPage(p)
     setProjectId(null)
@@ -23373,7 +21477,7 @@ function AppContent() {
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
         {page === 'endringsmelding' && <EndringsmeldingPage />}
-        {page === 'ordre' && <OrdrePage openOrderId={pendingLinkId} onOpenHandled={() => setPendingLinkId(null)} />}
+        {page === 'ordre' && <OrdrePage />}
         {page === 'faktura' && <FakturaPage />}
         {page === 'ansatte' && <AnsattePage />}
         {page === 'timelister' && <TimelistePage />}
@@ -23398,5 +21502,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AuthProvider><NotifProvider><ConfirmProvider><AlertProvider><AppContent /></AlertProvider></ConfirmProvider></NotifProvider></AuthProvider>
+  return <AuthProvider><NotifProvider><ConfirmProvider><AppContent /></ConfirmProvider></NotifProvider></AuthProvider>
 }
