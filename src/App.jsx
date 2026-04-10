@@ -6115,6 +6115,7 @@ const QUOTE_STATUS = {
   'Sendt':    { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '📤' },
   'Akseptert':{ bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   'Avslått':  { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+  'Erstattet':{ bg: '#f5f3ff', color: '#7c3aed', border: '#e9d5ff', emoji: '🔄' },
 }
 
 const qInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
@@ -6233,6 +6234,7 @@ function TilbudPage() {
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{q.title}</span>
                       <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
                       <QuoteStatusBadge status={q.status} />
+                      {(q.revision_number || 1) > 1 && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px' }}>Rev.{q.revision_number}</span>}
                       {isExpired && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'12px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>⏰ Utløpt</span>}
                     </div>
                     <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -6264,6 +6266,10 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   const [editing, setEditing] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [showSendModal, setShowSendModal] = useState(false)
+  const [showNewRevision, setShowNewRevision] = useState(false)
+  const [revisionNote, setRevisionNote] = useState('')
+  const [revisions, setRevisions] = useState([])
+  const [showRevisions, setShowRevisions] = useState(false)
   const cfg = QUOTE_STATUS[q.status]
   const proj = projects.find(p => p.id === q.project_id)
   const { grandTotal, chapterTotals } = calcQuote(q.chapters || [], q.global_markup)
@@ -6272,6 +6278,17 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
     const { data } = await supabase.from('quotes').select('*').eq('id', q.id).single()
     if (data) setQ(data)
   }
+
+  // Hent alle revisjoner av dette tilbudet
+  const loadRevisions = async () => {
+    const rootId = q.parent_quote_id || q.id
+    const { data } = await supabase.from('quotes').select('id, title, quote_number, revision_number, revision_note, status, total_amount, created_at')
+      .or(`id.eq.${rootId},parent_quote_id.eq.${rootId}`)
+      .order('revision_number', { ascending: true })
+    setRevisions(data || [])
+  }
+
+  useEffect(() => { loadRevisions() }, [q.id])
 
   const handleDelete = async () => {
     if (!(await confirm({ message: 'Slett dette tilbudet?', subMessage: 'Tilbudet og alle tilhørende linjer slettes permanent.', danger: true }))) return
@@ -6284,6 +6301,45 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
     if (status === 'Akseptert') updates.accepted_at = new Date().toISOString()
     await supabase.from('quotes').update(updates).eq('id', q.id)
     setQ(v => ({ ...v, ...updates }))
+  }
+
+  // ── Ny revisjon ──
+  const createRevision = async () => {
+    try {
+      const rootId = q.parent_quote_id || q.id
+      // Finn høyeste revisjonsnummer
+      const maxRev = revisions.length > 0 ? Math.max(...revisions.map(r => r.revision_number || 1)) : (q.revision_number || 1)
+      const newRevNumber = maxRev + 1
+
+      // Arkiver gjeldende — sett status til «Erstattet»
+      await supabase.from('quotes').update({ status: 'Erstattet', updated_at: new Date().toISOString() }).eq('id', q.id)
+
+      // Opprett ny revisjon
+      const { data: existingQ } = await supabase.from('quotes').select('quote_number')
+      const newPayload = {
+        ...q,
+        quote_number: q.quote_number, // behold samme tilbudsnummer
+        revision_number: newRevNumber,
+        revision_note: revisionNote.trim() || null,
+        parent_quote_id: rootId,
+        status: 'Utkast',
+        sent_at: null,
+        accepted_at: null,
+        total_amount: grandTotal,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: user?.id,
+      }
+      delete newPayload.id
+      const { data, error } = await supabase.from('quotes').insert(newPayload).select().single()
+      if (error) throw error
+
+      setShowNewRevision(false)
+      setRevisionNote('')
+      // Naviger til ny revisjon
+      setQ(data)
+      loadRevisions()
+    } catch(e) { alert('Feil ved opprettelse av revisjon: ' + e.message) }
   }
 
   const handlePrint = () => window.print()
@@ -6300,16 +6356,19 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
               <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
                 <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{q.title}</h1>
                 <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+                {(q.revision_number || 1) > 1 && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>Rev. {q.revision_number}</span>}
                 <QuoteStatusBadge status={q.status} />
               </div>
               <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
                 {q.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {q.customer_name}</span>}
                 {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                {q.revision_note && <span style={{ fontSize:'12px', color:'#7c3aed', fontStyle:'italic' }}>📝 {q.revision_note}</span>}
               </div>
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>}
+            <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>
             <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut / PDF</button>
             {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>}
             <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
@@ -6438,17 +6497,90 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
           {/* Info */}
           <div style={qCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Detaljer</h3>
-            {[['Prosjekt', proj?.name], ['Gyldig til', q.valid_until], ['Betalingsbetingelser', q.payment_terms], ['Leveringstid', q.delivery_time], ['Sendt', q.sent_at ? new Date(q.sent_at).toLocaleDateString('nb-NO') : null], ['Akseptert', q.accepted_at ? new Date(q.accepted_at).toLocaleDateString('nb-NO') : null]].filter(r=>r[1]).map(([k,v],i)=>(
+            {[['Prosjekt', proj?.name], ['Revisjon', `Rev. ${q.revision_number || 1}`], ['Gyldig til', q.valid_until], ['Betalingsbetingelser', q.payment_terms], ['Leveringstid', q.delivery_time], ['Sendt', q.sent_at ? new Date(q.sent_at).toLocaleDateString('nb-NO') : null], ['Akseptert', q.accepted_at ? new Date(q.accepted_at).toLocaleDateString('nb-NO') : null]].filter(r=>r[1]).map(([k,v],i)=>(
               <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
                 <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a', textAlign:'right', maxWidth:'55%' }}>{v}</span>
               </div>
             ))}
           </div>
+
+          {/* Revisjonshistorikk */}
+          {revisions.length > 1 && (
+            <div style={qCard}>
+              <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📜 Revisjoner ({revisions.length})</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                {revisions.map((rev, i) => {
+                  const isCurrent = rev.id === q.id
+                  const revTotal = rev.total_amount || 0
+                  const prevTotal = i > 0 ? (revisions[i-1].total_amount || 0) : 0
+                  const diff = i > 0 ? revTotal - prevTotal : 0
+                  return (
+                    <div key={rev.id}
+                      onClick={() => { if (!isCurrent) { setQ(null); supabase.from('quotes').select('*').eq('id', rev.id).single().then(({ data }) => { if (data) setQ(data) }) } }}
+                      style={{ padding:'10px 12px', borderRadius:'10px', cursor: isCurrent ? 'default' : 'pointer',
+                        background: isCurrent ? '#eff6ff' : '#f8fafc', border: `1px solid ${isCurrent ? '#bfdbfe' : '#f1f5f9'}`,
+                        transition:'border-color 0.15s' }}
+                      onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.borderColor = '#e2e8f0' }}
+                      onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.borderColor = '#f1f5f9' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'2px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                          <span style={{ background: isCurrent ? '#2563eb' : '#e2e8f0', color: isCurrent ? 'white' : '#64748b', fontSize:'10px', fontWeight:'700', padding:'1px 6px', borderRadius:'4px' }}>Rev. {rev.revision_number || 1}</span>
+                          {isCurrent && <span style={{ fontSize:'10px', color:'#2563eb', fontWeight:'600' }}>Gjeldende</span>}
+                          {rev.status === 'Erstattet' && <span style={{ fontSize:'10px', color:'#94a3b8' }}>Erstattet</span>}
+                        </div>
+                        <span style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{fmt(revTotal)}</span>
+                      </div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                        {new Date(rev.created_at).toLocaleDateString('nb-NO')}
+                        {i > 0 && diff !== 0 && (
+                          <span style={{ color: diff > 0 ? '#dc2626' : '#059669', fontWeight:'600', marginLeft:'6px' }}>
+                            {diff > 0 ? '▲' : '▼'} {diff > 0 ? '+' : ''}{fmt(diff)}
+                          </span>
+                        )}
+                      </div>
+                      {rev.revision_note && <div style={{ fontSize:'11px', color:'#7c3aed', marginTop:'2px', fontStyle:'italic' }}>{rev.revision_note}</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {editing && <TilbudEditorModal projects={projects} user={user} initial={q} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh() }} />}
       {showSendModal && <SendTilbudModal quote={q} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); refresh() }} />}
+
+      {/* Ny revisjon modal */}
+      {showNewRevision && (
+        <>
+          <div onClick={() => setShowNewRevision(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(500px, calc(100vw - 32px))', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9' }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🔄 Opprett ny revisjon</h2>
+            </div>
+            <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+              <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'14px 16px', border:'1px solid #bfdbfe' }}>
+                <div style={{ fontSize:'12px', fontWeight:'600', color:'#2563eb', marginBottom:'4px' }}>Gjeldende tilbud</div>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{q.title} — Rev. {q.revision_number || 1}</div>
+                <div style={{ fontSize:'13px', color:'#64748b', marginTop:'2px' }}>{q.quote_number} · {fmt(grandTotal)} eks. mva</div>
+              </div>
+              <div style={{ background:'#faf5ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #e9d5ff', fontSize:'13px', color:'#7c3aed', lineHeight:1.5 }}>
+                En ny revisjon (Rev. {(q.revision_number || 1) + 1}) opprettes som kopi av gjeldende tilbud. Det gamle tilbudet settes til status «Erstattet». Du kan deretter redigere den nye versjonen.
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Hva er endret? (valgfritt)</label>
+                <textarea value={revisionNote} onChange={e => setRevisionNote(e.target.value)} placeholder="F.eks. «Justert pris etter tilbakemelding fra kunde» eller «Lagt til ekstra kapittel for utomhus»"
+                  rows={3} style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none', fontFamily:'system-ui,sans-serif' }} autoFocus />
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={() => setShowNewRevision(false)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={createRevision} style={{ padding:'10px 24px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>🔄 Opprett Rev. {(q.revision_number || 1) + 1}</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
