@@ -12163,6 +12163,7 @@ const TS_STATUS = {
   'Utkast':    { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
   'Innlevert': { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📤' },
   'Godkjent':  { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'✅' },
+  'Returnert': { bg:'#fffbeb', color:'#d97706', border:'#fde68a', emoji:'🔄' },
   'Avvist':    { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'❌' },
 }
 
@@ -12350,13 +12351,38 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
       if (user?.id) {
         await supabase.from('notifications').insert({ user_id:user.id, title:`Timeliste innlevert – uke ${week}`, message:`Din timeliste for uke ${week}, ${year} er innlevert og venter på godkjenning.`, type:'info', link_page:'timelister' })
       }
-      // Varsle brukere med admin-rolle om ny timeliste til godkjenning
+
+      // Finn prosjektledere å varsle (fra prosjekter i denne timelisten)
+      const sheetEntries = (sheet.timesheet_entries || entries.filter(e => e.timesheet_id === sheet.id))
+      const projectIds = [...new Set(sheetEntries.map(e => e.project_id).filter(Boolean))]
+      const notifiedUsers = new Set()
+
+      if (projectIds.length > 0) {
+        const { data: projData } = await supabase.from('projects').select('id, name, project_manager_name, project_manager_email').in('id', projectIds)
+        // Finn ansatte med matchende e-post som har user_id
+        if (projData?.length) {
+          for (const p of projData) {
+            if (p.project_manager_email) {
+              const { data: mgrEmp } = await supabase.from('employees').select('user_id').eq('email', p.project_manager_email).single()
+              if (mgrEmp?.user_id && mgrEmp.user_id !== user?.id && !notifiedUsers.has(mgrEmp.user_id)) {
+                notifiedUsers.add(mgrEmp.user_id)
+                const emp = employees.find(e => e.id === employeeId)
+                const empName = emp ? `${emp.first_name||''} ${emp.last_name||''}`.trim() : 'En ansatt'
+                await supabase.from('notifications').insert({ user_id:mgrEmp.user_id, title:`Ny timeliste til godkjenning`, message:`${empName} har levert inn timeliste for uke ${week}, ${year}. Prosjekt: ${p.name}`, type:'info', link_page:'timelister' })
+              }
+            }
+          }
+        }
+      }
+
+      // Varsle også admin-brukere
       const { data: admins } = await supabase.from('user_roles').select('user_id').eq('role','admin')
       if (admins?.length) {
-        const emp = await supabase.from('employees').select('first_name,last_name').eq('id',employeeId).single()
-        const empName = emp?.data ? `${emp.data.first_name||''} ${emp.data.last_name||''}`.trim() : 'En ansatt'
+        const emp = employees.find(e => e.id === employeeId)
+        const empName = emp ? `${emp.first_name||''} ${emp.last_name||''}`.trim() : 'En ansatt'
         for (const a of admins) {
-          if (a.user_id !== user?.id) {
+          if (a.user_id !== user?.id && !notifiedUsers.has(a.user_id)) {
+            notifiedUsers.add(a.user_id)
             await supabase.from('notifications').insert({ user_id:a.user_id, title:`Ny timeliste til godkjenning`, message:`${empName} har levert inn timeliste for uke ${week}, ${year}.`, type:'info', link_page:'timelister' })
           }
         }
@@ -12399,6 +12425,23 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
         <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'14px 18px', border:'1px solid #fecaca' }}>
           <div style={{ fontSize:'13px', fontWeight:'700', color:'#dc2626', marginBottom:'4px' }}>❌ Avvist av leder</div>
           <div style={{ fontSize:'13px', color:'#475569' }}>{sheet.reject_comment}</div>
+        </div>
+      )}
+
+      {sheet?.status==='Returnert' && (
+        <div style={{ background:'#fffbeb', borderRadius:'12px', padding:'14px 18px', border:'1px solid #fde68a' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#d97706', marginBottom:'4px' }}>🔄 Returnert for korrigering</div>
+              {sheet.reject_comment && <div style={{ fontSize:'13px', color:'#475569' }}>{sheet.reject_comment}</div>}
+            </div>
+            <button onClick={async () => {
+              await supabase.from('timesheets').update({ status:'Utkast', reject_comment:null, updated_at:new Date().toISOString() }).eq('id', sheet.id)
+              onRefresh()
+            }} style={{ padding:'8px 16px', background:'#d97706', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', flexShrink:0 }}>
+              ✏️ Rediger og lever på nytt
+            </button>
+          </div>
         </div>
       )}
 
@@ -12886,12 +12929,24 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
           </div>
 
           <div style={{ marginBottom:'12px' }}>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Kommentar ved avslag</label>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Kommentar ved retur/avslag</label>
             <textarea value={rejectComment} onChange={e=>setRejectComment(e.target.value)} rows={2} placeholder="Forklar hva som må korrigeres..." style={{ ...tsInp, resize:'none' }} />
           </div>
 
           <div style={{ display:'flex', gap:'10px' }}>
             <button onClick={()=>handleReject(selected)} disabled={processing} style={{ flex:1, padding:'13px', background:processing?'#fca5a5':'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>❌ Avvis</button>
+            <button onClick={async ()=>{
+              if (!rejectComment.trim()) return alert('Skriv en kommentar om hva som må korrigeres')
+              setProcessing(true)
+              try {
+                await supabase.from('timesheets').update({ status:'Returnert', reject_comment:rejectComment.trim(), updated_at:new Date().toISOString() }).eq('id',selected.id)
+                if (selected.created_by) {
+                  await supabase.from('notifications').insert({ user_id:selected.created_by, title:`Timeliste returnert – uke ${selected.week_number}`, message:`Din timeliste for uke ${selected.week_number}, ${selected.year} er returnert for korrigering. Kommentar: ${rejectComment.trim()}`, type:'warning', link_page:'timelister' })
+                }
+                setRejectComment(''); setSelected(null); onRefresh()
+              } catch(e) { alert('Feil: '+e.message) }
+              finally { setProcessing(false) }
+            }} disabled={processing} style={{ flex:1, padding:'13px', background:processing?'#fde68a':'#fffbeb', color:'#d97706', border:'1px solid #fde68a', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>🔄 Returner</button>
             <button onClick={()=>handleApprove(selected)} disabled={processing} style={{ flex:2, padding:'13px', background:processing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>✅ Godkjenn timeliste</button>
           </div>
         </div>
