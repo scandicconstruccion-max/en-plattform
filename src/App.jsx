@@ -17762,6 +17762,78 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const ok=items.filter(i=>i.status==='ok').length
   const openF=followups.filter(f=>!f.completed).length
   const today=new Date().toISOString().split('T')[0]
+  const [showConvert, setShowConvert] = useState(false)
+
+  // ── PDF-rapport ──
+  const exportPDF = async () => {
+    try {
+      if (!window.jspdf) { await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)}) }
+      const { jsPDF } = window.jspdf; const doc=new jsPDF('p','mm','a4')
+      const pw=210,ph=297,ml=14,mr=14,cw=pw-ml-mr; let y=0
+      const hex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]
+      const setC=c=>doc.setTextColor(c[0],c[1],c[2]), setF=c=>doc.setFillColor(c[0],c[1],c[2]), setD=c=>doc.setDrawColor(c[0],c[1],c[2])
+      const addPage=()=>{doc.addPage();y=14}, checkSpace=n=>{if(y+n>ph-22)addPage()}
+
+      y=14; setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica','bold')
+      doc.text('BEFARINGSRAPPORT',ml,y); doc.setFont('helvetica','normal')
+      doc.text(new Date().toLocaleDateString('nb-NO',{day:'numeric',month:'long',year:'numeric'}),pw-mr,y,{align:'right'})
+      y+=8; setC(hex('#0f172a')); doc.setFontSize(18); doc.setFont('helvetica','bold')
+      doc.text(ins.title,ml,y); y+=8
+      setC(hex('#64748b')); doc.setFontSize(10); doc.setFont('helvetica','normal')
+      doc.text([ins.date,ins.location,proj?.name].filter(Boolean).join(' · '),ml,y); y+=6
+      if(ins.participants?.length){doc.text('Deltakere: '+ins.participants.join(', '),ml,y);y+=6}
+      if(ins.notes){y+=2;setC(hex('#475569'));doc.setFontSize(9);const nl=doc.splitTextToSize(ins.notes,cw);doc.text(nl,ml,y);y+=nl.length*4}
+      y+=6
+
+      setF(hex('#f8fafc'));setD(hex('#e2e8f0'));doc.roundedRect(ml,y,cw,14,2,2,'FD')
+      const sItems=[{l:'Punkter',v:''+items.length},{l:'OK',v:''+ok,c:'#16a34a'},{l:'Avvik',v:''+avvik,c:'#dc2626'},{l:'Oppfolging',v:''+followups.length},{l:'Apne',v:''+openF,c:'#d97706'}]
+      sItems.forEach((s,i)=>{const sw=cw/sItems.length;setC(hex(s.c||'#0f172a'));doc.setFontSize(11);doc.setFont('helvetica','bold');doc.text(s.v,ml+6+i*sw,y+6);setC(hex('#94a3b8'));doc.setFontSize(7);doc.setFont('helvetica','normal');doc.text(s.l,ml+6+i*sw,y+11)})
+      y+=20
+
+      if(items.length>0){setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Sjekkpunkter',ml,y);y+=7
+        items.forEach(item=>{checkSpace(12);const st=ITEM_STATUS[item.status];setF(hex(st.bg));setD(hex(st.color+'40'));doc.roundedRect(ml,y,cw,8,1.5,1.5,'FD');setF(hex(st.color));doc.rect(ml,y+0.5,1.5,7,'F');setC(hex(st.color));doc.setFontSize(7);doc.setFont('helvetica','bold');doc.text(st.label,ml+5,y+5);setC(hex('#0f172a'));doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text(item.description||'',ml+20,y+5);if(item.location_ref){setC(hex('#2563eb'));doc.setFontSize(7);doc.text('Plassering: '+item.location_ref,pw-mr-4,y+5,{align:'right'})};y+=10})
+        y+=4}
+
+      if(followups.length>0){checkSpace(15);setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Oppfolgingspunkter',ml,y);y+=7
+        followups.forEach(fu=>{checkSpace(9);setF(hex(fu.completed?'#f0fdf4':'#fffbeb'));doc.roundedRect(ml,y,cw,7,1.5,1.5,'F');setC(hex(fu.completed?'#16a34a':'#d97706'));doc.setFontSize(8);doc.setFont('helvetica','bold');doc.text(fu.completed?'Fullfort':'Apen',ml+4,y+4.5);setC(hex('#0f172a'));doc.setFont('helvetica','normal');doc.text(fu.description,ml+22,y+4.5);if(fu.responsible||fu.due_date){setC(hex('#94a3b8'));doc.setFontSize(7);doc.text([fu.responsible,fu.due_date].filter(Boolean).join(' · '),pw-mr-4,y+4.5,{align:'right'})};y+=9})
+        y+=4}
+
+      const imgFiles=files.filter(f=>f.file_type?.startsWith('image/'))
+      if(imgFiles.length>0){checkSpace(20);setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Bilder',ml,y);y+=7
+        for(const f of imgFiles){try{checkSpace(55);const resp=await fetch(f.file_url);const blob=await resp.blob();const b64=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(blob)});doc.addImage(b64,'JPEG',ml,y,60,45);setC(hex('#64748b'));doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(f.name,ml+64,y+6);y+=50}catch(e){console.warn(e)}}}
+
+      checkSpace(50);y+=6;setF(hex('#ffffff'));setD(hex('#e2e8f0'));doc.roundedRect(ml,y,cw,40,2.5,2.5,'FD');setC(hex('#0f172a'));doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Signaturer',ml+5,y+7)
+      const sigW=(cw-18)/2,sigY=y+12
+      ;[{l:'Inspeksjonsansvarlig',x:ml+5},{l:'Prosjektleder / Byggherre',x:ml+5+sigW+8}].forEach(sc=>{setC(hex('#64748b'));doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.text(sc.l,sc.x,sigY);setD(hex('#0f172a'));doc.line(sc.x,sigY+14,sc.x+sigW,sigY+14);setC(hex('#94a3b8'));doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.text('Signatur / Dato',sc.x,sigY+18);doc.line(sc.x,sigY+25,sc.x+sigW,sigY+25);doc.text('Navn',sc.x,sigY+29)})
+
+      const pc=doc.internal.getNumberOfPages()
+      for(let i=1;i<=pc;i++){doc.setPage(i);setD(hex('#f1f5f9'));doc.line(ml,ph-14,pw-mr,ph-14);doc.setFontSize(7);setC(hex('#94a3b8'));doc.setFont('helvetica','normal');doc.text('Befaringsrapport — '+ins.title,ml,ph-9);doc.text('Side '+i+'/'+pc,pw/2,ph-9,{align:'center'});doc.setFont('helvetica','bold');setC(hex('#059669'));doc.text('En Plattform',pw-mr,ph-9,{align:'right'})}
+      doc.save('Befaring - '+ins.title+'.pdf')
+    } catch(e){alert('PDF-feil: '+e.message)}
+  }
+
+  // ── Konverter til avvik ──
+  const convertToDeviation = async (item) => {
+    try {
+      const { data: ed } = await supabase.from('deviations').select('deviation_number')
+      const devNr = nextSequenceNumber(ed||[], 'AV', 'deviation_number')
+      await supabase.from('deviations').insert({ title:item.description, deviation_number:devNr, project_id:ins.project_id, description:'Opprettet fra befaring "'+ins.title+'" ('+ins.date+').\n\nSjekkpunkt: '+item.description, severity:'Middels', status:'Åpen', images:[], created_by:user?.id })
+      alert('Avvik opprettet: '+devNr)
+    } catch(e){alert('Feil: '+e.message)}
+  }
+
+  // ── Konverter avvikspunkter til sjekkliste ──
+  const convertToChecklist = async () => {
+    const avvikItems=items.filter(i=>i.status==='avvik')
+    if(!avvikItems.length) return alert('Ingen avvikspunkter å konvertere')
+    try {
+      const { data: ec } = await supabase.from('checklists').select('checklist_number')
+      const clNr = nextSequenceNumber(ec||[], 'SL', 'checklist_number')
+      await supabase.from('checklists').insert({ title:'Utbedring etter befaring: '+ins.title, checklist_number:clNr, project_id:ins.project_id, sections:[{title:'Fra befaring: '+ins.title,items:avvikItems.map(i=>({text:i.description,checked:false,required:true,status:'Ikke kontrollert'}))}], status:'Under arbeid', created_by:user?.id })
+      alert('Sjekkliste opprettet: '+clNr+' med '+avvikItems.length+' punkter')
+      setShowConvert(false)
+    } catch(e){alert('Feil: '+e.message)}
+  }
 
   const ITEM_STATUS = {
     ok:    { label:'OK',    color:'#16a34a', bg:'#f0fdf4', next:'avvik' },
@@ -17789,7 +17861,9 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
+            <button onClick={exportPDF} style={{ padding:'9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>📄 PDF-rapport</button>
+            <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>
             <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding:'9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px' }}>🗑️</button>
           </div>
@@ -17821,8 +17895,15 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                   return (
                     <div key={item.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9' }}>
                       <button onClick={()=>toggleItemStatus(item)} style={{ padding:'4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth:'52px' }}>{st.label}</button>
-                      <span style={{ flex:1, fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
-                      <button onClick={()=>deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
+                        {item.location_ref && <div style={{ fontSize:'11px', color:'#2563eb', marginTop:'2px' }}>📍 {item.location_ref}</div>}
+                      </div>
+                      <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
+                        {item.status==='avvik'&&<button onClick={()=>convertToDeviation(item)} title="Opprett avvik" style={{ background:'#fef2f2',color:'#dc2626',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer',fontWeight:'600' }}>⚠️</button>}
+                        <button onClick={async ()=>{const ref=prompt('Plassering / romreferanse:',item.location_ref||'');if(ref!==null){await supabase.from('inspection_items').update({location_ref:ref||null}).eq('id',item.id);loadDetails()}}} title="Koble til rom/tegning" style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer' }}>📍</button>
+                        <button onClick={()=>deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
+                      </div>
                     </div>
                   )
                 })}
@@ -17931,6 +18012,42 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
         </div>
       </div>
       {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+
+      {/* Konverter-modal */}
+      {showConvert && (
+        <>
+          <div onClick={()=>setShowConvert(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(500px,calc(100vw - 32px))',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9' }}>
+              <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>🔄 Konverter befaringspunkter</h2>
+            </div>
+            <div style={{ padding:'24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+              <div style={{ background:'#eff6ff',borderRadius:'10px',padding:'12px 16px',border:'1px solid #bfdbfe',fontSize:'13px',color:'#1e40af' }}>
+                {items.length} sjekkpunkter · {avvik} avvik · {ok} OK
+              </div>
+
+              <button onClick={convertToChecklist} disabled={avvik===0}
+                style={{ padding:'14px',borderRadius:'12px',border:'1px solid #bbf7d0',background:'#f0fdf4',cursor:avvik>0?'pointer':'not-allowed',textAlign:'left',opacity:avvik>0?1:0.5 }}>
+                <div style={{ fontWeight:'700',fontSize:'14px',color:'#059669' }}>☑️ Opprett sjekkliste fra avvikspunkter</div>
+                <div style={{ fontSize:'12px',color:'#64748b',marginTop:'4px' }}>Alle {avvik} avvikspunkter konverteres til en ny sjekkliste for utbedring i prosjektet.</div>
+              </button>
+
+              <div style={{ fontSize:'13px',fontWeight:'600',color:'#374151',marginTop:'4px' }}>Eller konverter enkeltpunkter til avvik:</div>
+              <div style={{ display:'flex',flexDirection:'column',gap:'6px',maxHeight:'200px',overflowY:'auto' }}>
+                {items.filter(i=>i.status==='avvik').map(item=>(
+                  <div key={item.id} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'8px 12px',background:'#fef2f2',borderRadius:'8px',border:'1px solid #fecaca' }}>
+                    <span style={{ flex:1,fontSize:'13px',color:'#0f172a' }}>{item.description}</span>
+                    <button onClick={()=>convertToDeviation(item)} style={{ padding:'6px 12px',background:'#dc2626',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'11px',fontWeight:'600',whiteSpace:'nowrap' }}>⚠️ Opprett avvik</button>
+                  </div>
+                ))}
+                {avvik===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic',textAlign:'center',padding:'12px' }}>Ingen avvikspunkter funnet — marker punkter som «Avvik» først</p>}
+              </div>
+
+              <button onClick={()=>setShowConvert(false)} style={{ padding:'10px',background:'#f1f5f9',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#64748b',marginTop:'4px' }}>Lukk</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
