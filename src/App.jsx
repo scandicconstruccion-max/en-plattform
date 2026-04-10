@@ -8065,34 +8065,40 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 }
 
 function InviterUEModal({ tender, user, onClose, onSaved }) {
-  const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null }])
+  const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null, customer_id: null }])
   const [existingUes, setExistingUes] = useState([])
+  const [ueKunder, setUeKunder] = useState([])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [showUEPicker, setShowUEPicker] = useState(null)
+  const [ueSearch, setUeSearch] = useState('')
 
-  // Hent allerede inviterte UE-er for dette anbudet
   useEffect(() => {
-    supabase.from('tender_ues').select('company_name, email, status').eq('tender_id', tender.id)
-      .then(({ data }) => setExistingUes(data || []))
+    Promise.all([
+      supabase.from('tender_ues').select('company_name, email, status').eq('tender_id', tender.id).then(r => r.data || []),
+      supabase.from('customers').select('id, name, email, phone, orgnr, type').in('type', ['ue', 'bedrift']).order('name').then(r => r.data || []),
+    ]).then(([existing, kunder]) => { setExistingUes(existing); setUeKunder(kunder) })
   }, [])
 
-  const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null }])
+  const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null, customer_id: null }])
   const removeUE = (id) => setUes(u=>u.filter(x=>x.id!==id))
+  const selectFromRegister = (ueId, kunde) => {
+    setUes(u => u.map(x => x.id === ueId ? { ...x, company_name: kunde.name, email: kunde.email || '', contact_name: '', customer_id: kunde.id, dupWarning: null } : x))
+    setShowUEPicker(null); setUeSearch('')
+  }
   const updateUE = (id, f, v) => {
     setUes(u => u.map(x => {
       if (x.id !== id) return x
       const updated = { ...x, [f]: v, dupWarning: null }
-      // Duplikatsjekk ved e-post eller firmanavn
       if (f === 'email' && v.trim()) {
         const dupEmail = existingUes.find(e => e.email?.toLowerCase() === v.trim().toLowerCase())
-        if (dupEmail) updated.dupWarning = `${dupEmail.company_name} (${dupEmail.email}) er allerede invitert — status: ${dupEmail.status}`
-        // Sjekk også mot andre UE-er i samme skjema
+        if (dupEmail) updated.dupWarning = `${dupEmail.company_name} (${dupEmail.email}) er allerede invitert`
         const dupInForm = ues.find(other => other.id !== id && other.email?.toLowerCase() === v.trim().toLowerCase())
-        if (dupInForm) updated.dupWarning = `Denne e-posten er allerede lagt til i skjemaet`
+        if (dupInForm) updated.dupWarning = 'Denne e-posten er allerede lagt til i skjemaet'
       }
       if (f === 'company_name' && v.trim()) {
         const dupName = existingUes.find(e => e.company_name?.toLowerCase() === v.trim().toLowerCase())
-        if (dupName) updated.dupWarning = `${dupName.company_name} er allerede invitert (${dupName.email}) — status: ${dupName.status}`
+        if (dupName) updated.dupWarning = `${dupName.company_name} er allerede invitert (${dupName.email})`
       }
       return updated
     }))
@@ -8100,18 +8106,12 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
 
   const handleSend = async () => {
     const valid = ues.filter(u=>u.company_name.trim()&&u.email.trim())
-    if (valid.length===0) return alert('Legg til minst én UE med navn og e-post.')
-
-    // Sjekk duplikater mot eksisterende
+    if (valid.length===0) return alert('Legg til minst en UE med navn og e-post.')
     const dups = valid.filter(u => existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
-    if (dups.length > 0) {
-      const skip = window.confirm(`${dups.length} UE${dups.length > 1 ? '-er' : ''} er allerede invitert:\n\n${dups.map(d => `• ${d.company_name} (${d.email})`).join('\n')}\n\nVil du sende invitasjon på nytt til disse?`)
-      if (!skip) {
-        // Filtrer ut duplikater
-        const nonDups = valid.filter(u => !existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
-        if (nonDups.length === 0) return
-        return sendInvitations(nonDups)
-      }
+    if (dups.length > 0 && !window.confirm(`${dups.length} UE er allerede invitert. Sende pa nytt?`)) {
+      const nonDups = valid.filter(u => !existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
+      if (nonDups.length === 0) return
+      return sendInvitations(nonDups)
     }
     await sendInvitations(valid)
   }
@@ -8120,99 +8120,86 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
     setSending(true)
     try {
       for (const ue of ueList) {
-        const { data, error } = await supabase.from('tender_ues').insert({ tender_id:tender.id, company_name:ue.company_name.trim(), contact_name:ue.contact_name.trim()||null, email:ue.email.trim(), status:'Invitert' }).select().single()
+        let custId = ue.customer_id
+        if (!custId) {
+          const existingCust = ueKunder.find(k => k.email?.toLowerCase() === ue.email.trim().toLowerCase() || k.name?.toLowerCase() === ue.company_name.trim().toLowerCase())
+          if (existingCust) { custId = existingCust.id }
+          else {
+            const { data: newCust } = await supabase.from('customers').insert({ name: ue.company_name.trim(), email: ue.email.trim(), type: 'ue', created_by: user?.id }).select().single()
+            if (newCust) custId = newCust.id
+          }
+        }
+        const { data, error } = await supabase.from('tender_ues').insert({ tender_id:tender.id, company_name:ue.company_name.trim(), contact_name:ue.contact_name.trim()||null, email:ue.email.trim(), status:'Invitert', customer_id: custId||null }).select().single()
         if (error) throw error
         const pricingUrl = `${window.location.origin}/anbud-pris?token=${data.token}`
-        const { grandTotal } = calcTender(tender.chapters||[], tender.global_markup)
-        const html = `
-          <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-            <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Anbudsforespørsel: ${tender.title}</h1>
-            <p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>
-            ${tender.description?`<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">${tender.description}</p></div>`:''}
-            ${tender.deadline?`<p style="color:#dc2626;font-weight:600;font-size:14px">⏰ Anbudsfrist: ${tender.deadline}</p>`:''}
-            <p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for følgende poster.</p>
-            <div style="text-align:center;margin:32px 0">
-              <a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">📝 Fyll inn priser</a>
-            </div>
-            <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-            <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
-          </div>`
-        const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-          method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-          body: JSON.stringify({ to: ue.email.trim(), subject:`Anbudsforespørsel: ${tender.title} (${tender.tender_number})`, html })
-        })
+        const html = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px"><h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Anbudsforespørsel: ${tender.title}</h1><p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>${tender.description?'<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">'+tender.description+'</p></div>':''}${tender.deadline?'<p style="color:#dc2626;font-weight:600;font-size:14px">Anbudsfrist: '+tender.deadline+'</p>':''}<p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for folggende poster.</p><div style="text-align:center;margin:32px 0"><a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Fyll inn priser</a></div><hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0"><p style="color:#94a3b8;font-size:12px">Sendt via En Plattform</p></div>`
+        const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY }, body: JSON.stringify({ to: ue.email.trim(), subject:'Anbudsforespørsel: '+tender.title+' ('+tender.tender_number+')', html }) })
         if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
       }
-      setSent(true)
-      setTimeout(()=>onSaved(), 1500)
+      setSent(true); setTimeout(()=>onSaved(), 1500)
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSending(false) }
   }
 
   const hasDups = ues.some(u => u.dupWarning)
+  const filteredUeKunder = ueKunder.filter(k => !ueSearch || [k.name, k.email, k.orgnr].some(v => v?.toLowerCase().includes(ueSearch.toLowerCase())))
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'600px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Inviter underentreprenører</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Inviter underentreprenorer</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>x</button>
         </div>
         <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
           {sent ? (
-            <div style={{ textAlign:'center', padding:'20px' }}>
-              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
-              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Invitasjoner sendt!</h3>
-              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>UE-ene mottar e-post med lenke for å fylle inn priser.</p>
-            </div>
+            <div style={{ textAlign:'center', padding:'20px' }}><div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div><h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Invitasjoner sendt!</h3><p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>UE-ene mottar e-post med lenke for a fylle inn priser.</p></div>
           ) : (
             <>
-              <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', fontSize:'13px', color:'#1d4ed8' }}>
-                📋 <strong>{tender.title}</strong> — {tender.tender_number}{tender.deadline?` · Frist: ${tender.deadline}`:''}
-              </div>
-
-              {/* Allerede inviterte */}
+              <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', fontSize:'13px', color:'#1d4ed8' }}><strong>{tender.title}</strong> — {tender.tender_number}{tender.deadline?' · Frist: '+tender.deadline:''}</div>
               {existingUes.length > 0 && (
                 <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #e2e8f0' }}>
                   <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px' }}>Allerede inviterte ({existingUes.length})</div>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
-                    {existingUes.map((e, i) => (
-                      <span key={i} style={{ fontSize:'11px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'2px 8px', color:'#475569' }}>
-                        {e.company_name}
-                        <span style={{ color: e.status === 'Priset' ? '#059669' : e.status === 'Invitert' ? '#2563eb' : '#94a3b8', marginLeft:'4px', fontWeight:'600' }}>
-                          ({e.status})
-                        </span>
-                      </span>
-                    ))}
-                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>{existingUes.map((e, i) => (<span key={i} style={{ fontSize:'11px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'2px 8px', color:'#475569' }}>{e.company_name} <span style={{ color: e.status==='Priset'?'#059669':'#2563eb', fontWeight:'600' }}>({e.status})</span></span>))}</div>
                 </div>
               )}
-
               {ues.map((ue,i)=>(
-                <div key={ue.id} style={{ background: ue.dupWarning ? '#fffbeb' : '#f8fafc', borderRadius:'12px', padding:'14px', border:`1px solid ${ue.dupWarning ? '#fde68a' : '#f1f5f9'}` }}>
+                <div key={ue.id} style={{ background: ue.dupWarning?'#fffbeb':'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid '+(ue.dupWarning?'#fde68a':'#f1f5f9') }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
                     <span style={{ fontWeight:'700', fontSize:'13px', color:'#64748b' }}>UE {i+1}</span>
-                    {ues.length>1&&<button onClick={()=>removeUE(ue.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
+                    <div style={{ display:'flex', gap:'6px' }}>
+                      <button onClick={() => { setShowUEPicker(showUEPicker===ue.id?null:ue.id); setUeSearch('') }} style={{ background:'#fffbeb', color:'#d97706', border:'1px solid #fde68a', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', cursor:'pointer', fontWeight:'600' }}>🤝 Fra register</button>
+                      {ues.length>1&&<button onClick={()=>removeUE(ue.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
+                    </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                    <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn *</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={{ ...tInp, borderColor: ue.dupWarning ? '#fde68a' : '#e2e8f0' }} /></div>
-                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Kontaktperson</label><input value={ue.contact_name} onChange={e=>updateUE(ue.id,'contact_name',e.target.value)} placeholder="Fullt navn" style={tInp} /></div>
-                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={{ ...tInp, borderColor: ue.dupWarning ? '#fde68a' : '#e2e8f0' }} /></div>
-                  </div>
-                  {ue.dupWarning && (
-                    <div style={{ marginTop:'8px', fontSize:'12px', color:'#d97706', display:'flex', alignItems:'center', gap:'6px' }}>
-                      <span>⚠️</span> {ue.dupWarning}
+                  {showUEPicker===ue.id && (
+                    <div style={{ marginBottom:'10px', background:'white', borderRadius:'10px', border:'1px solid #e2e8f0', overflow:'hidden' }}>
+                      <input value={ueSearch} onChange={e=>setUeSearch(e.target.value)} placeholder="Sok i kontaktregisteret..." autoFocus style={{ width:'100%', padding:'8px 12px', border:'none', borderBottom:'1px solid #f1f5f9', fontSize:'13px', outline:'none', boxSizing:'border-box' }} />
+                      <div style={{ maxHeight:'160px', overflowY:'auto' }}>
+                        {filteredUeKunder.length===0 ? <div style={{ padding:'12px', textAlign:'center', color:'#94a3b8', fontSize:'12px' }}>Ingen treff</div> :
+                        filteredUeKunder.slice(0,10).map(k => (
+                          <button key={k.id} onClick={()=>selectFromRegister(ue.id,k)} style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'8px 12px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'12px', borderBottom:'1px solid #fafafa' }} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <span style={{ fontSize:'14px' }}>{k.type==='ue'?'🤝':'🏢'}</span>
+                            <div style={{ flex:1 }}><div style={{ fontWeight:'600', color:'#0f172a' }}>{k.name}</div><div style={{ color:'#94a3b8', fontSize:'11px' }}>{k.email||'Ingen e-post'}{k.orgnr?' · '+k.orgnr:''}</div></div>
+                            {k.type==='ue'&&<span style={{ background:'#fffbeb', color:'#d97706', fontSize:'10px', fontWeight:'600', padding:'1px 6px', borderRadius:'4px' }}>UE</span>}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                    <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn * {ue.customer_id&&<span style={{ color:'#059669', fontWeight:'500' }}>✓ Koblet</span>}</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={{ ...tInp, borderColor: ue.dupWarning?'#fde68a':ue.customer_id?'#bbf7d0':'#e2e8f0' }} /></div>
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Kontaktperson</label><input value={ue.contact_name} onChange={e=>updateUE(ue.id,'contact_name',e.target.value)} placeholder="Fullt navn" style={tInp} /></div>
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={{ ...tInp, borderColor: ue.dupWarning?'#fde68a':'#e2e8f0' }} /></div>
+                  </div>
+                  {ue.dupWarning&&<div style={{ marginTop:'8px', fontSize:'12px', color:'#d97706' }}>⚠️ {ue.dupWarning}</div>}
                 </div>
               ))}
               <button onClick={addUE} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'12px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Legg til flere UE-er</button>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
                 <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>
-                  {sending?'Sender...': hasDups ? '⚠️ Send (med duplikater)' : '📧 Send invitasjoner'}
-                </button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...': hasDups?'⚠️ Send (duplikater)':'📧 Send invitasjoner'}</button>
               </div>
             </>
           )}
@@ -14738,6 +14725,7 @@ const KUNDE_TYPE = {
   privat:   { label: 'Privat',       emoji: '👤', color: '#7c3aed', bg: '#f5f3ff' },
   offentlig:{ label: 'Offentlig',    emoji: '🏛️', color: '#0891b2', bg: '#ecfeff' },
   borettslag:{ label:'Borettslag',   emoji: '🏘️', color: '#059669', bg: '#f0fdf4' },
+  ue:       { label: 'Underleverandør', emoji: '🤝', color: '#d97706', bg: '#fffbeb' },
 }
 
 const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
