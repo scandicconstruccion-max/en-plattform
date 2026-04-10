@@ -18653,6 +18653,7 @@ function KalkulasjonPage({ onNavigate }) {
   const [showFaktorerPage, setShowFaktorerPage] = useState(false)
   const [showBibliotekPage, setShowBibliotekPage] = useState(false)
   const [showPrisbokPage, setShowPrisbokPage] = useState(false)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   const load = async () => {
     try {
@@ -18663,14 +18664,57 @@ function KalkulasjonPage({ onNavigate }) {
   }
   useEffect(() => { load() }, [])
 
-  const filtered = kalks.filter(k => {
+  // Filtrer ut maler fra vanlig liste
+  const templates = kalks.filter(k => k.is_template)
+  const regularKalks = kalks.filter(k => !k.is_template)
+
+  const filtered = regularKalks.filter(k => {
     if (filterStatus !== 'alle' && k.status !== filterStatus) return false
     if (search && ![k.title, k.customer_name, k.kalk_number].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
     return true
   })
 
   const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Ferdig': 0 }
-  kalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
+  regularKalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
+
+  // Ny fra mal
+  const createFromTemplate = async (tmpl) => {
+    try {
+      const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+      const newKalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+      // Deep-kopier kalkyler med nye IDer
+      const newKalkyler = (tmpl.kalkyler || []).map((kl, i) => ({
+        ...kl,
+        id: Date.now() + i,
+        bygningsdeler: (kl.bygningsdeler || []).map((bd, j) => ({ ...bd, id: Date.now() + i * 1000 + j }))
+      }))
+      const payload = {
+        title: tmpl.title + ' (fra mal)',
+        kalk_number: newKalkNr,
+        kalkyler: newKalkyler,
+        faktorer: tmpl.faktorer || {},
+        status: 'Utkast',
+        is_template: false,
+        total_cost: tmpl.total_cost,
+        total_ex_mva: tmpl.total_ex_mva,
+        profit_percent: tmpl.profit_percent,
+        created_by: user?.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const { data, error } = await supabase.from('calculations').insert(payload).select().single()
+      if (error) throw error
+      setShowTemplatePicker(false)
+      await load()
+      if (data) setViewKalk(data)
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
+  const deleteTemplate = async (tmpl) => {
+    if (!window.confirm(`Slett malen "${tmpl.title}"?`)) return
+    await supabase.from('calculations').delete().eq('id', tmpl.id)
+    load()
+  }
 
   const KALK_STATUS_CFG = {
     'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
@@ -18729,6 +18773,12 @@ function KalkulasjonPage({ onNavigate }) {
               style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
               ⚙️ Faktorer
             </button>
+            {templates.length > 0 && (
+              <button onClick={() => setShowTemplatePicker(true)}
+                style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#2563eb' }}>
+                🗂️ Ny fra mal ({templates.length})
+              </button>
+            )}
             <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
               + Nytt kalkulasjonsprosjekt
@@ -18800,6 +18850,87 @@ function KalkulasjonPage({ onNavigate }) {
           </div>
         )}
       </div>
+      {/* Malvelger */}
+      {showTemplatePicker && (
+        <>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} onClick={() => setShowTemplatePicker(false)} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(720px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+              <div>
+                <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🗂️ Opprett kalkulasjon fra mal</h2>
+                <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>Velg en mal for å opprette en komplett kalkyle med alle faggrupper og bygningsdeler</p>
+              </div>
+              <button onClick={() => setShowTemplatePicker(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
+              {templates.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
+                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>🗂️</div>
+                  <p style={{ fontSize:'14px' }}>Ingen maler lagret ennå. Åpne en kalkulasjon og velg «Lagre som mal» fra menyen.</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                  {templates.map(tmpl => {
+                    const tKalkyler = tmpl.kalkyler || []
+                    const tFaktorer = tmpl.faktorer || {}
+                    const tTotals = beregnProsjektTotal(tKalkyler, tFaktorer)
+                    const totalBd = tKalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0)
+                    return (
+                      <div key={tmpl.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px', transition:'box-shadow 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'10px' }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                              <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{tmpl.title}</span>
+                              <span style={{ background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'600' }}>Mal</span>
+                            </div>
+                            {tmpl.template_description && <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b', lineHeight:1.4 }}>{tmpl.template_description}</p>}
+                          </div>
+                          <div style={{ textAlign:'right', flexShrink:0, marginLeft:'16px' }}>
+                            <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(tTotals.totMedFortjeneste)}</div>
+                            <div style={{ fontSize:'11px', color:'#94a3b8' }}>referansesum</div>
+                          </div>
+                        </div>
+
+                        {/* Faggruppe-tags */}
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'12px' }}>
+                          {tKalkyler.map(kl => {
+                            const fag = getFaggruppe(kl.fag)
+                            const bdCount = (kl.bygningsdeler || []).length
+                            return (
+                              <span key={kl.id} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'4px 10px', fontSize:'12px', color:'#475569' }}>
+                                {fag.emoji} {kl.name} · {bdCount} bygn.deler
+                              </span>
+                            )
+                          })}
+                        </div>
+
+                        {/* Metadata + handlinger */}
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                          <div style={{ display:'flex', gap:'14px', fontSize:'12px', color:'#94a3b8' }}>
+                            <span>👷 {tKalkyler.length} faggrupper</span>
+                            <span>🧱 {totalBd} bygningsdeler</span>
+                            <span>⏱️ {tTotals.totTimer.toFixed(0)} timer</span>
+                          </div>
+                          <div style={{ display:'flex', gap:'8px' }}>
+                            <button onClick={() => deleteTemplate(tmpl)}
+                              style={{ padding:'7px 12px', border:'1px solid #fecaca', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'12px', color:'#dc2626' }}>🗑️</button>
+                            <button onClick={() => createFromTemplate(tmpl)}
+                              style={{ padding:'7px 18px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                              Bruk denne malen
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
     </div>
   )
@@ -21165,6 +21296,35 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
     else { alert('✅ Kalkulasjon duplisert!'); onBack() }
   }
 
+  // ── Lagre som mal ──
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [templateDesc, setTemplateDesc] = useState('')
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateName.trim()) return alert('Malnavn er påkrevd')
+    try {
+      const templatePayload = {
+        title: templateName.trim(),
+        template_description: templateDesc.trim() || null,
+        is_template: true,
+        kalkyler: k.kalkyler,
+        faktorer: k.faktorer,
+        status: 'Mal',
+        customer_name: null, customer_address: null, customer_email: null,
+        project_id: null,
+        kalk_number: null,
+        total_cost: k.total_cost, total_ex_mva: k.total_ex_mva, profit_percent: k.profit_percent,
+        created_by: user?.id,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('calculations').insert(templatePayload)
+      if (error) throw error
+      setShowSaveTemplate(false); setTemplateName(''); setTemplateDesc('')
+      setToastMsg({ title: 'Mal lagret', message: `"${templateName.trim()}" er lagret som mal og kan gjenbrukes`, type: 'success' })
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
   // Generer tilbud fra kalkulasjon → Tilbudsmodulen
   const handleCreateQuote = async () => {
     const quoteChapters = kalkyler.map(kalk => {
@@ -21453,6 +21613,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowMoreMenu(false)} />
                 <div style={{ position:'absolute', top:'100%', left:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'200px' }}>
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
+                  <button onClick={() => { setShowSaveTemplate(true); setTemplateName(k.title); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🗂️ Lagre som mal</button>
                   <button onClick={async () => {
                     const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
                     if (count > 0) { updateKalkyler(updated); setToastMsg({ title: 'Priser oppdatert', message: `${count} materialpriser oppdatert fra aktiv prisliste`, type: 'success' }) }
@@ -22414,6 +22575,51 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             </div>
           </div>
         </div>
+      )}
+
+      {/* Lagre som mal modal */}
+      {showSaveTemplate && (
+        <>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onClick={() => setShowSaveTemplate(false)} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(520px, calc(100vw - 32px))', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9' }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🗂️ Lagre kalkulasjon som mal</h2>
+            </div>
+            <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+              <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'14px 16px', border:'1px solid #bfdbfe' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', marginBottom:'6px' }}>INNHOLD I MALEN</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                  {kalkyler.map(kl => {
+                    const fag = getFaggruppe(kl.fag)
+                    const bdCount = (kl.bygningsdeler || []).length
+                    return (
+                      <span key={kl.id} style={{ background:'white', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'4px 10px', fontSize:'12px', fontWeight:'600', color:'#1e40af' }}>
+                        {fag.emoji} {kl.name} ({bdCount} bygn.deler)
+                      </span>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize:'12px', color:'#64748b', marginTop:'8px' }}>
+                  Alle faggrupper, bygningsdeler, arbeidsarter, materialer og faktorer kopieres til malen.
+                </div>
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Malnavn *</label>
+                <input value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="F.eks. «Enebolig 150m² komplett» eller «Bad rehab standard»" autoFocus
+                  style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beskrivelse (valgfritt)</label>
+                <textarea value={templateDesc} onChange={e => setTemplateDesc(e.target.value)} placeholder="Beskriv hva malen dekker, f.eks. «Komplett kalkyle for enebolig med tømrer, maler, rørlegger og elektriker»"
+                  rows={3} style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none' }} />
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={() => setShowSaveTemplate(false)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSaveAsTemplate} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>🗂️ Lagre som mal</button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Generell suksess/feil popup */}
