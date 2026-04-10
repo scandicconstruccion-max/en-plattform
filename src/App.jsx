@@ -9080,7 +9080,6 @@ function EndringsmeldingPage() {
             <button onClick={() => setShowPdfPicker(false)} style={{ marginTop:'10px', background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'12px' }}>Avbryt</button>
           </div>
         )}
-        </div>
       </div>
 
       {/* Statistikk */}
