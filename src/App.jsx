@@ -12844,108 +12844,273 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
 
 // ── STATS VIEW ────────────────────────────────────────────────────────────────
 function TimesheetStats({ entries, timesheets, employees, projects, selectedEmployee, statsView }) {
-  const filteredEntries = selectedEmployee ? entries.filter(e=>{
-    const ts = timesheets.find(t=>t.id===e.timesheet_id)
-    return ts?.employee_id===selectedEmployee
-  }) : entries
+  const [reportType, setReportType] = useState('oversikt') // 'oversikt'|'ansatt'|'prosjekt'
+  const [periodFrom, setPeriodFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` })
+  const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split('T')[0])
+  const [selectedProject, setSelectedProject] = useState(null)
+
+  const filteredEntries = entries.filter(e => {
+    if (selectedEmployee) {
+      const ts = timesheets.find(t=>t.id===e.timesheet_id)
+      if (ts?.employee_id !== selectedEmployee) return false
+    }
+    if (selectedProject && e.project_id !== selectedProject) return false
+    if (e.date && (e.date < periodFrom || e.date > periodTo)) return false
+    return true
+  })
 
   const totalNormal = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.normal_hours)||0),0)
   const totalOT50   = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.overtime_50)||0),0)
   const totalOT100  = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.overtime_100)||0),0)
   const totalKm     = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.travel_km)||0),0)
   const totalDiet   = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.diet)||0),0)
+  const totalExpenses = filteredEntries.reduce((acc,e)=>acc+(parseFloat(e.expenses)||0),0)
 
-  // Group by project
-  const byProject = projects.map(proj=>{
-    const projEntries = filteredEntries.filter(e=>e.project_id===proj.id)
-    const hours = projEntries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
-    return { ...proj, hours }
-  }).filter(p=>p.hours>0).sort((a,b)=>b.hours-a.hours)
+  // Fravær
+  const absenceEntries = filteredEntries.filter(e => e.absence_type)
+  const absenceDays = absenceEntries.length
+  const absenceByType = {}
+  absenceEntries.forEach(e => { absenceByType[e.absence_type] = (absenceByType[e.absence_type] || 0) + 1 })
 
-  // Group by period
-  const now = new Date()
+  // Per ansatt
+  const byEmployee = employees.map(emp => {
+    const empEntries = entries.filter(e => {
+      const ts = timesheets.find(t=>t.id===e.timesheet_id)
+      if (ts?.employee_id !== emp.id) return false
+      if (e.date && (e.date < periodFrom || e.date > periodTo)) return false
+      if (selectedProject && e.project_id !== selectedProject) return false
+      return true
+    })
+    const normal = empEntries.reduce((a,e)=>a+(parseFloat(e.normal_hours)||0),0)
+    const ot50 = empEntries.reduce((a,e)=>a+(parseFloat(e.overtime_50)||0),0)
+    const ot100 = empEntries.reduce((a,e)=>a+(parseFloat(e.overtime_100)||0),0)
+    const km = empEntries.reduce((a,e)=>a+(parseFloat(e.travel_km)||0),0)
+    const diet = empEntries.reduce((a,e)=>a+(parseFloat(e.diet)||0),0)
+    const expenses = empEntries.reduce((a,e)=>a+(parseFloat(e.expenses)||0),0)
+    const absence = empEntries.filter(e => e.absence_type).length
+    const rate = parseFloat(emp.hourly_rate) || 0
+    return { ...emp, normal, ot50, ot100, total: normal+ot50+ot100, km, diet, expenses, absence, rate, cost: normal*rate + ot50*rate*1.5 + ot100*rate*2 }
+  }).filter(e => e.total > 0 || e.absence > 0).sort((a,b) => b.total - a.total)
+
+  // Per prosjekt
+  const byProject = projects.map(proj => {
+    const projEntries = filteredEntries.filter(e => e.project_id === proj.id)
+    const hours = projEntries.reduce((a,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+a,0)
+    const empIds = [...new Set(projEntries.map(e => { const ts=timesheets.find(t=>t.id===e.timesheet_id); return ts?.employee_id }).filter(Boolean))]
+    return { ...proj, hours, empCount: empIds.length, entries: projEntries.length }
+  }).filter(p => p.hours > 0).sort((a,b) => b.hours - a.hours)
+
+  // Per periode
   const getKey = (e) => {
     if (statsView==='dag') return e.date
-    if (statsView==='uke') {
-      const ts = timesheets.find(t=>t.id===e.timesheet_id)
-      return ts ? `Uke ${ts.week_number}, ${ts.year}` : '—'
-    }
+    if (statsView==='uke') { const ts = timesheets.find(t=>t.id===e.timesheet_id); return ts ? `Uke ${ts.week_number}, ${ts.year}` : '—' }
     return e.date?.slice(0,7)||'—'
   }
-
   const byPeriod = {}
-  filteredEntries.forEach(e=>{
+  filteredEntries.forEach(e => {
     const k=getKey(e)
-    if (!byPeriod[k]) byPeriod[k]={key:k,normal:0,ot50:0,ot100:0,km:0}
+    if (!byPeriod[k]) byPeriod[k]={key:k,normal:0,ot50:0,ot100:0,km:0,absence:0}
     byPeriod[k].normal+=(parseFloat(e.normal_hours)||0)
     byPeriod[k].ot50+=(parseFloat(e.overtime_50)||0)
     byPeriod[k].ot100+=(parseFloat(e.overtime_100)||0)
     byPeriod[k].km+=(parseFloat(e.travel_km)||0)
+    if (e.absence_type) byPeriod[k].absence++
   })
   const periods = Object.values(byPeriod).sort((a,b)=>b.key.localeCompare(a.key)).slice(0,20)
 
+  // Eksport — enkel CSV
   const exportCSV = () => {
     const rows = [
-      ['Dato','Ansatt','Prosjekt','Aktivitet','Fra','Til','Normal','OT50%','OT100%','Km','Diett','Utlegg','Merknad'],
+      ['Dato','Ansatt','Ansattnr','Prosjekt','Aktivitet','Fravær','Fra','Til','Normal','OT50%','OT100%','Km','Diett','Utlegg','Utlegg beskr.','Merknad'],
       ...filteredEntries.map(e=>{
         const ts = timesheets.find(t=>t.id===e.timesheet_id)
         const emp = employees.find(x=>x.id===ts?.employee_id)
         const proj = projects.find(p=>p.id===e.project_id)
-        return [e.date,`${emp?.first_name||''} ${emp?.last_name||''}`,proj?.name||'',e.activity||'',e.start_time||'',e.end_time||'',e.normal_hours||0,e.overtime_50||0,e.overtime_100||0,e.travel_km||0,e.diet||0,e.expenses||0,e.notes||'']
+        return [e.date,`${emp?.first_name||''} ${emp?.last_name||''}`,emp?.id||'',proj?.name||'',e.activity||'',e.absence_type||'',e.start_time||'',e.end_time||'',e.normal_hours||0,e.overtime_50||0,e.overtime_100||0,e.travel_km||0,e.diet||0,e.expenses||0,e.expenses_description||'',e.notes||'']
       })
     ]
     const csv = rows.map(r=>r.join(';')).join('\n')
     const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href=url; a.download=`timelister-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    const a = document.createElement('a'); a.href=url; a.download=`timelister-${periodFrom}-${periodTo}.csv`; a.click()
   }
+
+  // Lønnseksport — aggregert per ansatt
+  const exportPayroll = () => {
+    const rows = [
+      ['Ansattnr','Navn','Normal timer','Timepris','Normal beløp','OT50% timer','OT50% beløp','OT100% timer','OT100% beløp','Total timer','Total beløp','Km','Km-godtgjørelse','Diett','Utlegg','Fraværsdager','Fravær betalt','Fravær ubetalt','Periode'],
+      ...byEmployee.map(e => {
+        const paidAbsence = entries.filter(en => { const ts=timesheets.find(t=>t.id===en.timesheet_id); return ts?.employee_id===e.id && en.absence_type && en.date >= periodFrom && en.date <= periodTo }).filter(en => ['syk_egen','syk_lege','ferie','permisjon','avspasering','kurs'].includes(en.absence_type)).length
+        const unpaidAbsence = e.absence - paidAbsence
+        return [
+          e.id, `${e.first_name} ${e.last_name}`,
+          e.normal.toFixed(1), e.rate, Math.round(e.normal * e.rate),
+          e.ot50.toFixed(1), Math.round(e.ot50 * e.rate * 1.5),
+          e.ot100.toFixed(1), Math.round(e.ot100 * e.rate * 2),
+          e.total.toFixed(1), Math.round(e.cost),
+          e.km, Math.round(e.km * 4.90),
+          e.diet, e.expenses,
+          e.absence, paidAbsence, unpaidAbsence,
+          `${periodFrom} - ${periodTo}`
+        ]
+      })
+    ]
+    const csv = rows.map(r=>r.join(';')).join('\n')
+    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href=url; a.download=`lonnsgrunnlag-${periodFrom}-${periodTo}.csv`; a.click()
+  }
+
+  const ABSENCE_LABELS = { syk_egen:'Egenmelding', syk_lege:'Sykemelding', ferie:'Ferie', ferie_ubetalt:'Ferie (ubetalt)', permisjon:'Permisjon m/lønn', permisjon_ubetalt:'Permisjon u/lønn', avspasering:'Avspasering', kurs:'Kurs/opplæring', annet:'Annet' }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      {/* Periode + rapport-type */}
+      <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 20px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+          {[['oversikt','📊 Oversikt'],['ansatt','👷 Per ansatt'],['prosjekt','🏗️ Per prosjekt']].map(([v,l])=>(
+            <button key={v} onClick={()=>setReportType(v)} style={{ padding:'7px 14px', border:'none', background:reportType===v?'#059669':'white', color:reportType===v?'white':'#64748b', fontWeight:reportType===v?'700':'400', fontSize:'12px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:'6px', alignItems:'center', fontSize:'12px', color:'#64748b' }}>
+          <span>Fra</span>
+          <input type="date" value={periodFrom} onChange={e=>setPeriodFrom(e.target.value)} style={{ ...tsInp, maxWidth:'140px', fontSize:'12px', padding:'6px 8px' }} />
+          <span>Til</span>
+          <input type="date" value={periodTo} onChange={e=>setPeriodTo(e.target.value)} style={{ ...tsInp, maxWidth:'140px', fontSize:'12px', padding:'6px 8px' }} />
+        </div>
+        {reportType==='prosjekt' && (
+          <select value={selectedProject||''} onChange={e=>setSelectedProject(e.target.value||null)} style={{ ...tsInp, maxWidth:'200px', fontSize:'12px' }}>
+            <option value="">Alle prosjekter</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
+      </div>
+
       {/* Summary cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:'10px' }}>
-        {[['Normal',fmtHours(totalNormal)+'t','#16a34a','#f0fdf4'],['OT 50%',fmtHours(totalOT50)+'t','#d97706','#fffbeb'],['OT 100%',fmtHours(totalOT100)+'t','#dc2626','#fef2f2'],['Km',totalKm+'km','#2563eb','#eff6ff'],['Diett',totalDiet+' kr','#7c3aed','#f5f3ff']].map(([l,v,col,bg])=>(
-          <div key={l} style={{ background:bg, borderRadius:'12px', padding:'14px 16px', textAlign:'center', border:`1px solid ${bg}` }}>
-            <div style={{ fontSize:'11px', color:col, fontWeight:'700', textTransform:'uppercase', marginBottom:'4px' }}>{l}</div>
-            <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{v}</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'10px' }}>
+        {[['Normal',fmtHours(totalNormal)+'t','#16a34a','#f0fdf4'],['OT 50%',fmtHours(totalOT50)+'t','#d97706','#fffbeb'],['OT 100%',fmtHours(totalOT100)+'t','#dc2626','#fef2f2'],['Km',totalKm+'km','#2563eb','#eff6ff'],['Diett',totalDiet+' kr','#7c3aed','#f5f3ff'],['Fravær',absenceDays+' dager','#0891b2','#ecfeff']].map(([l,v,col,bg])=>(
+          <div key={l} style={{ background:bg, borderRadius:'12px', padding:'12px 14px', textAlign:'center', border:`1px solid ${bg}` }}>
+            <div style={{ fontSize:'10px', color:col, fontWeight:'700', textTransform:'uppercase', marginBottom:'3px' }}>{l}</div>
+            <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{v}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-        {/* By project */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
-          <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Timer per prosjekt</h3>
-          {byProject.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:byProject.map(p=>(
-            <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
-              <div style={{ flex:1, fontSize:'13px', fontWeight:'500', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
-              <div style={{ background:'#f0fdf4', borderRadius:'8px', padding:'3px 10px', fontWeight:'700', color:'#059669', fontSize:'13px', whiteSpace:'nowrap' }}>{fmtHours(p.hours)}t</div>
-            </div>
-          ))}
+      {/* Fraværsoversikt */}
+      {absenceDays > 0 && (
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 20px' }}>
+          <h3 style={{ margin:'0 0 10px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📋 Fravær i perioden</h3>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+            {Object.entries(absenceByType).map(([type, count]) => (
+              <span key={type} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'4px 12px', fontSize:'12px', fontWeight:'600', color:'#374151' }}>
+                {ABSENCE_LABELS[type]||type}: {count} dag{count>1?'er':''}
+              </span>
+            ))}
+          </div>
         </div>
+      )}
 
-        {/* By period */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
-          <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📅 Per {statsView==='dag'?'dag':statsView==='uke'?'uke':'måned'}</h3>
-          {periods.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:periods.map(p=>(
-            <div key={p.key} style={{ marginBottom:'8px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
-                <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.key}</span>
-                <span style={{ fontSize:'13px', fontWeight:'800', color:'#059669' }}>{fmtHours(p.normal+p.ot50+p.ot100)}t</span>
+      {/* Rapport: Per ansatt */}
+      {reportType === 'ansatt' && (
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+          <div style={{ padding:'14px 20px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>👷 Rapport per ansatt</div>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+              <thead><tr style={{ background:'#f1f5f9' }}>
+                {['Ansatt','Normal','OT50%','OT100%','Totalt','Km','Diett','Utlegg','Fravær','Timekost'].map(h=>
+                  <th key={h} style={{ padding:'8px 10px', textAlign:h==='Ansatt'?'left':'right', fontWeight:'700', color:'#64748b', fontSize:'10px', textTransform:'uppercase' }}>{h}</th>
+                )}
+              </tr></thead>
+              <tbody>
+                {byEmployee.map(e=>(
+                  <tr key={e.id} style={{ borderBottom:'1px solid #f8fafc' }}>
+                    <td style={{ padding:'10px', fontWeight:'600', color:'#0f172a' }}>{e.first_name} {e.last_name}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#16a34a' }}>{fmtHours(e.normal)}t</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#d97706' }}>{e.ot50>0?fmtHours(e.ot50)+'t':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#dc2626' }}>{e.ot100>0?fmtHours(e.ot100)+'t':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'800', color:'#0f172a' }}>{fmtHours(e.total)}t</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#2563eb' }}>{e.km>0?e.km:'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#7c3aed' }}>{e.diet>0?e.diet+' kr':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#374151' }}>{e.expenses>0?e.expenses+' kr':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', color:'#0891b2' }}>{e.absence>0?e.absence+'d':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#059669' }}>{e.cost>0?Math.round(e.cost).toLocaleString('nb-NO')+' kr':'—'}</td>
+                  </tr>
+                ))}
+                <tr style={{ background:'#f0fdf4', fontWeight:'700' }}>
+                  <td style={{ padding:'10px' }}>Totalt</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#16a34a' }}>{fmtHours(totalNormal)}t</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#d97706' }}>{fmtHours(totalOT50)}t</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#dc2626' }}>{fmtHours(totalOT100)}t</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#0f172a' }}>{fmtHours(totalNormal+totalOT50+totalOT100)}t</td>
+                  <td style={{ padding:'10px', textAlign:'right' }}>{totalKm}</td>
+                  <td style={{ padding:'10px', textAlign:'right' }}>{totalDiet} kr</td>
+                  <td style={{ padding:'10px', textAlign:'right' }}>{totalExpenses} kr</td>
+                  <td style={{ padding:'10px', textAlign:'right' }}>{absenceDays}d</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO')} kr</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Rapport: Per prosjekt */}
+      {reportType === 'prosjekt' && (
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+          <div style={{ padding:'14px 20px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>🏗️ Rapport per prosjekt</div>
+          {byProject.map(p=>(
+            <div key={p.id} style={{ padding:'12px 20px', borderBottom:'1px solid #f8fafc', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{p.name}</div>
+                <div style={{ fontSize:'11px', color:'#94a3b8' }}>{p.empCount} ansatt{p.empCount>1?'e':''} · {p.entries} registreringer</div>
               </div>
-              <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#94a3b8' }}>
-                {p.normal>0&&<span>Normal: {fmtHours(p.normal)}t</span>}
-                {p.ot50>0&&<span style={{ color:'#d97706' }}>OT50: {fmtHours(p.ot50)}t</span>}
-                {p.ot100>0&&<span style={{ color:'#dc2626' }}>OT100: {fmtHours(p.ot100)}t</span>}
-              </div>
+              <div style={{ fontWeight:'800', fontSize:'16px', color:'#059669' }}>{fmtHours(p.hours)}t</div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Per periode */}
+      {reportType === 'oversikt' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Timer per prosjekt</h3>
+            {byProject.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:byProject.map(p=>(
+              <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+                <div style={{ flex:1, fontSize:'13px', fontWeight:'500', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+                <div style={{ background:'#f0fdf4', borderRadius:'8px', padding:'3px 10px', fontWeight:'700', color:'#059669', fontSize:'13px', whiteSpace:'nowrap' }}>{fmtHours(p.hours)}t</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📅 Per {statsView==='dag'?'dag':statsView==='uke'?'uke':'måned'}</h3>
+            {periods.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:periods.map(p=>(
+              <div key={p.key} style={{ marginBottom:'8px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                  <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.key}</span>
+                  <span style={{ fontSize:'13px', fontWeight:'800', color:'#059669' }}>{fmtHours(p.normal+p.ot50+p.ot100)}t</span>
+                </div>
+                <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#94a3b8' }}>
+                  {p.normal>0&&<span>Normal: {fmtHours(p.normal)}t</span>}
+                  {p.ot50>0&&<span style={{ color:'#d97706' }}>OT50: {fmtHours(p.ot50)}t</span>}
+                  {p.ot100>0&&<span style={{ color:'#dc2626' }}>OT100: {fmtHours(p.ot100)}t</span>}
+                  {p.absence>0&&<span style={{ color:'#0891b2' }}>Fravær: {p.absence}d</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Eksport-knapper */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+        <button onClick={exportCSV} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
+          📥 Eksporter timelister (CSV)
+        </button>
+        <button onClick={exportPayroll} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
+          💰 Eksporter lønnsgrunnlag
+        </button>
       </div>
-
-      <button onClick={exportCSV} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
-        📥 Eksporter til CSV (lønnssystem)
-      </button>
     </div>
   )
 }
