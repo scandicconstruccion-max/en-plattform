@@ -9979,6 +9979,17 @@ function FakturaPage() {
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
   if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
 
+  // ── MVA-rapport state ──
+  const [showMvaReport, setShowMvaReport] = useState(false)
+  const [mvaPeriod, setMvaPeriod] = useState(() => {
+    const now = new Date()
+    const q = Math.floor(now.getMonth() / 2) // Termin (2-mnd)
+    const startMonth = q * 2
+    const start = new Date(now.getFullYear(), startMonth, 1)
+    const end = new Date(now.getFullYear(), startMonth + 2, 0)
+    return { from: start.toISOString().split('T')[0], to: end.toISOString().split('T')[0], label: `${q+1}. termin ${now.getFullYear()}` }
+  })
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
@@ -9987,8 +9998,10 @@ function FakturaPage() {
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧾 Faktura</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>
           </div>
-          <div style={{ position:'relative' }}>
-            <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny faktura ▾</button>
+          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📊 MVA-rapport</button>
+            <div style={{ position:'relative' }}>
+              <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny faktura ▾</button>
             {showNew==='menu' && (
               <>
                 <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowNew(null)} />
@@ -10012,6 +10025,7 @@ function FakturaPage() {
               </>
             )}
           </div>
+          </div>{/* end flex button group */}
         </div>
       </div>
 
@@ -10091,6 +10105,114 @@ function FakturaPage() {
             </div>
           </div>
         )}
+
+        {/* MVA-rapport */}
+        {showMvaReport && (() => {
+          const periodInvoices = invoices.filter(i => {
+            if (i.status === 'Utkast') return false
+            const d = i.invoice_date || i.created_at?.split('T')[0]
+            return d >= mvaPeriod.from && d <= mvaPeriod.to
+          })
+          const creditNotes = periodInvoices.filter(i => i.is_credit_note)
+          const regularInv = periodInvoices.filter(i => !i.is_credit_note)
+          const mvaByRate = {}
+          periodInvoices.forEach(inv => {
+            ;(inv.lines || []).forEach(l => {
+              const rate = parseFloat(l.mvaRate) || 0
+              const lineNet = (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0)
+              if (!mvaByRate[rate]) mvaByRate[rate] = { net: 0, mva: 0, count: 0 }
+              mvaByRate[rate].net += lineNet
+              mvaByRate[rate].mva += lineNet * rate
+              mvaByRate[rate].count++
+            })
+          })
+          const totalNet = Object.values(mvaByRate).reduce((s, v) => s + v.net, 0)
+          const totalMva = Object.values(mvaByRate).reduce((s, v) => s + v.mva, 0)
+          const totalGross = totalNet + totalMva
+          const perioder = []
+          const now = new Date()
+          for (let y = now.getFullYear(); y >= now.getFullYear() - 1; y--) {
+            for (let t = 5; t >= 0; t--) {
+              const sm = t * 2, start = new Date(y, sm, 1), end = new Date(y, sm + 2, 0)
+              if (start <= now) perioder.push({ from: start.toISOString().split('T')[0], to: end.toISOString().split('T')[0], label: `${t+1}. termin ${y} (${start.toLocaleDateString('nb-NO',{month:'short'})}\u2013${end.toLocaleDateString('nb-NO',{month:'short'})})` })
+            }
+          }
+          return (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e9d5ff', padding:'20px', boxShadow:'0 2px 8px rgba(124,58,237,0.08)' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+                <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>\uD83D\uDCCA MVA-rapport</h3>
+                <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                  <select value={mvaPeriod.from} onChange={e => { const p = perioder.find(pp => pp.from === e.target.value); if (p) setMvaPeriod(p) }} style={{ ...iInp, maxWidth:'280px', fontSize:'13px' }}>
+                    {perioder.map(p => <option key={p.from} value={p.from}>{p.label}</option>)}
+                  </select>
+                  <button onClick={() => setShowMvaReport(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8' }}>\u00D7</button>
+                </div>
+              </div>
+              {periodInvoices.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'24px', color:'#94a3b8', fontSize:'14px' }}>Ingen fakturaer i valgt periode</div>
+              ) : (<>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px', marginBottom:'16px' }}>
+                  {[
+                    { label:'Fakturaer', value: String(regularInv.length), color:'#0f172a', bg:'#f8fafc' },
+                    { label:'Omsetning (netto)', value: fmtI(totalNet), color:'#2563eb', bg:'#eff6ff' },
+                    { label:'Utg\u00E5ende MVA', value: fmtI(totalMva), color:'#dc2626', bg:'#fef2f2' },
+                    { label:'Brutto', value: fmtI(totalGross), color:'#059669', bg:'#f0fdf4' },
+                  ].map(s => (
+                    <div key={s.label} style={{ background:s.bg, borderRadius:'10px', padding:'12px', textAlign:'center' }}>
+                      <div style={{ fontSize:'16px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'2px' }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginBottom:'16px' }}>
+                  <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'8px', textTransform:'uppercase' }}>Fordelt per MVA-sats</div>
+                  <div style={{ background:'#f8fafc', borderRadius:'10px', overflow:'hidden', border:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'8px 14px', background:'#f1f5f9' }}>
+                      {['MVA-sats','Grunnlag','MVA-bel\u00F8p','Linjer'].map(h => <div key={h} style={{ fontSize:'10px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{h}</div>)}
+                    </div>
+                    {Object.entries(mvaByRate).sort(([a],[b]) => parseFloat(b)-parseFloat(a)).map(([rate, data]) => (
+                      <div key={rate} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'10px 14px', borderTop:'1px solid #f1f5f9', fontSize:'13px' }}>
+                        <div style={{ fontWeight:'700', color:'#0f172a' }}>{(parseFloat(rate)*100).toFixed(0)}%</div>
+                        <div style={{ color:'#374151' }}>{fmtI(data.net)}</div>
+                        <div style={{ color:'#dc2626', fontWeight:'600' }}>{fmtI(data.mva)}</div>
+                        <div style={{ color:'#94a3b8' }}>{data.count}</div>
+                      </div>
+                    ))}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'10px 14px', borderTop:'2px solid #e2e8f0', fontSize:'13px', fontWeight:'700' }}>
+                      <div>Totalt</div><div>{fmtI(totalNet)}</div><div style={{ color:'#dc2626' }}>{fmtI(totalMva)}</div><div style={{ color:'#94a3b8' }}>{periodInvoices.reduce((s,i) => s + (i.lines||[]).length, 0)}</div>
+                    </div>
+                  </div>
+                </div>
+                {creditNotes.length > 0 && (
+                  <div style={{ marginBottom:'16px' }}>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px' }}>\u21A9\uFE0F Kreditnotaer i perioden ({creditNotes.length})</div>
+                    {creditNotes.map(cn => { const { net: cnNet } = calcLines(cn.lines); return (
+                      <div key={cn.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:'#f5f3ff', borderRadius:'6px', fontSize:'12px', marginBottom:'4px' }}>
+                        <span style={{ color:'#374151' }}>{cn.invoice_number} \u2014 {cn.title}</span>
+                        <span style={{ color:'#dc2626', fontWeight:'600' }}>{fmtI(cnNet)}</span>
+                      </div>
+                    )})}
+                  </div>
+                )}
+                <details style={{ cursor:'pointer' }}>
+                  <summary style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', userSelect:'none' }}>Fakturaer i perioden ({regularInv.length})</summary>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginTop:'6px' }}>
+                    {regularInv.map(pi => { const { net: piNet, mva: piMva } = calcLines(pi.lines); return (
+                      <div key={pi.id} style={{ display:'grid', gridTemplateColumns:'auto 1fr 1fr 1fr auto', gap:'10px', padding:'6px 10px', background:'#fafafa', borderRadius:'6px', fontSize:'12px', alignItems:'center' }}>
+                        <span style={{ color:'#94a3b8', fontFamily:'monospace', fontSize:'11px' }}>{pi.invoice_number}</span>
+                        <span style={{ color:'#0f172a', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pi.title}</span>
+                        <span style={{ color:'#374151' }}>{fmtI(piNet)}</span>
+                        <span style={{ color:'#dc2626' }}>{fmtI(piMva)}</span>
+                        <InvStatusBadge status={pi.status} />
+                      </div>
+                    )})}
+                  </div>
+                </details>
+              </>)}
+            </div>
+          )
+        })()}
+
 
         {/* Filters */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
