@@ -12823,14 +12823,13 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
 
                   {/* Actions */}
                   <div style={{ display:'flex', gap:'8px' }}>
-                    </>
-                  )}
-
                     <button onClick={()=>saveDay(date)} disabled={saving||!entry?._dirty} style={{ flex:1, padding:'12px', background:entry?._dirty?'#059669':'#f1f5f9', color:entry?._dirty?'white':'#94a3b8', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:entry?._dirty?'pointer':'default' }}>
                       {saving?'Lagrer...':'💾 Lagre dag'}
                     </button>
                     {entry&&!entry._new&&<button onClick={()=>deleteEntry(date)} style={{ padding:'12px 16px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>🗑️</button>}
                   </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
