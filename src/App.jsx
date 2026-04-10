@@ -8466,6 +8466,189 @@ function EndringsmeldingPage() {
   const totalTillegg = filtered.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
   const totalIkkeFakturert = filtered.filter(e => e.status === 'Godkjent').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
 
+  // ── PDF-rapport per prosjekt ──
+  const [showPdfPicker, setShowPdfPicker] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  const exportProjectPDF = async (projectId) => {
+    setExportingPdf(true)
+    try {
+      if (!window.jspdf) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+          s.onload = resolve; s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF('p', 'mm', 'a4')
+      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
+      let y = 0
+
+      const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+      const setC = (c) => doc.setTextColor(c[0],c[1],c[2])
+      const setF = (c) => doc.setFillColor(c[0],c[1],c[2])
+      const setD = (c) => doc.setDrawColor(c[0],c[1],c[2])
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (n) => { if (y + n > ph - 22) addPage() }
+
+      const proj = projects.find(p => p.id === projectId)
+      const projEms = endringer.filter(e => e.project_id === projectId).sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
+      const godkjent = projEms.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
+      const totalGodkjent = godkjent.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+      const totalTimer = projEms.reduce((s, e) => s + (parseFloat(e.hours) || 0), 0)
+
+      // ── Header ──
+      y = 14
+      setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text('ENDRINGSMELDINGSRAPPORT', ml, y)
+      doc.setFont('helvetica', 'normal')
+      doc.text(new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }), pw - mr, y, { align:'right' })
+      y += 8
+
+      setC(hex('#0f172a')); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
+      doc.text(proj?.name || 'Alle prosjekter', ml, y)
+      y += 8
+
+      setC(hex('#64748b')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+      doc.text(`${projEms.length} endringsmeldinger · ${godkjent.length} godkjent`, ml, y)
+      y += 10
+
+      // ── Oppsummering ──
+      setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+      doc.roundedRect(ml, y, cw, 20, 2.5, 2.5, 'FD')
+
+      const sumW = cw / 4
+      const sumItems = [
+        { label: 'Totalt godkjent', value: Math.round(totalGodkjent).toLocaleString('nb-NO') + ' kr', color: '#059669' },
+        { label: 'Antall EM', value: String(projEms.length), color: '#0f172a' },
+        { label: 'Godkjente', value: String(godkjent.length), color: '#16a34a' },
+        { label: 'Timer totalt', value: totalTimer.toFixed(0) + ' t', color: '#2563eb' },
+      ]
+      sumItems.forEach((s, i) => {
+        const sx = ml + 6 + i * sumW
+        setC(hex(s.color)); doc.setFontSize(12); doc.setFont('helvetica', 'bold')
+        doc.text(s.value, sx, y + 8)
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+        doc.text(s.label, sx, y + 14)
+      })
+      y += 28
+
+      // ── Statusfordeling ──
+      const statusCounts = {}
+      projEms.forEach(em => { statusCounts[em.status] = (statusCounts[em.status] || 0) + 1 })
+      if (Object.keys(statusCounts).length > 0) {
+        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+        const statusText = Object.entries(statusCounts).map(([s, c]) => `${s}: ${c}`).join('  ·  ')
+        doc.text(statusText, ml, y)
+        y += 8
+      }
+
+      setD(hex('#e2e8f0')); doc.line(ml, y, pw - mr, y); y += 8
+
+      // ── Endringsmeldinger ──
+      projEms.forEach((em, idx) => {
+        const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
+        const stColor = st.color
+        const hasDesc = !!em.description
+        const hasReason = !!em.reason
+        const cardH = 16 + (hasDesc ? Math.min(doc.splitTextToSize(em.description, cw - 30).length * 3.5, 20) + 4 : 0) + (hasReason ? 5 : 0) + (em.time_consequence ? 5 : 0)
+        checkSpace(cardH + 6)
+
+        // Kort
+        setF(hex('#ffffff')); setD(hex('#f1f5f9'))
+        doc.roundedRect(ml, y, cw, cardH, 2, 2, 'FD')
+
+        // Venstre fargekant
+        setF(hex(stColor))
+        doc.rect(ml, y + 0.5, 1.5, cardH - 1, 'F')
+
+        // Nummer + tittel
+        setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text(em.em_number || `EM-${String(idx+1).padStart(4,'0')}`, ml + 5, y + 5)
+
+        setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+        const titleLines = doc.splitTextToSize(em.title || '', cw - 60)
+        doc.text(titleLines, ml + 5, y + 10)
+
+        // Status-pill + beløp
+        const pillW = doc.getTextWidth(em.status) + 6
+        setF(hex(st.bg)); doc.roundedRect(pw - mr - pillW - 4, y + 2, pillW, 5, 1, 1, 'F')
+        setC(hex(stColor)); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold')
+        doc.text(em.status, pw - mr - pillW/2 - 1, y + 5.5, { align:'center' })
+
+        // Beløp
+        if (em.amount) {
+          setC(hex('#059669')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+          doc.text(Math.round(em.amount).toLocaleString('nb-NO') + ' kr', pw - mr - 5, y + 12, { align:'right' })
+        }
+
+        let ey = y + 14
+
+        // Årsak
+        if (hasReason) {
+          setC(hex('#d97706')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+          doc.text('Arsak: ' + em.reason, ml + 5, ey)
+          ey += 4
+        }
+
+        // Beskrivelse
+        if (hasDesc) {
+          setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+          const descLines = doc.splitTextToSize(em.description, cw - 14).slice(0, 5)
+          doc.text(descLines, ml + 5, ey)
+          ey += descLines.length * 3.5 + 1
+        }
+
+        // Tidskonsekvens
+        if (em.time_consequence) {
+          setC(hex('#d97706')); doc.setFontSize(7)
+          doc.text('Tidskonsekvens: ' + em.time_consequence, ml + 5, ey)
+        }
+
+        y += cardH + 4
+      })
+
+      // ── Signaturfelt ──
+      checkSpace(50)
+      y += 6
+      setF(hex('#ffffff')); setD(hex('#e2e8f0'))
+      doc.roundedRect(ml, y, cw, 42, 2.5, 2.5, 'FD')
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text('Signaturer', ml + 5, y + 7)
+
+      const sigW = (cw - 18) / 2
+      const sigY = y + 12
+      ;[{ label:'Entreprenor', x:ml+5 }, { label:'Byggherre / Kunde', x:ml+5+sigW+8 }].forEach(sc => {
+        setC(hex('#64748b')); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold')
+        doc.text(sc.label, sc.x, sigY)
+        setD(hex('#0f172a'))
+        doc.line(sc.x, sigY + 14, sc.x + sigW, sigY + 14)
+        setC(hex('#94a3b8')); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal')
+        doc.text('Signatur / Dato', sc.x, sigY + 18)
+        doc.line(sc.x, sigY + 25, sc.x + sigW, sigY + 25)
+        doc.text('Navn (blokkbokstaver)', sc.x, sigY + 29)
+      })
+
+      // ── Footer ──
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        setD(hex('#f1f5f9')); doc.line(ml, ph - 14, pw - mr, ph - 14)
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal'); setC(hex('#94a3b8'))
+        doc.text(`Endringsmeldingsrapport — ${proj?.name || 'Prosjekt'}`, ml, ph - 9)
+        doc.text(`Side ${i}/${pageCount}`, pw/2, ph - 9, { align:'center' })
+        doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
+        doc.text('En Plattform', pw - mr, ph - 9, { align:'right' })
+      }
+
+      doc.save(`EM-rapport - ${proj?.name || 'Prosjekt'}.pdf`)
+      setShowPdfPicker(false)
+    } catch(e) { console.error(e); alert('Feil ved PDF: ' + e.message) }
+    finally { setExportingPdf(false) }
+  }
+
   const handleDelete = async (em) => {
     if (!window.confirm(`Slette endringsmelding "${em.title}"?`)) return
     await supabase.from('endringsmeldinger').delete().eq('id', em.id)
@@ -8791,7 +8974,38 @@ function EndringsmeldingPage() {
             <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
             <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>
           </div>
-          <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny endringsmelding</button>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => setShowPdfPicker(!showPdfPicker)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📄 PDF-rapport</button>
+            <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny endringsmelding</button>
+          </div>
+        </div>
+        {/* PDF prosjektvelger */}
+        {showPdfPicker && (
+          <div style={{ marginTop:'16px', background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0', padding:'16px' }}>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Velg prosjekt for PDF-rapport</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px', maxHeight:'200px', overflowY:'auto' }}>
+              {projects.filter(p => endringer.some(e => e.project_id === p.id)).map(p => {
+                const pEms = endringer.filter(e => e.project_id === p.id)
+                const pTotal = pEms.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert').reduce((s,e) => s + (parseFloat(e.amount)||0), 0)
+                return (
+                  <button key={p.id} onClick={() => exportProjectPDF(p.id)} disabled={exportingPdf}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor='#059669'} onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
+                    <div>
+                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{p.name}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{pEms.length} EM · {pEms.filter(e=>e.status==='Godkjent').length} godkjent</div>
+                    </div>
+                    <span style={{ fontWeight:'700', color:'#059669' }}>{Math.round(pTotal).toLocaleString('nb-NO')} kr</span>
+                  </button>
+                )
+              })}
+              {projects.filter(p => endringer.some(e => e.project_id === p.id)).length === 0 && (
+                <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'12px' }}>Ingen prosjekter med endringsmeldinger</p>
+              )}
+            </div>
+            <button onClick={() => setShowPdfPicker(false)} style={{ marginTop:'10px', background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'12px' }}>Avbryt</button>
+          </div>
+        )}
         </div>
       </div>
 
