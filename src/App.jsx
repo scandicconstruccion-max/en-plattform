@@ -9942,22 +9942,27 @@ function FakturaPage() {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('alle')
   const [search, setSearch] = useState('')
-  const [showNew, setShowNew] = useState(null) // null|'manual'|'order'|'quote'|'partial'|'changes'
+  const [showNew, setShowNew] = useState(null) // null|'manual'|'order'|'quote'|'partial'|'changes'|'kalkulation'
   const [selected, setSelected] = useState(null)
+  const [calculations, setCalculations] = useState([])
 
   const load = async () => {
     try {
-      const [inv, ord, q, p] = await Promise.all([
+      const [inv, ord, q, p, kalks] = await Promise.all([
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('calculations').select('id, title, kalk_number, kalkyler, faktorer, total_ex_mva, customer_name, project_id').eq('is_template', false).order('created_at',{ascending:false}).then(r=>r.data||[]),
       ])
-      setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p)
+      setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p); setCalculations(kalks)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
+
+  // Forfalt-fakturaer for purring
+  const overdueInvoices = invoices.filter(i => isOverdue(i) || (i.status === 'Purret' && i.due_date && new Date(i.due_date) < new Date()))
 
   const filtered = invoices.filter(i => {
     if (filterStatus!=='alle'&&i.status!==filterStatus) return false
@@ -9991,6 +9996,7 @@ function FakturaPage() {
                   {[
                     { key:'order', emoji:'📦', label:'Fra ordre', desc:'Kopier linjer fra ordre' },
                     { key:'quote', emoji:'📋', label:'Fra tilbud', desc:'Fra akseptert tilbud' },
+                    { key:'kalkulation', emoji:'🧮', label:'Fra kalkulasjon', desc:'Velg poster og delfakturer' },
                     { key:'partial', emoji:'✂️', label:'Delfakturering', desc:'Fakturere % av en ordre' },
                     { key:'changes', emoji:'🔄', label:'Endringsmeldinger', desc:'Fakturere endringsmeldinger' },
                     { key:'manual', emoji:'✏️', label:'Manuell faktura', desc:'Lag fra bunnen av' },
@@ -10036,12 +10042,53 @@ function FakturaPage() {
           })}
         </div>
 
-        {/* Overdue warning */}
-        {overdueCount > 0 && (
-          <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'14px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'20px' }}>🚨</span>
-            <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626' }}>{overdueCount} faktura{overdueCount>1?'er er':'er'} forfalt — vurder purring</span>
-            <button onClick={()=>setFilterStatus('Sendt')} style={{ marginLeft:'auto', background:'#dc2626', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>Vis forfalt</button>
+        {/* Purring-banner for forfalt fakturaer */}
+        {overdueInvoices.length > 0 && (
+          <div style={{ background:'#fef2f2', borderRadius:'14px', border:'1px solid #fecaca', padding:'16px 20px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                <span style={{ fontSize:'20px' }}>🚨</span>
+                <div>
+                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#dc2626' }}>{overdueInvoices.length} forfalt{overdueInvoices.length > 1 ? 'e' : ''} faktura{overdueInvoices.length > 1 ? 'er' : ''}</div>
+                  <div style={{ fontSize:'12px', color:'#991b1b' }}>Totalt utestående: {fmtI(overdueInvoices.reduce((s,i) => s + calcLines(i.lines).gross, 0))}</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {overdueInvoices.slice(0, 5).map(oi => {
+                const daysOver = Math.floor((new Date() - new Date(oi.due_date)) / 86400000)
+                const { gross: oiGross } = calcLines(oi.lines)
+                return (
+                  <div key={oi.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'white', borderRadius:'10px', padding:'10px 14px' }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{oi.title}</div>
+                      <div style={{ fontSize:'11px', color:'#dc2626' }}>
+                        {oi.customer_name} · {oi.invoice_number} · Forfalt {daysOver} dager · {fmtI(oiGross)}
+                        {oi.reminder_count > 0 && <span style={{ color:'#d97706', marginLeft:'6px' }}>{oi.reminder_count} purring{oi.reminder_count > 1 ? 'er' : ''}</span>}
+                      </div>
+                    </div>
+                    <button onClick={async (e) => {
+                      e.stopPropagation()
+                      if (!oi.customer_email) { alert('Ingen e-post registrert'); return }
+                      if (!window.confirm(`Send purring til ${oi.customer_email}?`)) return
+                      try {
+                        const { gross: g } = calcLines(oi.lines)
+                        const reminderNum = (oi.reminder_count || 0) + 1
+                        const html = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px"><div style="background:#fef2f2;border-radius:12px;padding:16px;border:1px solid #fecaca;margin-bottom:20px"><h2 style="margin:0;color:#dc2626;font-size:18px">Purring ${reminderNum} – Ubetalt faktura</h2><p style="margin:4px 0 0;color:#dc2626;font-size:13px">Forfallsdato: <strong>${oi.due_date}</strong></p></div><h1 style="color:#0f172a;font-size:20px">${oi.title}</h1><p style="color:#64748b">Fakturanummer: <strong>${oi.invoice_number}</strong></p><div style="background:#f8fafc;border-radius:12px;padding:20px;margin:16px 0"><div style="font-size:28px;font-weight:800;color:#0f172a">${fmtI(g)}</div></div>${oi.bank_account?'<p style="color:#374151">Kontonr: <strong>'+oi.bank_account+'</strong></p>':''}${oi.kid?'<p style="color:#374151">KID: <strong>'+oi.kid+'</strong></p>':''}<p style="color:#64748b;font-size:13px">Vennligst betal snarest.</p><hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0"><p style="color:#94a3b8;font-size:12px">Purring ${reminderNum} — En Plattform</p></div>`
+                        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+                          method:'POST', headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY},
+                          body: JSON.stringify({ to:oi.customer_email, subject:`PURRING ${reminderNum} – Faktura ${oi.invoice_number}`, html })
+                        })
+                        await supabase.from('invoices').update({ status:'Purret', reminder_count:reminderNum, last_reminder_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', oi.id)
+                        load()
+                      } catch(err) { alert('Feil: '+err.message) }
+                    }} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>
+                      📧 Purring {(oi.reminder_count||0)+1}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -10106,6 +10153,7 @@ function FakturaPage() {
       {showNew==='quote'    && <FakturaFraTilbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
       {showNew==='partial'  && <FakturaFraOrdreModal orders={orders} projects={projects} user={user} mode="partial" onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
       {showNew==='changes'  && <FakturaEndringsModal orders={orders} projects={projects} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
+      {showNew==='kalkulation' && <FakturaFraKalkModal calculations={calculations} projects={projects} invoices={invoices} user={user} onClose={()=>setShowNew(null)} onSaved={()=>{setShowNew(null);load()}} />}
     </div>
   )
 }
@@ -10694,6 +10742,180 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
             <button onClick={handleCreate} disabled={saving||!selectedOrder||selectedChanges.length===0} style={{ padding:'10px 24px', background:saving||!selectedOrder||selectedChanges.length===0?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, onSaved }) {
+  const [step, setStep] = useState(1) // 1=velg kalk, 2=velg poster
+  const [selectedKalk, setSelectedKalk] = useState(null)
+  const [selectedBds, setSelectedBds] = useState({}) // { bdId: { checked, pct } }
+  const [saving, setSaving] = useState(false)
+
+  // Beregn hva som allerede er fakturert for valgt kalkulasjon
+  const previousInvoices = selectedKalk ? invoices.filter(i => i.source_calculation_id === selectedKalk.id) : []
+  const previouslyInvoicedBds = previousInvoices.reduce((acc, inv) => {
+    ;(inv.invoiced_bds || []).forEach(bd => { acc[bd.bd_id] = (acc[bd.bd_id] || 0) + (bd.percent || 100) })
+    return acc
+  }, {})
+
+  const toggleBd = (kalkId, bdId) => {
+    setSelectedBds(prev => {
+      const key = `${kalkId}_${bdId}`
+      if (prev[key]) { const { [key]: _, ...rest } = prev; return rest }
+      return { ...prev, [key]: { checked: true, pct: 100 - (previouslyInvoicedBds[bdId] || 0) } }
+    })
+  }
+
+  const setPct = (kalkId, bdId, pct) => {
+    const key = `${kalkId}_${bdId}`
+    setSelectedBds(prev => ({ ...prev, [key]: { ...prev[key], pct: Math.min(Math.max(0, pct), 100 - (previouslyInvoicedBds[bdId] || 0)) } }))
+  }
+
+  const handleCreate = async () => {
+    const entries = Object.entries(selectedBds).filter(([_, v]) => v.checked && v.pct > 0)
+    if (entries.length === 0) return alert('Velg minst en post')
+    setSaving(true)
+    try {
+      const k = selectedKalk
+      const alleFaktorer = k.faktorer || {}
+      const lines = []; const invoicedBds = []
+
+      entries.forEach(([key, val]) => {
+        const [kalkIdStr, bdId] = key.split('_')
+        const kalkId = parseInt(kalkIdStr)
+        const kalkyle = (k.kalkyler || []).find(kl => kl.id === kalkId)
+        if (!kalkyle) return
+        const bd = (kalkyle.bygningsdeler || []).find(b => b.id === parseInt(bdId))
+        if (!bd) return
+        const fakt = alleFaktorer[kalkyle.fag] || getDefaultFaktorer(kalkyle.fag)
+        const bdRes = beregnBygningsdel(bd, fakt)
+        const amount = Math.round(bdRes.totalMedFortjeneste * val.pct / 100)
+        const fag = getFaggruppe(kalkyle.fag)
+        lines.push({ id: Date.now() + Math.random() * 1000, description: `${fag.emoji} ${bd.name} (${val.pct}%)`, qty: 1, unit: 'stk', unitPrice: amount, mvaRate: 0.25 })
+        invoicedBds.push({ bd_id: bdId, kalkyle_id: kalkId, bd_name: bd.name, fag: kalkyle.fag, percent: val.pct })
+      })
+
+      const { net } = calcLines(lines)
+      const proj = projects.find(p => p.id === k.project_id)
+      const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
+      const invNr = nextSequenceNumber(existingInv || [], 'F', 'invoice_number')
+
+      const { error } = await supabase.from('invoices').insert({
+        title: `Delfaktura – ${k.title}`,
+        invoice_number: invNr,
+        project_id: k.project_id || null,
+        customer_name: k.customer_name || proj?.name || '',
+        lines, invoiced_bds: invoicedBds,
+        source_calculation_id: k.id,
+        payment_terms: '30 dager netto',
+        due_date: addDays(new Date().toISOString(), 30),
+        status: 'Utkast',
+        created_by: user?.id,
+      })
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const selectedCount = Object.values(selectedBds).filter(v => v.checked && v.pct > 0).length
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 Delfaktura fra kalkulasjon</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+          {step === 1 ? (
+            <>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>Velg kalkulasjon å delfakturere fra:</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {calculations.filter(c => !c.is_template).map(c => {
+                  const kalkyler = c.kalkyler || []
+                  const bdCount = kalkyler.reduce((s, kl) => s + (kl.bygningsdeler||[]).length, 0)
+                  return (
+                    <button key={c.id} onClick={() => { setSelectedKalk(c); setStep(2); setSelectedBds({}) }}
+                      style={{ display:'flex', alignItems:'center', gap:'14px', width:'100%', padding:'14px 16px', borderRadius:'12px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left' }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor='#059669'} onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
+                      <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>🧮</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{c.title}</div>
+                        <div style={{ fontSize:'12px', color:'#94a3b8' }}>{c.kalk_number} · {kalkyler.length} fag · {bdCount} poster</div>
+                      </div>
+                      <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px', flexShrink:0 }}>{fmtI(c.total_ex_mva)}</div>
+                    </button>
+                  )
+                })}
+                {calculations.length === 0 && <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px' }}>Ingen kalkulasjoner funnet</p>}
+              </div>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setStep(1)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', padding:0 }}>← Velg annen kalkulasjon</button>
+              <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', marginBottom:'16px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af' }}>{selectedKalk.title}</div>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>{selectedKalk.kalk_number} · {fmtI(selectedKalk.total_ex_mva)}</div>
+              </div>
+
+              <p style={{ margin:'0 0 10px', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Velg bygningsdeler og prosent å fakturere:</p>
+
+              {(selectedKalk.kalkyler || []).map(kalkyle => {
+                const fag = getFaggruppe(kalkyle.fag)
+                const fakt = (selectedKalk.faktorer || {})[kalkyle.fag] || getDefaultFaktorer(kalkyle.fag)
+                return (
+                  <div key={kalkyle.id} style={{ marginBottom:'14px' }}>
+                    <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', marginBottom:'6px' }}>{fag.emoji} {kalkyle.name}</div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                      {(kalkyle.bygningsdeler || []).map(bd => {
+                        const key = `${kalkyle.id}_${bd.id}`
+                        const sel = selectedBds[key]
+                        const bdRes = beregnBygningsdel(bd, fakt)
+                        const prevPct = previouslyInvoicedBds[bd.id] || 0
+                        const remaining = 100 - prevPct
+                        const isFullyInvoiced = remaining <= 0
+                        return (
+                          <div key={bd.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 10px', borderRadius:'8px', background: sel?.checked ? '#ecfdf5' : isFullyInvoiced ? '#f8fafc' : 'white', border:`1px solid ${sel?.checked ? '#a7f3d0' : '#f1f5f9'}`, opacity: isFullyInvoiced ? 0.5 : 1 }}>
+                            <input type="checkbox" checked={!!sel?.checked} disabled={isFullyInvoiced} onChange={() => toggleBd(kalkyle.id, bd.id)} style={{ accentColor:'#059669' }} />
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{bd.name}</div>
+                              <div style={{ fontSize:'11px', color:'#94a3b8' }}>{bd.mengde} {bd.enhet} · {fmtI(bdRes.totalMedFortjeneste)}{prevPct > 0 ? ` · ${prevPct}% fakturert` : ''}</div>
+                            </div>
+                            {sel?.checked && !isFullyInvoiced && (
+                              <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+                                <input type="number" value={sel.pct} onChange={e => setPct(kalkyle.id, bd.id, parseInt(e.target.value) || 0)} min={0} max={remaining}
+                                  style={{ width:'50px', padding:'4px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', textAlign:'center' }} />
+                                <span style={{ fontSize:'11px', color:'#64748b' }}>%</span>
+                                <span style={{ fontSize:'11px', color:'#059669', fontWeight:'600', marginLeft:'4px' }}>{fmtI(bdRes.totalMedFortjeneste * sel.pct / 100)}</span>
+                              </div>
+                            )}
+                            {isFullyInvoiced && <span style={{ fontSize:'10px', color:'#059669', fontWeight:'600' }}>✓ Fullført</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </div>
+        {step === 2 && (
+          <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+            <span style={{ fontSize:'13px', color:'#64748b' }}>{selectedCount} poster valgt</span>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+              <button onClick={handleCreate} disabled={saving || selectedCount === 0}
+                style={{ padding:'10px 24px', background: saving ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600' }}>
+                {saving ? 'Oppretter...' : `🧾 Opprett delfaktura (${selectedCount} poster)`}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
