@@ -6150,6 +6150,7 @@ function TilbudPage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [purringTarget, setPurringTarget] = useState(null)
 
   const load = async () => {
     try {
@@ -6162,6 +6163,9 @@ function TilbudPage() {
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
+
+  // Finn utløpte tilbud uten svar
+  const expiredQuotes = quotes.filter(q => q.status === 'Sendt' && q.valid_until && new Date(q.valid_until) < new Date())
 
   const filtered = quotes.filter(q => {
     if (filterStatus !== 'alle' && q.status !== filterStatus) return false
@@ -6204,6 +6208,47 @@ function TilbudPage() {
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total akseptert</div>
           </div>
         </div>
+
+        {/* Purring-banner for utløpte tilbud */}
+        {expiredQuotes.length > 0 && (
+          <div style={{ background:'#fef2f2', borderRadius:'14px', border:'1px solid #fecaca', padding:'16px 20px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: expiredQuotes.length > 0 ? '12px' : '0' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                <span style={{ fontSize:'20px' }}>⏰</span>
+                <div>
+                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#dc2626' }}>{expiredQuotes.length} utløpte tilbud uten svar</div>
+                  <div style={{ fontSize:'12px', color:'#991b1b' }}>Disse tilbudene har passert gyldighetsdato og bør følges opp</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {expiredQuotes.slice(0, 5).map(eq => {
+                const daysOverdue = Math.floor((new Date() - new Date(eq.valid_until)) / 86400000)
+                const { grandTotal: eqTotal } = calcQuote(eq.chapters || [], eq.global_markup)
+                return (
+                  <div key={eq.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'white', borderRadius:'10px', padding:'10px 14px', border:'1px solid #fef2f2' }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{eq.title}</div>
+                      <div style={{ fontSize:'11px', color:'#dc2626' }}>
+                        {eq.customer_name} · Utløpt {daysOverdue} dager siden · {fmt(eqTotal)}
+                        {eq.reminder_count > 0 && <span style={{ color:'#d97706', marginLeft:'8px' }}>📧 {eq.reminder_count} purring{eq.reminder_count > 1 ? 'er' : ''} sendt</span>}
+                      </div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setPurringTarget(eq) }}
+                      style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>
+                      📧 Send purring
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setSelected(eq) }}
+                      style={{ padding:'6px 14px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                      Vis
+                    </button>
+                  </div>
+                )
+              })}
+              {expiredQuotes.length > 5 && <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#991b1b', textAlign:'center' }}>+ {expiredQuotes.length - 5} flere utløpte tilbud</p>}
+            </div>
+          </div>
+        )}
 
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk tilbud, kunde, nummer..." style={{ ...qInp, maxWidth:'260px', flex:1 }} />
@@ -6256,6 +6301,9 @@ function TilbudPage() {
       </div>
 
       {showNew && <TilbudEditorModal projects={projects} user={user} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
+
+      {/* Purring-modal */}
+      {purringTarget && <PurringModal quote={purringTarget} user={user} onClose={() => setPurringTarget(null)} onSent={() => { setPurringTarget(null); load() }} />}
     </div>
   )
 }
@@ -6270,6 +6318,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   const [revisionNote, setRevisionNote] = useState('')
   const [revisions, setRevisions] = useState([])
   const [showRevisions, setShowRevisions] = useState(false)
+  const [showPurringModal, setShowPurringModal] = useState(false)
   const cfg = QUOTE_STATUS[q.status]
   const proj = projects.find(p => p.id === q.project_id)
   const { grandTotal, chapterTotals } = calcQuote(q.chapters || [], q.global_markup)
@@ -6368,6 +6417,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>}
+            {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding:'9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send purring</button>}
             <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>
             <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut / PDF</button>
             {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>}
@@ -6550,6 +6600,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 
       {editing && <TilbudEditorModal projects={projects} user={user} initial={q} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh() }} />}
       {showSendModal && <SendTilbudModal quote={q} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); refresh() }} />}
+      {showPurringModal && <PurringModal quote={q} user={user} onClose={() => setShowPurringModal(false)} onSent={() => { setShowPurringModal(false); refresh() }} />}
 
       {/* Ny revisjon modal */}
       {showNewRevision && (
@@ -6850,6 +6901,135 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
                 <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
                 <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send nå'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PurringModal({ quote, user, onClose, onSent }) {
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [newValidUntil, setNewValidUntil] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().split('T')[0]
+  })
+  const { grandTotal } = calcQuote(quote.chapters || [], quote.global_markup)
+  const daysOverdue = quote.valid_until ? Math.floor((new Date() - new Date(quote.valid_until)) / 86400000) : 0
+  const reminderCount = (quote.reminder_count || 0) + 1
+
+  const handleSendPurring = async () => {
+    const email = quote.customer_email
+    if (!email) return alert('Ingen e-postadresse registrert for denne kunden')
+    setSending(true)
+    try {
+      const approvalUrl = await createApprovalToken({ module: 'quote', recordId: quote.id, recipientEmail: email, createdBy: user?.id })
+      const emailHtml = `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
+          <div style="background:#fef2f2;border-radius:12px;padding:16px 20px;margin-bottom:20px;border:1px solid #fecaca">
+            <p style="margin:0;color:#dc2626;font-weight:600;font-size:14px">Purring — tilbud utløpt</p>
+          </div>
+          <h1 style="color:#0f172a;font-size:20px;margin-bottom:8px">${quote.title}</h1>
+          <p style="color:#64748b;font-size:14px">Tilbudsnummer: <strong>${quote.quote_number}</strong></p>
+          <p style="color:#475569;line-height:1.6;font-size:14px">Vi har sendt et tilbud som utløp ${quote.valid_until}. Vi ønsker å følge opp og høre om dere fortsatt er interessert.</p>
+          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0">
+            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM EKS. MVA</div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a">${fmt(grandTotal)}</div>
+          </div>
+          <p style="color:#475569;font-size:14px">Tilbudet er forlenget med ny gyldighetsdato: <strong>${newValidUntil}</strong></p>
+          <div style="text-align:center;margin:32px 0">
+            <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
+          </div>
+          <p style="color:#94a3b8;font-size:12px">Purring ${reminderCount} — sendt via En Plattform</p>
+        </div>
+      `
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: email, subject: `Purring: Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml })
+      })
+      const fnData = await fnRes.json()
+      if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
+
+      // Oppdater tilbudet med ny gyldighetsdato og purreteller
+      await supabase.from('quotes').update({
+        valid_until: newValidUntil,
+        reminder_count: reminderCount,
+        last_reminder_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', quote.id)
+
+      // Intern varsling
+      if (user?.id) {
+        await supabase.from('notifications').insert({
+          user_id: user.id,
+          title: `Purring sendt: ${quote.title}`,
+          message: `Purring ${reminderCount} sendt til ${email}. Ny frist: ${newValidUntil}`,
+          type: 'info', link_page: 'tilbud',
+        })
+      }
+
+      setSent(true)
+      setTimeout(() => onSent(), 2000)
+    } catch(e) { alert('Feil ved sending av purring: ' + e.message) }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send purring</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {sent ? (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Purring sendt!</h3>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar en purring med ny gyldighetsdato</p>
+            </div>
+          ) : (
+            <>
+              {/* Tilbudsinfo */}
+              <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'14px', border:'1px solid #fecaca' }}>
+                <div style={{ fontSize:'13px', color:'#dc2626', fontWeight:'600' }}>{quote.title}</div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'6px' }}>
+                  <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(grandTotal)}</div>
+                  <span style={{ fontSize:'12px', color:'#dc2626', fontWeight:'600' }}>⏰ Utløpt {daysOverdue > 0 ? `${daysOverdue} dager siden` : 'i dag'}</span>
+                </div>
+                {quote.reminder_count > 0 && (
+                  <div style={{ fontSize:'12px', color:'#d97706', marginTop:'6px' }}>📧 {quote.reminder_count} purring{quote.reminder_count > 1 ? 'er' : ''} allerede sendt · Siste: {quote.last_reminder_at ? new Date(quote.last_reminder_at).toLocaleDateString('nb-NO') : '—'}</div>
+                )}
+              </div>
+
+              {/* Mottaker */}
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
+                <div style={{ fontSize:'12px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>SENDES TIL</div>
+                <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{quote.customer_email || 'Ingen e-post registrert'}</div>
+              </div>
+
+              {/* Ny gyldighetsdato */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ny gyldighetsdato</label>
+                <input type="date" value={newValidUntil} onChange={e => setNewValidUntil(e.target.value)} style={qInp} />
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>Tilbudet forlenges med denne datoen i e-posten</div>
+              </div>
+
+              {/* Info */}
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e', lineHeight:1.5 }}>
+                Kunden mottar en purrings-e-post med oppdatert gyldighetsdato og en godkjenningsknapp. Tilbudet oppdateres med ny frist og purreteller.
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSendPurring} disabled={sending || !quote.customer_email}
+                  style={{ padding:'10px 24px', background: sending ? '#fca5a5' : '#dc2626', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600' }}>
+                  {sending ? 'Sender...' : `📧 Send purring ${reminderCount}`}
+                </button>
               </div>
             </>
           )}
