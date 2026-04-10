@@ -21223,6 +21223,13 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const alleFaktorer = k.faktorer || {}
   const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
   const hasCustomFaktorer = Object.keys(alleFaktorer).length > 0
+  const [showProjFaktorer, setShowProjFaktorer] = useState(false)
+  const hasCustomProjFaktorer = kalkyler.some(kl => {
+    const fakt = alleFaktorer[kl.fag]
+    if (!fakt) return false
+    const def = getDefaultFaktorer(kl.fag)
+    return JSON.stringify(fakt) !== JSON.stringify(def)
+  })
 
   const KALK_STATUS_CFG = {
     'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
@@ -22673,6 +22680,84 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 </div>
               )
             })}
+          </div>
+
+          {/* Prosjektspesifikke satser */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+            <button onClick={() => setShowProjFaktorer(!showProjFaktorer)}
+              style={{ width:'100%', background:'#f8fafc', padding:'12px 18px', borderBottom: showProjFaktorer ? '1px solid #f1f5f9' : 'none', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', textAlign:'left' }}>⚙️ Prosjektsatser</div>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                {hasCustomProjFaktorer && <span style={{ background:'#eff6ff', color:'#2563eb', fontSize:'10px', fontWeight:'700', padding:'1px 6px', borderRadius:'4px' }}>Tilpasset</span>}
+                <span style={{ color:'#94a3b8', fontSize:'12px', transition:'transform 0.2s', transform: showProjFaktorer ? 'rotate(180deg)' : 'rotate(0)' }}>▼</span>
+              </div>
+            </button>
+            {showProjFaktorer && (
+              <div style={{ padding:'14px 18px' }}>
+                <div style={{ fontSize:'11px', color:'#64748b', marginBottom:'10px', lineHeight:1.4 }}>
+                  Juster satsene for denne kalkulasjonen uten å endre bedriftens standardsatser. Endringer gjelder kun dette prosjektet.
+                </div>
+                {kalkyler.map(kl => {
+                  const fag = getFaggruppe(kl.fag)
+                  const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
+                  const defFakt = getDefaultFaktorer(kl.fag)
+                  const hasOverride = JSON.stringify(fakt) !== JSON.stringify(defFakt)
+                  return (
+                    <div key={kl.id} style={{ marginBottom:'12px' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                          <span style={{ fontSize:'14px' }}>{fag.emoji}</span>
+                          <span style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a' }}>{kl.name}</span>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                          {hasOverride && <span style={{ fontSize:'9px', color:'#2563eb', fontWeight:'600' }}>Tilpasset</span>}
+                          <button onClick={() => {
+                            const newFaktorer = { ...alleFaktorer, [kl.fag]: getDefaultFaktorer(kl.fag) }
+                            saveProject({ ...k, faktorer: newFaktorer })
+                          }} title="Tilbakestill til bedriftsstandard" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#94a3b8', padding:'2px' }}>↺</button>
+                        </div>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px' }}>
+                        {[
+                          { key: 'produksjonslonn', label: 'Lønn', unit: 'kr/t' },
+                          { key: 'sosiale_prosent', label: 'Sosiale', unit: '%' },
+                          { key: 'faste_prosent', label: 'Faste', unit: '%' },
+                          { key: 'fortjeneste_lonn_prosent', label: 'Fortj.lønn', unit: '%' },
+                          { key: 'fortjeneste_innkjop_prosent', label: 'Fortj.mat', unit: '%' },
+                          { key: 'grunntid_justering', label: 'Tidsjust.', unit: '×', step: '0.1' },
+                        ].map(field => {
+                          const val = fakt[field.key] ?? ''
+                          const defVal = defFakt[field.key] ?? ''
+                          const isDiff = String(val) !== String(defVal)
+                          return (
+                            <div key={field.key}>
+                              <div style={{ fontSize:'9px', color: isDiff ? '#2563eb' : '#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{field.label}</div>
+                              <input type="number" step={field.step || '1'} value={val}
+                                onChange={e => {
+                                  const newFaktorer = { ...alleFaktorer, [kl.fag]: { ...fakt, [field.key]: e.target.value } }
+                                  saveProject({ ...k, faktorer: newFaktorer })
+                                }}
+                                style={{ width:'100%', padding:'5px 6px', border:`1px solid ${isDiff ? '#bfdbfe' : '#e2e8f0'}`, borderRadius:'6px', fontSize:'12px', outline:'none', boxSizing:'border-box', background: isDiff ? '#eff6ff' : 'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }} />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+                <button onClick={async () => {
+                  try {
+                    const { data } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+                    const bedriftF = data?.kalk_faktorer || {}
+                    const newF = {}
+                    kalkyler.forEach(kl => { newF[kl.fag] = bedriftF[kl.fag] || getDefaultFaktorer(kl.fag) })
+                    saveProject({ ...k, faktorer: newF })
+                  } catch(e) { console.error(e) }
+                }} style={{ width:'100%', padding:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#64748b', marginTop:'4px' }}>
+                  ↺ Tilbakestill alle til bedriftsstandard
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Mottatte UE-tilbud */}
