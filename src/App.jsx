@@ -12542,7 +12542,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   const getEntry = (date) => entries.find(e=>e.date===date)
 
   const initEntry = (date) => ({
-    _new:true, date, project_id:'', activity:'', start_time:'07:00', end_time:'15:30',
+    _new:true, date, project_id:'', activity:'', absence_type:'', start_time:'07:00', end_time:'15:30',
     normal_hours:7.5, overtime_50:0, overtime_100:0, travel_km:0, diet:0, expenses:0,
     expenses_description:'', notes:''
   })
@@ -12555,21 +12555,68 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
     })
   }
 
+  const ABSENCE_TYPES = [
+    { id: '', label: '— Ingen fravær —', color: '#64748b', paid: true },
+    { id: 'syk_egen', label: 'Egenmelding', color: '#dc2626', paid: true, emoji: '🤒' },
+    { id: 'syk_lege', label: 'Sykemelding', color: '#dc2626', paid: true, emoji: '🏥' },
+    { id: 'ferie', label: 'Ferie', color: '#2563eb', paid: true, emoji: '🏖️' },
+    { id: 'ferie_ubetalt', label: 'Ferie (ubetalt)', color: '#7c3aed', paid: false, emoji: '🏖️' },
+    { id: 'permisjon', label: 'Permisjon m/lønn', color: '#059669', paid: true, emoji: '👶' },
+    { id: 'permisjon_ubetalt', label: 'Permisjon u/lønn', color: '#7c3aed', paid: false, emoji: '📋' },
+    { id: 'avspasering', label: 'Avspasering', color: '#0891b2', paid: true, emoji: '⏰' },
+    { id: 'kurs', label: 'Kurs/opplæring', color: '#d97706', paid: true, emoji: '📚' },
+    { id: 'annet', label: 'Annet fravær', color: '#64748b', paid: false, emoji: '📝' },
+  ]
+
   const calcHoursFromTime = (date, start, end) => {
     if (!start||!end) return
     const [sh,sm]=start.split(':').map(Number)
     const [eh,em]=end.split(':').map(Number)
     const totalMins=(eh*60+em)-(sh*60+sm)
     if (totalMins<=0) return
-    const totalHours=totalMins/60
-    const normal=Math.min(totalHours,7.5)
-    const ot50=Math.max(0,Math.min(totalHours-7.5,2))
-    const ot100=Math.max(0,totalHours-9.5)
+
+    const totalHours = totalMins / 60
+    const dayIndex = weekDates.indexOf(date)
+    const isWeekend = dayIndex >= 5 // Lørdag/søndag
+
+    let normal, ot50, ot100
+
+    if (isWeekend) {
+      // Helgearbeid: Alt er 100% overtid
+      normal = 0; ot50 = 0; ot100 = totalHours
+    } else {
+      // Ukedag: Sjekk akkumulert uketimer for OT-beregning
+      const weekNormalSoFar = entries
+        .filter(e => e.date !== date && weekDates.indexOf(e.date) < 5) // kun ukedager, ekskluder gjeldende dag
+        .reduce((s, e) => s + (parseFloat(e.normal_hours) || 0), 0)
+
+      const WEEKLY_NORMAL = 37.5 // Normal arbeidstid per uke
+      const DAILY_NORMAL = 7.5   // Normal per dag
+      const DAILY_OT50_MAX = 2   // OT50% opptil 2 timer daglig (7.5–9.5t)
+
+      // Beregn daglig normal og OT
+      const remainingWeekNormal = Math.max(0, WEEKLY_NORMAL - weekNormalSoFar)
+      const effectiveDailyNormal = Math.min(DAILY_NORMAL, remainingWeekNormal)
+
+      normal = Math.min(totalHours, effectiveDailyNormal)
+      const beyondNormal = Math.max(0, totalHours - effectiveDailyNormal)
+      ot50 = Math.min(beyondNormal, DAILY_OT50_MAX)
+      ot100 = Math.max(0, beyondNormal - DAILY_OT50_MAX)
+
+      // Kveldstillegg: etter kl 21 = 100% (forenklet sjekk)
+      if (eh >= 21) {
+        const eveningMins = (eh * 60 + em) - 21 * 60
+        const eveningHours = Math.max(0, eveningMins / 60)
+        ot100 = Math.max(ot100, eveningHours)
+        ot50 = Math.max(0, ot50 - eveningHours)
+      }
+    }
+
     setEntries(prev=>{
       const existing=prev.find(e=>e.date===date)
       const upd={normal_hours:Math.round(normal*10)/10,overtime_50:Math.round(ot50*10)/10,overtime_100:Math.round(ot100*10)/10,_dirty:true}
       if (existing) return prev.map(e=>e.date===date?{...e,...upd}:e)
-      return [...prev,{...initEntry(date),[`start_time`]:start,[`end_time`]:end,...upd}]
+      return [...prev,{...initEntry(date),start_time:start,end_time:end,...upd}]
     })
   }
 
@@ -12582,6 +12629,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
       const payload = {
         timesheet_id:sid, date:entry.date,
         project_id:entry.project_id||null, activity:entry.activity||null,
+        absence_type:entry.absence_type||null,
         start_time:entry.start_time||null, end_time:entry.end_time||null,
         normal_hours:parseFloat(entry.normal_hours)||0,
         overtime_50:parseFloat(entry.overtime_50)||0,
@@ -12661,7 +12709,58 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
               {/* Day form – expanded */}
               {isActive && (
                 <div style={{ padding:'16px 18px', borderTop:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'14px' }}>
-                  {/* Project + Activity */}
+
+                  {/* Type: Arbeid eller Frav\u00E6r */}
+                  <div>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Type registrering</label>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                      <button onClick={() => updateEntry(date, 'absence_type', '')}
+                        style={{ padding:'8px', borderRadius:'8px', border: `2px solid ${!entry?.absence_type ? '#059669' : '#e2e8f0'}`, background: !entry?.absence_type ? '#f0fdf4' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: !entry?.absence_type ? '#059669' : '#64748b' }}>
+                        \u23F1\uFE0F Arbeid
+                      </button>
+                      <button onClick={() => { updateEntry(date, 'absence_type', 'ferie'); updateEntry(date, 'normal_hours', 7.5); updateEntry(date, 'overtime_50', 0); updateEntry(date, 'overtime_100', 0) }}
+                        style={{ padding:'8px', borderRadius:'8px', border: `2px solid ${entry?.absence_type ? '#2563eb' : '#e2e8f0'}`, background: entry?.absence_type ? '#eff6ff' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: entry?.absence_type ? '#2563eb' : '#64748b' }}>
+                        \uD83D\uDCCB Frav\u00E6r
+                      </button>
+                    </div>
+                  </div>
+
+                  {entry?.absence_type ? (
+                    <>
+                      <div>
+                        <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Frav\u00E6rstype</label>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                          {ABSENCE_TYPES.filter(a => a.id).map(a => (
+                            <button key={a.id} onClick={() => {
+                              updateEntry(date, 'absence_type', a.id)
+                              if (a.paid) { updateEntry(date, 'normal_hours', 7.5) } else { updateEntry(date, 'normal_hours', 0) }
+                              updateEntry(date, 'overtime_50', 0); updateEntry(date, 'overtime_100', 0)
+                            }}
+                              style={{ padding:'8px 10px', borderRadius:'8px', border:`1px solid ${entry?.absence_type === a.id ? a.color + '60' : '#f1f5f9'}`, background: entry?.absence_type === a.id ? a.color + '10' : 'white', cursor:'pointer', textAlign:'left', fontSize:'12px' }}>
+                              <span style={{ fontWeight:'600', color: entry?.absence_type === a.id ? a.color : '#374151' }}>{a.emoji} {a.label}</span>
+                              {!a.paid && <div style={{ fontSize:'10px', color:'#94a3b8' }}>Uten l\u00F8nn</div>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Merknad</label>
+                        <input value={entry?.notes||''} onChange={e => updateEntry(date, 'notes', e.target.value)} placeholder="Valgfritt" style={tsInp} />
+                      </div>
+                      {(() => { const at = ABSENCE_TYPES.find(a => a.id === entry?.absence_type); return at ? (
+                        <div style={{ background: at.color + '10', borderRadius:'8px', padding:'10px 14px', border:`1px solid ${at.color}30`, fontSize:'12px', color: at.color }}>
+                          {at.emoji} <strong>{at.label}</strong> \u2014 {at.paid ? '7,5 timer l\u00F8nnet frav\u00E6r' : 'Ubetalt frav\u00E6r (0 timer)'}
+                        </div>
+                      ) : null })()}
+                    </>
+                  ) : (
+                    <>
+                  {isWeekend && (
+                    <div style={{ background:'#fef2f2', borderRadius:'8px', padding:'8px 12px', border:'1px solid #fecaca', fontSize:'12px', color:'#dc2626', fontWeight:'600' }}>
+                      \uD83D\uDEA8 Helgearbeid \u2014 alle timer registreres automatisk som 100% overtid
+                    </div>
+                  )}
+{/* Project + Activity */}
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
@@ -12725,6 +12824,9 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
 
                   {/* Actions */}
                   <div style={{ display:'flex', gap:'8px' }}>
+                    </>
+                  )}
+
                     <button onClick={()=>saveDay(date)} disabled={saving||!entry?._dirty} style={{ flex:1, padding:'12px', background:entry?._dirty?'#059669':'#f1f5f9', color:entry?._dirty?'white':'#94a3b8', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:entry?._dirty?'pointer':'default' }}>
                       {saving?'Lagrer...':'💾 Lagre dag'}
                     </button>
