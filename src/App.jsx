@@ -10163,6 +10163,10 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const [inv, setInv] = useState(init)
   const [editing, setEditing] = useState(false)
   const [showSend, setShowSend] = useState(false)
+  const [showKreditnota, setShowKreditnota] = useState(false)
+  const [kreditReason, setKreditReason] = useState('')
+  const [kreditLines, setKreditLines] = useState([]) // hvilke linjer å kreditere
+  const [kreditMode, setKreditMode] = useState('full') // 'full' | 'partial'
   const cfg = INV_STATUS[inv.status]
   const proj = projects.find(p=>p.id===inv.project_id)
   const ord = orders.find(o=>o.id===inv.order_id)
@@ -10217,6 +10221,64 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
     } catch(e) { alert('Feil: '+e.message) }
   }
 
+  // ── Kreditnota ──
+  const createKreditnota = async () => {
+    try {
+      const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
+      const creditNr = nextSequenceNumber(existingInv || [], 'F', 'invoice_number')
+
+      // Bestem kreditlinjer
+      let creditLines
+      if (kreditMode === 'full') {
+        creditLines = (inv.lines || []).map(l => ({
+          ...l, id: Date.now() + Math.random() * 1000,
+          description: `Kreditering: ${l.description}`,
+          unitPrice: -(Math.abs(parseFloat(l.unitPrice) || 0)),
+        }))
+      } else {
+        creditLines = kreditLines.filter(l => l._selected).map(l => ({
+          ...l, id: Date.now() + Math.random() * 1000,
+          description: `Kreditering: ${l.description}`,
+          unitPrice: -(Math.abs(parseFloat(l.unitPrice) || 0)) * (l._creditPct / 100),
+          _selected: undefined, _creditPct: undefined,
+        }))
+      }
+
+      if (creditLines.length === 0) return alert('Ingen linjer valgt for kreditering')
+
+      const { error } = await supabase.from('invoices').insert({
+        title: `Kreditnota – ${inv.title}`,
+        invoice_number: creditNr,
+        project_id: inv.project_id,
+        customer_name: inv.customer_name,
+        customer_email: inv.customer_email,
+        customer_address: inv.customer_address,
+        customer_orgnr: inv.customer_orgnr,
+        our_name: inv.our_name, our_address: inv.our_address, our_orgnr: inv.our_orgnr,
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: addDays(new Date().toISOString(), 14),
+        payment_terms: inv.payment_terms,
+        bank_account: inv.bank_account, kid: inv.kid,
+        lines: creditLines,
+        is_credit_note: true,
+        credit_for_invoice_id: inv.id,
+        credit_for_invoice_number: inv.invoice_number,
+        credit_reason: kreditReason.trim() || null,
+        notes: `Kreditnota for faktura ${inv.invoice_number}${kreditReason ? '. Årsak: ' + kreditReason : ''}`,
+        status: 'Sendt',
+        created_by: user?.id,
+      })
+      if (error) throw error
+
+      // Oppdater original faktura
+      await supabase.from('invoices').update({ status: 'Kreditert', updated_at: new Date().toISOString() }).eq('id', inv.id)
+      setInv(v => ({ ...v, status: 'Kreditert' }))
+      setShowKreditnota(false)
+      alert('Kreditnota opprettet og original faktura kreditert.')
+      onBack()
+    } catch(e) { alert('Feil: ' + e.message) }
+  }
+
   // Group lines by mva rate for summary
   const mvaGroups = (inv.lines||[]).reduce((acc,l)=>{
     const r=parseFloat(l.mvaRate)||0
@@ -10238,6 +10300,8 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{inv.title}</h1>
                 <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
                 <InvStatusBadge status={inv.status} />
+                {inv.is_credit_note&&<span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px', border:'1px solid #e9d5ff' }}>↩️ Kreditnota</span>}
+                {inv.credit_for_invoice_number&&<span style={{ fontSize:'12px', color:'#7c3aed' }}>Krediterer: {inv.credit_for_invoice_number}</span>}
                 {overdue&&<span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px', border:'1px solid #fecaca' }}>FORFALT</span>}
               </div>
               <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -10250,6 +10314,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
           <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
             {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send faktura</button>}
             {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding:'9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⚠️ Send purring</button>}
+            {inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kreditnota</button>}
             <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
             {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
             <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
@@ -10368,6 +10433,99 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
 
       {editing&&<FakturaEditorModal projects={projects} user={user} initial={inv} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
       {showSend&&<SendFakturaModal invoice={inv} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
+
+      {/* Kreditnota-modal */}
+      {showKreditnota && (
+        <>
+          <div onClick={() => setShowKreditnota(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(600px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>↩️ Opprett kreditnota</h2>
+            </div>
+            <div style={{ padding:'24px', overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:'16px' }}>
+              {/* Original faktura info */}
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', border:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'4px' }}>KREDITERER FAKTURA</div>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{inv.title} — {inv.invoice_number}</div>
+                <div style={{ fontSize:'13px', color:'#64748b', marginTop:'2px' }}>{inv.customer_name} · {fmtI(gross)} inkl. mva</div>
+              </div>
+
+              {/* Type kreditering */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kreditering</label>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <button onClick={() => { setKreditMode('full'); setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100}))) }}
+                    style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${kreditMode==='full'?'#7c3aed':'#e2e8f0'}`, background:kreditMode==='full'?'#f5f3ff':'white', cursor:'pointer', textAlign:'center' }}>
+                    <div style={{ fontWeight:'700', fontSize:'13px', color:kreditMode==='full'?'#7c3aed':'#475569' }}>Full kreditering</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Krediter hele fakturaen</div>
+                  </button>
+                  <button onClick={() => { setKreditMode('partial'); setKreditLines((inv.lines||[]).map(l=>({...l,_selected:false,_creditPct:100}))) }}
+                    style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${kreditMode==='partial'?'#7c3aed':'#e2e8f0'}`, background:kreditMode==='partial'?'#f5f3ff':'white', cursor:'pointer', textAlign:'center' }}>
+                    <div style={{ fontWeight:'700', fontSize:'13px', color:kreditMode==='partial'?'#7c3aed':'#475569' }}>Delvis kreditering</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Velg linjer og prosent</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Velg linjer ved delvis */}
+              {kreditMode === 'partial' && (
+                <div>
+                  <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg linjer å kreditere</label>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                    {kreditLines.map((line, i) => {
+                      const lineNet = (parseFloat(line.qty)||0) * Math.abs(parseFloat(line.unitPrice)||0)
+                      return (
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', borderRadius:'10px', background: line._selected ? '#f5f3ff' : '#f8fafc', border:`1px solid ${line._selected ? '#e9d5ff' : '#f1f5f9'}` }}>
+                          <input type="checkbox" checked={line._selected} onChange={e => {
+                            const nl = [...kreditLines]; nl[i] = { ...nl[i], _selected: e.target.checked }; setKreditLines(nl)
+                          }} style={{ accentColor:'#7c3aed' }} />
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{line.description}</div>
+                            <div style={{ fontSize:'11px', color:'#94a3b8' }}>{line.qty} {line.unit} × {fmtI(Math.abs(line.unitPrice))} = {fmtI(lineNet)}</div>
+                          </div>
+                          {line._selected && (
+                            <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+                              <input type="number" value={line._creditPct} min={1} max={100} onChange={e => {
+                                const nl = [...kreditLines]; nl[i] = { ...nl[i], _creditPct: Math.min(100, Math.max(1, parseInt(e.target.value)||100)) }; setKreditLines(nl)
+                              }} style={{ width:'50px', padding:'4px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', textAlign:'center' }} />
+                              <span style={{ fontSize:'11px', color:'#64748b' }}>%</span>
+                              <span style={{ fontSize:'11px', color:'#7c3aed', fontWeight:'600', marginLeft:'4px' }}>-{fmtI(lineNet * line._creditPct / 100)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Kreditbeløp */}
+              <div style={{ background:'#fef2f2', borderRadius:'10px', padding:'14px', border:'1px solid #fecaca', textAlign:'center' }}>
+                <div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'600', marginBottom:'2px' }}>KREDITBELØP (NETTO)</div>
+                <div style={{ fontSize:'22px', fontWeight:'800', color:'#dc2626' }}>
+                  -{fmtI(kreditMode === 'full' ? net : kreditLines.filter(l => l._selected).reduce((s, l) => s + Math.abs((parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0)) * (l._creditPct / 100), 0))}
+                </div>
+              </div>
+
+              {/* Årsak */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Årsak for kreditering</label>
+                <textarea value={kreditReason} onChange={e => setKreditReason(e.target.value)} placeholder="Beskriv årsaken, f.eks. «Feil pris på linje 3» eller «Kansellert arbeid»"
+                  rows={3} style={{ ...iInp, resize:'none' }} />
+              </div>
+
+              {/* Info */}
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e', lineHeight:1.5 }}>
+                En kreditnota opprettes som en ny faktura med negative beløp. Original faktura settes til status «Kreditert». Kreditnotaen kan sendes til kunden som vanlig.
+              </div>
+            </div>
+            <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px', flexShrink:0 }}>
+              <button onClick={() => setShowKreditnota(false)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+              <button onClick={createKreditnota} style={{ padding:'10px 24px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>↩️ Opprett kreditnota</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
