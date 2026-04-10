@@ -8065,20 +8065,61 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 }
 
 function InviterUEModal({ tender, user, onClose, onSaved }) {
-  const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'' }])
+  const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null }])
+  const [existingUes, setExistingUes] = useState([])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
-  const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'' }])
+  // Hent allerede inviterte UE-er for dette anbudet
+  useEffect(() => {
+    supabase.from('tender_ues').select('company_name, email, status').eq('tender_id', tender.id)
+      .then(({ data }) => setExistingUes(data || []))
+  }, [])
+
+  const addUE = () => setUes(u=>[...u,{ id:Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null }])
   const removeUE = (id) => setUes(u=>u.filter(x=>x.id!==id))
-  const updateUE = (id,f,v) => setUes(u=>u.map(x=>x.id===id?{...x,[f]:v}:x))
+  const updateUE = (id, f, v) => {
+    setUes(u => u.map(x => {
+      if (x.id !== id) return x
+      const updated = { ...x, [f]: v, dupWarning: null }
+      // Duplikatsjekk ved e-post eller firmanavn
+      if (f === 'email' && v.trim()) {
+        const dupEmail = existingUes.find(e => e.email?.toLowerCase() === v.trim().toLowerCase())
+        if (dupEmail) updated.dupWarning = `${dupEmail.company_name} (${dupEmail.email}) er allerede invitert — status: ${dupEmail.status}`
+        // Sjekk også mot andre UE-er i samme skjema
+        const dupInForm = ues.find(other => other.id !== id && other.email?.toLowerCase() === v.trim().toLowerCase())
+        if (dupInForm) updated.dupWarning = `Denne e-posten er allerede lagt til i skjemaet`
+      }
+      if (f === 'company_name' && v.trim()) {
+        const dupName = existingUes.find(e => e.company_name?.toLowerCase() === v.trim().toLowerCase())
+        if (dupName) updated.dupWarning = `${dupName.company_name} er allerede invitert (${dupName.email}) — status: ${dupName.status}`
+      }
+      return updated
+    }))
+  }
 
   const handleSend = async () => {
     const valid = ues.filter(u=>u.company_name.trim()&&u.email.trim())
     if (valid.length===0) return alert('Legg til minst én UE med navn og e-post.')
+
+    // Sjekk duplikater mot eksisterende
+    const dups = valid.filter(u => existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
+    if (dups.length > 0) {
+      const skip = window.confirm(`${dups.length} UE${dups.length > 1 ? '-er' : ''} er allerede invitert:\n\n${dups.map(d => `• ${d.company_name} (${d.email})`).join('\n')}\n\nVil du sende invitasjon på nytt til disse?`)
+      if (!skip) {
+        // Filtrer ut duplikater
+        const nonDups = valid.filter(u => !existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
+        if (nonDups.length === 0) return
+        return sendInvitations(nonDups)
+      }
+    }
+    await sendInvitations(valid)
+  }
+
+  const sendInvitations = async (ueList) => {
     setSending(true)
     try {
-      for (const ue of valid) {
+      for (const ue of ueList) {
         const { data, error } = await supabase.from('tender_ues').insert({ tender_id:tender.id, company_name:ue.company_name.trim(), contact_name:ue.contact_name.trim()||null, email:ue.email.trim(), status:'Invitert' }).select().single()
         if (error) throw error
         const pricingUrl = `${window.location.origin}/anbud-pris?token=${data.token}`
@@ -8108,6 +8149,8 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
     finally { setSending(false) }
   }
 
+  const hasDups = ues.some(u => u.dupWarning)
+
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
@@ -8128,23 +8171,48 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
               <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'12px 16px', border:'1px solid #bfdbfe', fontSize:'13px', color:'#1d4ed8' }}>
                 📋 <strong>{tender.title}</strong> — {tender.tender_number}{tender.deadline?` · Frist: ${tender.deadline}`:''}
               </div>
+
+              {/* Allerede inviterte */}
+              {existingUes.length > 0 && (
+                <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #e2e8f0' }}>
+                  <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px' }}>Allerede inviterte ({existingUes.length})</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                    {existingUes.map((e, i) => (
+                      <span key={i} style={{ fontSize:'11px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'2px 8px', color:'#475569' }}>
+                        {e.company_name}
+                        <span style={{ color: e.status === 'Priset' ? '#059669' : e.status === 'Invitert' ? '#2563eb' : '#94a3b8', marginLeft:'4px', fontWeight:'600' }}>
+                          ({e.status})
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {ues.map((ue,i)=>(
-                <div key={ue.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9' }}>
+                <div key={ue.id} style={{ background: ue.dupWarning ? '#fffbeb' : '#f8fafc', borderRadius:'12px', padding:'14px', border:`1px solid ${ue.dupWarning ? '#fde68a' : '#f1f5f9'}` }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
                     <span style={{ fontWeight:'700', fontSize:'13px', color:'#64748b' }}>UE {i+1}</span>
                     {ues.length>1&&<button onClick={()=>removeUE(ue.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                    <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn *</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={tInp} /></div>
+                    <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn *</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={{ ...tInp, borderColor: ue.dupWarning ? '#fde68a' : '#e2e8f0' }} /></div>
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Kontaktperson</label><input value={ue.contact_name} onChange={e=>updateUE(ue.id,'contact_name',e.target.value)} placeholder="Fullt navn" style={tInp} /></div>
-                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={tInp} /></div>
+                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={{ ...tInp, borderColor: ue.dupWarning ? '#fde68a' : '#e2e8f0' }} /></div>
                   </div>
+                  {ue.dupWarning && (
+                    <div style={{ marginTop:'8px', fontSize:'12px', color:'#d97706', display:'flex', alignItems:'center', gap:'6px' }}>
+                      <span>⚠️</span> {ue.dupWarning}
+                    </div>
+                  )}
                 </div>
               ))}
               <button onClick={addUE} style={{ background:'white', border:'2px dashed #e2e8f0', borderRadius:'12px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>+ Legg til flere UE-er</button>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
                 <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send invitasjoner'}</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>
+                  {sending?'Sender...': hasDups ? '⚠️ Send (med duplikater)' : '📧 Send invitasjoner'}
+                </button>
               </div>
             </>
           )}
