@@ -21101,6 +21101,91 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [showMoveBdModal, setShowMoveBdModal] = useState(null) // { kalkId, bdId, bdName }
   const [toastMsg, setToastMsg] = useState(null) // { title, message, type: 'success'|'error' }
   const [showImportKalkyle, setShowImportKalkyle] = useState(null) // kalkId to import into
+  const [showVersions, setShowVersions] = useState(false)
+  const [versions, setVersions] = useState([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [compareVersion, setCompareVersion] = useState(null)
+
+  // ── Versjonering — snapshot-basert ──
+  const loadVersions = async () => {
+    setLoadingVersions(true)
+    try {
+      const { data } = await supabase.from('calculation_versions').select('*').eq('calculation_id', k.id).order('version_number', { ascending: false })
+      setVersions(data || [])
+    } catch(e) { console.error(e) }
+    finally { setLoadingVersions(false) }
+  }
+
+  const saveVersion = async (label) => {
+    if (!label?.trim()) return
+    try {
+      const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
+      const newTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
+      await supabase.from('calculation_versions').insert({
+        calculation_id: k.id,
+        version_number: maxV + 1,
+        label: label.trim(),
+        snapshot_kalkyler: kalkyler,
+        snapshot_faktorer: alleFaktorer,
+        total_ex_mva: newTotals.totMedFortjeneste,
+        total_hours: newTotals.totTimer,
+        fag_count: kalkyler.length,
+        bd_count: kalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0),
+        created_by: user?.id,
+      })
+      await loadVersions()
+      setToastMsg({ title: 'Versjon lagret', message: `v${maxV + 1}: ${label.trim()}`, type: 'success' })
+    } catch(e) { alert('Feil ved versjonering: ' + e.message) }
+  }
+
+  const restoreVersion = async (version) => {
+    if (!window.confirm(`Gjenopprett versjon v${version.version_number} "${version.label}"?\n\nNåværende kalkyle lagres automatisk som en ny versjon før gjenoppretting.`)) return
+    // Lagre nåværende som versjon først
+    const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
+    const curTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
+    await supabase.from('calculation_versions').insert({
+      calculation_id: k.id, version_number: maxV + 1, label: 'Auto-lagret for gjenoppretting',
+      snapshot_kalkyler: kalkyler, snapshot_faktorer: alleFaktorer,
+      total_ex_mva: curTotals.totMedFortjeneste, total_hours: curTotals.totTimer,
+      fag_count: kalkyler.length, bd_count: kalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0),
+      created_by: user?.id,
+    })
+    // Gjenopprett
+    const restored = { ...k, kalkyler: version.snapshot_kalkyler, faktorer: version.snapshot_faktorer }
+    saveProject(restored)
+    await loadVersions()
+    setCompareVersion(null)
+    setToastMsg({ title: 'Versjon gjenopprettet', message: `v${version.version_number}: ${version.label}`, type: 'success' })
+  }
+
+  // Sammenlign to versjoner
+  const buildDiff = (oldV, newV) => {
+    const oldKalkyler = oldV?.snapshot_kalkyler || []
+    const newKalkyler = newV?.snapshot_kalkyler || kalkyler
+    const oldTotals = beregnProsjektTotal(oldKalkyler, oldV?.snapshot_faktorer || {})
+    const newTotals = beregnProsjektTotal(newKalkyler, newV?.snapshot_faktorer || alleFaktorer)
+    const diff = {
+      sumDiff: newTotals.totMedFortjeneste - oldTotals.totMedFortjeneste,
+      timerDiff: newTotals.totTimer - oldTotals.totTimer,
+      fagEndringer: [],
+    }
+    // Per faggruppe
+    const allFag = new Set([...oldKalkyler.map(k => k.fag), ...newKalkyler.map(k => k.fag)])
+    allFag.forEach(fagId => {
+      const oldK = oldKalkyler.find(k => k.fag === fagId)
+      const newK = newKalkyler.find(k => k.fag === fagId)
+      const fag = getFaggruppe(fagId)
+      if (!oldK && newK) { diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'added', bdDiff: (newK.bygningsdeler||[]).length }) }
+      else if (oldK && !newK) { diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'removed', bdDiff: -(oldK.bygningsdeler||[]).length }) }
+      else if (oldK && newK) {
+        const oldBdCount = (oldK.bygningsdeler||[]).length, newBdCount = (newK.bygningsdeler||[]).length
+        if (oldBdCount !== newBdCount || JSON.stringify(oldK.bygningsdeler) !== JSON.stringify(newK.bygningsdeler)) {
+          diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'changed', bdDiff: newBdCount - oldBdCount, oldBd: oldBdCount, newBd: newBdCount })
+        }
+      }
+    })
+    return diff
+  }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!ue.email) return alert('E-postadresse til UE er påkrevd')
@@ -21624,6 +21709,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
                   <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📦 Last ned materialliste</button>
+                  <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
+                  <button onClick={() => {
+                    const label = prompt('Gi denne versjonen et navn (f.eks. «Etter kundejustering» eller «Revidert etter befaring»):')
+                    if (label) { saveVersion(label); setShowMoreMenu(false) }
+                  }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>💾 Lagre versjon</button>
+                  <button onClick={() => { loadVersions(); setShowVersions(true); setShowMoreMenu(false) }}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📜 Versjonshistorikk</button>
                   <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
                   <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
@@ -22617,6 +22709,124 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 <button onClick={() => setShowSaveTemplate(false)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
                 <button onClick={handleSaveAsTemplate} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>🗂️ Lagre som mal</button>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Versjonshistorikk-modal */}
+      {showVersions && (
+        <>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onClick={() => { setShowVersions(false); setCompareVersion(null) }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(700px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+              <div>
+                <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>📜 Versjonshistorikk</h2>
+                <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{versions.length} lagrede versjoner · Sammenlign og gjenopprett</p>
+              </div>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={() => {
+                  const label = prompt('Navn på ny versjon:')
+                  if (label) saveVersion(label)
+                }} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>💾 Lagre nåværende</button>
+                <button onClick={() => { setShowVersions(false); setCompareVersion(null) }} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+              </div>
+            </div>
+            <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
+              {loadingVersions ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster versjoner...</div>
+              ) : versions.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
+                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>📜</div>
+                  <p style={{ fontSize:'14px' }}>Ingen versjoner lagret ennå. Klikk «Lagre nåværende» for å opprette første versjon.</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {/* Nåværende (ulagret) */}
+                  <div style={{ background:'#ecfdf5', borderRadius:'12px', border:'1px solid #a7f3d0', padding:'14px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <div>
+                        <span style={{ fontWeight:'700', fontSize:'14px', color:'#059669' }}>Nåværende versjon (ulagret)</span>
+                        <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
+                          {kalkyler.length} faggrupper · {kalkyler.reduce((s,kl) => s + (kl.bygningsdeler||[]).length, 0)} bygningsdeler · {fmt(totals.totMedFortjeneste)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lagrede versjoner */}
+                  {versions.map((v, i) => {
+                    const isComparing = compareVersion?.id === v.id
+                    const diff = isComparing ? buildDiff(v, null) : null
+                    return (
+                      <div key={v.id} style={{ background: isComparing ? '#eff6ff' : 'white', borderRadius:'12px', border:`1px solid ${isComparing ? '#bfdbfe' : '#f1f5f9'}`, padding:'14px 16px', transition:'all 0.15s' }}>
+                        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                              <span style={{ background:'#f1f5f9', color:'#475569', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>v{v.version_number}</span>
+                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{v.label}</span>
+                            </div>
+                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#94a3b8', flexWrap:'wrap' }}>
+                              <span>{new Date(v.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+                              <span>👷 {v.fag_count} fag</span>
+                              <span>🧱 {v.bd_count} bygn.deler</span>
+                              <span>💰 {fmt(v.total_ex_mva)}</span>
+                              <span>⏱️ {(v.total_hours||0).toFixed(0)}t</span>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                            <button onClick={() => setCompareVersion(isComparing ? null : v)}
+                              style={{ padding:'6px 10px', border:`1px solid ${isComparing ? '#2563eb' : '#e2e8f0'}`, borderRadius:'8px', background: isComparing ? '#2563eb' : 'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color: isComparing ? 'white' : '#475569' }}>
+                              {isComparing ? '✕ Lukk' : '🔍 Sammenlign'}
+                            </button>
+                            <button onClick={() => restoreVersion(v)}
+                              style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>
+                              ↩️ Gjenopprett
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Sammenligning */}
+                        {isComparing && diff && (
+                          <div style={{ marginTop:'12px', background:'white', borderRadius:'10px', padding:'14px', border:'1px solid #e2e8f0' }}>
+                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', marginBottom:'10px' }}>Endringer fra v{v.version_number} til nåværende:</div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                              <div style={{ background: diff.sumDiff > 0 ? '#fef2f2' : diff.sumDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
+                                <div style={{ fontSize:'14px', fontWeight:'800', color: diff.sumDiff > 0 ? '#dc2626' : diff.sumDiff < 0 ? '#059669' : '#64748b' }}>
+                                  {diff.sumDiff > 0 ? '+' : ''}{fmt(diff.sumDiff)}
+                                </div>
+                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>prisendring</div>
+                              </div>
+                              <div style={{ background: diff.timerDiff > 0 ? '#fffbeb' : diff.timerDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
+                                <div style={{ fontSize:'14px', fontWeight:'800', color: diff.timerDiff > 0 ? '#d97706' : diff.timerDiff < 0 ? '#059669' : '#64748b' }}>
+                                  {diff.timerDiff > 0 ? '+' : ''}{diff.timerDiff.toFixed(1)}t
+                                </div>
+                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>timediff</div>
+                              </div>
+                            </div>
+                            {diff.fagEndringer.length > 0 ? (
+                              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                                {diff.fagEndringer.map((fe, fi) => (
+                                  <div key={fi} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', padding:'4px 8px', borderRadius:'6px',
+                                    background: fe.type === 'added' ? '#ecfdf5' : fe.type === 'removed' ? '#fef2f2' : '#fffbeb' }}>
+                                    <span>{fe.emoji}</span>
+                                    <span style={{ fontWeight:'600', color:'#0f172a' }}>{fe.fag}</span>
+                                    <span style={{ color: fe.type === 'added' ? '#059669' : fe.type === 'removed' ? '#dc2626' : '#d97706' }}>
+                                      {fe.type === 'added' ? '+ Lagt til' : fe.type === 'removed' ? '− Fjernet' : `${fe.bdDiff > 0 ? '+' : ''}${fe.bdDiff} bygn.deler (${fe.oldBd}→${fe.newBd})`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>Ingen strukturelle endringer i faggrupper (mulig kun prisendringer)</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </>
