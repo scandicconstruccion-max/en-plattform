@@ -18654,6 +18654,9 @@ function KalkulasjonPage({ onNavigate }) {
   const [showBibliotekPage, setShowBibliotekPage] = useState(false)
   const [showPrisbokPage, setShowPrisbokPage] = useState(false)
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [compareIds, setCompareIds] = useState([])
+  const [showCompare, setShowCompare] = useState(false)
+  const [expandedCompareFag, setExpandedCompareFag] = useState(new Set())
 
   const load = async () => {
     try {
@@ -18751,6 +18754,239 @@ function KalkulasjonPage({ onNavigate }) {
 
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
 
+  // ── Sammenligningsvisning ──
+  if (showCompare && compareIds.length === 2) {
+    const kA = kalks.find(k => k.id === compareIds[0])
+    const kB = kalks.find(k => k.id === compareIds[1])
+    if (!kA || !kB) { setShowCompare(false); return null }
+
+    const kalkylerA = kA.kalkyler || [], kalkylerB = kB.kalkyler || []
+    const faktorerA = kA.faktorer || {}, faktorerB = kB.faktorer || {}
+    const totA = beregnProsjektTotal(kalkylerA, faktorerA)
+    const totB = beregnProsjektTotal(kalkylerB, faktorerB)
+
+    // Samle alle faggrupper fra begge
+    const allFag = [...new Set([...kalkylerA.map(k => k.fag), ...kalkylerB.map(k => k.fag)])]
+    const toggleFagExpand = (fag) => setExpandedCompareFag(prev => { const n = new Set(prev); n.has(fag) ? n.delete(fag) : n.add(fag); return n })
+
+    const diffVal = (a, b) => b - a
+    const diffColor = (d) => d > 0 ? '#dc2626' : d < 0 ? '#059669' : '#94a3b8'
+    const diffArrow = (d) => d > 0 ? '▲' : d < 0 ? '▼' : '—'
+    const diffPct = (a, b) => a === 0 ? (b === 0 ? 0 : 100) : ((b - a) / a * 100)
+
+    return (
+      <div style={{ fontFamily:'system-ui,sans-serif' }}>
+        {/* Header */}
+        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+          <button onClick={() => { setShowCompare(false); setCompareIds([]) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kalkulasjoner</button>
+          <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>🔍 Sammenligning av kalkulasjoner</h1>
+        </div>
+
+        <div style={{ padding:'24px 32px' }}>
+          {/* Oppsummeringskort — 3 kolonner: A | diff | B */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 140px 1fr', gap:'12px', marginBottom:'24px' }}>
+            {/* Kalk A */}
+            <div style={{ background:'#eff6ff', borderRadius:'14px', border:'1px solid #bfdbfe', padding:'20px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#3b82f6', marginBottom:'6px', letterSpacing:'0.05em' }}>KALKULASJON A</div>
+              <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{kA.title}</div>
+              <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'12px' }}>{kA.kalk_number}{kA.customer_name ? ` · ${kA.customer_name}` : ''}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(totA.totMedFortjeneste)}</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>totalsum</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{totA.totTimer.toFixed(0)}t</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>timer</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{totA.fortjenesteProsent.toFixed(1)}%</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>margin</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{kalkylerA.length} / {kalkylerA.reduce((s,kl) => s + (kl.bygningsdeler||[]).length, 0)}</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>fag / bd</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Differanse-kolonne */}
+            <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap:'8px', alignItems:'center' }}>
+              {[
+                { label: 'Sum', d: diffVal(totA.totMedFortjeneste, totB.totMedFortjeneste), fmt: v => fmt(v) },
+                { label: 'Timer', d: diffVal(totA.totTimer, totB.totTimer), fmt: v => v.toFixed(0) + 't' },
+                { label: 'Margin', d: diffVal(totA.fortjenesteProsent, totB.fortjenesteProsent), fmt: v => v.toFixed(1) + '%' },
+              ].map((item, i) => (
+                <div key={i} style={{ background: '#f8fafc', borderRadius:'10px', padding:'8px 14px', textAlign:'center', width:'100%' }}>
+                  <div style={{ fontSize:'14px', fontWeight:'800', color: diffColor(item.d) }}>
+                    {diffArrow(item.d)} {item.d > 0 ? '+' : ''}{item.fmt(item.d)}
+                  </div>
+                  <div style={{ fontSize:'9px', color:'#94a3b8' }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Kalk B */}
+            <div style={{ background:'#faf5ff', borderRadius:'14px', border:'1px solid #e9d5ff', padding:'20px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px', letterSpacing:'0.05em' }}>KALKULASJON B</div>
+              <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{kB.title}</div>
+              <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'12px' }}>{kB.kalk_number}{kB.customer_name ? ` · ${kB.customer_name}` : ''}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(totB.totMedFortjeneste)}</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>totalsum</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{totB.totTimer.toFixed(0)}t</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>timer</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{totB.fortjenesteProsent.toFixed(1)}%</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>margin</div>
+                </div>
+                <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{kalkylerB.length} / {kalkylerB.reduce((s,kl) => s + (kl.bygningsdeler||[]).length, 0)}</div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8' }}>fag / bd</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Per faggruppe sammenligning */}
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            {allFag.map(fagId => {
+              const fag = getFaggruppe(fagId)
+              const klA = kalkylerA.find(k => k.fag === fagId)
+              const klB = kalkylerB.find(k => k.fag === fagId)
+              const faktA = faktorerA[fagId] || getDefaultFaktorer(fagId)
+              const faktB = faktorerB[fagId] || getDefaultFaktorer(fagId)
+              const rA = klA ? beregnKalkyle(klA, faktA) : null
+              const rB = klB ? beregnKalkyle(klB, faktB) : null
+              const sumA = rA?.totMedFortjeneste || 0, sumB = rB?.totMedFortjeneste || 0
+              const timerA = rA?.totTimer || 0, timerB = rB?.totTimer || 0
+              const bdCountA = (klA?.bygningsdeler || []).length, bdCountB = (klB?.bygningsdeler || []).length
+              const isExpanded = expandedCompareFag.has(fagId)
+              const sumDiff = sumB - sumA
+              const onlyA = !klB, onlyB = !klA
+
+              return (
+                <div key={fagId} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
+                  {/* Faggruppe header */}
+                  <div onClick={() => toggleFagExpand(fagId)} style={{ padding:'14px 18px', cursor:'pointer', display:'grid', gridTemplateColumns:'1fr 140px 1fr', gap:'12px', alignItems:'center', background: onlyA ? '#eff6ff08' : onlyB ? '#faf5ff08' : 'white' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                      <span style={{ fontSize:'18px' }}>{fag.emoji}</span>
+                      <div>
+                        <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{fag.name}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                          {klA ? `${bdCountA} bygn.deler · ${fmt(sumA)}` : <span style={{ color:'#dc2626' }}>Finnes ikke i A</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:'center' }}>
+                      {klA && klB ? (
+                        <>
+                          <div style={{ fontSize:'13px', fontWeight:'800', color: diffColor(sumDiff) }}>{diffArrow(sumDiff)} {sumDiff > 0 ? '+' : ''}{fmt(sumDiff)}</div>
+                          <div style={{ fontSize:'10px', color: diffColor(sumDiff) }}>{diffPct(sumA, sumB) > 0 ? '+' : ''}{diffPct(sumA, sumB).toFixed(1)}%</div>
+                        </>
+                      ) : (
+                        <span style={{ fontSize:'11px', fontWeight:'600', color: onlyA ? '#3b82f6' : '#7c3aed' }}>{onlyA ? 'Kun i A' : 'Kun i B'}</span>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                        {klB ? `${bdCountB} bygn.deler · ${fmt(sumB)}` : <span style={{ color:'#dc2626' }}>Finnes ikke i B</span>}
+                      </div>
+                      <span style={{ color:'#94a3b8', fontSize:'14px', transition:'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)' }}>▼</span>
+                    </div>
+                  </div>
+
+                  {/* Bygningsdeler side-by-side */}
+                  {isExpanded && (
+                    <div style={{ borderTop:'1px solid #f1f5f9', padding:'14px 18px' }}>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr', gap:'8px' }}>
+                        {/* Headers */}
+                        <div style={{ fontSize:'10px', fontWeight:'700', color:'#3b82f6', marginBottom:'4px' }}>A — BYGNINGSDELER</div>
+                        <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textAlign:'center', marginBottom:'4px' }}>DIFF</div>
+                        <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', marginBottom:'4px' }}>B — BYGNINGSDELER</div>
+
+                        {/* Samle alle bygningsdeler fra begge */}
+                        {(() => {
+                          const bdsA = klA?.bygningsdeler || []
+                          const bdsB = klB?.bygningsdeler || []
+                          const allBdNames = [...new Set([...bdsA.map(b => b.name), ...bdsB.map(b => b.name)])]
+                          return allBdNames.map((bdName, bi) => {
+                            const bdA = bdsA.find(b => b.name === bdName)
+                            const bdB = bdsB.find(b => b.name === bdName)
+                            const bdResA = bdA ? beregnBygningsdel(bdA, faktA) : null
+                            const bdResB = bdB ? beregnBygningsdel(bdB, faktB) : null
+                            const bdSumA = bdResA?.totalMedFortjeneste || 0
+                            const bdSumB = bdResB?.totalMedFortjeneste || 0
+                            const bdDiff = bdSumB - bdSumA
+                            const bgRow = bi % 2 === 0 ? '#fafafa' : 'white'
+                            return (
+                              <React.Fragment key={bi}>
+                                <div style={{ background: bdA ? bgRow : '#fef2f2', borderRadius:'6px', padding:'6px 10px', fontSize:'12px' }}>
+                                  {bdA ? (
+                                    <>
+                                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{bdA.name}</div>
+                                      <div style={{ color:'#64748b' }}>{bdA.mengde} {bdA.enhet} · {fmt(bdSumA)}</div>
+                                    </>
+                                  ) : <span style={{ color:'#dc2626', fontStyle:'italic' }}>—</span>}
+                                </div>
+                                <div style={{ background: bgRow, borderRadius:'6px', padding:'6px 6px', textAlign:'center', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                                  {bdA && bdB ? (
+                                    <span style={{ fontWeight:'700', color: diffColor(bdDiff) }}>{bdDiff > 0 ? '+' : ''}{fmt(bdDiff)}</span>
+                                  ) : (
+                                    <span style={{ color: !bdA ? '#7c3aed' : '#3b82f6', fontWeight:'600' }}>{!bdA ? '+ Ny' : '− Fjernet'}</span>
+                                  )}
+                                </div>
+                                <div style={{ background: bdB ? bgRow : '#fef2f2', borderRadius:'6px', padding:'6px 10px', fontSize:'12px' }}>
+                                  {bdB ? (
+                                    <>
+                                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{bdB.name}</div>
+                                      <div style={{ color:'#64748b' }}>{bdB.mengde} {bdB.enhet} · {fmt(bdSumB)}</div>
+                                    </>
+                                  ) : <span style={{ color:'#dc2626', fontStyle:'italic' }}>—</span>}
+                                </div>
+                              </React.Fragment>
+                            )
+                          })
+                        })()}
+                      </div>
+
+                      {/* Faktor-sammenligning */}
+                      {klA && klB && (() => {
+                        const diffs = []
+                        const labels = { produksjonslonn: 'Produksjonslonn', sosiale_prosent: 'Sosiale %', faste_prosent: 'Faste %', fortjeneste_lonn_prosent: 'Fortj. lonn %', fortjeneste_innkjop_prosent: 'Fortj. innkjop %', grunntid_justering: 'Tidsjustering' }
+                        Object.entries(labels).forEach(([key, label]) => {
+                          const vA = parseFloat(faktA[key]) || 0, vB = parseFloat(faktB[key]) || 0
+                          if (Math.abs(vA - vB) > 0.01) diffs.push({ label, vA, vB })
+                        })
+                        if (diffs.length === 0) return null
+                        return (
+                          <div style={{ marginTop:'10px', background:'#fffbeb', borderRadius:'8px', padding:'10px 12px', border:'1px solid #fde68a' }}>
+                            <div style={{ fontSize:'10px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>FAKTORENDRINGER</div>
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                              {diffs.map((d, di) => (
+                                <span key={di} style={{ fontSize:'11px', color:'#92400e', background:'white', padding:'2px 8px', borderRadius:'6px' }}>
+                                  {d.label}: {d.vA} → {d.vB}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
       {/* Header */}
@@ -18804,6 +19040,18 @@ function KalkulasjonPage({ onNavigate }) {
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk kalkulasjon, kunde, nummer..." style={{ ...qInp, maxWidth:'300px', flex:1 }} />
           {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
+          {compareIds.length === 2 && (
+            <button onClick={() => setShowCompare(true)}
+              style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'9px 18px', fontSize:'13px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px' }}>
+              🔍 Sammenlign (2)
+            </button>
+          )}
+          {compareIds.length > 0 && compareIds.length < 2 && (
+            <span style={{ fontSize:'12px', color:'#3b82f6', fontWeight:'600' }}>Velg {2 - compareIds.length} til for å sammenligne</span>
+          )}
+          {compareIds.length > 0 && (
+            <button onClick={() => setCompareIds([])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'12px', color:'#94a3b8' }}>✕ Avbryt</button>
+          )}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} prosjekter</span>
         </div>
 
@@ -18822,9 +19070,14 @@ function KalkulasjonPage({ onNavigate }) {
               const alleFaktorer = k.faktorer || {}
               const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
               return (
-                <div key={k.id} onClick={() => setViewKalk(k)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                <div key={k.id} style={{ background:'white', borderRadius:'14px', border: compareIds.includes(k.id) ? '2px solid #3b82f6' : '1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'12px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
+                  <input type="checkbox" checked={compareIds.includes(k.id)} onChange={e => {
+                    e.stopPropagation()
+                    setCompareIds(prev => prev.includes(k.id) ? prev.filter(x => x !== k.id) : prev.length >= 2 ? [prev[1], k.id] : [...prev, k.id])
+                  }} onClick={e => e.stopPropagation()}
+                    style={{ width:'16px', height:'16px', accentColor:'#3b82f6', cursor:'pointer', flexShrink:0 }} />
+                  <div onClick={() => setViewKalk(k)} style={{ display:'flex', alignItems:'center', gap:'16px', flex:1, minWidth:0 }}>
                   <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
@@ -18844,6 +19097,7 @@ function KalkulasjonPage({ onNavigate }) {
                     <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
                   </div>
                   <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  </div>{/* end clickable div */}
                 </div>
               )
             })}
