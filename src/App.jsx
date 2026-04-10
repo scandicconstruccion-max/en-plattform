@@ -955,6 +955,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
   const [checklists, setChecklists] = useState([])
+  const [endringsmeldinger, setEndringsmeldinger] = useState([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -966,14 +967,16 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
   const load = async () => {
     try {
-      const [proj, allProj, clRes] = await Promise.all([
+      const [proj, allProj, clRes, emRes] = await Promise.all([
         db.getProject(projectId),
         db.getProjects(),
-        supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
+        supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
+        supabase.from('endringsmeldinger').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
       ])
       setProject(proj)
       setAllProjects(allProj)
       setChecklists(clRes.data || [])
+      setEndringsmeldinger(emRes.data || [])
     } catch(e){console.error(e)} finally { setLoading(false) }
   }
   useEffect(() => { load() }, [projectId])
@@ -1187,6 +1190,77 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         </div>
 
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Endringsmeldinger-sammendrag */}
+          {endringsmeldinger.length > 0 && (() => {
+            const godkjent = endringsmeldinger.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
+            const avventer = endringsmeldinger.filter(e => e.status === 'Sendt' || e.status === 'Under forhandling')
+            const totalGodkjent = godkjent.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+            const totalAvventer = avventer.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+            const totalAlle = endringsmeldinger.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+            return (
+              <div style={card}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Endringsmeldinger ({endringsmeldinger.length})</h3>
+                {/* Akkumulert beløp */}
+                <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0', textAlign:'center', marginBottom:'12px' }}>
+                  <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', marginBottom:'2px' }}>GODKJENT TILLEGGSARBEID</div>
+                  <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</div>
+                </div>
+                {/* Avventende */}
+                {totalAvventer > 0 && (
+                  <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'10px 12px', border:'1px solid #fde68a', marginBottom:'12px', textAlign:'center' }}>
+                    <div style={{ fontSize:'10px', color:'#d97706', fontWeight:'600', marginBottom:'2px' }}>AVVENTER GODKJENNING</div>
+                    <div style={{ fontSize:'16px', fontWeight:'700', color:'#d97706' }}>{Math.round(totalAvventer).toLocaleString('nb-NO')} kr</div>
+                    <div style={{ fontSize:'11px', color:'#92400e', marginTop:'2px' }}>{avventer.length} endringsmelding{avventer.length !== 1 ? 'er' : ''}</div>
+                  </div>
+                )}
+                {/* Budsjett-kontekst */}
+                {project.budget && (
+                  <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 12px', marginBottom:'12px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                      <span style={{ color:'#64748b' }}>Opprinnelig budsjett</span>
+                      <span style={{ fontWeight:'600', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</span>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                      <span style={{ color:'#059669' }}>+ Godkjente endringer</span>
+                      <span style={{ fontWeight:'600', color:'#059669' }}>+{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</span>
+                    </div>
+                    <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a' }}>Justert budsjett</span>
+                      <span style={{ fontWeight:'800', color:'#0f172a' }}>{Math.round(Number(project.budget) + totalGodkjent).toLocaleString('nb-NO')} kr</span>
+                    </div>
+                    <div style={{ marginTop:'8px', height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden' }}>
+                      <div style={{ height:'100%', borderRadius:'3px', background:'#059669', width: `${Math.min(100, (Number(project.budget) / (Number(project.budget) + totalGodkjent)) * 100)}%` }} />
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>
+                      <span>Opprinnelig</span>
+                      <span>+{(totalGodkjent / Number(project.budget) * 100).toFixed(1)}% endringer</span>
+                    </div>
+                  </div>
+                )}
+                {/* Liste over siste EM-er */}
+                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                  {endringsmeldinger.slice(0, 5).map(em => {
+                    const emSt = { Utkast:'#64748b', Sendt:'#2563eb', Godkjent:'#16a34a', Avvist:'#dc2626', 'Under forhandling':'#d97706', Fakturert:'#7c3aed' }[em.status] || '#64748b'
+                    return (
+                      <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'12px' }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{em.title}</div>
+                          <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'1px' }}>
+                            <span style={{ color:'#94a3b8', fontSize:'11px' }}>{em.em_number}</span>
+                            <span style={{ color: emSt, fontSize:'10px', fontWeight:'600' }}>{em.status}</span>
+                          </div>
+                        </div>
+                        <span style={{ fontWeight:'700', color: emSt, fontSize:'12px', flexShrink:0 }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</span>
+                      </div>
+                    )
+                  })}
+                  {endringsmeldinger.length > 5 && <div style={{ fontSize:'11px', color:'#94a3b8', textAlign:'center', paddingTop:'4px' }}>+ {endringsmeldinger.length - 5} flere</div>}
+                </div>
+              </div>
+            )
+          })()}
+
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
             {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
