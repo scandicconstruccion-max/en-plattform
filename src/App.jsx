@@ -219,19 +219,19 @@ const moduleSections = [
   },
 ]
 
-function ModuleCard({ module, onNavigate }) {
+function ModuleCard({ module, onNavigate, isMobile }) {
   const m = moduleCards.find(x => x.id === module)
   if (!m) return null
   return (
     <button onClick={() => onNavigate(m.id)}
-      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: '14px', padding: '14px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.2s' }}
+      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: isMobile ? '12px' : '14px', padding: isMobile ? '10px' : '14px', cursor: 'pointer', textAlign: isMobile ? 'center' : 'left', transition: 'box-shadow 0.2s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-      <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginBottom: '10px' }}>
+      <div style={{ width: isMobile ? '32px' : '38px', height: isMobile ? '32px' : '38px', borderRadius: '10px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '16px' : '18px', marginBottom: isMobile ? '6px' : '10px', ...(isMobile ? { margin: '0 auto 6px' } : {}) }}>
         {m.emoji}
       </div>
-      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '13px', marginBottom: '3px' }}>{m.name}</div>
-      <div style={{ color: '#94a3b8', fontSize: '11px' }}>{m.desc}</div>
+      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: isMobile ? '11px' : '13px', marginBottom: isMobile ? '0' : '3px' }}>{m.name}</div>
+      {!isMobile && <div style={{ color: '#94a3b8', fontSize: '11px' }}>{m.desc}</div>}
     </button>
   )
 }
@@ -281,23 +281,28 @@ function Dashboard({ onNavigate, user }) {
     else { loadStats() }
   }
 
+  // Responsiv
+  const [ww, setWw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
+  React.useEffect(() => { const h = () => setWw(window.innerWidth); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h) }, [])
+  const mob = ww < 768
+
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: mob ? '16px' : '24px 32px' }}>
+        <div style={{ display: 'flex', alignItems: mob ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: mob ? 'column' : 'row', gap: mob ? '10px' : '0' }}>
           <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen tilbake, {firstName}</h1>
-            <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>{dateStr}</p>
+            <h1 style={{ fontSize: mob ? '18px' : '24px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Velkommen, {firstName}</h1>
+            <p style={{ color: '#64748b', marginTop: '4px', fontSize: mob ? '12px' : '14px', marginBottom: 0 }}>{dateStr}</p>
           </div>
           <button onClick={toggleStats}
-            style={{ padding: '8px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', background: showStats ? '#f8fafc' : 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            style={{ padding: mob ? '8px 12px' : '8px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', background: showStats ? '#f8fafc' : 'white', cursor: 'pointer', fontSize: mob ? '12px' : '13px', fontWeight: '600', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', alignSelf: mob ? 'stretch' : 'auto', justifyContent: 'center' }}>
             {showStats ? '▲ Skjul nøkkeltall' : '▼ Vis nøkkeltall'}
           </button>
         </div>
 
         {/* Nøkkeltall-kort */}
         {showStats && (
-          <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
+          <div style={{ marginTop: mob ? '12px' : '20px', display: 'grid', gridTemplateColumns: mob ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: mob ? '8px' : '12px' }}>
             {loadingStats || !stats ? (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '14px' }}>Laster nøkkeltall...</div>
             ) : [
@@ -308,17 +313,17 @@ function Dashboard({ onNavigate, user }) {
               { label: 'Uleste varsler', value: unread, icon: '🔔', color: unread > 0 ? '#d97706' : '#059669', bg: unread > 0 ? '#fffbeb' : '#ecfdf5', onClick: () => onNavigate('varsler') },
             ].map((stat, i) => (
               <button key={i} onClick={stat.onClick}
-                style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '16px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.15s' }}
+                style={{ background: 'white', borderRadius: mob ? '12px' : '14px', border: '1px solid #f1f5f9', padding: mob ? '12px' : '16px', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>{stat.icon}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: mob ? '6px' : '10px' }}>
+                  <div style={{ width: mob ? '30px' : '36px', height: mob ? '30px' : '36px', borderRadius: '10px', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: mob ? '15px' : '18px' }}>{stat.icon}</div>
                   {typeof stat.value === 'number' && stat.value > 0 && stat.color === '#dc2626' && (
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />
                   )}
                 </div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: stat.color, marginBottom: '2px' }}>{stat.value}</div>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>{stat.label}</div>
+                <div style={{ fontSize: mob ? '20px' : '26px', fontWeight: '800', color: stat.color, marginBottom: '2px' }}>{stat.value}</div>
+                <div style={{ fontSize: mob ? '11px' : '12px', color: '#64748b', fontWeight: '500' }}>{stat.label}</div>
               </button>
             ))}
           </div>
@@ -328,21 +333,21 @@ function Dashboard({ onNavigate, user }) {
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
         @media (min-width: 1200px) { .dashboard-grid-single { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
       `}</style>
-      <div style={{ padding: '24px 32px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#0f172a', marginBottom: '24px', marginTop: 0 }}>Moduler</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+      <div style={{ padding: mob ? '16px' : '24px 32px' }}>
+        <h2 style={{ fontSize: mob ? '16px' : '18px', fontWeight: '600', color: '#0f172a', marginBottom: mob ? '16px' : '24px', marginTop: 0 }}>Moduler</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: mob ? '20px' : '28px' }}>
           {moduleSections.map((section, i) => (
             <div key={i}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-                <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{section.title}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: mob ? '10px' : '14px' }}>
+                <span style={{ fontSize: mob ? '12px' : '13px', fontWeight: '600', color: '#64748b', letterSpacing: '0.05em' }}>{section.title}</span>
                 <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
               </div>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                gap: '12px'
+                gridTemplateColumns: mob ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(130px, 1fr))',
+                gap: mob ? '8px' : '12px'
               }}>
-                {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} />)}
+                {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} isMobile={mob} />)}
               </div>
             </div>
           ))}
