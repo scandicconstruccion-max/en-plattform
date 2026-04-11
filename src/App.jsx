@@ -1,6 +1,26 @@
 import React, { useState, useEffect, createContext, useContext } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
+// ── Global responsive styles ──
+const MobileStyles = () => (
+  <style>{`
+    @viewport { width: device-width; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overscroll-behavior-y: none; }
+    input, select, textarea, button { font-size: 16px !important; }
+    @media (min-width: 768px) { input, select, textarea, button { font-size: inherit !important; } }
+    @media (max-width: 767px) {
+      .desktop-only { display: none !important; }
+      .mobile-padding { padding-left: 12px !important; padding-right: 12px !important; }
+    }
+    @media (min-width: 768px) {
+      .mobile-only { display: none !important; }
+    }
+    @keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+    @keyframes spin { to { transform: rotate(360deg) } }
+  `}</style>
+)
+
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -25464,6 +25484,21 @@ function AppContent() {
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
   const [activeModules, setActiveModules] = useState(null) // null = loading
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // ── Responsiv deteksjon ──
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
+  React.useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+  const isMobile = windowWidth < 768
+  const isTablet = windowWidth >= 768 && windowWidth < 1024
+
+  // Feltmoduler — fulloptimert for mobil
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
   React.useEffect(() => {
@@ -25502,10 +25537,11 @@ function AppContent() {
   const [page, setPage] = React.useState(getPageFromHash)
 
   const navigate = (p) => {
-    if (p === page) return
+    if (p === page) { setMobileMenuOpen(false); return }
     window.history.pushState({ page: p }, '', '#' + p)
     setPage(p)
     setProjectId(null)
+    setMobileMenuOpen(false)
   }
 
   // Check if current page is a locked module
@@ -25549,11 +25585,65 @@ function AppContent() {
 
   if (!user) return <Login />
 
-  const sidebarWidth = collapsed ? 60 : 220
+  const sidebarWidth = isMobile ? 0 : (collapsed ? 60 : 220)
   const activePage = page === 'prosjekt_detaljer' ? 'prosjekter' : page === 'avvik_detaljer' ? 'avvik' : page
+
+  // ── Kontormodul-melding ──
+  const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer'
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
+
+      {/* ── MOBIL: Hamburgermeny overlay ── */}
+      {isMobile && mobileMenuOpen && (
+        <>
+          <div onClick={() => setMobileMenuOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:998, transition:'opacity 0.3s' }} />
+          <div style={{ position:'fixed', top:0, left:0, height:'100vh', width:'280px', background:'white', zIndex:999, boxShadow:'4px 0 24px rgba(0,0,0,0.15)', display:'flex', flexDirection:'column', overflowY:'auto', animation:'slideIn 0.25s ease-out' }}>
+            <style>{`@keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }`}</style>
+            {/* Logo */}
+            <div style={{ height:'60px', display:'flex', alignItems:'center', padding:'0 16px', borderBottom:'1px solid #f1f5f9', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                <span style={{ fontSize:'22px' }}>🏗️</span>
+                <span style={{ fontWeight:'800', color:'#059669', fontSize:'16px' }}>En Plattform</span>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px' }}>×</button>
+            </div>
+            {/* Nav */}
+            <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
+              {navGroups.map((group, gi) => (
+                <div key={gi} style={{ marginBottom:'4px' }}>
+                  <div style={{ padding:'10px 12px 4px', fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.08em' }}>{group.title}</div>
+                  {group.items.map(item => {
+                    const isActive = activePage === item.id
+                    const locked = !isModuleActive(item.id)
+                    return (
+                      <button key={item.id} onClick={() => navigate(item.id)}
+                        style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'none', cursor:'pointer', background:isActive?'#ecfdf5':'transparent', color:locked?'#cbd5e1':isActive?'#059669':'#475569', fontWeight:isActive?'700':'400', fontSize:'15px', textAlign:'left', marginBottom:'2px', opacity:locked?0.7:1 }}>
+                        <span style={{ fontSize:'18px', flexShrink:0 }}>{locked?'🔒':item.emoji}</span>
+                        <span style={{ flex:1 }}>{item.label}</span>
+                        {locked && <span style={{ fontSize:'10px', color:'#94a3b8' }}>PRO</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </nav>
+            {/* Bruker */}
+            <div style={{ padding:'14px 16px', borderTop:'1px solid #f1f5f9' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#d1fae5', display:'flex', alignItems:'center', justifyContent:'center', color:'#059669', fontWeight:'bold', fontSize:'13px' }}>
+                  {user?.email?.[0]?.toUpperCase()||'U'}
+                </div>
+                <div style={{ flex:1, fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{displayName}</div>
+                <button onClick={() => supabase.auth.signOut()} style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'6px 12px', cursor:'pointer', color:'#dc2626', fontSize:'12px', fontWeight:'600' }}>Logg ut</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── DESKTOP: Sidebar ── */}
+      {!isMobile && (
       <div style={{ position: 'fixed', top: 0, left: 0, height: '100vh', width: sidebarWidth, background: 'white', borderRight: '1px solid #e2e8f0', transition: 'width 0.3s', zIndex: 40, display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
         <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0' : '0 12px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
           <button onClick={() => navigate('dashboard')} title="Gå til dashboard"
@@ -25614,22 +25704,45 @@ function AppContent() {
           )}
         </div>
       </div>
+      )}
 
-      <main style={{ marginLeft: sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh' }}>
+      <main style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh' }}>
         {/* Global top bar */}
-        <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white', borderBottom: '1px solid #f1f5f9', padding: '0 28px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-          <NotifBell onNavigate={navigate} />
-          <div style={{ width: '1px', height: '24px', background: '#f1f5f9' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: '800', fontSize: '12px' }}>
-              {user?.email?.[0]?.toUpperCase() || 'U'}
+        <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMobile ? '0 12px' : '0 28px', height: isMobile ? '52px' : '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          {/* Mobil: Hamburger + Logo */}
+          {isMobile ? (
+            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+              <button onClick={() => setMobileMenuOpen(true)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'22px', padding:'4px', color:'#374151', lineHeight:1 }}>☰</button>
+              <span style={{ fontWeight:'800', color:'#059669', fontSize:'15px' }}>En Plattform</span>
             </div>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {displayName}
-            </span>
-            <button onClick={() => supabase.auth.signOut()} title="Logg ut" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', padding: '2px', lineHeight: 1 }}>⏻</button>
+          ) : <div />}
+          <div style={{ display:'flex', alignItems:'center', gap: isMobile ? '6px' : '10px' }}>
+            <NotifBell onNavigate={navigate} />
+            {!isMobile && <div style={{ width: '1px', height: '24px', background: '#f1f5f9' }} />}
+            {!isMobile ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: '800', fontSize: '12px' }}>
+                  {user?.email?.[0]?.toUpperCase() || 'U'}
+                </div>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayName}
+                </span>
+                <button onClick={() => supabase.auth.signOut()} title="Logg ut" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', padding: '2px', lineHeight: 1 }}>⏻</button>
+              </div>
+            ) : (
+              <div style={{ width:'30px', height:'30px', borderRadius:'50%', background:'#d1fae5', display:'flex', alignItems:'center', justifyContent:'center', color:'#059669', fontWeight:'800', fontSize:'11px' }}>
+                {user?.email?.[0]?.toUpperCase()||'U'}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Kontormodul-tips på mobil */}
+        {showDesktopTip && (
+          <div style={{ margin:'8px 12px 0', background:'#eff6ff', borderRadius:'8px', padding:'8px 12px', border:'1px solid #bfdbfe', fontSize:'12px', color:'#1e40af', display:'flex', alignItems:'center', gap:'6px' }}>
+            💻 Denne modulen er best egnet for PC for full funksjonalitet
+          </div>
+        )}
         {isPageLocked ? (
           <LockedModulePage pageId={page} onNavigate={navigate} />
         ) : (<>
@@ -25680,5 +25793,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AuthProvider><NotifProvider><ConfirmProvider><AppContent /></ConfirmProvider></NotifProvider></AuthProvider>
+  return <AuthProvider><NotifProvider><ConfirmProvider><MobileStyles /><AppContent /></ConfirmProvider></NotifProvider></AuthProvider>
 }
