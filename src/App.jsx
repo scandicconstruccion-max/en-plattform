@@ -4710,7 +4710,7 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
           </div>
         </div>
       </div>
-      <div style={{ padding: isMob ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMob ? '1fr' : '2fr 1fr', gap: isMob ? '12px' : '20px' }}>
+      <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px' }}>
         <div>
           {rec.type === 'sja'             && <SjaView rec={rec} proj={proj} />}
           {rec.type === 'ruh'             && <RuhView rec={rec} proj={proj} />}
