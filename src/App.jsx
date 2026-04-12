@@ -2226,103 +2226,96 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
     else onDownload(file)
   }
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
     <>
     <div style={{ background: isArchived ? '#fef9f9' : 'white', borderRadius: '12px',
-      border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: '12px 16px',
-      display: 'flex', alignItems: 'center', gap: '12px', opacity: isArchived ? 0.85 : 1 }}
+      border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: isMob ? '10px 12px' : '12px 16px',
+      display: 'flex', flexDirection: isMob ? 'column' : 'row', alignItems: isMob ? 'stretch' : 'center', gap: isMob ? '8px' : '12px', opacity: isArchived ? 0.85 : 1 }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-      <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />
-      {/* Thumbnail for bilder */}
-      {isImage && thumbUrl ? (
-        <div onClick={openPreview} style={{ width: '42px', height: '42px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }}>
-          <img src={thumbUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      ) : (
-        <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0, cursor: canPreview ? 'pointer' : 'default' }}
-          onClick={() => { if (canPreview) openPreview() }}>
-          {getFileEmoji(file.name, file.file_type)}
-        </div>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div onClick={handleNameClick}
-          style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : (canPreview ? '#2563eb' : '#0f172a'), fontSize: '14px',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
-          textDecoration: canPreview ? 'none' : 'none' }}
-          onMouseEnter={e => { if (canPreview) e.currentTarget.style.textDecoration = 'underline' }}
-          onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
-          {file.name}
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
-          {file.revision_label && (
-            <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`,
-              borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '1px 8px',
-              display: 'flex', alignItems: 'center', gap: '3px' }}>
-              {file.revision_label}
-              {!isArchived && <span>✓</span>}
-              {isArchived && <span>🗄️</span>}
+      {/* Top row: icon + name + actions (mobil) eller alt på én rad (desktop) */}
+      <div style={{ display:'flex', alignItems:'center', gap: isMob ? '8px' : '12px', minWidth:0 }}>
+        {!isMob && <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />}
+        {/* Thumbnail for bilder */}
+        {isImage && thumbUrl ? (
+          <div onClick={openPreview} style={{ width: isMob ? '34px' : '42px', height: isMob ? '34px' : '42px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }}>
+            <img src={thumbUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+        ) : (
+          <div style={{ width: isMob ? '30px' : '36px', height: isMob ? '30px' : '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMob ? '15px' : '18px', flexShrink: 0, cursor: canPreview ? 'pointer' : 'default' }}
+            onClick={() => { if (canPreview) openPreview() }}>
+            {getFileEmoji(file.name, file.file_type)}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div onClick={handleNameClick}
+            style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : (canPreview ? '#2563eb' : '#0f172a'), fontSize: isMob ? '13px' : '14px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+            onMouseEnter={e => { if (canPreview) e.currentTarget.style.textDecoration = 'underline' }}
+            onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+            {file.name}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '3px', flexWrap: 'wrap' }}>
+            {file.revision_label && (
+              <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`,
+                borderRadius: '999px', fontSize: '10px', fontWeight: '700', padding: '1px 6px',
+                display: 'flex', alignItems: 'center', gap: '3px' }}>
+                {file.revision_label}
+                {!isArchived && <span>✓</span>}
+                {isArchived && <span>🗄️</span>}
+              </span>
+            )}
+            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+              {file.file_size ? formatFileSize(file.file_size) : ''}
+              {file.file_size && '  '}
+              {new Date(file.created_at).toLocaleDateString('nb-NO')}
             </span>
-          )}
-          {canPreview && <span style={{ fontSize: '11px', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: '4px' }}>Klikk for å vise</span>}
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            {file.file_size ? formatFileSize(file.file_size) : ''}
-            {file.file_size && '  '}
-            {new Date(file.created_at).toLocaleDateString('nb-NO')}
-            {file.description ? `  ·  ${file.description}` : ''}
-          </span>
-          {file.revision_note && <span style={{ fontSize: '11px', color: '#7c3aed', background: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>📝 {file.revision_note}</span>}
-          {(file.revision_log?.length > 0) && (
-            <button onClick={(e) => { e.stopPropagation(); setShowHistory(!showHistory) }}
-              style={{ fontSize: '11px', color: '#2563eb', background: '#eff6ff', padding: '1px 8px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: '500' }}>
-              📋 {file.revision_log.length} revisjon{file.revision_log.length > 1 ? 'er' : ''}
-            </button>
-          )}
+          </div>
         </div>
-        {/* Endringslogg inline */}
-        {showHistory && file.revision_log?.length > 0 && (
-          <div style={{ marginTop: '8px', background: '#f8fafc', borderRadius: '8px', padding: '10px 12px', border: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.04em' }}>ENDRINGSLOGG</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {[...file.revision_log].reverse().map((entry, i) => (
-                <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '12px' }}>
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i === 0 ? '#059669' : '#cbd5e1', marginTop: '5px', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: '600', color: '#059669' }}>{entry.revision}</span>
-                      <span style={{ color: '#94a3b8' }}>{new Date(entry.date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      <span style={{ color: '#64748b' }}>{entry.user_email?.split('@')[0]}</span>
-                    </div>
-                    <div style={{ color: '#374151', marginTop: '2px', lineHeight: 1.4 }}>{entry.note}</div>
-                    {entry.file_size && entry.prev_file_size && (
-                      <div style={{ color: '#94a3b8', marginTop: '2px', fontSize: '11px' }}>
-                        Filstørrelse: {formatFileSize(entry.prev_file_size)} → {formatFileSize(entry.file_size)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Mobil: kompakte knapper på høyre side */}
+        {isMob && (
+          <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
+            {canPreview && <button onClick={openPreview} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>👁️</button>}
+            <button onClick={() => onDownload(file)} style={{ background:'#f8fafc', color:'#475569', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>⬇️</button>
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
-        {supportsRevision && !isArchived && onNewRevision && (
-          <label style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669',
-            border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer',
-            fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-            🔄 Ny revisjon
-            <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
-          </label>
-        )}
-        {canPreview && <button onClick={openPreview} title="Forhåndsvisning"
-          style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
-        <button onClick={() => onDownload(file)} title="Last ned"
-          style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
-        <button onClick={() => onDelete(file)} title="Slett"
-          style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
-      </div>
+      {/* Desktop: ekstra info og knapper */}
+      {!isMob && (
+        <>
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
+            {supportsRevision && !isArchived && onNewRevision && (
+              <label style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669',
+                border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer',
+                fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                🔄 Ny revisjon
+                <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
+              </label>
+            )}
+            {canPreview && <button onClick={openPreview} title="Forhåndsvisning"
+              style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
+            <button onClick={() => onDownload(file)} title="Last ned"
+              style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
+            <button onClick={() => onDelete(file)} title="Slett"
+              style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
+          </div>
+        </>
+      )}
+      {/* Mobil: revisjon + slett som egen rad */}
+      {isMob && (supportsRevision && !isArchived && onNewRevision || true) && (
+        <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end' }}>
+          {supportsRevision && !isArchived && onNewRevision && (
+            <label style={{ padding:'5px 10px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px' }}>
+              🔄 Ny revisjon
+              <input type="file" style={{ display:'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
+            </label>
+          )}
+          <button onClick={() => onDelete(file)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'11px' }}>🗑️</button>
+        </div>
+      )}
     </div>
 
     {/* ── Forhåndsvisning fullskjerm-modal ── */}
