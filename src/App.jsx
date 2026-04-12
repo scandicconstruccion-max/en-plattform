@@ -688,7 +688,7 @@ function ContactSection({ title, items, onChange }) {
       </div>
       {items.map((item, i) => (
         <div key={i} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', marginBottom:'10px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'8px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'8px' }}>
             <FInput value={item.company || item.name || ''} onChange={e => update(i, 'company', e.target.value)} placeholder="Firma" />
             <FInput value={item.trade || item.discipline || ''} onChange={e => update(i, 'trade', e.target.value)} placeholder="Fag/disiplin" />
             <FInput value={item.contact_person || ''} onChange={e => update(i, 'contact_person', e.target.value)} placeholder="Kontaktperson" />
@@ -709,7 +709,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
   const [form, setForm] = useState(initial || emptyProsjekt)
   const [pnrError, setPnrError] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const g2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }
+  const g2 = { display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }
   const sec = (label) => <h3 style={{ margin:'8px 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a', borderBottom:'1px solid #f1f5f9', paddingBottom:'8px' }}>{label}</h3>
   // Filtrer ut seg selv fra overordnet-listen (kan ikke være sitt eget parent)
   const parentProjects = (allProjects || []).filter(p => p.id !== initial?.id)
@@ -1202,7 +1202,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
           <div style={card}>
             <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
               {project.address && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Adresse</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{project.address}</p></div>}
               {(project.start_date||project.end_date) && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Periode</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{project.start_date && new Date(project.start_date).toLocaleDateString('nb-NO')}{project.end_date && ` – ${new Date(project.end_date).toLocaleDateString('nb-NO')}`}</p></div>}
               {project.budget && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Budsjett</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</p></div>}
@@ -4472,16 +4472,17 @@ const hmsInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0'
 const hmsCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
 function HmsModalShell({ title, onClose, size, children }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const maxWidth = size === 'xl' ? '860px' : size === 'lg' ? '680px' : '520px'
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? '0' : '16px' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
+      <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? '0' : '20px', width: '100%', maxWidth: isMob ? '100%' : maxWidth, maxHeight: isMob ? '100vh' : '92vh', height: isMob ? '100vh' : 'auto', display: 'flex', flexDirection: 'column', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ padding: isMob ? '14px 16px' : '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: isMob ? '15px' : '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ overflowY: 'auto', flex: 1 }}>{children}</div>
+        <div style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>{children}</div>
       </div>
     </div>
   )
@@ -4788,8 +4789,8 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <HmsModalShell title={`🦺 ${isEdit?'Rediger':'Ny'} SJA – Sikker Jobb Analyse`} onClose={onClose} size="xl">
-      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+      <form onSubmit={handleSave} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '24px', display:'flex', flexDirection:'column', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel / Jobbtype *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Arbeid i høyde – takarbeid" style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
@@ -4800,7 +4801,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
         </div>
         <div>
           <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Nødnummer</h3>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
             {[['brann','🔥 Brann','110'],['politi','👮 Politi','112'],['ambulanse','🚑 Ambulanse','113'],['intern','☎️ Intern','Internnr']].map(([k,lbl,ph]) => (
               <div key={k}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{lbl}</label><input value={nodNummer[k]} onChange={e=>setNodNummer(v=>({...v,[k]:e.target.value}))} placeholder={ph} style={hmsInp} /></div>
             ))}
@@ -4823,13 +4824,13 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
                     {operasjoner.length>1 && <button type="button" onClick={()=>removeOp(op.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
                   </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
                   <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Arbeidsoperasjon</label><input value={op.operasjon} onChange={e=>updateOp(op.id,'operasjon',e.target.value)} placeholder="Hva skal gjøres" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Identifisert fare</label><input value={op.fare} onChange={e=>updateOp(op.id,'fare',e.target.value)} placeholder="Hva kan gå galt?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={op.konsekvens} onChange={e=>updateOp(op.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
                   <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Tiltak</label><input value={op.tiltak} onChange={e=>updateOp(op.id,'tiltak',e.target.value)} placeholder="Hva gjøres for å redusere risikoen?" style={hmsInp} /></div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet: <strong>{op.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={op.sannsynlighet} onChange={e=>updateOp(op.id,'sannsynlighet',+e.target.value)} style={{ width:'100%', accentColor:'#2563eb' }} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Alvorlighet: <strong>{op.alvorlighet}</strong>/5</label><input type="range" min="1" max="5" value={op.alvorlighet} onChange={e=>updateOp(op.id,'alvorlighet',+e.target.value)} style={{ width:'100%', accentColor:'#2563eb' }} /></div>
                 </div>
@@ -4867,7 +4868,7 @@ function SjaView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#2563eb' }}>🦺 Sikker Jobb Analyse</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Dato',d.dato],['Sted',d.sted],['Ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -4896,7 +4897,7 @@ function SjaView({ rec, proj }) {
                   <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{op.operasjon||`Operasjon ${i+1}`}</span>
                   <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
                   {op.fare&&<div><strong>Fare:</strong> {op.fare}</div>}
                   {op.konsekvens&&<div><strong>Konsekvens:</strong> {op.konsekvens}</div>}
                   {op.tiltak&&<div><strong>Tiltak:</strong> {op.tiltak}</div>}
@@ -4949,7 +4950,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
   return (
     <HmsModalShell title={`🚨 ${isEdit?'Rediger':'Ny'} RUH – Uønsket Hendelse`} onClose={onClose} size="lg">
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="Kort beskrivelse av hendelsen" style={hmsInp} /></div>
           <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Hendelsestype</label><select value={form.hendelsestype} onChange={e=>set('hendelsestype',e.target.value)} style={hmsInp}>{TYPER.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
@@ -4990,7 +4991,7 @@ function RuhView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Rapport om Uønsket Hendelse</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Hendelsestype',d.hendelsestype],['Dato',d.dato],['Tidspunkt',d.tidspunkt],['Sted',d.sted],['Rapportert av',d.ansvarlig],['Involverte',d.involverte],['Vitner',d.vitner]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -5038,7 +5039,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
   return (
     <HmsModalShell title={`📊 ${isEdit?'Rediger':'Ny'} Risikoanalyse`} onClose={onClose} size="xl">
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={hmsInp} placeholder="Navn på risikoanalysen" /></div>
           <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
@@ -5066,7 +5067,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
                     {risikoer.length>1 && <button type="button" onClick={()=>removeR(r.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
                   </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Fare / Risiko</label><input value={r.fare} onChange={e=>updateR(r.id,'fare',e.target.value)} placeholder="Hva er faren?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Årsak</label><input value={r.arsak} onChange={e=>updateR(r.id,'arsak',e.target.value)} placeholder="Hva kan forårsake det?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={r.konsekvens} onChange={e=>updateR(r.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
@@ -5094,7 +5095,7 @@ function RisikoView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#7c3aed' }}>📊 Risikoanalyse</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Dato',d.dato],['Område',d.omrade],['Ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -5110,7 +5111,7 @@ function RisikoView({ rec, proj }) {
                 <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{r.fare||`Risiko ${i+1}`}</span>
                 <span style={{ background:'white', color:rc.color, fontSize:'13px', fontWeight:'800', padding:'4px 12px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
                 {r.arsak&&<div><strong>Årsak:</strong> {r.arsak}</div>}
                 {r.konsekvens&&<div><strong>Konsekvens:</strong> {r.konsekvens}</div>}
                 {r.tiltak&&<div><strong>Tiltak:</strong> {r.tiltak}</div>}
@@ -5163,7 +5164,7 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
   return (
     <HmsModalShell title={`📦 ${isEdit?'Rediger':'Ny'} Mottakskontroll`} onClose={onClose} size="xl">
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Mottak stål – leveranse 14" style={hmsInp} /></div>
           <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
@@ -5228,7 +5229,7 @@ function MottakskontrollView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0891b2' }}>📦 Mottakskontroll</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Dato',d.dato],['Leverandør',d.leverandor],['Ordrenr.',d.ordrenummer],['Mottatt av',d.mottattAv],['Sted',d.sted],['Transportør',d.transportor],['Fraktseddel',d.fraktseddel]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -5317,7 +5318,7 @@ function HandbokModal({ user, initial, onClose, onSaved }) {
     <HmsModalShell title={`📗 ${isEdit?'Rediger':'Ny'} HMS-håndbok`} onClose={onClose} size="xl">
       <form onSubmit={handleSave} style={{ display:'flex', flexDirection:'column', height:'100%', maxHeight:'80vh' }}>
         {/* Toppinfo */}
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
           <div><label style={lbl()}>Bedrift</label><input value={form.bedrift} onChange={e=>set('bedrift',e.target.value)} placeholder="Bedriftens navn" style={hmsInp} /></div>
           <div><label style={lbl()}>HMS-ansvarlig *</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} required placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Revisjonsansvarlig</label><input value={form.revisjonsansvarlig} onChange={e=>set('revisjonsansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -5402,7 +5403,7 @@ function HandbokView({ rec, proj }) {
             </span>
           )}
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)', gap:'8px' }}>
           {[['Bedrift',d.bedrift],['Versjon',d.versjon],['Dato',d.dato],['HMS-ansvarlig',d.ansvarlig],['Revisjonsansvarlig',d.revisjonsansvarlig],['Neste revisjon',d.neste_revisjon]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
               <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -5750,7 +5751,7 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={mCard}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Maskininformasjon</h3>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
               {[['Kategori',m.category],['Type',m.type],['Merke',m.brand],['Modell',m.model],['Serienummer',m.serial_number],['Årsmodell',m.year],['Siste service',m.last_service],['Neste service',m.next_service],['Prosjekt',proj?.name]].filter(r=>r[1]).map(([k,v])=>(
                 <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                   <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -5952,7 +5953,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
         <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Ny status</label>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
               {Object.entries(MASKIN_STATUS).map(([s,cfg]) => (
                 <button key={s} type="button" onClick={()=>setNewStatus(s)}
                   style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${newStatus===s?cfg.border:'#e2e8f0'}`, background:newStatus===s?cfg.bg:'white', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
@@ -6092,7 +6093,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
         <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Navn / Beskrivelse *')}<input value={form.name} onChange={e=>set('name',e.target.value)} required placeholder="F.eks. Slagborrmaskin Makita, Rullestillas 4m" style={mInp} /></div>
 
             {/* Kategori */}
@@ -6643,7 +6644,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
           <div style={qCard}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
               <div>
                 <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
                 {[['Navn', q.customer_name], ['Adresse', q.customer_address], ['Org.nr', q.customer_orgnr], ['E-post', q.customer_email]].filter(r=>r[1]).map(([k,v]) => (
@@ -6934,7 +6935,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
         <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
           {/* STEP 1 - Info */}
           {step === 1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tilbudstittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbud betongarbeider Blokk B" style={qInp} /></div>
               <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
               <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
@@ -7625,7 +7626,7 @@ function UESvarPage() {
               <span style={{ fontSize:'12px', color:'#94a3b8' }}>{foresp.foresporsel_nr}</span>
             </div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>PROSJEKT</div>
               <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{foresp.prosjekt_navn}</div>
@@ -8201,7 +8202,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 
         <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
           {step===1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
               <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
               <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
@@ -8400,7 +8401,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
                       </div>
                     </div>
                   )}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                     <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn * {ue.customer_id&&<span style={{ color:'#059669', fontWeight:'500' }}>✓ Koblet</span>}</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={{ ...tInp, borderColor: ue.dupWarning?'#fde68a':ue.customer_id?'#bbf7d0':'#e2e8f0' }} /></div>
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Kontaktperson</label><input value={ue.contact_name} onChange={e=>updateUE(ue.id,'contact_name',e.target.value)} placeholder="Fullt navn" style={tInp} /></div>
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={{ ...tInp, borderColor: ue.dupWarning?'#fde68a':'#e2e8f0' }} /></div>
@@ -8975,7 +8976,7 @@ function EndringsmeldingPage() {
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
           <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'14px' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
               <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
               <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
@@ -8995,7 +8996,7 @@ function EndringsmeldingPage() {
 
             <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px' }}>
               <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>💰 Kostnadskonsekvens</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'10px' }}>
                 <div>{lbl('Timer')}<input type="number" value={form.hours} onChange={e=>set('hours',e.target.value)} placeholder="0" style={inp} /></div>
                 <div>{lbl('Materialer (kr)')}<input type="number" value={form.materials_cost} onChange={e=>set('materials_cost',e.target.value)} placeholder="0" style={inp} /></div>
                 <div>{lbl('UE (kr)')}<input type="number" value={form.ue_cost} onChange={e=>set('ue_cost',e.target.value)} placeholder="0" style={inp} /></div>
@@ -9130,7 +9131,7 @@ function EndringsmeldingPage() {
             <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
             <p style={{ margin:0, fontSize:'14px', color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{em.description || '—'}</p>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', marginBottom:'16px' }}>
             <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
               <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
               <div style={{ fontSize:'12px', color:'#64748b' }}>Totalt beløp</div>
@@ -9572,7 +9573,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
           <div style={oCard}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
               <div>
                 <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
                 {[['Navn',o.customer_name],['Adresse',o.customer_address],['Org.nr',o.customer_orgnr],['E-post',o.customer_email]].filter(r=>r[1]).map(([k,v])=>(
@@ -9767,7 +9768,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
 
         <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
           {step===1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
               <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
               <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
@@ -10596,7 +10597,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 {inv.our_orgnr&&<div style={{ fontSize:'13px', color:'#64748b' }}>Org.nr: {inv.our_orgnr}</div>}
               </div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'20px', marginBottom:'16px' }}>
               <div>
                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'8px' }}>Fakturert til</div>
                 {[inv.customer_name,inv.customer_address,inv.customer_orgnr?`Org.nr: ${inv.customer_orgnr}`:null,inv.customer_email].filter(Boolean).map((v,i)=><div key={i} style={{ fontSize:'14px', color:'#0f172a', marginBottom:'2px' }}>{v}</div>)}
@@ -10712,7 +10713,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
               {/* Type kreditering */}
               <div>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kreditering</label>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                   <button onClick={() => { setKreditMode('full'); setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100}))) }}
                     style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${kreditMode==='full'?'#7c3aed':'#e2e8f0'}`, background:kreditMode==='full'?'#f5f3ff':'white', cursor:'pointer', textAlign:'center' }}>
                     <div style={{ fontWeight:'700', fontSize:'13px', color:kreditMode==='full'?'#7c3aed':'#475569' }}>Full kreditering</div>
@@ -10848,7 +10849,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
         </div>
         <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
           {/* Info */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Faktura betongarbeider Blokk B" style={iInp} /></div>
             <div>{lbl('Fakturanummer')}<input value={form.invoice_number} onChange={e=>set('invoice_number',e.target.value)} style={iInp} /></div>
             <div>{lbl('Fakturadato')}<input type="date" value={form.invoice_date} onChange={e=>set('invoice_date',e.target.value)} style={iInp} /></div>
@@ -10858,7 +10859,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
             <div>{lbl('Bankkonto')}<input value={form.bank_account} onChange={e=>set('bank_account',e.target.value)} placeholder="1234.56.78901" style={iInp} /></div>
             <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'20px' }}>
             <div>
               <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>👤 Fakturert til (kunde)</div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -11763,7 +11764,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
             <>
               <div style={eCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👤 Personopplysninger</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                   {[['Fullt navn',`${emp.first_name} ${emp.last_name}`],['Stilling',emp.position],['Avdeling',emp.department],['Kontraktstype',emp.contract_type],['E-post',emp.email],['Telefon',emp.phone],['Adresse',emp.address],['Fødselsdato',emp.birth_date],['Ansattdato',emp.hired_date],['Sluttdato',emp.end_date]].filter(r=>r[1]).map(([k,v])=>(
                     <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                       <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -11775,7 +11776,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
               {(emp.emergency_contact_name||emp.emergency_contact_phone) && (
                 <div style={{ ...eCard, background:'#fff7ed', border:'1px solid #fed7aa' }}>
                   <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#ea580c' }}>🚨 Nødkontakt</h3>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px' }}>
                     {[['Navn',emp.emergency_contact_name],['Telefon',emp.emergency_contact_phone],['Relasjon',emp.emergency_contact_relation]].filter(r=>r[1]).map(([k,v])=>(
                       <div key={k}><div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{k}</div><div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{v}</div></div>
                     ))}
@@ -11862,7 +11863,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
           {activeTab==='salary' && (
             <div style={eCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>💰 Lønn og satser (intern)</h3>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 {emp.hourly_rate && (
                   <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'16px', border:'1px solid #bbf7d0', textAlign:'center' }}>
                     <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Timesats</div>
@@ -11963,7 +11964,7 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           {sec('👤 Personopplysninger')}
           <div>{lbl('Fornavn *')}<input value={form.first_name} onChange={e=>set('first_name',e.target.value)} placeholder="Fornavn" style={eInp} /></div>
           <div>{lbl('Etternavn *')}<input value={form.last_name} onChange={e=>set('last_name',e.target.value)} placeholder="Etternavn" style={eInp} /></div>
@@ -12021,7 +12022,7 @@ function LeggTilSertifikatModal({ employeeId, onClose, onSaved }) {
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📜 Legg til sertifikat</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ padding:'24px', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sertifikattype *</label>
             <select value={form.name} onChange={e=>set('name',e.target.value)} style={eInp}>
@@ -12078,7 +12079,7 @@ function LeggTilProsjektModal({ employeeId, projects, existingIds, onClose, onSa
             </select>
           </div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Rolle på prosjektet</label><input value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} placeholder="F.eks. Anleggsleder, Fagarbeider" style={eInp} /></div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
             <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Fra dato</label><input type="date" value={form.from_date} onChange={e=>setForm(f=>({...f,from_date:e.target.value}))} style={eInp} /></div>
             <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Til dato</label><input type="date" value={form.to_date} onChange={e=>setForm(f=>({...f,to_date:e.target.value}))} style={eInp} /></div>
           </div>
@@ -12242,7 +12243,7 @@ function SkillsTab({ employeeId, skills, onRefresh }) {
 
       {adding && (
         <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'16px', display:'flex', flexDirection:'column', gap:'10px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
             <div>
               <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Kompetanse</label>
               <select value={newSkill} onChange={e=>setNewSkill(e.target.value)} style={{ width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'white' }}>
@@ -12850,7 +12851,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   {/* Type: Arbeid eller Frav\u00E6r */}
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Type registrering</label>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px' }}>
                       <button onClick={() => updateEntry(date, 'absence_type', '')}
                         style={{ padding:'8px', borderRadius:'8px', border: `2px solid ${!entry?.absence_type ? '#059669' : '#e2e8f0'}`, background: !entry?.absence_type ? '#f0fdf4' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: !entry?.absence_type ? '#059669' : '#64748b' }}>
                         \u23F1\uFE0F Arbeid
@@ -12866,7 +12867,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     <>
                       <div>
                         <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Frav\u00E6rstype</label>
-                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px' }}>
                           {ABSENCE_TYPES.filter(a => a.id).map(a => (
                             <button key={a.id} onClick={() => {
                               updateEntry(date, 'absence_type', a.id)
@@ -12898,7 +12899,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     </div>
                   )}
 {/* Project + Activity */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
                       <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
@@ -12929,7 +12930,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   {/* Hours breakdown */}
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Timer (juster manuelt)</label>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px' }}>
                       {[['normal_hours','Normal','#16a34a'],['overtime_50','OT 50%','#d97706'],['overtime_100','OT 100%','#dc2626']].map(([f,l,col])=>(
                         <div key={f}>
                           <div style={{ fontSize:'11px', color:col, fontWeight:'700', marginBottom:'4px', textAlign:'center' }}>{l}</div>
@@ -12942,7 +12943,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   </div>
 
                   {/* Travel + diet */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px' }}>
                     {[['travel_km','🚗 Km','0'],['diet','🍽️ Diett kr','0'],['expenses','💳 Utlegg kr','0']].map(([f,l,ph])=>(
                       <div key={f}>
                         <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>{l}</label>
@@ -13208,7 +13209,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 
       {/* Per periode */}
       {reportType === 'oversikt' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Timer per prosjekt</h3>
             {byProject.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:byProject.map(p=>(
@@ -13239,7 +13240,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
       )}
 
       {/* Eksport-knapper */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+      <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
         <button onClick={exportCSV} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
           📥 Eksporter timelister (CSV)
         </button>
@@ -15912,7 +15913,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)',gap:'8px' }}>
               {[['group','👥','Gruppe'],['project','🏗️','Prosjekt'],['direct','👤','Direkte']].map(([v,e,l])=>(
                 <button key={v} onClick={()=>set('type',v)}
                   style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${form.type===v?'#059669':'#e2e8f0'}`,background:form.type===v?'#f0fdf4':'white',cursor:'pointer',textAlign:'center' }}>
@@ -16441,7 +16442,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               {/* Kontaktinfo */}
               <div style={card}>
                 <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Kontaktinformasjon</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                   {[
                     ['E-post', kunde.email, `mailto:${kunde.email}`],
                     ['Telefon', kunde.phone, `tel:${kunde.phone}`],
@@ -16811,7 +16812,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
               ))}
             </div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>
               {lbl('Navn *')}<input value={form.name} onChange={e => checkDuplicate('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={{ ...kundeInp, borderColor: dupWarning && form.name ? '#f87171' : '#e2e8f0' }} />
               {dupWarning && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#dc2626' }}>{dupWarning}</p>}
@@ -17006,7 +17007,7 @@ function CRMPage() {
         </div>
 
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'10px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(5,1fr)' : 'repeat(5,1fr)', gap:'10px' }}>
           {[
             { label:'Totalt', value:stats.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
             { label:'Leads', value:stats.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
@@ -17299,7 +17300,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
             <>
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                   {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal&&c.city?`${c.postal} ${c.city}`:c.city||c.postal],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null]].filter(r=>r[1]).map(([k,v])=>(
                     <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                       <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -18075,7 +18076,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'10px' }}>
                 <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>+ Nytt oppfølgingspunkt</div>
                 <input value={newFollowup.description} onChange={e=>setNewFollowup(f=>({...f,description:e.target.value}))} placeholder="Beskrivelse av oppfølging..." style={bInp} />
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                   <input value={newFollowup.responsible} onChange={e=>setNewFollowup(f=>({...f,responsible:e.target.value}))} placeholder="Ansvarlig person" style={bInp} />
                   <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
                 </div>
@@ -18113,7 +18114,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           {tab==='info'&&(
             <div style={bCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Befaringsinfo</h3>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                 {[['Tittel',ins.title],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
                   <div key={k} style={{ background:'#f8fafc',borderRadius:'8px',padding:'9px 12px' }}>
                     <div style={{ fontSize:'11px',color:'#94a3b8',textTransform:'uppercase',fontWeight:'600' }}>{k}</div>
@@ -18514,7 +18515,7 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
           )}
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Byggefase *</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'6px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(2,1fr)',gap:'6px' }}>
               {BYGGEFASER.map(f=>(
                 <button key={f.id} onClick={()=>setFase(f.id)} style={{ padding:'9px 10px',borderRadius:'10px',border:`2px solid ${fase===f.id?f.color:'#e2e8f0'}`,background:fase===f.id?f.bg:'white',cursor:'pointer',fontSize:'12px',fontWeight:'700',color:fase===f.id?f.color:'#64748b',textAlign:'left' }}>{f.label}</button>
               ))}
@@ -18852,7 +18853,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
           ))}
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Dokumenttype</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)',gap:'6px' }}>
               {Object.entries(FDV_DOC_TYPES).map(([k,v])=>(
                 <button key={k} onClick={()=>set('doc_type',k)} style={{ padding:'7px',borderRadius:'8px',border:`2px solid ${form.doc_type===k?'#059669':'#e2e8f0'}`,background:form.doc_type===k?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'700',color:form.doc_type===k?'#059669':'#64748b' }}>{v.emoji} {v.label}</button>
               ))}
@@ -19237,7 +19238,7 @@ function MinBedriftPage() {
             {/* Firmainfo */}
             <div style={mbCard}>
               {mbSec('Firmainfo')}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 <div style={{ gridColumn:'1/-1' }}>{mbLbl('Firmanavn *')}<input value={settings?.name||''} onChange={e=>set('name',e.target.value)} placeholder="Bedriftens offisielle navn" style={mbInp} /></div>
                 <div>{mbLbl('Org.nr')}<input value={settings?.org_number||''} onChange={e=>set('org_number',e.target.value)} placeholder="123 456 789" style={mbInp} /></div>
                 <div>{mbLbl('MVA-nummer')}<input value={settings?.vat_number||''} onChange={e=>set('vat_number',e.target.value)} placeholder="NO 123 456 789 MVA" style={mbInp} /></div>
@@ -19253,7 +19254,7 @@ function MinBedriftPage() {
             {/* Økonomi */}
             <div style={mbCard}>
               {mbSec('Økonomiinnstillinger')}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 <div>{mbLbl('Bankkontonummer')}<input value={settings?.bank_account||''} onChange={e=>set('bank_account',e.target.value)} placeholder="xxxx.xx.xxxxx" style={mbInp} /></div>
                 <div>{mbLbl('Standard betalingsbetingelser')}<input value={settings?.default_payment_terms||''} onChange={e=>set('default_payment_terms',e.target.value)} placeholder="30 dager netto" style={mbInp} /></div>
                 <div>{mbLbl('Standard MVA-sats (%)')}<input type="number" value={settings?.default_vat_rate||25} onChange={e=>set('default_vat_rate',e.target.value)} placeholder="25" style={mbInp} /></div>
@@ -19273,7 +19274,7 @@ function MinBedriftPage() {
             {/* Nøkkelpersoner */}
             <div style={mbCard}>
               {mbSec('Nøkkelpersoner')}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 <div>{mbLbl('Daglig leder')}<input value={settings?.contact_ceo||''} onChange={e=>set('contact_ceo',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
                 <div>{mbLbl('HMS-ansvarlig')}<input value={settings?.contact_hms||''} onChange={e=>set('contact_hms',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
                 <div>{mbLbl('Regnskapsfører')}<input value={settings?.contact_accountant||''} onChange={e=>set('contact_accountant',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
@@ -19575,7 +19576,7 @@ function BrukeradminPage() {
         </div>
 
         {/* Stats */}
-        <div style={{ display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px' }}>
+        <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(5,1fr)' : 'repeat(5,1fr)',gap:'10px' }}>
           {[
             { label:'Totalt', value:users.length, emoji:'👥', bg:'#f8fafc', color:'#0f172a' },
             { label:'Aktive', value:activeCount, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
@@ -20523,7 +20524,7 @@ function KalkulasjonPage({ onNavigate }) {
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#3b82f6', marginBottom:'6px', letterSpacing:'0.05em' }}>KALKULASJON A</div>
               <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{kA.title}</div>
               <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'12px' }}>{kA.kalk_number}{kA.customer_name ? ` · ${kA.customer_name}` : ''}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                 <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
                   <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(totA.totMedFortjeneste)}</div>
                   <div style={{ fontSize:'10px', color:'#94a3b8' }}>totalsum</div>
@@ -20564,7 +20565,7 @@ function KalkulasjonPage({ onNavigate }) {
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px', letterSpacing:'0.05em' }}>KALKULASJON B</div>
               <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{kB.title}</div>
               <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'12px' }}>{kB.kalk_number}{kB.customer_name ? ` · ${kB.customer_name}` : ''}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                 <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
                   <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(totB.totMedFortjeneste)}</div>
                   <div style={{ fontSize:'10px', color:'#94a3b8' }}>totalsum</div>
@@ -22708,7 +22709,7 @@ function KalkFaktorerPage({ onBack }) {
         {/* Forklaring */}
         <div style={{ background:'#eff6ff', borderRadius:'14px', border:'1px solid #bfdbfe', padding:'16px 20px' }}>
           <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'8px' }}>Hvordan faktorene brukes</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'12px', color:'#1e40af', lineHeight:1.5 }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px', fontSize:'12px', color:'#1e40af', lineHeight:1.5 }}>
             <div><strong>Produksjonslønn:</strong> Timelønn for fagarbeider</div>
             <div><strong>Sosiale kostn.:</strong> Arbeidsgiveravg., feriepenger etc.</div>
             <div><strong>Faste kostn.:</strong> Kontor, admin, forsikring etc.</div>
@@ -22886,7 +22887,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
         {/* Body */}
         <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px', maxHeight:'70vh', overflowY:'auto' }}>
           {/* Prosjektinfo */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektnavn *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbygg Strandveien 12" style={qInp} /></div>
             <div>{lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
             <div>{lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={qInp} /></div>
@@ -24450,7 +24451,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                           }} title="Tilbakestill til bedriftsstandard" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#94a3b8', padding:'2px' }}>↺</button>
                         </div>
                       </div>
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px' }}>
+                      <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'4px' }}>
                         {[
                           { key: 'produksjonslonn', label: 'Lønn', unit: 'kr/t' },
                           { key: 'sosiale_prosent', label: 'Sosiale', unit: '%' },
@@ -24862,7 +24863,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         {isComparing && diff && (
                           <div style={{ marginTop:'12px', background:'white', borderRadius:'10px', padding:'14px', border:'1px solid #e2e8f0' }}>
                             <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', marginBottom:'10px' }}>Endringer fra v{v.version_number} til nåværende:</div>
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
                               <div style={{ background: diff.sumDiff > 0 ? '#fef2f2' : diff.sumDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
                                 <div style={{ fontSize:'14px', fontWeight:'800', color: diff.sumDiff > 0 ? '#dc2626' : diff.sumDiff < 0 ? '#059669' : '#64748b' }}>
                                   {diff.sumDiff > 0 ? '+' : ''}{fmt(diff.sumDiff)}
