@@ -9501,7 +9501,7 @@ function OrdrePage() {
             {!isMobO && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            {!isMobO && quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Fra tilbud</button>}
+            {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 10px' : '10px 16px', fontSize: isMobO ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobO ? '📋 Tilbud' : '📋 Fra tilbud'}</button>}
             <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 12px' : '11px 20px', fontSize: isMobO ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ordre</button>
           </div>
         </div>
@@ -9855,27 +9855,28 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { grandTotal } = calcOrder(chapters, form.global_markup)
+  const isMobOE = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobOE ? 'stretch' : 'center', justifyContent:'center', padding: isMobOE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📦 {isEdit?'Rediger':'Ny'} ordre</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobOE ? '0' : '20px', width:'100%', maxWidth: isMobOE ? '100%' : '900px', maxHeight: isMobOE ? '100vh' : '94vh', height: isMobOE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobOE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobOE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobOE ? '8px' : '16px', flex:1, minWidth:0 }}>
+            <h2 style={{ margin:0, fontSize: isMobOE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>📦 {isEdit?'Rediger':'Ny'} ordre</h2>
             <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Informasjon'],['2','Linjer & Poster']].map(([n,l])=>(
-                <button key={n} onClick={()=>setStep(+n)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize:'13px', cursor:'pointer' }}>{n}. {l}</button>
+              {[['1', isMobOE ? 'Info' : 'Informasjon'],['2', isMobOE ? 'Poster' : 'Linjer & Poster']].map(([n,l])=>(
+                <button key={n} onClick={()=>setStep(+n)} style={{ padding: isMobOE ? '4px 10px' : '6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize: isMobOE ? '11px' : '13px', cursor:'pointer' }}>{n}. {l}</button>
               ))}
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtO(grandTotal)}</strong></span>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobOE ? '6px' : '10px', flexShrink:0 }}>
+            {!isMobOE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtO(grandTotal)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobOE ? '14px' : '24px', WebkitOverflowScrolling:'touch' }}>
           {step===1 && (
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
@@ -9899,15 +9900,15 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                 const { sum, total } = calcOrderChapter(ch)
                 return (
                   <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-                    <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
-                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
+                    <div style={{ background:'#f8fafc', padding: isMobOE ? '10px 12px' : '12px 18px', display:'flex', alignItems:'center', gap: isMobOE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobOE ? 'wrap' : 'nowrap' }}>
+                      <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700', minWidth: isMobOE ? '120px' : 'auto', fontSize: isMobOE ? '13px' : '14px' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" style={{ ...oInp, width: isMobOE ? '60px' : '100px', fontSize: isMobOE ? '12px' : '14px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobOE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
+                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
-                    <div style={{ padding:'14px 18px' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <div style={{ padding: isMobOE ? '10px' : '14px 18px', overflowX: isMobOE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobOE ? '600px' : 'auto' }}>
                         <thead><tr>{['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
                         <tbody>
                           {ch.posts.map(p => {
@@ -9940,12 +9941,12 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
             </div>
           )}
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>← Tilbake</button>}</div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step===1&&<button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Linjer →</button>}
-            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett ordre'}</button>}
+        <div style={{ padding: isMobOE ? '12px 14px' : '16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0, gap:'8px' }}>
+          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding: isMobOE ? '8px 12px' : '10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOE ? '12px' : '14px' }}>← Tilbake</button>}</div>
+          {isMobOE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmtO(grandTotal)}</span>}
+          <div style={{ display:'flex', gap: isMobOE ? '6px' : '10px' }}>
+            {step===1&&<button onClick={()=>setStep(2)} style={{ padding: isMobOE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{isMobOE ? 'Neste →' : 'Neste: Linjer →'}</button>}
+            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding: isMobOE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
           </div>
         </div>
       </div>
@@ -9981,14 +9982,14 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center', justifyContent:'center', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Opprett ordre fra tilbud</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px', width:'100%', maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '500px', maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh', height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto', boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>📋 Ordre fra tilbud</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '24px', display:'flex', flexDirection:'column', gap:'16px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch' }}>
           <p style={{ margin:0, fontSize:'14px', color:'#64748b' }}>Velg et akseptert tilbud. Alle kapitler og poster kopieres automatisk til ordren.</p>
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {quotes.map(q => {
@@ -10007,8 +10008,7 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
             })}
           </div>
           <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett ordre'}</button>
+            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 'auto' }}>{saving?'Oppretter...':'Opprett ordre'}</button>
           </div>
         </div>
       </div>
