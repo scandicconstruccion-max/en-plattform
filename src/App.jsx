@@ -4879,7 +4879,7 @@ function SjaView({ rec, proj }) {
       {d.nodNummer && (
         <div style={{ ...hmsCard, background:'#fef2f2', border:'1px solid #fecaca' }}>
           <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Nødnummer</h3>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'8px' }}>
             {[['🔥 Brann',d.nodNummer.brann||'110'],['👮 Politi',d.nodNummer.politi||'112'],['🚑 Ambulanse',d.nodNummer.ambulanse||'113'],['☎️ Intern',d.nodNummer.intern]].filter(r=>r[1]).map(([k,v]) => (
               <div key={k} style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center', border:'1px solid #fecaca' }}><div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'600', marginBottom:'4px' }}>{k}</div><div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{v}</div></div>
             ))}
@@ -5579,7 +5579,7 @@ function MaskinPage() {
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
         {/* Status stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(MASKIN_STATUS).map(([s,cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus===s?'alle':s)}
               style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}>
@@ -7851,7 +7851,7 @@ function AnbudsPage() {
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {[
             { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
             { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
@@ -11540,7 +11540,7 @@ function AnsattePage() {
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(EMP_STATUS).map(([s,cfg])=>(
             <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
               style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
@@ -16804,7 +16804,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
           {/* Kundetype */}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kunde</label>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'8px' }}>
               {Object.entries(KUNDE_TYPE).map(([key, cfg]) => (
                 <button key={key} type="button" onClick={() => set('type', key)}
                   style={{ padding:'9px 8px', borderRadius:'10px', border:`2px solid ${form.type === key ? cfg.color : '#e2e8f0'}`,
@@ -17743,7 +17743,7 @@ function BefaringPage() {
           </div>
           <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny befaring</button>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
           {[
             { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
             { label:'Planlagt', value:inspections.filter(i=>i.status==='planlagt').length, emoji:'📅', bg:'#eff6ff', color:'#2563eb' },
@@ -20762,7 +20762,7 @@ function KalkulasjonPage({ onNavigate }) {
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
         {/* Status cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(KALK_STATUS_CFG).map(([s, cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
               style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
