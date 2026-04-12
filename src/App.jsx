@@ -6732,12 +6732,32 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                     <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(total)}</div>
                   </div>
                 </div>
+                {isMobTD ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {(ch.posts || []).map((p, pi) => {
+                      const lineSum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <div key={pi} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{p.description || '—'}</span>
+                            <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmt(lineSum)}</span>
+                          </div>
+                          <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#64748b' }}>
+                            <span>{p.qty} {p.unit}</span>
+                            {p.unitPriceWork > 0 && <span>Arb: {fmt(p.unitPriceWork)}</span>}
+                            {p.unitPriceMaterial > 0 && <span>Mat: {fmt(p.unitPriceMaterial)}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
                 <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize: isMobTD ? '11px' : '13px', minWidth: isMobTD ? '420px' : 'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                   <thead>
                     <tr style={{ background:'#f8fafc' }}>
-                      {(isMobTD ? ['Beskr.','Mng','Enh','Arb','Mat','Sum'] : ['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum']).map((h,hi) => (
-                        <th key={hi} style={{ padding: isMobTD ? '6px 4px' : '8px 10px', textAlign: hi>=3 ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize: isMobTD ? '9px' : '11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                      {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map((h,hi) => (
+                        <th key={hi} style={{ padding:'8px 10px', textAlign: hi>=3 ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -6758,6 +6778,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                   </tbody>
                 </table>
                 </div>
+                )}
                 {ch.description && <p style={{ margin:'10px 0 0', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{ch.description}</p>}
               </div>
             )
