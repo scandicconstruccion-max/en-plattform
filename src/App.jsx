@@ -16438,9 +16438,9 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
     { id: 'notater', label: `📝 Notater (${notater.length})` },
   ]
 
-  const card = { background:'white', borderRadius: isMobKD ? '12px' : '16px', border:'1px solid #f1f5f9', padding: isMobKD ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
-
   const isMobKD = typeof window !== 'undefined' && window.innerWidth < 768
+
+  const card = { background:'white', borderRadius: isMobKD ? '12px' : '16px', border:'1px solid #f1f5f9', padding: isMobKD ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
