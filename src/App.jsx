@@ -10248,7 +10248,7 @@ function FakturaPage() {
             {!isMobF && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0 }}>
-            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobF ? '9px 10px' : '11px 18px', fontSize: isMobF ? '11px' : '14px', fontWeight:'600', cursor:'pointer', color:'#374151', whiteSpace:'nowrap' }}>{isMobF ? '📊 MVA' : '📊 MVA-rapport'}</button>
+            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background: showMvaReport ? '#7c3aed' : 'white', border: showMvaReport ? '1px solid #7c3aed' : '1px solid #e2e8f0', borderRadius:'10px', padding: isMobF ? '9px 10px' : '11px 18px', fontSize: isMobF ? '11px' : '14px', fontWeight:'600', cursor:'pointer', color: showMvaReport ? 'white' : '#374151', whiteSpace:'nowrap' }}>{showMvaReport ? (isMobF ? '📊 Lukk MVA' : '📊 Lukk MVA-rapport') : (isMobF ? '📊 MVA' : '📊 MVA-rapport')}</button>
             <div style={{ position:'relative' }}>
               <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobF ? '9px 12px' : '11px 20px', fontSize: isMobF ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobF ? '+ Faktura ▾' : '+ Ny faktura ▾'}</button>
             {showNew==='menu' && (
