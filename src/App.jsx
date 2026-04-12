@@ -16138,6 +16138,8 @@ function KunderPage() {
     } catch(e) { alert('Feil: ' + e.message) }
   }
 
+  const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -16160,30 +16162,32 @@ function KunderPage() {
   )
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <div>
-          <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
-          <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{kunder.length} registrerte kunder</p>
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={exportCSV} style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>
-            Eksporter CSV
-          </button>
-          <label style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151', display:'flex', alignItems:'center' }}>
-            Importer CSV
-            <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
-          </label>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobK ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', marginBottom: isMobK ? '10px' : '0' }}>
+          <div>
+            <h1 style={{ margin:0, fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{kunder.length} kunder</p>
+          </div>
           <button onClick={() => setShowNew(true)}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '8px 12px' : '10px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
             + Ny kunde
           </button>
         </div>
+        {!isMobK && (
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={exportCSV} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151' }}>Eksporter CSV</button>
+            <label style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'flex', alignItems:'center' }}>
+              Importer CSV
+              <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
+            </label>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
-      <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding:'12px 32px', display:'flex', gap:'24px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding: isMobK ? '10px 14px' : '12px 32px', display:'flex', gap: isMobK ? '6px' : '24px', flexWrap:'wrap' }}>
         {Object.entries(KUNDE_TYPE).map(([key, cfg]) => {
           const count = kunder.filter(k => k.type === key).length
           return (
@@ -16201,8 +16205,8 @@ function KunderPage() {
       </div>
 
       {/* Search */}
-      <div style={{ padding:'16px 32px', background:'white', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'10px', alignItems:'center' }}>
-        <div style={{ position:'relative', flex:1, maxWidth:'360px' }}>
+      <div style={{ padding: isMobK ? '10px 14px' : '16px 32px', background:'white', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+        <div style={{ position:'relative', flex:1, minWidth: isMobK ? '100%' : 'auto', maxWidth: isMobK ? '100%' : '360px' }}>
           <span style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8', fontSize:'14px' }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk på navn, e-post, telefon, orgnr..."
             style={{ ...kundeInp, paddingLeft:'34px' }} />
@@ -16217,7 +16221,7 @@ function KunderPage() {
       </div>
 
       {/* Customer list */}
-      <div style={{ padding:'20px 32px' }}>
+      <div style={{ padding: isMobK ? '12px' : '20px 32px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
             <div style={{ fontSize:'48px', marginBottom:'12px' }}>🏢</div>
@@ -16232,25 +16236,25 @@ function KunderPage() {
               const antallProsjekter = prosjekter.filter(p => p.customer_id === kunde.id).length
               return (
                 <div key={kunde.id}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'16px', cursor:'pointer', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobK ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobK ? '12px' : '16px 20px', display:'flex', alignItems: isMobK ? 'flex-start' : 'center', gap: isMobK ? '10px' : '16px', cursor:'pointer', transition:'box-shadow 0.15s' }}
                   onClick={() => setSelected(kunde)}
                   onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                   {/* Avatar */}
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>
+                  {!isMobK && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>
                     {type.emoji}
-                  </div>
+                  </div>}
                   {/* Info */}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{kunde.name}</span>
-                      <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px' }}>{type.emoji} {type.label}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobK ? '6px' : '10px', marginBottom:'4px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700', fontSize: isMobK ? '13px' : '15px', color:'#0f172a' }}>{kunde.name}</span>
+                      <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'10px', fontWeight:'700', padding:'2px 6px' }}>{type.label}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'16px', fontSize:'13px', color:'#64748b', flexWrap:'wrap' }}>
-                      {kunde.orgnr && <span>Org: {kunde.orgnr}</span>}
+                    <div style={{ display:'flex', gap: isMobK ? '6px' : '16px', fontSize: isMobK ? '11px' : '13px', color:'#64748b', flexWrap:'wrap' }}>
+                      {!isMobK && kunde.orgnr && <span>Org: {kunde.orgnr}</span>}
                       {kunde.email && <span>✉️ {kunde.email}</span>}
                       {kunde.phone && <span>📞 {kunde.phone}</span>}
-                      {kunde.city && <span>📍 {kunde.city}</span>}
+                      {!isMobK && kunde.city && <span>📍 {kunde.city}</span>}
                     </div>
                   </div>
                   {/* Prosjekter */}
@@ -16262,12 +16266,12 @@ function KunderPage() {
                   )}
                   {/* Actions */}
                   <div style={{ display:'flex', gap:'6px', flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setSelected(kunde)}
+                    {!isMobK && <button onClick={() => setSelected(kunde)}
                       style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
                       Åpne
-                    </button>
+                    </button>}
                     <button onClick={() => handleDelete(kunde)}
-                      style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'14px' }}>
+                      style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding: isMobK ? '6px 8px' : '7px 10px', cursor:'pointer', fontSize: isMobK ? '12px' : '14px' }}>
                       🗑️
                     </button>
                   </div>
@@ -16434,19 +16438,21 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
     { id: 'notater', label: `📝 Notater (${notater.length})` },
   ]
 
-  const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+  const card = { background:'white', borderRadius: isMobKD ? '12px' : '16px', border:'1px solid #f1f5f9', padding: isMobKD ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+  const isMobKD = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobKD ? '8px' : '12px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobKD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
+                <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
@@ -16456,23 +16462,23 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
             </div>
           </div>
           <button onClick={() => setEditing(true)}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 20px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>
-            ✏️ Rediger
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
+            ✏️{!isMobKD && ' Rediger'}
           </button>
         </div>
 
         {/* Tabs */}
-        <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft:'-32px', marginRight:'-32px', paddingLeft:'32px' }}>
+        <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              style={{ padding:'10px 18px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab === t.id ? '700' : '400', background:'transparent', color: activeTab === t.id ? '#059669' : '#64748b', borderBottom: activeTab === t.id ? '2px solid #059669' : '2px solid transparent', fontFamily:'system-ui,sans-serif' }}>
+              style={{ padding: isMobKD ? '8px 10px' : '10px 18px', border:'none', cursor:'pointer', fontSize: isMobKD ? '11px' : '13px', whiteSpace:'nowrap', fontWeight: activeTab === t.id ? '700' : '400', background:'transparent', color: activeTab === t.id ? '#059669' : '#64748b', borderBottom: activeTab === t.id ? '2px solid #059669' : '2px solid transparent', fontFamily:'system-ui,sans-serif' }}>
               {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'1fr 340px', gap:'20px' }}>
+      <div style={{ padding: isMobKD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobKD ? '1fr' : '1fr 340px', gap: isMobKD ? '12px' : '20px' }}>
         {/* Venstre kolonne */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
@@ -16480,7 +16486,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
           {activeTab === 'oversikt' && (
             <>
               {/* Nøkkeltall */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobKD ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap:'10px' }}>
                 {[
                   { label: 'Totalt fakturert', value: Math.round(totalFakturert).toLocaleString('nb-NO') + ' kr', color: '#059669', bg: '#ecfdf5' },
                   { label: 'Utestående', value: Math.round(utestaende).toLocaleString('nb-NO') + ' kr', color: utestaende > 0 ? '#d97706' : '#059669', bg: utestaende > 0 ? '#fffbeb' : '#ecfdf5' },
@@ -25671,7 +25677,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
