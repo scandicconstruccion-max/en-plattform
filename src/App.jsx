@@ -944,28 +944,32 @@ function ProsjekterPage({ onNavigateDetail }) {
             )})}
           </div>
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:'4px', overflowX:'hidden' }}>
             {filtered.map(p => {
               const depth = p._depth || p.depth || 0
               const childCount = projects.filter(c => c.parent_id === p.id).length
+              const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+              const indent = isMob ? Math.min(depth * 16, 32) : depth * 28
               return (
               <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px', marginLeft: depth * 28 }}>
+                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding: isMob ? '10px 12px' : '14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap: isMob ? '10px' : '14px', marginLeft: indent, maxWidth:'100%', overflow:'hidden' }}>
                 {depth > 0 && <span style={{ color:'#d1d5db', fontSize:'14px', flexShrink:0 }}>└</span>}
-                <div style={{ width:'38px', height:'38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
-                    {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
-                    {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 8px', borderRadius:'999px' }}>{childCount} under</span>}
+                <div style={{ width: isMob ? '32px' : '38px', height: isMob ? '32px' : '38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMob ? '15px' : '18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
+                <div style={{ flex:1, minWidth:0, overflow:'hidden' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize: isMob ? '13px' : '14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMob ? '140px' : 'none' }}>{p.name}</span>
+                    {p.project_number && <span style={{ fontSize:'11px', color:'#94a3b8' }}>#{p.project_number}</span>}
+                    {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 6px', borderRadius:'999px', flexShrink:0 }}>{childCount}</span>}
                   </div>
+                  {!isMob && (
                   <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
                     {p.client_name && <span>{p.client_name}</span>}
                     {p.address && <span>{p.address}</span>}
                   </div>
+                  )}
                 </div>
                 <StatusBadge status={p.status} />
-                <span style={{ color:'#cbd5e1' }}>›</span>
+                <span style={{ color:'#cbd5e1', flexShrink:0 }}>›</span>
               </button>
             )})}
           </div>
