@@ -872,17 +872,17 @@ function ProsjekterPage({ onNavigateDetail }) {
 
   return (
     <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
+            <h1 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
           </div>
-          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
+          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '9px 14px' : '10px 18px', fontSize:'13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Nytt prosjekt</button>
         </div>
       </div>
-      <div style={{ padding:'24px 32px' }}>
-        <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap', alignItems:'center' }}>
+      <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '24px 32px' }}>
+        <div style={{ display:'flex', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '12px', marginBottom: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px', flexWrap:'wrap', alignItems:'center' }}>
           <div style={{ position:'relative', flex:1, minWidth:'200px' }}>
             <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter prosjekt..." style={{ ...inp, paddingLeft:'36px' }} />
@@ -944,23 +944,24 @@ function ProsjekterPage({ onNavigateDetail }) {
             )})}
           </div>
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'4px', overflowX:'hidden' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:'4px', overflowX:'hidden', width:'100%' }}>
             {filtered.map(p => {
               const depth = p._depth || p.depth || 0
               const childCount = projects.filter(c => c.parent_id === p.id).length
               const isMob = typeof window !== 'undefined' && window.innerWidth < 768
-              const indent = isMob ? Math.min(depth * 16, 32) : depth * 28
+              const indent = isMob ? Math.min(depth * 12, 24) : depth * 28
               return (
               <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding: isMob ? '10px 12px' : '14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap: isMob ? '10px' : '14px', marginLeft: indent, maxWidth:'100%', overflow:'hidden' }}>
-                {depth > 0 && <span style={{ color:'#d1d5db', fontSize:'14px', flexShrink:0 }}>└</span>}
-                <div style={{ width: isMob ? '32px' : '38px', height: isMob ? '32px' : '38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMob ? '15px' : '18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
+                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding: isMob ? '10px 10px' : '14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap: isMob ? '8px' : '14px', marginLeft: indent, width: isMob ? `calc(100% - ${indent}px)` : 'auto', maxWidth:'100%', overflow:'hidden', boxSizing:'border-box' }}>
+                {depth > 0 && !isMob && <span style={{ color:'#d1d5db', fontSize:'14px', flexShrink:0 }}>└</span>}
+                <div style={{ width: isMob ? '30px' : '38px', height: isMob ? '30px' : '38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMob ? '14px' : '18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
                 <div style={{ flex:1, minWidth:0, overflow:'hidden' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
-                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize: isMob ? '13px' : '14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMob ? '140px' : 'none' }}>{p.name}</span>
-                    {p.project_number && <span style={{ fontSize:'11px', color:'#94a3b8' }}>#{p.project_number}</span>}
+                  <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize: isMob ? '13px' : '14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
+                    {p.project_number && !isMob && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>#{p.project_number}</span>}
                     {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 6px', borderRadius:'999px', flexShrink:0 }}>{childCount}</span>}
                   </div>
+                  {isMob && p.project_number && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'1px' }}>#{p.project_number}</div>}
                   {!isMob && (
                   <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
                     {p.client_name && <span>{p.client_name}</span>}
@@ -1409,6 +1410,7 @@ function ProsjektfilerPage() {
   const [deleteTarget, setDeleteTarget] = useState(null) // file to confirm delete
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const dragCounter = React.useRef(0)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const fileInputRef = React.useRef()
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
 
@@ -1676,23 +1678,126 @@ function ProsjektfilerPage() {
         </div>
       )}
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-          ⬆️ Last opp fil
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer' }}>
+          ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
         </button>
       </div>
 
       {/* Project selector */}
-      <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: '12px 32px' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMob ? '10px 16px' : '12px 32px' }}>
         <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
-          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '200px' }}>
+          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }}>
           <option value="all">Velg prosjekt</option>
           {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
         </select>
       </div>
 
-      {/* Two-panel layout */}
+      {/* MOBIL: Stacked layout */}
+      {isMob ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+          {selectedProject === 'all' ? (
+            <div style={{ textAlign: 'center', padding: '40px 16px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '10px' }}>🏗️</div>
+              <div style={{ fontSize: '15px', fontWeight: '600', color: '#64748b' }}>Velg et prosjekt</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Velg prosjekt i feltet over</div>
+            </div>
+          ) : !selectedCategory ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {FILE_CATEGORIES.map(cat => {
+                const catCount = countForCat(cat.id)
+                const hasSubs = cat.sub.length > 0
+                const isExpanded = expandedCats[cat.id]
+                return (
+                  <div key={cat.id}>
+                    <button onClick={() => { if (hasSubs) { toggleCat(cat.id) } else { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false) } }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #f1f5f9', background: 'white', cursor: 'pointer', textAlign: 'left' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>{cat.emoji}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{cat.name}</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>{cat.label}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: catCount > 0 ? '#059669' : '#94a3b8' }}>{catCount} fil{catCount !== 1 ? 'er' : ''}</span>
+                        <span style={{ color: '#cbd5e1', fontSize: '16px' }}>{hasSubs ? (isExpanded ? '▾' : '▸') : '›'}</span>
+                      </div>
+                    </button>
+                    {hasSubs && isExpanded && (
+                      <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                        {cat.sub.map(sub => {
+                          const subCount = countForSub(cat.id, sub)
+                          return (
+                            <button key={sub} onClick={() => { setSelectedCategory(cat.id); setSelectedSub(sub); setShowArchive(false) }}
+                              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', border: '1px solid #f1f5f9', background: '#f8fafc', cursor: 'pointer', textAlign: 'left' }}>
+                              <span style={{ fontSize: '14px' }}>📂</span>
+                              <span style={{ flex: 1, fontSize: '13px', fontWeight: '500', color: '#374151' }}>{sub}</span>
+                              <span style={{ fontSize: '12px', color: '#94a3b8' }}>{subCount}</span>
+                              <span style={{ color: '#cbd5e1' }}>›</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <>
+              <button onClick={() => { setSelectedCategory(null); setSelectedSub(null) }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '13px', fontWeight: '600', padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                ← Tilbake til kategorier
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..."
+                    style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
+                  style={{ padding: '8px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '18px', flexShrink: 0 }}>⬆️</button>
+              </div>
+              {catSupportsRevision && (
+                <button onClick={() => setShowArchive(v => !v)}
+                  style={{ width: '100%', padding: '8px', background: showArchive ? '#f0fdf4' : 'white', color: showArchive ? '#059669' : '#64748b', border: `1px solid ${showArchive ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
+                  🗄️ {showArchive ? 'Skjul arkiverte revisjoner' : 'Vis arkiverte revisjoner'}
+                </button>
+              )}
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
+              ) : fileGroups.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px', background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: '36px', marginBottom: '10px' }}>📭</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>Ingen filer</div>
+                  <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
+                    style={{ marginTop: '12px', padding: '8px 18px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>⬆️ Last opp</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({fileGroups.length})</div>
+                  {fileGroups.map(group => {
+                    const current = group[0]
+                    const docGroup = current.document_group || current.id
+                    const archived = archivedPanelFiles.filter(f => (f.document_group || f.id) === docGroup)
+                    return (
+                      <div key={current.id} style={{ marginBottom: '8px' }}>
+                        <FileRow file={current} isArchived={false} catBg={selectedCat?.bg} catColor={selectedCat?.color} supportsRevision={catSupportsRevision} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={handleNewRevision} uploading={uploading} />
+                        {showArchive && archived.map(f => (
+                          <div key={f.id} style={{ marginTop: '3px', marginLeft: '12px' }}>
+                            <FileRow file={f} isArchived={true} catBg="#fef2f2" catColor="#dc2626" supportsRevision={false} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={null} uploading={false} />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+      /* DESKTOP: Two-panel layout */
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
         {/* LEFT: Category list */}
@@ -1846,6 +1951,7 @@ function ProsjektfilerPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Local delete confirmation dialog */}
       {deleteTarget && (
