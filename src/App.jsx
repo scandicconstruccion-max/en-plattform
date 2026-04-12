@@ -6680,10 +6680,10 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                 {(q.revision_number || 1) > 1 && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>Rev. {q.revision_number}</span>}
                 <QuoteStatusBadge status={q.status} />
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                {q.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {q.customer_name}</span>}
-                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                {q.revision_note && <span style={{ fontSize:'12px', color:'#7c3aed', fontStyle:'italic' }}>📝 {q.revision_note}</span>}
+              <div style={{ display:'flex', gap: isMobTD ? '6px' : '12px', flexWrap:'wrap' }}>
+                {q.customer_name && <span style={{ fontSize: isMobTD ? '11px' : '13px', color:'#64748b' }}>👤 {q.customer_name}</span>}
+                {proj && <span style={{ fontSize: isMobTD ? '11px' : '13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                {!isMobTD && q.revision_note && <span style={{ fontSize:'12px', color:'#7c3aed', fontStyle:'italic' }}>📝 {q.revision_note}</span>}
               </div>
             </div>
           </div>
@@ -6698,7 +6698,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobTD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobTD ? '1fr' : '2fr 1fr', gap: isMobTD ? '12px' : '20px' }}>
         {/* Left - print area */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
