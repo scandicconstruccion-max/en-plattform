@@ -3396,7 +3396,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
                     <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       + Bilde
-                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) addItemImage(item.idx, e.target.files[0]); e.target.value = '' }} />
+                      <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) addItemImage(item.idx, e.target.files[0]); e.target.value = '' }} />
                     </label>
                     <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       📷 Kamera
@@ -3842,7 +3842,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
               style={{ border: `2px dashed ${dragOver ? '#059669' : '#e2e8f0'}`, borderRadius: '12px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: dragOver ? '#f0fdf4' : '#f8fafc', transition: 'all 0.15s' }}>
               <div style={{ fontSize: '24px', marginBottom: '6px' }}>📷</div>
               <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Dra bilder hit eller <span style={{ color: '#059669', fontWeight: '600' }}>klikk for å velge</span></p>
-              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
             {images.length > 0 && (
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
@@ -9013,7 +9013,7 @@ function EndringsmeldingPage() {
                   </div>
                 ))}
                 <label style={{ width:'80px', height:'80px', borderRadius:'8px', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'#94a3b8', fontSize:'24px' }}>
-                  +<input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload} />
+                  +<input type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={handleImageUpload} />
                 </label>
               </div>
             </div>
@@ -18501,7 +18501,7 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
             <div style={{ fontSize:'32px',marginBottom:'8px' }}>📸</div>
             <div style={{ fontWeight:'600',color:'#0f172a',fontSize:'14px',marginBottom:'4px' }}>Dra og slipp bilder her</div>
             <div style={{ color:'#94a3b8',fontSize:'12px' }}>eller klikk for å velge filer</div>
-            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e=>handleFiles(e.target.files)} accept="image/*" multiple />
+            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e=>handleFiles(e.target.files)} accept="image/*" capture="environment" multiple />
           </div>
           {previews.length>0&&(
             <div style={{ display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center' }}>
@@ -19225,7 +19225,7 @@ function MinBedriftPage() {
                     style={{ padding:'8px 16px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
                     {logoUploading ? 'Laster opp...' : '📸 Last opp logo'}
                   </button>
-                  <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadLogo} accept="image/*" />
+                  <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadLogo} accept="image/*" capture="environment" />
                   {settings?.logo_url && <button onClick={() => set('logo_url', null)} style={{ marginLeft:'8px', padding:'8px 14px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'13px' }}>Fjern</button>}
                 </div>
               </div>
