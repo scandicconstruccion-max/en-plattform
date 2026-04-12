@@ -9657,11 +9657,11 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobOD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobOD ? '1fr' : '2fr 1fr', gap: isMobOD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
           <div style={oCard}>
-            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobOD ? '1fr' : '1fr 1fr', gap: isMobOD ? '12px' : '16px' }}>
               <div>
                 <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
                 {[['Navn',o.customer_name],['Adresse',o.customer_address],['Org.nr',o.customer_orgnr],['E-post',o.customer_email]].filter(r=>r[1]).map(([k,v])=>(
