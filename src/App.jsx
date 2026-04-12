@@ -2633,7 +2633,7 @@ function SjekklistePage({ onNavigateDetail }) {
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={f}>
+    <div style={{ ...f, overflowX: 'hidden', maxWidth: '100vw' }}>
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '16px' : '20px 32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div>
@@ -2641,8 +2641,8 @@ function SjekklistePage({ onNavigateDetail }) {
             <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny mal</button>}
-            {view === 'lister' && <button onClick={() => setShowNew(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny sjekkliste</button>}
+            {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: isMob ? '8px 12px' : '10px 18px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Ny mal</button>}
+            {view === 'lister' && <button onClick={() => setShowNew(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 12px' : '10px 18px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Ny sjekkliste</button>}
           </div>
         </div>
         {/* Tabs */}
@@ -2653,7 +2653,7 @@ function SjekklistePage({ onNavigateDetail }) {
         </div>
       </div>
 
-      <div style={{ padding: isMob ? '12px' : '24px 32px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', overflowX: 'hidden' }}>
         {view === 'lister' ? (
           <>
             {/* Filters */}
@@ -2692,14 +2692,14 @@ function SjekklistePage({ onNavigateDetail }) {
                       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
                       {!isMob && <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>✅</div>}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: isMob ? '6px' : '10px', marginBottom: isMob ? '3px' : '6px', flexWrap: isMob ? 'wrap' : 'nowrap' }}>
+                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMob ? 'calc(100% - 80px)' : 'none' }}>{c.title}</span>
                           {statusBadge(c.status)}
                         </div>
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', gap: isMob ? '6px' : '12px', fontSize: isMob ? '11px' : '12px', color: '#64748b', marginBottom: isMob ? '5px' : '8px', flexWrap: 'wrap' }}>
                           <span>📁 {projectName}</span>
-                          <span>📝 {c.items?.length || 0} punkter</span>
-                          <span>📅 {new Date(c.created_at).toLocaleDateString('nb-NO')}</span>
+                          <span>📝 {c.items?.length || 0}</span>
+                          {!isMob && <span>📅 {new Date(c.created_at).toLocaleDateString('nb-NO')}</span>}
                         </div>
                         {/* Progress bar */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
