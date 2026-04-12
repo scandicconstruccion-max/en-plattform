@@ -8741,6 +8741,8 @@ function EndringsmeldingPage() {
   const totalTillegg = filtered.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
   const totalIkkeFakturert = filtered.filter(e => e.status === 'Godkjent').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
 
+  const isMobEM = typeof window !== 'undefined' && window.innerWidth < 768
+
   // ── PDF-rapport per prosjekt ──
   const [showPdfPicker, setShowPdfPicker] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
@@ -9170,24 +9172,24 @@ function EndringsmeldingPage() {
     const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
     const proj = projects.find(p => p.id === em.project_id)
     return (
-      <div style={f}>
-        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-          <button onClick={() => setViewEm(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#64748b', marginBottom:'12px' }}>← Tilbake til oversikt</button>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold' }}>{em.title}</h1>
-                <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'3px 12px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>{st.emoji} {em.status}</span>
+      <div style={{ ...f, overflowX:'hidden', maxWidth:'100vw' }}>
+        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobEM ? '14px' : '20px 32px' }}>
+          <button onClick={() => setViewEm(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'13px', color:'#64748b', marginBottom:'10px' }}>← Tilbake til oversikt</button>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobEM ? '8px' : '16px', flexWrap: isMobEM ? 'wrap' : 'nowrap' }}>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobEM ? '6px' : '10px', marginBottom:'4px', flexWrap:'wrap' }}>
+                <h1 style={{ margin:0, fontSize: isMobEM ? '16px' : '20px', fontWeight:'bold' }}>{em.title}</h1>
+                <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700' }}>{st.emoji} {em.status}</span>
               </div>
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
+              <p style={{ margin:0, color:'#94a3b8', fontSize: isMobEM ? '11px' : '13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
             </div>
-            <div style={{ display:'flex', gap:'8px' }}>
-              {em.status === 'Utkast' && <button onClick={() => sendToCustomer(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📧 Send til kunde</button>}
-              <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', cursor:'pointer' }}>✏️ Rediger</button>
+            <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+              {em.status === 'Utkast' && <button onClick={() => sendToCustomer(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📧 Send' : '📧 Send til kunde'}</button>}
+              <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '12px' : '14px', cursor:'pointer' }}>✏️</button>
             </div>
           </div>
         </div>
-        <div style={{ padding:'24px 32px', maxWidth:'800px' }}>
+        <div style={{ padding: isMobEM ? '12px' : '24px 32px', maxWidth:'800px' }}>
           {em.reason && <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', fontSize:'13px', color:'#92400e' }}>🏷️ Årsak: <strong>{em.reason}</strong></div>}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px', marginBottom:'16px' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
@@ -9228,9 +9230,9 @@ function EndringsmeldingPage() {
             <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📋 Aktivitetslogg</h3>
             {(em.activity_log || []).slice().reverse().map((log, i) => (
               <div key={i} style={{ display:'flex', gap:'10px', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
-                <span style={{ color:'#94a3b8', fontSize:'12px', width:'130px', flexShrink:0 }}>{new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
-                <span style={{ color:'#374151' }}>{log.action}</span>
-                <span style={{ color:'#94a3b8', marginLeft:'auto' }}>{log.by}</span>
+                <span style={{ color:'#94a3b8', fontSize: isMobEM ? '10px' : '12px', width: isMobEM ? 'auto' : '130px', flexShrink:0 }}>{new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+                <span style={{ color:'#374151', fontSize: isMobEM ? '12px' : '13px' }}>{log.action}</span>
+                {!isMobEM && <span style={{ color:'#94a3b8', marginLeft:'auto' }}>{log.by}</span>}
               </div>
             ))}
             {(!em.activity_log || em.activity_log.length === 0) && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert</p>}
@@ -9242,16 +9244,16 @@ function EndringsmeldingPage() {
 
   // ── List View ──────────────────────────────────────────────────────────────
   return (
-    <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ ...f, overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobEM ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>
+            <h1 style={{ margin:0, fontSize: isMobEM ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
+            {!isMobEM && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>}
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => setShowPdfPicker(!showPdfPicker)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📄 PDF-rapport</button>
-            <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny endringsmelding</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobEM && <button onClick={() => setShowPdfPicker(!showPdfPicker)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📄 PDF</button>}
+            <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>
           </div>
         </div>
         {/* PDF prosjektvelger */}
@@ -9284,7 +9286,7 @@ function EndringsmeldingPage() {
       </div>
 
       {/* Statistikk */}
-      <div style={{ padding:'16px 32px', display:'flex', gap:'12px' }}>
+      <div style={{ padding: isMobEM ? '10px 12px' : '16px 32px', display:'grid', gridTemplateColumns: isMobEM ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', gap: isMobEM ? '6px' : '12px' }}>
         {[
           { label:'Totalt', value: endringer.length, color:'#0f172a' },
           { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b' },
@@ -9293,28 +9295,28 @@ function EndringsmeldingPage() {
           { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669' },
           { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706' },
         ].map((s,i) => (
-          <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'12px 16px', flex:1, textAlign:'center' }}>
-            <div style={{ fontSize:'18px', fontWeight:'800', color:s.color }}>{s.value}</div>
-            <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.label}</div>
+          <div key={i} style={{ background:'white', borderRadius: isMobEM ? '10px' : '12px', border:'1px solid #f1f5f9', padding: isMobEM ? '8px' : '12px 16px', textAlign:'center' }}>
+            <div style={{ fontSize: isMobEM ? '14px' : '18px', fontWeight:'800', color:s.color }}>{s.value}</div>
+            <div style={{ fontSize: isMobEM ? '9px' : '11px', color:'#94a3b8' }}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Filtre */}
-      <div style={{ padding:'0 32px 12px', display:'flex', gap:'10px', alignItems:'center' }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk i endringer..." style={{ ...inp, maxWidth:'250px' }} />
-        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...inp, maxWidth:'160px', background:'white' }}>
+      <div style={{ padding: isMobEM ? '0 12px 10px' : '0 32px 12px', display:'flex', gap: isMobEM ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...inp, maxWidth: isMobEM ? '100%' : '250px', flex: isMobEM ? '1 1 100%' : 'none' }} />
+        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...inp, maxWidth: isMobEM ? '100%' : '160px', background:'white', flex: isMobEM ? '1 1 48%' : 'none', fontSize: isMobEM ? '13px' : '14px' }}>
           <option value="all">Alle statuser</option>
           {Object.keys(EM_STATUS).map(s => <option key={s} value={s}>{EM_STATUS[s].emoji} {s}</option>)}
         </select>
-        <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth:'200px', background:'white' }}>
+        <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth: isMobEM ? '100%' : '200px', background:'white', flex: isMobEM ? '1 1 48%' : 'none', fontSize: isMobEM ? '13px' : '14px' }}>
           <option value="all">Alle prosjekter</option>
           {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
         </select>
       </div>
 
       {/* Liste */}
-      <div style={{ padding:'0 32px 32px' }}>
+      <div style={{ padding: isMobEM ? '0 12px 12px' : '0 32px 32px' }}>
         {loading && <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster...</div>}
         {!loading && filtered.length === 0 && <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Ingen endringsmeldinger funnet</div>}
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -9325,38 +9327,37 @@ function EndringsmeldingPage() {
             return (
               <div key={em.id} style={{ background:'white', borderRadius:'14px', border:`1px solid ${st.border}`, overflow:'hidden' }}>
                 {/* Hovedrad */}
-                <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:'12px' }}>
-                  <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>
+                <div style={{ padding: isMobEM ? '10px 12px' : '14px 20px', display:'flex', alignItems:'center', gap: isMobEM ? '8px' : '12px' }}>
+                  {!isMobEM && <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>}
                   <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setViewEm(em)}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
-                      <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{em.title}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'600', fontSize: isMobEM ? '13px' : '14px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobEM ? 'calc(100vw - 160px)' : 'none' }}>{em.title}</span>
                       <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'600' }}>{em.status}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>
-                      {proj && <span style={{ fontSize:'12px', color:'#059669' }}>🏗️ {proj.name}</span>}
-                      {em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
-                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>
-                      {(em.images||[]).length > 0 && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📸 {em.images.length}</span>}
+                    <div style={{ display:'flex', gap: isMobEM ? '4px' : '10px', flexWrap:'wrap' }}>
+                      {!isMobEM && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>}
+                      {proj && <span style={{ fontSize: isMobEM ? '11px' : '12px', color:'#059669' }}>🏗️ {proj.name}</span>}
+                      {!isMobEM && em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
+                      {!isMobEM && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>}
                     </div>
                   </div>
-                  <div style={{ textAlign:'right', flexShrink:0, marginRight:'8px' }}>
+                  {!isMobEM && <div style={{ textAlign:'right', flexShrink:0, marginRight:'8px' }}>
                     <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
                     {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
-                  </div>
+                  </div>}
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
-                    {(em.status === 'Utkast' || em.status === 'Under forhandling') && (
+                    {!isMobEM && (em.status === 'Utkast' || em.status === 'Under forhandling') && (
                       <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde"
                         style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
                     )}
-                    {em.status === 'Sendt' && (
+                    {!isMobEM && em.status === 'Sendt' && (
                       <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
                         style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
-                    <button onClick={(e) => { e.stopPropagation(); setExpandedEm(isExpanded ? null : em.id) }} title="Vis historikk"
-                      style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'700' }}>{isExpanded ? '▲' : '▼'}</button>
+                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
+                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                    <button onClick={(e) => { e.stopPropagation(); isMobEM ? setViewEm(em) : setExpandedEm(isExpanded ? null : em.id) }} title={isMobEM ? "Vis" : "Vis historikk"}
+                      style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize: isMobEM ? '12px' : '14px', color:'#64748b', fontWeight:'700' }}>{isMobEM ? '›' : isExpanded ? '▲' : '▼'}</button>
                   </div>
                 </div>
                 {/* Utvidet: Historikk og aktivitetslogg */}
