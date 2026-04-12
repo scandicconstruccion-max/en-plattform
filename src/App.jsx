@@ -6969,31 +6969,32 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { grandTotal } = calcQuote(chapters, form.global_markup)
+  const isMobTE = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobTE ? 'stretch' : 'center', justifyContent:'center', padding: isMobTE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobTE ? '0' : '20px', width:'100%', maxWidth: isMobTE ? '100%' : '900px', maxHeight: isMobTE ? '100vh' : '94vh', height: isMobTE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobTE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         {/* Modal header */}
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 {isEdit ? 'Rediger' : 'Nytt'} tilbud</h2>
+        <div style={{ padding: isMobTE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobTE ? '8px' : '16px', flex:1, minWidth:0 }}>
+            <h2 style={{ margin:0, fontSize: isMobTE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>📋 {isEdit ? 'Rediger' : 'Nytt'} tilbud</h2>
             <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Informasjon'],['2','Kapitler & Poster']].map(([n, lbl]) => (
+              {[['1', isMobTE ? 'Info' : 'Informasjon'],['2', isMobTE ? 'Poster' : 'Kapitler & Poster']].map(([n, label]) => (
                 <button key={n} onClick={() => setStep(+n)}
-                  style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize:'13px', cursor:'pointer' }}>
-                  {n}. {lbl}
+                  style={{ padding: isMobTE ? '4px 10px' : '6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize: isMobTE ? '11px' : '13px', cursor:'pointer' }}>
+                  {n}. {label}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmt(grandTotal)}</strong></span>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobTE ? '6px' : '10px', flexShrink:0 }}>
+            {!isMobTE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmt(grandTotal)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobTE ? '14px' : '24px', WebkitOverflowScrolling:'touch' }}>
           {/* STEP 1 - Info */}
           {step === 1 && (
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
@@ -7023,16 +7024,16 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                 return (
                   <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
                     {/* Chapter header */}
-                    <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
-                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                    <div style={{ background:'#f8fafc', padding: isMobTE ? '10px 12px' : '14px 18px', display:'flex', alignItems:'center', gap: isMobTE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobTE ? 'wrap' : 'nowrap' }}>
+                      <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700', minWidth: isMobTE ? '120px' : 'auto', fontSize: isMobTE ? '13px' : '14px' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...qInp, width: isMobTE ? '60px' : '100px', fontSize: isMobTE ? '12px' : '14px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobTE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
+                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
                     {/* Posts table */}
-                    <div style={{ padding:'14px 18px' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <div style={{ padding: isMobTE ? '10px' : '14px 18px', overflowX: isMobTE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobTE ? '600px' : 'auto' }}>
                         <thead>
                           <tr>
                             {['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i) => (
@@ -7083,14 +7084,14 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+        <div style={{ padding: isMobTE ? '12px 14px' : '16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0, gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
-            {step === 2 && <button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>← Tilbake</button>}
+            {step === 2 && <button onClick={()=>setStep(1)} style={{ padding: isMobTE ? '8px 12px' : '10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTE ? '12px' : '14px', fontWeight:'500' }}>← Tilbake</button>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step === 1 && <button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Kapitler →</button>}
-            {step === 2 && <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett tilbud'}</button>}
+          {isMobTE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmt(grandTotal)}</span>}
+          <div style={{ display:'flex', gap: isMobTE ? '6px' : '10px' }}>
+            {step === 1 && <button onClick={()=>setStep(2)} style={{ padding: isMobTE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTE ? '12px' : '14px', fontWeight:'600' }}>{isMobTE ? 'Neste →' : 'Neste: Kapitler →'}</button>}
+            {step === 2 && <button onClick={handleSave} disabled={saving} style={{ padding: isMobTE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobTE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
           </div>
         </div>
       </div>
@@ -25682,7 +25683,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
