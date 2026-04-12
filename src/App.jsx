@@ -10724,11 +10724,31 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
 
           {/* Lines */}
           <div style={iCard}>
-            <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize: isMobFD ? '11px' : '13px', minWidth: isMobFD ? '550px' : 'auto' }}>
+            {isMobFD ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {(inv.lines||[]).map((l,i)=>{
+                  const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
+                  const lineMva=lineNet*(parseFloat(l.mvaRate)||0)
+                  return (
+                    <div key={i} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                        <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{l.description||'—'}</span>
+                        <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmtI(lineNet+lineMva)}</span>
+                      </div>
+                      <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#64748b', flexWrap:'wrap' }}>
+                        <span>{l.qty} {l.unit} × {fmtI(l.unitPrice)}</span>
+                        <span>MVA {Math.round((parseFloat(l.mvaRate)||0)*100)}%</span>
+                        <span>Netto: {fmtI(lineNet)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
               <thead><tr style={{ background:'#f8fafc' }}>
-                {(isMobFD ? ['Beskr.','Mng','Enh','Pris','MVA','Netto','Brutto'] : ['Beskrivelse','Mengde','Enhet','Enhetspris','MVA%','Netto','MVA','Brutto']).map((h,hi)=>(
-                  <th key={hi} style={{ padding: isMobFD ? '6px 4px' : '9px 10px', textAlign: hi>=1 ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize: isMobFD ? '9px' : '11px', textTransform:'uppercase', borderBottom:'2px solid #f1f5f9' }}>{h}</th>
+                {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA%','Netto','MVA','Brutto'].map(h=>(
+                  <th key={h} style={{ padding:'9px 10px', textAlign:['Mengde','Enhetspris','MVA%','Netto','MVA','Brutto'].includes(h)?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #f1f5f9' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -10748,12 +10768,12 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 })}
               </tbody>
             </table>
-            </div>
+            )}
           </div>
 
           {/* Totals */}
           <div style={{ ...iCard, background:'#f8fafc' }}>
-            <div style={{ maxWidth:'320px', marginLeft:'auto', display:'flex', flexDirection:'column', gap:'6px' }}>
+            <div style={{ maxWidth: isMobFD ? '100%' : '320px', marginLeft: isMobFD ? '0' : 'auto', display:'flex', flexDirection:'column', gap:'6px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}><span>Netto</span><span style={{ fontWeight:'600' }}>{fmtI(net)}</span></div>
               {Object.entries(mvaGroups).map(([rate,base])=>(
                 <div key={rate} style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#64748b' }}>
