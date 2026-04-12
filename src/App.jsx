@@ -10147,7 +10147,7 @@ const INV_STATUS = {
 const MVA_RATES = [{ label:'25% (standard)', rate:0.25 },{ label:'15% (næringsmidler)', rate:0.15 },{ label:'12% (transport/kino)', rate:0.12 },{ label:'0% (fritatt)', rate:0 }]
 
 const iInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const iCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const iCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function InvStatusBadge({ status }) {
   const cfg = INV_STATUS[status]||INV_STATUS['Utkast']
@@ -10234,21 +10234,23 @@ function FakturaPage() {
     return { from: start.toISOString().split('T')[0], to: end.toISOString().split('T')[0], label: `${q+1}. termin ${now.getFullYear()}` }
   })
 
+  const isMobF = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
   if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobF ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧾 Faktura</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>
+            <h1 style={{ fontSize: isMobF ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧾 Faktura</h1>
+            {!isMobF && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>}
           </div>
-          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📊 MVA-rapport</button>
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0 }}>
+            {!isMobF && <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📊 MVA</button>}
             <div style={{ position:'relative' }}>
-              <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny faktura ▾</button>
+              <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobF ? '9px 12px' : '11px 20px', fontSize: isMobF ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobF ? '+ Faktura ▾' : '+ Ny faktura ▾'}</button>
             {showNew==='menu' && (
               <>
                 <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowNew(null)} />
@@ -10276,18 +10278,18 @@ function FakturaPage() {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobF ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobF ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr) 1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobF ? 'repeat(2, 1fr)' : 'repeat(3,1fr) 1fr 1fr', gap: isMobF ? '8px' : '12px' }}>
           {[
             { label:'Utestående', value:fmtI(totalSendt+totalPurret), sub:`${counts['Sendt']||0} sendt, ${counts['Purret']||0} purret`, bg:'#eff6ff', color:'#2563eb', emoji:'📊' },
             { label:'Betalt', value:fmtI(totalBetalt), sub:`${counts['Betalt']||0} fakturaer`, bg:'#f0fdf4', color:'#16a34a', emoji:'✅' },
             { label:'Forfalt', value:overdueCount > 0 ? `${overdueCount} faktura${overdueCount>1?'er':''}` : 'Ingen', sub:overdueCount>0?'Krever oppfølging':'Alle à jour', bg:overdueCount>0?'#fef2f2':'#f8fafc', color:overdueCount>0?'#dc2626':'#64748b', emoji:overdueCount>0?'🚨':'👍' },
           ].map(s=>(
-            <div key={s.label} style={{ background:s.bg, borderRadius:'14px', padding:'16px 20px', border:`1px solid ${s.bg}` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}><span style={{ fontSize:'18px' }}>{s.emoji}</span><span style={{ fontSize:'12px', fontWeight:'700', color:s.color, textTransform:'uppercase' }}>{s.label}</span></div>
-              <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>{s.sub}</div>
+            <div key={s.label} style={{ background:s.bg, borderRadius: isMobF ? '10px' : '14px', padding: isMobF ? '10px' : '16px 20px', border:`1px solid ${s.bg}` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom: isMobF ? '4px' : '6px' }}><span style={{ fontSize: isMobF ? '14px' : '18px' }}>{s.emoji}</span><span style={{ fontSize: isMobF ? '10px' : '12px', fontWeight:'700', color:s.color, textTransform:'uppercase' }}>{s.label}</span></div>
+              <div style={{ fontSize: isMobF ? '14px' : '18px', fontWeight:'800', color:'#0f172a' }}>{s.value}</div>
+              {!isMobF && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>{s.sub}</div>}
             </div>
           ))}
           {['Utkast','Betalt'].map(s=>{
@@ -10462,9 +10464,9 @@ function FakturaPage() {
 
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk faktura, kunde, nummer..." style={{ ...iInp, maxWidth:'260px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...iInp, maxWidth:'160px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobF ? '10px' : '14px 18px', display:'flex', gap: isMobF ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...iInp, maxWidth: isMobF ? '100%' : '260px', flex: isMobF ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...iInp, maxWidth: isMobF ? '100%' : '160px', flex: isMobF ? '1 1 100%' : 'none', fontSize: isMobF ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(INV_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
           </select>
@@ -10488,28 +10490,27 @@ function FakturaPage() {
               const proj = projects.find(p=>p.id===inv.project_id)
               return (
                 <div key={inv.id} onClick={()=>setSelected(inv)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${overdue?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobF ? '12px' : '14px', border:`1px solid ${overdue?'#fecaca':'#f1f5f9'}`, padding: isMobF ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobF ? 'flex-start' : 'center', gap: isMobF ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>
+                  {!isMobF && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{inv.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobF ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobF ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobF ? 'calc(100vw - 130px)' : 'none' }}>{inv.title}</span>
+                      {!isMobF && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>}
                       <InvStatusBadge status={inv.status} />
                       {overdue && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>FORFALT</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {inv.customer_name&&<span style={{ fontSize:'12px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
-                      {proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {inv.due_date&&<span style={{ fontSize:'12px', color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 Forfall {inv.due_date}</span>}
-                      {inv.paid_at&&<span style={{ fontSize:'12px', color:'#16a34a' }}>✓ Betalt {new Date(inv.paid_at).toLocaleDateString('nb-NO')}</span>}
+                    <div style={{ display:'flex', gap: isMobF ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {inv.customer_name&&<span style={{ fontSize: isMobF ? '11px' : '12px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
+                      {!isMobF && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobF && inv.due_date&&<span style={{ fontSize:'12px', color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 {inv.due_date}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtI(net)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>+mva {fmtI(gross)}</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobF ? '13px' : '15px', color:'#0f172a' }}>{fmtI(net)}</div>
+                    {!isMobF && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>+mva {fmtI(gross)}</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobF && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -10529,6 +10530,7 @@ function FakturaPage() {
 
 function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const confirm = useConfirm()
+  const isMobFD = typeof window !== 'undefined' && window.innerWidth < 768
   const [inv, setInv] = useState(init)
   const [editing, setEditing] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -10657,17 +10659,17 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   },{})
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print{.no-print{display:none!important} body{background:white} .print-area{padding:40px!important}}`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til fakturaer</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{inv.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobFD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til fakturaer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobFD ? '8px' : '16px', flexWrap: isMobFD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobFD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobFD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobFD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobFD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{inv.title}</h1>
+                {!isMobFD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>}
                 <InvStatusBadge status={inv.status} />
                 {inv.is_credit_note&&<span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px', border:'1px solid #e9d5ff' }}>↩️ Kreditnota</span>}
                 {inv.credit_for_invoice_number&&<span style={{ fontSize:'12px', color:'#7c3aed' }}>Krediterer: {inv.credit_for_invoice_number}</span>}
@@ -10680,18 +10682,18 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send faktura</button>}
-            {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding:'9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⚠️ Send purring</button>}
-            {inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kreditnota</button>}
-            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
-            {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobFD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '📧 Send' : '📧 Send faktura'}</button>}
+            {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '⚠️ Purr' : '⚠️ Send purring'}</button>}
+            {!isMobFD && inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kredit</button>}
+            {!isMobFD && <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
+            {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobFD ? '12px' : '13px' }}>✏️</button>}
+            <button onClick={handleDelete} style={{ padding: isMobFD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobFD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobFD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobFD ? '1fr' : '2fr 1fr', gap: isMobFD ? '12px' : '20px' }}>
         <div className="print-area" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Faktura header */}
           <div style={iCard}>
@@ -10722,10 +10724,11 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
 
           {/* Lines */}
           <div style={iCard}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+            <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize: isMobFD ? '11px' : '13px', minWidth: isMobFD ? '550px' : 'auto' }}>
               <thead><tr style={{ background:'#f8fafc' }}>
-                {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA%','Netto','MVA','Brutto'].map(h=>(
-                  <th key={h} style={{ padding:'9px 10px', textAlign:['Mengde','Enhetspris','MVA%','Netto','MVA','Brutto'].includes(h)?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'2px solid #f1f5f9' }}>{h}</th>
+                {(isMobFD ? ['Beskr.','Mng','Enh','Pris','MVA','Netto','Brutto'] : ['Beskrivelse','Mengde','Enhet','Enhetspris','MVA%','Netto','MVA','Brutto']).map((h,hi)=>(
+                  <th key={hi} style={{ padding: isMobFD ? '6px 4px' : '9px 10px', textAlign: hi>=1 ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize: isMobFD ? '9px' : '11px', textTransform:'uppercase', borderBottom:'2px solid #f1f5f9' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -10745,6 +10748,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Totals */}
@@ -25730,7 +25734,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
