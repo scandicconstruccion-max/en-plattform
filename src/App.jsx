@@ -1125,7 +1125,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         )}
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
           {/* Underprosjekter-seksjon */}
           {childProjects.length > 0 && (
@@ -4557,16 +4557,18 @@ function HmsPage() {
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui, sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster HMS & Risiko...</p></div></div>
   if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { setSelected(null); loadData() }} />
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui, sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMob ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🛡️ HMS & Risiko</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>SJA, RUH, Risikoanalyse, Mottakskontroll og HMS-håndbok</p>
+            <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🛡️ HMS & Risiko</h1>
+            {!isMob && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>SJA, RUH, Risikoanalyse, Mottakskontroll og HMS-håndbok</p>}
           </div>
           <div style={{ position:'relative' }}>
-            <button onClick={() => setShowNew(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt HMS-skjema ▾</button>
+            <button onClick={() => setShowNew(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMob ? '9px 12px' : '11px 20px', fontSize: isMob ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ HMS-skjema ▾</button>
             {showNew && (
               <>
                 <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setShowNew(false)} />
@@ -4585,24 +4587,24 @@ function HmsPage() {
           </div>
         </div>
       </div>
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:'12px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMob ? '12px' : '20px', overflowX:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMob ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)', gap: isMob ? '8px' : '12px' }}>
           {Object.entries(HMS_TYPES).map(([key, cfg]) => (
             <button key={key} onClick={() => setActiveTab(activeTab === key ? 'alle' : key)}
-              style={{ background: activeTab===key ? cfg.bg : 'white', border:`1px solid ${activeTab===key ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'20px', fontWeight:'800', color: activeTab===key ? cfg.color : '#0f172a' }}>{counts[key]}</div>
-              <div style={{ fontSize:'11px', color: activeTab===key ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{cfg.label}</div>
+              style={{ background: activeTab===key ? cfg.bg : 'white', border:`1px solid ${activeTab===key ? cfg.border : '#f1f5f9'}`, borderRadius: isMob ? '10px' : '14px', padding: isMob ? '10px' : '16px', cursor:'pointer', textAlign: isMob ? 'center' : 'left', transition:'all 0.15s' }}>
+              <div style={{ fontSize: isMob ? '18px' : '22px', marginBottom: isMob ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMob ? '16px' : '20px', fontWeight:'800', color: activeTab===key ? cfg.color : '#0f172a' }}>{counts[key]}</div>
+              <div style={{ fontSize: isMob ? '10px' : '11px', color: activeTab===key ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{cfg.label}</div>
             </button>
           ))}
         </div>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth:'200px', flex:1 }} />
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth:'220px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMob ? '10px' : '14px 18px', display:'flex', gap: isMob ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth: isMob ? '100%' : '200px', flex: isMob ? '1 1 100%' : '1' }} />
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle prosjekter</option>
             {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth:'160px' }}>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(HMS_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -4622,19 +4624,19 @@ function HmsPage() {
               const proj = projects.find(p => p.id === rec.project_id)
               return (
                 <div key={rec.id} onClick={() => setSelected(rec)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMob ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap: isMob ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg?.emoji}</div>
+                  {!isMob && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg?.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'5px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{rec.title}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMob ? '6px' : '10px', flexWrap:'wrap', marginBottom: isMob ? '3px' : '5px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMob ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMob ? 'calc(100vw - 100px)' : 'none' }}>{rec.title}</span>
                       <HmsTypeBadge type={rec.type} />
                       <HmsStatusBadge status={rec.status} />
                     </div>
-                    <div style={{ display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap' }}>
-                      {proj && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {rec.data?.dato && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {rec.data.dato}</span>}
-                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(rec.created_at).toLocaleDateString('nb-NO')}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMob ? '6px' : '14px', flexWrap:'wrap' }}>
+                      {proj && <span style={{ fontSize: isMob ? '11px' : '12px', color:'#059669', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMob && rec.data?.dato && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {rec.data.dato}</span>}
+                      {!isMob && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(rec.created_at).toLocaleDateString('nb-NO')}</span>}
                     </div>
                   </div>
                   <span style={{ color:'#94a3b8', fontSize:'18px', flexShrink:0 }}>›</span>
@@ -4655,6 +4657,7 @@ function HmsPage() {
 
 function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
   const confirm = useConfirm()
+  const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [rec, setRec] = useState(initialRecord)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -4680,16 +4683,16 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
   const refreshRec = async () => { const { data } = await supabase.from('hms_records').select('*').eq('id', rec.id).single(); if (data) setRec(data) }
 
   return (
-    <div style={{ fontFamily:'system-ui, sans-serif' }}>
+    <div style={{ fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print { .no-print { display:none !important } }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til HMS & Risiko</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg?.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{rec.title}</h1>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobH ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til HMS & Risiko</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobH ? '8px' : '16px', flexWrap: isMobH ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobH ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobH && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg?.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobH ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{rec.title}</h1>
                 <HmsTypeBadge type={rec.type} />
                 <HmsStatusBadge status={rec.status} />
               </div>
@@ -4699,10 +4702,10 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-            <button onClick={() => window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
-            <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobH ? '6px' : '8px', flexShrink:0 }}>
+            <button onClick={() => window.print()} style={{ padding: isMobH ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '13px' }}>{isMobH ? '🖨️' : '🖨️ Skriv ut'}</button>
+            <button onClick={() => setEditing(true)} style={{ padding: isMobH ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobH ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
