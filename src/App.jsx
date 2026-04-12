@@ -2630,13 +2630,15 @@ function SjekklistePage({ onNavigateDetail }) {
 
   const uncategorized = templates.filter(t => !CATEGORY_LABELS[t.category])
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
     <div style={f}>
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '16px' : '20px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Sjekklister</h1>
-            <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
+            <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Sjekklister</h1>
+            <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny mal</button>}
@@ -2651,20 +2653,20 @@ function SjekklistePage({ onNavigateDetail }) {
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px' }}>
         {view === 'lister' ? (
           <>
             {/* Filters */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+            <div style={{ display: 'flex', gap: isMob ? '8px' : '12px', marginBottom: isMob ? '12px' : '20px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: isMob ? '100%' : '200px' }}>
                 <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>🔍</span>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter sjekkliste..." style={{ ...inp, paddingLeft: '36px' }} />
               </div>
-              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '180px', background: 'white' }}>
+              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '180px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
                 <option value="all">Alle prosjekter</option>
                 {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: '160px', background: 'white' }}>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '160px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
                 {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
@@ -2685,13 +2687,13 @@ function SjekklistePage({ onNavigateDetail }) {
                   const projectName = projects.find(p => p.id === c.project_id)?.name || '–'
                   return (
                     <button key={c.id} onClick={() => onNavigateDetail(c.id)}
-                      style={{ ...card, padding: '16px 20px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '16px' }}
+                      style={{ ...card, padding: isMob ? '12px' : '16px 20px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: isMob ? '10px' : '16px' }}
                       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
                       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                      <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>✅</div>
+                      {!isMob && <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>✅</div>}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
                           {statusBadge(c.status)}
                         </div>
                         <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
@@ -2731,7 +2733,7 @@ function SjekklistePage({ onNavigateDetail }) {
                       <span style={{ fontSize: '12px', color: '#94a3b8' }}>{group.templates.length} maler</span>
                     </button>
                     {expandedMalKat[group.cat] && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
                       {group.templates.map(tmpl => (
                         <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
