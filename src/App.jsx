@@ -10967,20 +10967,21 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { net, mva, gross } = calcLines(lines)
 
+  const isMobFE = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobFE ? 'stretch' : 'center', justifyContent:'center', padding: isMobFE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'960px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobFE ? '0' : '20px', width:'100%', maxWidth: isMobFE ? '100%' : '960px', maxHeight: isMobFE ? '100vh' : '94vh', height: isMobFE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobFE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobFE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <h2 style={{ margin:0, fontSize: isMobFE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: isMobFE ? '7px 12px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobFE ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
+            {!isMobFE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobFE ? '14px' : '24px', display:'flex', flexDirection:'column', gap: isMobFE ? '14px' : '20px', WebkitOverflowScrolling:'touch' }}>
           {/* Info */}
           <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Faktura betongarbeider Blokk B" style={iInp} /></div>
@@ -11018,9 +11019,10 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
               <button onClick={addLine} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til linje</button>
             </div>
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <div style={{ overflowX: isMobFE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobFE ? '600px' : 'auto' }}>
                 <thead><tr style={{ background:'#f8fafc' }}>
-                  {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA','Netto',''].map((h,i)=><th key={i} style={{ padding:'9px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
+                  {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA','Netto',''].map((h,i)=><th key={i} style={{ padding: isMobFE ? '6px 4px' : '9px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize: isMobFE ? '9px' : '11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {lines.map(l => {
@@ -11041,11 +11043,12 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
                   })}
                 </tbody>
               </table>
-              <div style={{ padding:'12px 16px', background:'#f8fafc', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'20px' }}>
+              </div>
+              <div style={{ padding: isMobFE ? '10px 12px' : '12px 16px', background:'#f8fafc', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent: isMobFE ? 'space-between' : 'flex-end', gap: isMobFE ? '8px' : '20px' }}>
                 {[['Netto',fmtI(net)],['MVA',fmtI(mva)],['Å betale',fmtI(gross)]].map(([k,v],i)=>(
-                  <div key={k} style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
-                    <div style={{ fontSize:i===2?'16px':'14px', fontWeight:i===2?'800':'600', color:i===2?'#059669':'#0f172a' }}>{v}</div>
+                  <div key={k} style={{ textAlign: isMobFE ? 'center' : 'right' }}>
+                    <div style={{ fontSize: isMobFE ? '9px' : '11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+                    <div style={{ fontSize: isMobFE ? (i===2?'14px':'12px') : (i===2?'16px':'14px'), fontWeight:i===2?'800':'600', color:i===2?'#059669':'#0f172a' }}>{v}</div>
                   </div>
                 ))}
               </div>
