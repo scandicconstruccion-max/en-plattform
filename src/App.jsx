@@ -10248,7 +10248,7 @@ function FakturaPage() {
             {!isMobF && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0 }}>
-            {!isMobF && <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📊 MVA</button>}
+            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobF ? '9px 10px' : '11px 18px', fontSize: isMobF ? '11px' : '14px', fontWeight:'600', cursor:'pointer', color:'#374151', whiteSpace:'nowrap' }}>{isMobF ? '📊 MVA' : '📊 MVA-rapport'}</button>
             <div style={{ position:'relative' }}>
               <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobF ? '9px 12px' : '11px 20px', fontSize: isMobF ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobF ? '+ Faktura ▾' : '+ Ny faktura ▾'}</button>
             {showNew==='menu' && (
@@ -10427,7 +10427,7 @@ function FakturaPage() {
                         <div style={{ color:'#94a3b8' }}>{data.count}</div>
                       </div>
                     ))}
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'10px 14px', borderTop:'2px solid #e2e8f0', fontSize:'13px', fontWeight:'700' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding: isMobF ? '8px 10px' : '10px 14px', borderTop:'2px solid #e2e8f0', fontSize: isMobF ? '12px' : '13px', fontWeight:'700' }}>
                       <div>Totalt</div><div>{fmtI(totalNet)}</div><div style={{ color:'#dc2626' }}>{fmtI(totalMva)}</div><div style={{ color:'#94a3b8' }}>{periodInvoices.reduce((s,i) => s + (i.lines||[]).length, 0)}</div>
                     </div>
                   </div>
@@ -10447,11 +10447,11 @@ function FakturaPage() {
                   <summary style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', userSelect:'none' }}>Fakturaer i perioden ({regularInv.length})</summary>
                   <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginTop:'6px' }}>
                     {regularInv.map(pi => { const { net: piNet, mva: piMva } = calcLines(pi.lines); return (
-                      <div key={pi.id} style={{ display:'grid', gridTemplateColumns:'auto 1fr 1fr 1fr auto', gap:'10px', padding:'6px 10px', background:'#fafafa', borderRadius:'6px', fontSize:'12px', alignItems:'center' }}>
-                        <span style={{ color:'#94a3b8', fontFamily:'monospace', fontSize:'11px' }}>{pi.invoice_number}</span>
-                        <span style={{ color:'#0f172a', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pi.title}</span>
-                        <span style={{ color:'#374151' }}>{fmtI(piNet)}</span>
-                        <span style={{ color:'#dc2626' }}>{fmtI(piMva)}</span>
+                      <div key={pi.id} style={{ display:'flex', alignItems:'center', gap: isMobF ? '6px' : '10px', padding:'6px 10px', background:'#fafafa', borderRadius:'6px', fontSize: isMobF ? '11px' : '12px', flexWrap: isMobF ? 'wrap' : 'nowrap' }}>
+                        {!isMobF && <span style={{ color:'#94a3b8', fontFamily:'monospace', fontSize:'11px', flexShrink:0 }}>{pi.invoice_number}</span>}
+                        <span style={{ color:'#0f172a', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{pi.title}</span>
+                        <span style={{ color:'#374151', flexShrink:0 }}>{fmtI(piNet)}</span>
+                        {!isMobF && <span style={{ color:'#dc2626', flexShrink:0 }}>{fmtI(piMva)}</span>}
                         <InvStatusBadge status={pi.status} />
                       </div>
                     )})}
