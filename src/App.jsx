@@ -6387,7 +6387,7 @@ const QUOTE_STATUS = {
 }
 
 const qInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
-const qCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+const qCard = { background: 'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border: '1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
 function QuoteStatusBadge({ status }) {
   const cfg = QUOTE_STATUS[status] || QUOTE_STATUS['Utkast']
@@ -6675,8 +6675,8 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
             {!isMobTD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>}
             <div style={{ minWidth:0 }}>
               <div style={{ display:'flex', alignItems:'center', gap: isMobTD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize: isMobTD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{q.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+                <h1 style={{ margin:0, fontSize: isMobTD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace: isMobTD ? 'nowrap' : 'normal', maxWidth: isMobTD ? 'calc(100vw - 100px)' : 'none' }}>{q.title}</h1>
+                {!isMobTD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>}
                 {(q.revision_number || 1) > 1 && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>Rev. {q.revision_number}</span>}
                 <QuoteStatusBadge status={q.status} />
               </div>
@@ -6703,9 +6703,9 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
           <div style={qCard}>
-            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobTD ? '1fr' : '1fr 1fr', gap: isMobTD ? '12px' : '16px' }}>
               <div>
-                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom: isMobTD ? '6px' : '10px' }}>Kunde</div>
                 {[['Navn', q.customer_name], ['Adresse', q.customer_address], ['Org.nr', q.customer_orgnr], ['E-post', q.customer_email]].filter(r=>r[1]).map(([k,v]) => (
                   <div key={k} style={{ marginBottom:'5px', fontSize:'13px' }}><span style={{ color:'#94a3b8' }}>{k}: </span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
                 ))}
@@ -6725,19 +6725,19 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
             const { sum, total } = calcChapter(ch)
             return (
               <div key={ci} style={qCard}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobTD ? '10px' : '14px', gap:'8px' }}>
+                  <h3 style={{ margin:0, fontSize: isMobTD ? '13px' : '15px', fontWeight:'700', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
                   <div style={{ textAlign:'right' }}>
                     {ch.markup > 0 && <div style={{ fontSize:'11px', color:'#94a3b8' }}>Påslag {ch.markup}%</div>}
                     <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(total)}</div>
                   </div>
                 </div>
-                <div style={{ overflowX: isMobTD ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', margin: isMobTD ? '0 -14px' : '0', padding: isMobTD ? '0 14px' : '0' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize: isMobTD ? '11px' : '13px', minWidth: isMobTD ? '500px' : 'auto' }}>
+                <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize: isMobTD ? '11px' : '13px', minWidth: isMobTD ? '420px' : 'auto' }}>
                   <thead>
                     <tr style={{ background:'#f8fafc' }}>
-                      {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h => (
-                        <th key={h} style={{ padding:'8px 10px', textAlign: h==='Sum'||h==='Arbeid/enh'||h==='Material/enh' ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                      {(isMobTD ? ['Beskr.','Mng','Enh','Arb','Mat','Sum'] : ['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum']).map((h,hi) => (
+                        <th key={hi} style={{ padding: isMobTD ? '6px 4px' : '8px 10px', textAlign: hi>=3 ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize: isMobTD ? '9px' : '11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -6765,7 +6765,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 
           {/* Totals */}
           <div style={{ ...qCard, background:'#f8fafc' }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'320px', marginLeft:'auto' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth: isMobTD ? '100%' : '320px', marginLeft: isMobTD ? '0' : 'auto' }}>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}>
                 <span>Kapittelsum</span><span style={{ fontWeight:'600' }}>{fmt(chapterTotals)}</span>
               </div>
@@ -6775,7 +6775,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                   <span style={{ fontWeight:'600' }}>{fmt(grandTotal - chapterTotals)}</span>
                 </div>
               )}
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px', marginTop:'4px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobTD ? '15px' : '17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px', marginTop:'4px' }}>
                 <span>Total eks. mva</span><span style={{ color:'#059669' }}>{fmt(grandTotal)}</span>
               </div>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#94a3b8' }}>
