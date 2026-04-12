@@ -8098,7 +8098,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobOD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobOD ? '1fr' : '2fr 1fr', gap: isMobOD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Description */}
           {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
@@ -8695,7 +8695,7 @@ const ORDER_STATUS = {
 }
 
 const oInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const oCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const oCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function OrderStatusBadge({ status }) {
   const cfg = ORDER_STATUS[status] || ORDER_STATUS['Utkast']
@@ -9487,48 +9487,50 @@ function OrdrePage() {
   const counts = Object.keys(ORDER_STATUS).reduce((acc,s) => { acc[s]=orders.filter(o=>o.status===s).length; return acc }, {})
   const totalFullfort = orders.filter(o=>o.status==='Fullført').reduce((acc,o)=>acc+calcOrder(o.chapters||[],o.global_markup).grandTotal,0)
 
+  const isMobO = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ordrer...</p></div></div>
   if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobO ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📦 Ordre</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>
+            <h1 style={{ fontSize: isMobO ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📦 Ordre</h1>
+            {!isMobO && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Fra akseptert tilbud</button>}
-            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny ordre</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobO && quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Fra tilbud</button>}
+            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 12px' : '11px 20px', fontSize: isMobO ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ordre</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobO ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobO ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr) 1.3fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobO ? 'repeat(3, 1fr)' : 'repeat(5,1fr) 1.3fr', gap: isMobO ? '8px' : '12px' }}>
           {['Utkast','Sendt','Bekreftet','Pågår','Fullført'].map(s => {
             const cfg = ORDER_STATUS[s]
             return (
               <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
-                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'14px', cursor:'pointer', textAlign:'left' }}>
-                <div style={{ fontSize:'20px', marginBottom:'6px' }}>{cfg.emoji}</div>
-                <div style={{ fontSize:'20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
-                <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius: isMobO ? '10px' : '14px', padding: isMobO ? '10px' : '14px', cursor:'pointer', textAlign: isMobO ? 'center' : 'left' }}>
+                <div style={{ fontSize: isMobO ? '16px' : '20px', marginBottom: isMobO ? '4px' : '6px' }}>{cfg.emoji}</div>
+                <div style={{ fontSize: isMobO ? '16px' : '20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+                <div style={{ fontSize: isMobO ? '10px' : '11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
               </button>
             )
           })}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'14px', color:'white' }}>
+          {!isMobO && <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'14px', color:'white' }}>
             <div style={{ fontSize:'20px', marginBottom:'6px' }}>💰</div>
             <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtO(totalFullfort)}</div>
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Fullført totalt</div>
-          </div>
+          </div>}
         </div>
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk ordre, kunde, nummer..." style={{ ...oInp, maxWidth:'260px', flex:1 }} />
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobO ? '10px' : '14px 18px', display:'flex', gap: isMobO ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...oInp, maxWidth: isMobO ? '100%' : '260px', flex: isMobO ? '1 1 100%' : '1' }} />
           {(search||filterStatus!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} ordrer</span>
         </div>
@@ -9548,27 +9550,27 @@ function OrdrePage() {
               const { grandTotal } = calcOrder(o.chapters||[], o.global_markup)
               return (
                 <div key={o.id} onClick={()=>setSelected(o)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobO ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobO ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobO ? 'flex-start' : 'center', gap: isMobO ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  {!isMobO && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{o.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobO ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobO ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobO ? 'calc(100vw - 120px)' : 'none' }}>{o.title}</span>
+                      {!isMobO && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>}
                       <OrderStatusBadge status={o.status} />
                       {o.quote_id && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #ddd6fe' }}>Fra tilbud</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {o.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {o.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {o.delivery_date && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Levering {o.delivery_date}</span>}
+                    <div style={{ display:'flex', gap: isMobO ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {o.customer_name && <span style={{ fontSize: isMobO ? '11px' : '12px', color:'#64748b' }}>👤 {o.customer_name}</span>}
+                      {!isMobO && proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobO && o.delivery_date && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {o.delivery_date}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtO(grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobO ? '13px' : '15px', color:'#0f172a' }}>{fmtO(grandTotal)}</div>
+                    {!isMobO && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobO && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -9622,18 +9624,20 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     alert('Gå til Faktura-modulen og velg "Fra ordre" for å opprette faktura.')
   }
 
+  const isMobOD = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print { .no-print{display:none!important} }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ordrer</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{o.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobOD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ordrer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobOD ? '8px' : '16px', flexWrap: isMobOD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobOD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobOD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobOD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobOD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{o.title}</h1>
+                {!isMobOD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>}
                 <OrderStatusBadge status={o.status} />
               </div>
               <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -9642,13 +9646,13 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send bekreftelse</button>}
-            {o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Opprett faktura</button>}
-            <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄 Endringsmelding</button>
-            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobOD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '📧 Send' : '📧 Send bekreftelse'}</button>}
+            {!isMobOD && o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Faktura</button>}
+            {!isMobOD && <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄</button>}
+            {!isMobOD && <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobOD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobOD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
@@ -9679,13 +9683,33 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
             const { sum, total } = calcOrderChapter(ch)
             return (
               <div key={ci} style={oCard}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobOD ? '10px' : '14px', gap:'8px' }}>
+                  <h3 style={{ margin:0, fontSize: isMobOD ? '13px' : '15px', fontWeight:'700', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
                   <div style={{ textAlign:'right' }}>
                     {ch.markup>0 && <div style={{ fontSize:'11px', color:'#94a3b8' }}>Påslag {ch.markup}%</div>}
                     <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmtO(total)}</div>
                   </div>
                 </div>
+                {isMobOD ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {(ch.posts||[]).map((p,pi) => {
+                      const ls=(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <div key={pi} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{p.description||'—'}</span>
+                            <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmtO(ls)}</span>
+                          </div>
+                          <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#64748b' }}>
+                            <span>{p.qty} {p.unit}</span>
+                            {p.unitPriceWork>0 && <span>Arb: {fmtO(p.unitPriceWork)}</span>}
+                            {p.unitPriceMaterial>0 && <span>Mat: {fmtO(p.unitPriceMaterial)}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                   <thead><tr style={{ background:'#f8fafc' }}>
                     {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:['Arbeid/enh','Material/enh','Sum'].includes(h)?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
@@ -9704,13 +9728,14 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
                     })}
                   </tbody>
                 </table>
+                )}
               </div>
             )
           })}
 
           {/* Totals */}
           <div style={{ ...oCard, background:'#f8fafc' }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'320px', marginLeft:'auto' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth: isMobOD ? '100%' : '320px', marginLeft: isMobOD ? '0' : 'auto' }}>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}><span>Ordresum</span><span style={{ fontWeight:'600' }}>{fmtO(chapterTotals)}</span></div>
               {changes.filter(c=>c.status==='Godkjent').length>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#d97706' }}><span>Endringsmeldinger</span><span style={{ fontWeight:'600' }}>+{fmtO(changesTotal)}</span></div>}
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px' }}><span>Total eks. mva</span><span style={{ color:'#059669' }}>{fmtO(grandTotal+changesTotal)}</span></div>
