@@ -10296,10 +10296,10 @@ function FakturaPage() {
             const cfg=INV_STATUS[s]
             return (
               <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
-                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-                <div style={{ fontSize:'20px', marginBottom:'6px' }}>{cfg.emoji}</div>
-                <div style={{ fontSize:'20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
-                <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius: isMobF ? '10px' : '14px', padding: isMobF ? '10px' : '16px', cursor:'pointer', textAlign: isMobF ? 'center' : 'left' }}>
+                <div style={{ fontSize: isMobF ? '16px' : '20px', marginBottom: isMobF ? '4px' : '6px' }}>{cfg.emoji}</div>
+                <div style={{ fontSize: isMobF ? '16px' : '20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+                <div style={{ fontSize: isMobF ? '10px' : '11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
               </button>
             )
           })}
@@ -10389,12 +10389,12 @@ function FakturaPage() {
           return (
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e9d5ff', padding:'20px', boxShadow:'0 2px 8px rgba(124,58,237,0.08)' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-                <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>\uD83D\uDCCA MVA-rapport</h3>
+                <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📊 MVA-rapport</h3>
                 <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                   <select value={mvaPeriod.from} onChange={e => { const p = perioder.find(pp => pp.from === e.target.value); if (p) setMvaPeriod(p) }} style={{ ...iInp, maxWidth:'280px', fontSize:'13px' }}>
                     {perioder.map(p => <option key={p.from} value={p.from}>{p.label}</option>)}
                   </select>
-                  <button onClick={() => setShowMvaReport(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8' }}>\u00D7</button>
+                  <button onClick={() => setShowMvaReport(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8' }}>×</button>
                 </div>
               </div>
               {periodInvoices.length === 0 ? (
@@ -10404,7 +10404,7 @@ function FakturaPage() {
                   {[
                     { label:'Fakturaer', value: String(regularInv.length), color:'#0f172a', bg:'#f8fafc' },
                     { label:'Omsetning (netto)', value: fmtI(totalNet), color:'#2563eb', bg:'#eff6ff' },
-                    { label:'Utg\u00E5ende MVA', value: fmtI(totalMva), color:'#dc2626', bg:'#fef2f2' },
+                    { label:'Utgående MVA', value: fmtI(totalMva), color:'#dc2626', bg:'#fef2f2' },
                     { label:'Brutto', value: fmtI(totalGross), color:'#059669', bg:'#f0fdf4' },
                   ].map(s => (
                     <div key={s.label} style={{ background:s.bg, borderRadius:'10px', padding:'12px', textAlign:'center' }}>
@@ -10434,7 +10434,7 @@ function FakturaPage() {
                 </div>
                 {creditNotes.length > 0 && (
                   <div style={{ marginBottom:'16px' }}>
-                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px' }}>\u21A9\uFE0F Kreditnotaer i perioden ({creditNotes.length})</div>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px' }}>↩️ Kreditnotaer i perioden ({creditNotes.length})</div>
                     {creditNotes.map(cn => { const { net: cnNet } = calcLines(cn.lines); return (
                       <div key={cn.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:'#f5f3ff', borderRadius:'6px', fontSize:'12px', marginBottom:'4px' }}>
                         <span style={{ color:'#374151' }}>{cn.invoice_number} \u2014 {cn.title}</span>
