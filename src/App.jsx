@@ -1449,7 +1449,7 @@ function ProsjektfilerPage() {
     try {
       const [filesRes, projRes] = await Promise.all([
         supabase.from('project_files').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('id, name').order('name')
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')
       ])
       setFiles(filesRes.data || [])
       setProjects(projRes.data || [])
@@ -2519,7 +2519,7 @@ function SjekklistePage({ onNavigateDetail }) {
     try {
       const [cl, pr, tmpl] = await Promise.all([
         supabase.from('checklists').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || []),
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || []),
         supabase.from('checklist_templates').select('*').order('name').then(r => r.data || []),
       ])
       setChecklists(cl)
@@ -3518,7 +3518,7 @@ function AvvikPage() {
     try {
       const [devData, projData] = await Promise.all([
         supabase.from('deviations').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || [])
       ])
       setDeviations(devData)
       setProjects(projData)
@@ -4500,7 +4500,7 @@ function HmsPage() {
     try {
       const [recs, projs] = await Promise.all([
         supabase.from('hms_records').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || [])
       ])
       setRecords(recs); setProjects(projs)
     } catch (e) { console.error(e) }
@@ -5527,7 +5527,7 @@ function MaskinPage() {
     try {
       const [m, p] = await Promise.all([
         supabase.from('machines').select('*').order('name').then(r => r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data||[])
       ])
       setMaskiner(m); setProjects(p)
     } catch(e) { console.error(e) }
@@ -6361,7 +6361,7 @@ function TilbudPage() {
     try {
       const [q, p] = await Promise.all([
         supabase.from('quotes').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data || [])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data || [])
       ])
       setQuotes(q); setProjects(p)
     } catch(e) { console.error(e) }
@@ -7799,7 +7799,7 @@ function AnbudsPage() {
     try {
       const [t, p] = await Promise.all([
         supabase.from('tenders').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data||[])
       ])
       setTenders(t); setProjects(p)
     } catch(e) { console.error(e) }
@@ -8652,7 +8652,7 @@ function EndringsmeldingPage() {
     try {
       const [emRes, prRes] = await Promise.all([
         supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('id, name').order('name'),
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'),
       ])
       setEndringer(emRes.data || [])
       setProjects(prRes.data || [])
@@ -9378,7 +9378,7 @@ function OrdrePage() {
       const [o, q, p] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending:false }).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setOrders(o); setQuotes(q); setProjects(p)
     } catch(e) { console.error(e) }
@@ -10082,7 +10082,7 @@ function FakturaPage() {
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('calculations').select('id, title, kalk_number, kalkyler, faktorer, total_ex_mva, customer_name, project_id').eq('is_template', false).order('created_at',{ascending:false}).then(r=>r.data||[]),
       ])
       setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p); setCalculations(kalks)
@@ -11467,7 +11467,7 @@ function AnsattePage() {
     try {
       const [e, p] = await Promise.all([
         supabase.from('employees').select('*, employee_certifications(*)').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setEmployees(e); setProjects(p)
     } catch(e) { console.error(e) }
@@ -12351,7 +12351,7 @@ function TimelistePage() {
     try {
       const [emp, proj, ts] = await Promise.all([
         supabase.from('employees').select('id,first_name,last_name,hourly_rate').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}).then(r=>r.data||[])
       ])
       setEmployees(emp); setProjects(proj); setTimesheets(ts)
@@ -13466,7 +13466,7 @@ function RessursPage() {
       const [emp, mac, proj, pl, ms, sk] = await Promise.all([
         supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
         supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('resource_plans').select('*').then(r=>r.data||[]),
         supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date').then(r=>r.data||[]),
         supabase.from('employee_skills').select('*').then(r=>r.data||[])
@@ -14744,7 +14744,7 @@ function KalenderPage() {
       const [ev, emp, proj, att, sh] = await Promise.all([
         supabase.from('calendar_events').select('*').order('start_date').then(r=>r.data||[]),
         supabase.from('employees').select('id,first_name,last_name').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('calendar_attendees').select('*').then(r=>r.data||[]),
         supabase.from('calendar_sharing').select('*').then(r=>r.data||[])
       ])
@@ -15392,7 +15392,7 @@ function InterChatPage() {
       const [ch, emp, proj, mem] = await Promise.all([
         supabase.from('chat_channels').select('*, chat_messages(id,content,created_at,sender_id)').order('updated_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('employees').select('id,first_name,last_name').eq('status','Aktiv').order('first_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('chat_members').select('*').then(r=>r.data||[])
       ])
       setChannels(ch); setEmployees(emp); setProjects(proj); setMembers(mem)
@@ -16049,7 +16049,7 @@ function KunderPage() {
     try {
       const [k, p, q, inv] = await Promise.all([
         supabase.from('customers').select('*').order('name').then(r => r.data || []),
-        supabase.from('projects').select('id,name,status,customer_id').order('name').then(r => r.data || []),
+        supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         supabase.from('quotes').select('id,title,status,total_amount,customer_id,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,title,status,total_amount,customer_id,created_at,due_date').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
@@ -16927,7 +16927,7 @@ function CRMPage() {
         supabase.from('crm_customers').select('*').order('updated_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('crm_contacts').select('*').then(r=>r.data||[]),
         supabase.from('crm_activities').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,status').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('quotes').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
       ])
@@ -17702,7 +17702,7 @@ function BefaringPage() {
     try {
       const [ins, proj] = await Promise.all([
         supabase.from('inspections').select('*, inspection_items(*), inspection_followups(*), inspection_files(*)').order('date',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setInspections(ins); setProjects(proj)
     } catch(e) { console.error(e) }
@@ -18273,8 +18273,8 @@ function BildedokPage() {
     try {
       const [ph, proj, emp] = await Promise.all([
         supabase.from('photos').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
-        supabase.from('employees').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
+        supabase.from('employees').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
       ])
       setPhotos(ph); setProjects(proj); setEmployees(emp)
     } catch(e) { console.error(e) }
@@ -18564,7 +18564,7 @@ function FDVPage() {
       const [comp, docs, proj] = await Promise.all([
         supabase.from('fdv_components').select('*').order('category').then(r=>r.data||[]),
         supabase.from('fdv_documents').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setComponents(comp); setDocuments(docs); setProjects(proj)
     } catch(e) { console.error(e) }
