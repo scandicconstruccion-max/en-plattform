@@ -10169,9 +10169,6 @@ function FakturaPage() {
   const totalPurret = invoices.filter(i=>i.status==='Purret').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
   const overdueCount = invoices.filter(i=>isOverdue(i)).length
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
-  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
-
   // ── MVA-rapport state ──
   const [showMvaReport, setShowMvaReport] = useState(false)
   const [mvaPeriod, setMvaPeriod] = useState(() => {
@@ -10182,6 +10179,9 @@ function FakturaPage() {
     const end = new Date(now.getFullYear(), startMonth + 2, 0)
     return { from: start.toISOString().split('T')[0], to: end.toISOString().split('T')[0], label: `${q+1}. termin ${now.getFullYear()}` }
   })
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
+  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
