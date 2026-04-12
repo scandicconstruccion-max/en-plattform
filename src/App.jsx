@@ -5943,15 +5943,17 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
     finally { setSaving(false) }
   }
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Endre status – {maskin.name}</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '0' : '20px', width:'100%', maxWidth: isMob ? '100%' : '480px', maxHeight: isMob ? '100vh' : '92vh', height: isMob ? '100vh' : 'auto', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+        <div style={{ padding: isMob ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: isMob ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>🔄 Endre status{!isMob && ` – ${maskin.name}`}</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding: isMob ? '16px' : '24px', display:'flex', flexDirection:'column', gap: isMob ? '12px' : '16px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch' }}>
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Ny status</label>
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
