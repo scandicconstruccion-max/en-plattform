@@ -5886,7 +5886,11 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const [newStatus, setNewStatus] = useState(maskin.status)
   const [projectId, setProjectId] = useState(maskin.current_project_id||'')
   const [employeeName, setEmployeeName] = useState('')
+  const [employeeMode, setEmployeeMode] = useState('select') // 'select' | 'manual'
   const [employees, setEmployees] = useState([])
+  const [hasEmployeeAccess, setHasEmployeeAccess] = useState(false)
+  const [estimatedDays, setEstimatedDays] = useState('')
+  const [estimatedReturn, setEstimatedReturn] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [certWarning, setCertWarning] = useState(null)
@@ -5894,7 +5898,16 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const requiredCerts = getRequiredCerts(maskin)
 
   useEffect(() => {
-    supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data }) => setEmployees(data || []))
+    supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data, error }) => {
+      if (!error && data && data.length > 0) {
+        setEmployees(data)
+        setHasEmployeeAccess(true)
+        setEmployeeMode('select')
+      } else {
+        setHasEmployeeAccess(false)
+        setEmployeeMode('manual')
+      }
+    })
   }, [])
 
   const handleEmployeeSelect = async (empId) => {
@@ -5913,7 +5926,21 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
     }
   }
 
+  // Beregn estimert returdato fra antall dager
+  useEffect(() => {
+    if (estimatedDays && !isNaN(estimatedDays)) {
+      const d = new Date()
+      d.setDate(d.getDate() + parseInt(estimatedDays))
+      setEstimatedReturn(d.toISOString().split('T')[0])
+    } else if (!estimatedDays) {
+      setEstimatedReturn('')
+    }
+  }, [estimatedDays])
+
   const handleSave = async () => {
+    if (newStatus === 'På prosjekt' && !projectId) {
+      return alert('Du må velge et prosjekt når maskinen settes på prosjekt')
+    }
     setSaving(true)
     try {
       const updates = { status:newStatus, updated_at:new Date().toISOString() }
@@ -5922,16 +5949,18 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
       if (newStatus === 'På prosjekt') {
         updates.current_employee_name = employeeName || null
         updates.checked_out_at = new Date().toISOString()
+        updates.estimated_return = estimatedReturn || null
       } else {
         updates.current_employee_name = null
         updates.checked_out_at = null
+        updates.estimated_return = null
       }
       const { error:mErr } = await supabase.from('machines').update(updates).eq('id', maskin.id)
       if (mErr) throw mErr
 
       const proj = projects.find(p=>p.id===projectId)
       let action = `Status endret til ${newStatus}`
-      if (newStatus==='På prosjekt'&&proj) action = `Utlånt til ${proj.name}${employeeName ? ' ('+employeeName+')' : ''}`
+      if (newStatus==='På prosjekt'&&proj) action = `Utlånt til ${proj.name}${employeeName ? ' ('+employeeName+')' : ''}${estimatedReturn ? ' · Retur: '+estimatedReturn : ''}`
       else if (newStatus==='På lager') action = `Returnert til lager${employeeName ? ' av '+employeeName : ''}`
       else if (newStatus==='Service') action = 'Sendt til service'
       else if (newStatus==='Utrangert') action = 'Merket som utrangert'
@@ -5968,19 +5997,42 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
           </div>
           {newStatus==='På prosjekt' && (
             <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt</label>
-              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={mInp}>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label>
+              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ ...mInp, borderColor: !projectId ? '#fecaca' : '#e2e8f0' }}>
                 <option value="">Velg prosjekt...</option>
                 {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
+              {!projectId && <div style={{ fontSize:'11px', color:'#dc2626', marginTop:'4px' }}>Prosjekt er påkrevd</div>}
+            </div>
+          )}
+          {newStatus==='På prosjekt' && (
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>⏱️ Estimert tid på prosjekt</label>
+              <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                <input type="number" value={estimatedDays} onChange={e=>setEstimatedDays(e.target.value)} placeholder="Antall dager" min="1" style={{ ...mInp, flex:1 }} />
+                <span style={{ fontSize:'13px', color:'#64748b', whiteSpace:'nowrap' }}>dager</span>
+              </div>
+              {estimatedReturn && <div style={{ fontSize:'12px', color:'#059669', marginTop:'4px' }}>📅 Estimert retur: {new Date(estimatedReturn).toLocaleDateString('nb-NO')}</div>}
             </div>
           )}
           <div>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>👤 Ansatt (henter/leverer)</label>
-            <select value={employees.find(e => e.name === employeeName)?.id || ''} onChange={e => handleEmployeeSelect(e.target.value)} style={mInp}>
-              <option value="">Velg ansatt...</option>
-              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
-            </select>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+              <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>👤 Ansatt (henter/leverer)</label>
+              {hasEmployeeAccess && (
+                <button type="button" onClick={() => setEmployeeMode(m => m === 'select' ? 'manual' : 'select')}
+                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'500' }}>
+                  {employeeMode === 'select' ? 'Skriv inn manuelt' : 'Velg fra liste'}
+                </button>
+              )}
+            </div>
+            {employeeMode === 'select' && hasEmployeeAccess ? (
+              <select value={employees.find(e => e.name === employeeName)?.id || ''} onChange={e => handleEmployeeSelect(e.target.value)} style={mInp}>
+                <option value="">Velg ansatt...</option>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
+              </select>
+            ) : (
+              <input value={employeeName} onChange={e => { setEmployeeName(e.target.value); setCertWarning(null) }} placeholder="Skriv inn navn på ansatt..." style={mInp} />
+            )}
 
             {/* Sertifikatkrav og advarsel */}
             {requiredCerts.length > 0 && (
