@@ -5748,7 +5748,7 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobTD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobTD ? '1fr' : '2fr 1fr', gap: isMobTD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={mCard}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Maskininformasjon</h3>
@@ -6446,35 +6446,37 @@ function TilbudPage() {
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster tilbud...</p></div></div>
 
+  const isMobT = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobT ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Tilbud</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Opprett, send og følg opp tilbud til kunder</p>
+            <h1 style={{ fontSize: isMobT ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Tilbud</h1>
+            {!isMobT && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Opprett, send og følg opp tilbud til kunder</p>}
           </div>
-          <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt tilbud</button>
+          <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobT ? '9px 12px' : '11px 20px', fontSize: isMobT ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Nytt tilbud</button>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr) 1.4fr', gap:'12px' }}>
+      <div style={{ padding: isMobT ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobT ? '12px' : '20px', overflowX:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobT ? 'repeat(2, 1fr)' : 'repeat(4,1fr) 1.4fr', gap: isMobT ? '8px' : '12px' }}>
           {Object.entries(QUOTE_STATUS).map(([s, cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
-              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'20px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{counts[s]||0}</div>
-              <div style={{ fontSize:'11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius: isMobT ? '10px' : '14px', padding: isMobT ? '10px' : '16px', cursor:'pointer', textAlign: isMobT ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobT ? '16px' : '20px', marginBottom: isMobT ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMobT ? '16px' : '22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{counts[s]||0}</div>
+              <div style={{ fontSize: isMobT ? '10px' : '11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
             </button>
           ))}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+          {!isMobT && <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
             <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
             <div style={{ fontSize:'18px', fontWeight:'800' }}>{fmt(totalAkseptert)}</div>
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total akseptert</div>
-          </div>
+          </div>}
         </div>
 
         {/* Purring-banner for utløpte tilbud */}
@@ -6518,8 +6520,8 @@ function TilbudPage() {
           </div>
         )}
 
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk tilbud, kunde, nummer..." style={{ ...qInp, maxWidth:'260px', flex:1 }} />
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobT ? '10px' : '14px 18px', display:'flex', gap: isMobT ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk tilbud..." style={{ ...qInp, maxWidth: isMobT ? '100%' : '260px', flex: isMobT ? '1 1 100%' : '1' }} />
           {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} tilbud</span>
         </div>
@@ -6539,28 +6541,28 @@ function TilbudPage() {
               const isExpired = q.valid_until && new Date(q.valid_until) < new Date() && q.status === 'Sendt'
               return (
                 <div key={q.id} onClick={() => setSelected(q)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${isExpired ? '#fecaca' : '#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobT ? '12px' : '14px', border:`1px solid ${isExpired ? '#fecaca' : '#f1f5f9'}`, padding: isMobT ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobT ? 'flex-start' : 'center', gap: isMobT ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  {!isMobT && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{q.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobT ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobT ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobT ? 'calc(100vw - 130px)' : 'none' }}>{q.title}</span>
+                      {!isMobT && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>}
                       <QuoteStatusBadge status={q.status} />
                       {(q.revision_number || 1) > 1 && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px' }}>Rev.{q.revision_number}</span>}
                       {isExpired && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'12px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>⏰ Utløpt</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {q.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {q.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {q.valid_until && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Gyldig til {q.valid_until}</span>}
+                    <div style={{ display:'flex', gap: isMobT ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {q.customer_name && <span style={{ fontSize: isMobT ? '11px' : '12px', color:'#64748b' }}>👤 {q.customer_name}</span>}
+                      {!isMobT && proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobT && q.valid_until && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Gyldig til {q.valid_until}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>inkl. påslag</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobT ? '13px' : '16px', color:'#0f172a' }}>{fmt(grandTotal)}</div>
+                    {!isMobT && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>inkl. påslag</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobT && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -6661,17 +6663,19 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 
   const handlePrint = () => window.print()
 
+  const isMobTD = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print { .no-print { display:none !important } body { background:white } }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til tilbud</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{q.title}</h1>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobTD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til tilbud</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobTD ? '8px' : '16px', flexWrap: isMobTD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobTD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobTD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobTD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobTD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{q.title}</h1>
                 <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
                 {(q.revision_number || 1) > 1 && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>Rev. {q.revision_number}</span>}
                 <QuoteStatusBadge status={q.status} />
@@ -6683,13 +6687,13 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>}
-            {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding:'9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send purring</button>}
-            <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>
-            <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut / PDF</button>
-            {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>}
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobTD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Send' : '📧 Send til kunde'}</button>}
+            {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Purring' : '📧 Send purring'}</button>}
+            {!isMobTD && <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>}
+            {!isMobTD && <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
+            {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTD ? '12px' : '13px' }}>✏️</button>}
+            <button onClick={handleDelete} style={{ padding: isMobTD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobTD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
@@ -6728,7 +6732,8 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                     <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(total)}</div>
                   </div>
                 </div>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                <div style={{ overflowX: isMobTD ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', margin: isMobTD ? '0 -14px' : '0', padding: isMobTD ? '0 14px' : '0' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize: isMobTD ? '11px' : '13px', minWidth: isMobTD ? '500px' : 'auto' }}>
                   <thead>
                     <tr style={{ background:'#f8fafc' }}>
                       {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h => (
@@ -6752,6 +6757,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                     })}
                   </tbody>
                 </table>
+                </div>
                 {ch.description && <p style={{ margin:'10px 0 0', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{ch.description}</p>}
               </div>
             )
