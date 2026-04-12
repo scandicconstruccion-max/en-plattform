@@ -4710,7 +4710,7 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
           </div>
         </div>
       </div>
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMob ? '1fr' : '2fr 1fr', gap: isMob ? '12px' : '20px' }}>
         <div>
           {rec.type === 'sja'             && <SjaView rec={rec} proj={proj} />}
           {rec.type === 'ruh'             && <RuhView rec={rec} proj={proj} />}
@@ -5496,7 +5496,7 @@ function getRequiredCerts(machine) {
 }
 
 const mInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const mCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const mCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function MaskinStatusBadge({ status }) {
   const cfg = MASKIN_STATUS[status] || MASKIN_STATUS['På lager']
@@ -5695,6 +5695,7 @@ function MaskinPage() {
 
 function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const [m, setM] = useState(init)
   const [logs, setLogs] = useState([])
   const [editing, setEditing] = useState(false)
@@ -5719,30 +5720,30 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
   }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til maskiner</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'56px', height:'56px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px', flexShrink:0 }}>{cfg?.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{m.name}</h1>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMob ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til maskiner</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMob ? '8px' : '16px', flexWrap: isMob ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMob ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMob && <div style={{ width:'56px', height:'56px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px', flexShrink:0 }}>{cfg?.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMob ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMob ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{m.name}</h1>
                 <MaskinStatusBadge status={m.status} />
                 {m.next_service && <ServiceBadge date={m.next_service} />}
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                {m.category && <span style={{ fontSize:'13px', color:'#64748b' }}>📋 {m.category}</span>}
-                {m.type && <span style={{ fontSize:'13px', color:'#64748b' }}>🔩 {m.type}</span>}
-                {m.brand && <span style={{ fontSize:'13px', color:'#64748b' }}>🏷️ {m.brand} {m.model}</span>}
-                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              <div style={{ display:'flex', gap: isMob ? '6px' : '12px', flexWrap:'wrap' }}>
+                {m.category && <span style={{ fontSize: isMob ? '11px' : '13px', color:'#64748b' }}>📋 {m.category}</span>}
+                {!isMob && m.type && <span style={{ fontSize:'13px', color:'#64748b' }}>🔩 {m.type}</span>}
+                {m.brand && <span style={{ fontSize: isMob ? '11px' : '13px', color:'#64748b' }}>🏷️ {m.brand} {m.model}</span>}
+                {proj && <span style={{ fontSize: isMob ? '11px' : '13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-            <button onClick={()=>setShowStatusModal(true)} style={{ padding:'9px 16px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔄 Endre status</button>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMob ? '6px' : '8px', flexShrink:0 }}>
+            <button onClick={()=>setShowStatusModal(true)} style={{ padding: isMob ? '7px 10px' : '9px 16px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '11px' : '13px', fontWeight:'600', whiteSpace:'nowrap' }}>{isMob ? '🔄 Status' : '🔄 Endre status'}</button>
+            <button onClick={()=>setEditing(true)} style={{ padding: isMob ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMob ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMob ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMob ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
