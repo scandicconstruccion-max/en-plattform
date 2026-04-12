@@ -3605,20 +3605,20 @@ function AvvikPage() {
         <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '16px 20px', display: 'flex', gap: isMob ? '8px' : '12px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk i avvik..."
             style={{ ...inp, maxWidth: isMob ? '100%' : '240px', flex: isMob ? '1 1 100%' : '1' }} />
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '180px', flex: isMob ? '1 1 30%' : 'none' }}>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '180px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             <option value="Åpen">Åpen</option>
             <option value="Under behandling">Under behandling</option>
             <option value="Lukket">Lukket</option>
           </select>
-          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 30%' : 'none' }}>
+          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle alvorligheter</option>
             <option value="Lav">Lav</option>
             <option value="Medium">Medium</option>
             <option value="Høy">Høy</option>
             <option value="Kritisk">Kritisk</option>
           </select>
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 30%' : 'none' }}>
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle prosjekter</option>
             {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
@@ -4155,9 +4155,9 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const statusFlow = ['Åpen', 'Under behandling', 'Lukket']
   const currentIdx = statusFlow.indexOf(dev.status)
 
-  const card = { background: 'white', borderRadius: isMobD ? '12px' : '16px', border: '1px solid #f1f5f9', padding: isMobD ? '14px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
-
   const isMobD = typeof window !== 'undefined' && window.innerWidth < 768
+
+  const card = { background: 'white', borderRadius: isMobD ? '12px' : '16px', border: '1px solid #f1f5f9', padding: isMobD ? '14px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', overflowX: 'hidden', maxWidth: '100vw' }}>
