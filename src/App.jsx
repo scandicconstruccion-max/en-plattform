@@ -25657,6 +25657,7 @@ function AppContent() {
     setPage(p)
     setProjectId(null)
     setMobileMenuOpen(false)
+    window.scrollTo(0, 0)
   }
 
   // Check if current page is a locked module
@@ -25674,6 +25675,9 @@ function AppContent() {
       setPage(p)
       if (e.state?.projectId) setProjectId(e.state.projectId)
       else setProjectId(null)
+      if (e.state?.checklistId) setChecklistId(e.state.checklistId)
+      else setChecklistId(null)
+      setMobileMenuOpen(false)
     }
     window.addEventListener('popstate', onPop)
     window.history.replaceState({ page: getPageFromHash() }, '', window.location.hash || '#dashboard')
