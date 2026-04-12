@@ -3554,6 +3554,8 @@ function AvvikPage() {
     </div>
   )
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (selected) return (
     <AvvikDetaljer
       deviation={selected}
@@ -3564,31 +3566,31 @@ function AvvikPage() {
   )
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', overflowX: 'hidden', maxWidth: '100vw' }}>
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '16px' : '24px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div>
-            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>⚠️ Avvik</h1>
-            <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>Registrer, følg opp og lukk avvik</p>
+            <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>⚠️ Avvik</h1>
+            {!isMob && <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>Registrer, følg opp og lukk avvik</p>}
           </div>
           <button onClick={() => setShowNew(true)}
-            style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '12px', padding: '11px 20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 12px' : '11px 20px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
             + Registrer avvik
           </button>
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', display: 'flex', flexDirection: 'column', gap: isMob ? '12px' : '20px', overflowX: 'hidden' }}>
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMob ? '8px' : '16px' }}>
           {[
             { label: 'Åpne avvik', value: counts.open, color: '#dc2626', bg: '#fef2f2', emoji: '🔴' },
             { label: 'Under behandling', value: counts.inProgress, color: '#d97706', bg: '#fffbeb', emoji: '🟡' },
             { label: 'Lukkede avvik', value: counts.closed, color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
             { label: 'Kritiske (åpne)', value: counts.critical, color: '#dc2626', bg: '#fef2f2', emoji: '🚨' },
           ].map((s, i) => (
-            <div key={i} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div key={i} style={{ background: 'white', borderRadius: isMob ? '10px' : '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '20px' }}>{s.emoji}</span>
                 <span style={{ background: s.bg, color: s.color, fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>{s.value}</span>
@@ -3600,23 +3602,23 @@ function AvvikPage() {
         </div>
 
         {/* Filters */}
-        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '16px 20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '16px 20px', display: 'flex', gap: isMob ? '8px' : '12px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk i avvik..."
-            style={{ ...inp, maxWidth: '240px', flex: '1' }} />
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: '180px' }}>
+            style={{ ...inp, maxWidth: isMob ? '100%' : '240px', flex: isMob ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '180px', flex: isMob ? '1 1 30%' : 'none' }}>
             <option value="alle">Alle statuser</option>
             <option value="Åpen">Åpen</option>
             <option value="Under behandling">Under behandling</option>
             <option value="Lukket">Lukket</option>
           </select>
-          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: '160px' }}>
+          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 30%' : 'none' }}>
             <option value="alle">Alle alvorligheter</option>
             <option value="Lav">Lav</option>
             <option value="Medium">Medium</option>
             <option value="Høy">Høy</option>
             <option value="Kritisk">Kritisk</option>
           </select>
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: '220px' }}>
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 30%' : 'none' }}>
             <option value="alle">Alle prosjekter</option>
             {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
@@ -3644,25 +3646,25 @@ function AvvikPage() {
               const proj = projects.find(p => p.id === dev.project_id)
               return (
                 <div key={dev.id} onClick={() => setSelected(dev)}
-                  style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px 20px', cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s', display: 'flex', alignItems: 'flex-start', gap: '16px' }}
+                  style={{ background: 'white', borderRadius: isMob ? '12px' : '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s', display: 'flex', alignItems: 'flex-start', gap: isMob ? '10px' : '16px' }}
                   onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = '#e2e8f0' }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#f1f5f9' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                  {!isMob && <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
                     {dev.severity === 'Kritisk' ? '🚨' : dev.severity === 'Høy' ? '⚠️' : dev.severity === 'Medium' ? '📋' : '📝'}
-                  </div>
+                  </div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '15px' }}>{dev.title}</span>
+                      <span style={{ fontWeight: '700', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMob ? 'calc(100vw - 120px)' : 'none' }}>{dev.title}</span>
                       <SeverityBadge severity={dev.severity} />
                       <AvvikStatusBadge status={dev.status} />
                     </div>
-                    {dev.description && <p style={{ margin: '0 0 8px', color: '#64748b', fontSize: '13px', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '600px' }}>{dev.description}</p>}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                      {proj && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
-                      {dev.location && <span style={{ fontSize: '12px', color: '#64748b' }}>📍 {dev.location}</span>}
-                      {dev.assigned_to_name && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to_name}</span>}
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>
-                      {dev.images?.length > 0 && <span style={{ fontSize: '12px', color: '#94a3b8' }}>📎 {dev.images.length} bilde{dev.images.length > 1 ? 'r' : ''}</span>}
+                    {dev.description && !isMob && <p style={{ margin: '0 0 8px', color: '#64748b', fontSize: '13px', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '600px' }}>{dev.description}</p>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMob ? '6px' : '16px', flexWrap: 'wrap' }}>
+                      {proj && <span style={{ fontSize: isMob ? '11px' : '12px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
+                      {dev.location && <span style={{ fontSize: isMob ? '11px' : '12px', color: '#64748b' }}>📍 {dev.location}</span>}
+                      {!isMob && dev.assigned_to_name && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to_name}</span>}
+                      {!isMob && <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>}
+                      {dev.images?.length > 0 && <span style={{ fontSize: isMob ? '11px' : '12px', color: '#94a3b8' }}>📎 {dev.images.length}</span>}
                     </div>
                   </div>
                   <span style={{ color: '#94a3b8', fontSize: '18px', flexShrink: 0 }}>›</span>
@@ -4153,23 +4155,25 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const statusFlow = ['Åpen', 'Under behandling', 'Lukket']
   const currentIdx = statusFlow.indexOf(dev.status)
 
-  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+  const card = { background: 'white', borderRadius: isMobD ? '12px' : '16px', border: '1px solid #f1f5f9', padding: isMobD ? '14px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+
+  const isMobD = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', overflowX: 'hidden', maxWidth: '100vw' }}>
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMobD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, fontFamily: 'system-ui, sans-serif' }}>
           ← Tilbake til avvik
         </button>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-            <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: isMobD ? '8px' : '16px', flexWrap: isMobD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobD ? '10px' : '14px', flex: 1, minWidth: 0 }}>
+            {!isMobD && <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
               {dev.severity === 'Kritisk' ? '🚨' : '⚠️'}
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
+            </div>}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobD ? '6px' : '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                <h1 style={{ margin: 0, fontSize: isMobD ? '16px' : '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
                 <SeverityBadge severity={dev.severity} />
                 <AvvikStatusBadge status={dev.status} />
               </div>
@@ -4180,18 +4184,18 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0 }}>
             <button onClick={exportAvvikPDF} disabled={exporting}
-              style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '500', color: exporting ? '#94a3b8' : '#374151' }}>
-              {exporting ? '⏳...' : '📄 PDF'}
+              style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500', color: exporting ? '#94a3b8' : '#374151' }}>
+              {exporting ? '⏳' : '📄'}
             </button>
-            <button onClick={() => setShowEdit(true)} style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding: '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: '13px' }}>🗑️</button>
+            <button onClick={() => setShowEdit(true)} style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobD ? '7px 10px' : '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: isMobD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+      <div style={{ padding: isMobD ? '12px' : '24px 32px', display: 'grid', gridTemplateColumns: isMobD ? '1fr' : '2fr 1fr', gap: isMobD ? '12px' : '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
           {/* Beskrivelse */}
