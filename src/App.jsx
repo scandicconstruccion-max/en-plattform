@@ -17854,6 +17854,16 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
 
 // ─── BEFARING MODULE ──────────────────────────────────────────────────────────
 
+const BEFARING_TYPES = [
+  { id:'hms', label:'HMS', emoji:'🦺' },
+  { id:'kvalitet', label:'Kvalitet', emoji:'✅' },
+  { id:'sluttkontroll', label:'Sluttkontroll', emoji:'🔍' },
+  { id:'overtakelse', label:'Overtakelse', emoji:'🤝' },
+  { id:'garanti', label:'Garantibefaring', emoji:'🛡️' },
+  { id:'tilbud', label:'Tilbudsbefaring', emoji:'📋' },
+  { id:'annet', label:'Annet', emoji:'📝' },
+]
+
 const INS_STATUS = {
   planlagt:     { label:'Planlagt',     emoji:'📅', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
   gjennomfort:  { label:'Gjennomført',  emoji:'✅', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
@@ -18074,6 +18084,76 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const openF=followups.filter(f=>!f.completed).length
   const today=new Date().toISOString().split('T')[0]
   const [showConvert, setShowConvert] = useState(false)
+  const [showImportCL, setShowImportCL] = useState(false)
+  const [checklists, setChecklists] = useState([])
+  const [showSend, setShowSend] = useState(false)
+  const [sendItems, setSendItems] = useState([])
+  const [sendForm, setSendForm] = useState({ email:'', name:'', message:'' })
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const cameraRef = React.useRef(null)
+
+  const loadChecklists = async () => {
+    const { data } = await supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false})
+    setChecklists(data||[])
+  }
+
+  const importFromChecklist = async (cl) => {
+    const allItems = (cl.sections||[]).flatMap(s=>(s.items||[]).map(i=>i.text||i.description||''))
+    if (!allItems.length) return alert('Sjekklisten har ingen punkter')
+    for (let i=0; i<allItems.length; i++) {
+      if (allItems[i].trim()) {
+        await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:allItems[i].trim(), sort_order:items.length+i })
+      }
+    }
+    setShowImportCL(false)
+    loadDetails()
+  }
+
+  const uploadCamera = async (e) => {
+    const file=e.target.files?.[0]; if(!file) return
+    setSaving(true)
+    try {
+      const path='befaring/'+ins.id+'/'+Date.now()+'_'+file.name
+      const {error}=await supabase.storage.from('plattform-files').upload(path,file)
+      if(error) throw error
+      const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
+      await supabase.from('inspection_files').insert({ inspection_id:ins.id, name:file.name, file_url:publicUrl, file_type:file.type })
+      loadDetails()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false); e.target.value='' }
+  }
+
+  const sendToRecipient = async () => {
+    if (!sendForm.email.trim()) return alert('E-post er påkrevd')
+    if (sendItems.length===0) return alert('Velg minst ett punkt å sende')
+    setSendingEmail(true)
+    try {
+      const selectedItemsList = items.filter(i=>sendItems.includes(i.id))
+      const selectedFiles = files.filter(f=>f.file_type?.startsWith('image/'))
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:700px;margin:0 auto;padding:20px">' +
+        '<div style="background:#059669;color:white;padding:16px 24px;border-radius:12px 12px 0 0"><h1 style="margin:0;font-size:20px">Befaringsrapport</h1><p style="margin:6px 0 0;opacity:0.9;font-size:14px">'+ins.title+'</p></div>' +
+        '<div style="background:#f8fafc;padding:20px 24px;border:1px solid #e2e8f0;border-top:none">' +
+        '<p style="color:#64748b;font-size:13px;margin:0 0 4px">📅 '+ins.date+(ins.location?' · 📍 '+ins.location:'')+(proj?' · 🏗️ '+proj.name:'')+'</p>' +
+        (sendForm.message?'<div style="background:white;padding:12px;border-radius:8px;border:1px solid #e2e8f0;margin:12px 0;font-size:14px;color:#374151">'+sendForm.message+'</div>':'') +
+        '<h3 style="margin:16px 0 10px;font-size:15px;color:#0f172a">Punkter ('+selectedItemsList.length+')</h3>' +
+        selectedItemsList.map(item=>{
+          const st = item.status==='avvik'?{c:'#dc2626',bg:'#fef2f2',l:'Avvik'}:item.status==='ok'?{c:'#16a34a',bg:'#f0fdf4',l:'OK'}:{c:'#94a3b8',bg:'#f8fafc',l:'N/A'}
+          return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:'+st.bg+';border-radius:8px;margin-bottom:6px;border:1px solid '+st.c+'30"><span style="background:'+st.c+';color:white;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">'+st.l+'</span><span style="font-size:14px;color:#0f172a">'+item.description+'</span></div>'
+        }).join('') +
+        (selectedFiles.length>0?'<h3 style="margin:16px 0 10px;font-size:15px;color:#0f172a">Bilder</h3>'+selectedFiles.slice(0,6).map(f=>'<img src="'+f.file_url+'" style="width:200px;height:150px;object-fit:cover;border-radius:8px;margin:4px" />').join(''):'') +
+        '<hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">' +
+        '<p style="color:#94a3b8;font-size:12px">Sendt fra En Plattform KS-system</p></div></div>'
+      
+      const fnRes = await fetch(import.meta.env.VITE_SUPABASE_URL+'/functions/v1/send-quote',{
+        method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY},
+        body:JSON.stringify({to:sendForm.email,subject:'Befaring: '+ins.title+(sendForm.name?' – Til: '+sendForm.name:''),html})
+      })
+      if(!fnRes.ok) throw new Error('Sending feilet')
+      alert('Sendt til '+sendForm.email+'!')
+      setShowSend(false); setSendItems([]); setSendForm({email:'',name:'',message:''})
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSendingEmail(false) }
+  }
 
   // ── PDF-rapport ──
   const exportPDF = async () => {
@@ -18176,6 +18256,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
             <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600' }}>{isMobBD ? '📄 PDF' : '📄 PDF-rapport'}</button>
+            <button onClick={()=>{setSendItems(items.map(i=>i.id));setShowSend(true)}} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600' }}>{isMobBD ? '📧 Send' : '📧 Send rapport'}</button>
             {!isMobBD && <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>}
             <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobBD ? '7px 10px' : '9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize: isMobBD ? '12px' : '13px' }}>🗑️</button>
@@ -18221,9 +18302,10 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                   )
                 })}
               </div>
-              <div style={{ display:'flex', gap:'8px' }}>
-                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex:1 }} />
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex:'1 1 200px' }} />
                 <button onClick={addItem} style={{ padding:'9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700',whiteSpace:'nowrap' }}>+ Legg til</button>
+                <button onClick={()=>{loadChecklists();setShowImportCL(true)}} style={{ padding:'9px 14px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'10px',cursor:'pointer',fontSize:'12px',fontWeight:'600',whiteSpace:'nowrap' }}>📋 Importer sjekkliste</button>
               </div>
             </div>
           )}
@@ -18265,7 +18347,11 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             <div style={bCard}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Bilder og dokumenter</h3>
-                <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
+                <div style={{ display:'flex',gap:'6px' }}>
+                  <button onClick={()=>cameraRef.current?.click()} style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📷 Ta bilde</button>
+                  <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
+                </div>
+                <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={uploadCamera} />
                 <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadFile} accept="image/*,.pdf,.doc,.docx" multiple />
               </div>
               {files.length===0 ? <p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen filer lastet opp</p> : (
@@ -18291,7 +18377,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             <div style={bCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Befaringsinfo</h3>
               <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                {[['Tittel',ins.title],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
+                {[['Tittel',ins.title],['Type',(BEFARING_TYPES.find(t=>t.id===ins.inspection_type)||{}).label||ins.inspection_type],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
                   <div key={k} style={{ background:'#f8fafc',borderRadius:'8px',padding:'9px 12px' }}>
                     <div style={{ fontSize:'11px',color:'#94a3b8',textTransform:'uppercase',fontWeight:'600' }}>{k}</div>
                     <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a',marginTop:'2px' }}>{v}</div>
@@ -18324,7 +18410,80 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           </div>
         </div>
       </div>
-      {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {/* Import sjekkliste modal */}
+      {showImportCL && (
+        <>
+          <div onClick={()=>setShowImportCL(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius: isMobBD ? '0' : '20px',width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))',height: isMobBD ? '100vh' : 'auto',maxHeight: isMobBD ? '100vh' : '80vh',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',display:'flex',flexDirection:'column', inset: isMobBD ? 0 : 'auto', transform: isMobBD ? 'none' : 'translate(-50%,-50%)' }}>
+            <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+              <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📋 Importer sjekkliste</h2>
+              <button onClick={()=>setShowImportCL(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'8px' }}>
+              {checklists.length===0?<p style={{ color:'#94a3b8',fontSize:'14px',textAlign:'center',padding:'24px' }}>Ingen sjekklister funnet</p>:
+                checklists.map(cl=>{
+                  const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
+                  return (
+                    <button key={cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #f1f5f9',background:'white',cursor:'pointer',width:'100%',textAlign:'left' }}
+                      onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                      <div>
+                        <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
+                        <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
+                      </div>
+                      <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
+                    </button>
+                  )
+                })
+              }
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Send rapport modal */}
+      {showSend && (
+        <>
+          <div onClick={()=>setShowSend(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius: isMobBD ? '0' : '20px',width: isMobBD ? '100%' : 'min(560px,calc(100vw - 32px))',height: isMobBD ? '100vh' : 'auto',maxHeight: isMobBD ? '100vh' : '90vh',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',display:'flex',flexDirection:'column', inset: isMobBD ? 0 : 'auto', transform: isMobBD ? 'none' : 'translate(-50%,-50%)' }}>
+            <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+              <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📧 Send befaringsrapport</h2>
+              <button onClick={()=>setShowSend(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
+              <div style={{ background:'#eff6ff',borderRadius:'10px',padding:'12px',border:'1px solid #bfdbfe',fontSize:'13px',color:'#1e40af' }}>
+                Send utvalgte punkter med bilder til en kollega, UE eller andre. Mottaker trenger ikke tilgang til systemet.
+              </div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mottakers e-post *</label><input value={sendForm.email} onChange={e=>setSendForm(f=>({...f,email:e.target.value}))} placeholder="epost@firma.no" style={bInp} type="email" /></div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mottakers navn</label><input value={sendForm.name} onChange={e=>setSendForm(f=>({...f,name:e.target.value}))} placeholder="F.eks. Kontaktperson UE" style={bInp} /></div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Melding (valgfritt)</label><textarea value={sendForm.message} onChange={e=>setSendForm(f=>({...f,message:e.target.value}))} rows={2} placeholder="F.eks. Vennligst utbedr følgende punkter innen fredag..." style={{ ...bInp,resize:'none' }} /></div>
+              
+              <div>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px' }}>
+                  <label style={{ fontSize:'13px',fontWeight:'600',color:'#374151' }}>Velg punkter å sende ({sendItems.length}/{items.length})</label>
+                  <button onClick={()=>setSendItems(sendItems.length===items.length?[]:items.map(i=>i.id))} style={{ background:'none',border:'none',fontSize:'12px',color:'#2563eb',cursor:'pointer',fontWeight:'600' }}>{sendItems.length===items.length?'Fjern alle':'Velg alle'}</button>
+                </div>
+                <div style={{ display:'flex',flexDirection:'column',gap:'4px',maxHeight:'200px',overflowY:'auto' }}>
+                  {items.map(item=>{
+                    const sel=sendItems.includes(item.id)
+                    const st=item.status==='avvik'?'#dc2626':item.status==='ok'?'#16a34a':'#94a3b8'
+                    return (
+                      <label key={item.id} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'8px 10px',borderRadius:'8px',cursor:'pointer',background:sel?'#f0fdf4':'#f8fafc',border:sel?'1px solid #bbf7d0':'1px solid #f1f5f9' }}>
+                        <input type="checkbox" checked={sel} onChange={()=>setSendItems(s=>sel?s.filter(x=>x!==item.id):[...s,item.id])} style={{ accentColor:'#059669',width:'16px',height:'16px' }} />
+                        <span style={{ width:'6px',height:'6px',borderRadius:'50%',background:st,flexShrink:0 }} />
+                        <span style={{ fontSize:'13px',color:'#0f172a',flex:1 }}>{item.description}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <button onClick={sendToRecipient} disabled={sendingEmail} style={{ padding:'12px',background:sendingEmail?'#94a3b8':'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:sendingEmail?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700',marginTop:'4px' }}>{sendingEmail?'Sender...':'📧 Send rapport'}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+            {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
 
       {/* Konverter-modal */}
       {showConvert && (
@@ -18367,7 +18526,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
 function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit=!!initial
-  const [form, setForm] = useState({ title:initial?.title||'', date:initial?.date||new Date().toISOString().split('T')[0], location:initial?.location||'', project_id:initial?.project_id||'', status:initial?.status||'planlagt', notes:initial?.notes||'', participants:initial?.participants||[] })
+  const [form, setForm] = useState({ title:initial?.title||'', date:initial?.date||new Date().toISOString().split('T')[0], location:initial?.location||'', project_id:initial?.project_id||'', status:initial?.status||'planlagt', notes:initial?.notes||'', participants:initial?.participants||[], inspection_type:initial?.inspection_type||'kvalitet' })
   const [participantInput, setParticipantInput] = useState('')
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
