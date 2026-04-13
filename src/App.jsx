@@ -161,7 +161,7 @@ const navGroups = [
     title: 'ADMIN',
     items: [
       { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
-      { id: 'brukeradmin',label: 'Brukere',     emoji: '👤' },
+      { id: 'brukeradmin', label: 'Brukere',     emoji: '👤' },
     ]
   },
 ]
@@ -20830,6 +20830,8 @@ function KalkulasjonPage({ onNavigate }) {
     'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   }
 
+  const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -24033,31 +24035,32 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
     w.document.close()
   }
 
+  const isMobKV = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
-          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
-          <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
-          <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKV ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '8px' : '12px', marginBottom:'12px', flexWrap:'wrap' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding: isMobKV ? '6px 10px' : '8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
+          {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
+          <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
           {saving && <span style={{ fontSize:'12px', color:'#94a3b8' }}>Lagrer...</span>}
         </div>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems: isMobKV ? 'flex-start' : 'center', justifyContent:'space-between', flexDirection: isMobKV ? 'column' : 'row', gap: isMobKV ? '10px' : '0' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
-            <div style={{ display:'flex', gap:'16px', marginTop:'6px' }}>
-              {k.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
-              {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
-              {k.notes && <span style={{ fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>📝 {k.notes}</span>}
+            <h1 style={{ fontSize: isMobKV ? '17px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
+            <div style={{ display:'flex', gap: isMobKV ? '8px' : '16px', marginTop:'6px', flexWrap:'wrap' }}>
+              {k.customer_name && <span style={{ fontSize: isMobKV ? '11px' : '13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
+              {!isMobKV && k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
-            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', width: isMobKV ? '100%' : 'auto' }}>
+            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>
 
             {/* Mer-dropdown for sekundære handlinger */}
             <div style={{ position:'relative' }}>
-              <button onClick={() => setShowMoreMenu(!showMoreMenu)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⋯ Mer ▾</button>
+              <button onClick={() => setShowMoreMenu(!showMoreMenu)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>⋯ {isMobKV ? '' : 'Mer ▾'}</button>
               {showMoreMenu && (
                 <>
                 <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowMoreMenu(false)} />
@@ -24092,8 +24095,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             {/* Forhåndsvis PDF dropdown */}
             <div style={{ position:'relative' }}>
               <button onClick={() => setShowPreviewMenu(!showPreviewMenu)}
-                style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-                👁️ Forhåndsvis ▾
+                style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>
+                {isMobKV ? '👁️' : '👁️ Forhåndsvis ▾'}
               </button>
               {showPreviewMenu && (
                 <>
@@ -24111,19 +24114,41 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             </div>
 
             {/* Send til tilbudsmodul */}
-            <button onClick={handleTilbudClick}
+            {!isMobKV && <button onClick={handleTilbudClick}
               style={{ background: hasTilbudModule ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', opacity: hasTilbudModule ? 1 : 0.6 }}>
-              📋 Send til tilbudsmodul
-            </button>
+              📋 Tilbud
+            </button>}
 
-            <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>
+            <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '📧 Send' : '📧 Send til kunde'}</button>
           </div>
         </div>
       </div>
 
+      {/* Mobile totaloversikt */}
+      {isMobKV && (
+        <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', padding:'14px', display:'flex', justifyContent:'space-around', color:'white' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>SELVKOST</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{fmt(totals.totSelvkost)}</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>EKS. MVA</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{fmt(totals.totMedFortjeneste)}</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>MARGIN</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{totals.fortjenesteProsent.toFixed(1)}%</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>TIMER</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{totals.totTimer.toFixed(0)}</div>
+          </div>
+        </div>
+      )}
+
       {/* Mini-sammendrag — alltid synlig, toggle-bar */}
       {showMiniSummary && (
-        <div style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0', padding:'10px 32px', display:'flex', alignItems:'center', gap:'24px', fontSize:'13px' }}>
+        <div style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0', padding: isMobKV ? '8px 14px' : '10px 32px', display:'flex', alignItems:'center', gap: isMobKV ? '12px' : '24px', fontSize: isMobKV ? '11px' : '13px', flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
             <span style={{ color:'#64748b' }}>Eks. mva:</span>
             <span style={{ fontWeight:'800', color:'#0f172a', fontSize:'15px' }}>{fmt(totals.totMedFortjeneste)}</span>
@@ -24157,7 +24182,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
       {/* Nytt UE-tilbud mottatt banner */}
       {nyeUESvar.length > 0 && (
-        <div style={{ background:'#eff6ff', borderBottom:'1px solid #bfdbfe', padding:'12px 32px', display:'flex', alignItems:'center', gap:'12px' }}>
+        <div style={{ background:'#eff6ff', borderBottom:'1px solid #bfdbfe', padding: isMobKV ? '10px 14px' : '12px 32px', display:'flex', alignItems:'center', gap: isMobKV ? '8px' : '12px', flexWrap:'wrap' }}>
           <span style={{ fontSize:'20px' }}>🔔</span>
           <div style={{ flex:1 }}>
             <span style={{ fontWeight:'700', fontSize:'13px', color:'#1e40af' }}>Nytt UE-tilbud mottatt!</span>
@@ -24167,13 +24192,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
         </div>
       )}
 
-      <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
+      <div style={{ padding: isMobKV ? '12px' : '24px 32px', display:'flex', gap: isMobKV ? '12px' : '20px', flexWrap:'wrap' }}>
         {/* Main - per kalkyle with interactive bygningsdeler */}
-        <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ flex:2, minWidth: isMobKV ? '100%' : '500px', display:'flex', flexDirection:'column', gap: isMobKV ? '10px' : '16px' }}>
           {/* Faktorer guide for new users */}
           {!hasCustomFaktorer && kalkyler.length > 0 && (
-            <div style={{ background:'#fffbeb', border:'1px solid #fef08a', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px' }}>
-              <span style={{ fontSize:'24px', flexShrink:0 }}>💡</span>
+            <div style={{ background:'#fffbeb', border:'1px solid #fef08a', borderRadius: isMobKV ? '10px' : '14px', padding: isMobKV ? '10px 12px' : '14px 18px', display:'flex', alignItems: isMobKV ? 'flex-start' : 'center', gap: isMobKV ? '8px' : '12px', flexWrap: isMobKV ? 'wrap' : 'nowrap' }}>
+              {!isMobKV && <span style={{ fontSize:'24px', flexShrink:0 }}>💡</span>}
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:'700', fontSize:'13px', color:'#92400e', marginBottom:'2px' }}>Sett opp kalkulasjonsfaktorer</div>
                 <div style={{ fontSize:'12px', color:'#a16207' }}>Timepris, sosiale kostnader og fortjenestepåslag bruker standardverdier. Tilpass til din bedrift for korrekte kalkyler.</div>
@@ -25986,7 +26011,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulasjon']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
