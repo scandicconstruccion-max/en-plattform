@@ -13611,6 +13611,7 @@ function RessursPage() {
   const [showBookingModal, setShowBookingModal] = useState(null)
   const [dragging, setDragging] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [resizing, setResizing] = useState(null) // { planId, direction: 'left'|'right', startX, origDate, resourceId }
   const [filterProject, setFilterProject] = useState('alle')
   const [filterEmployee, setFilterEmployee] = useState('alle')
   const [showMilestones, setShowMilestones] = useState(false)
@@ -13732,6 +13733,88 @@ function RessursPage() {
     } catch(e) { alert('Feil: '+e.message) }
     setDragging(null); setDragOver(null); setDragCopy(false)
   }
+
+
+  // ── Resize handlers (drag edges to extend/shrink bookings) ──
+  const handleResizeStart = (plan, direction, e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setResizing({ planId: plan.id, direction, startX: e.clientX, origDate: plan.date, resourceId: plan.resource_id, plan })
+  }
+
+  const handleResizeMove = React.useCallback((e) => {
+    if (!resizing) return
+    // Calculate how many cells we've moved
+    const colW = viewMode==='maned' ? 68 : viewMode==='14' ? 60 : 90
+    const dx = e.clientX - resizing.startX
+    const cellsMoved = Math.round(dx / colW)
+    if (cellsMoved === 0) return
+    setResizing(prev => ({ ...prev, cellsMoved }))
+  }, [resizing, viewMode])
+
+  const handleResizeEnd = React.useCallback(async () => {
+    if (!resizing || !resizing.cellsMoved) { setResizing(null); return }
+    const cellsMoved = resizing.cellsMoved || 0
+    if (cellsMoved === 0) { setResizing(null); return }
+    
+    try {
+      const origDate = new Date(resizing.origDate + 'T12:00:00')
+      
+      if (resizing.direction === 'right') {
+        // Extend right: add new bookings for each day extended
+        for (let i = 1; i <= Math.abs(cellsMoved); i++) {
+          const d = new Date(origDate)
+          d.setDate(d.getDate() + (cellsMoved > 0 ? i : -i))
+          const newDate = d.toISOString().split('T')[0]
+          const dayOfWeek = d.getDay()
+          if (dayOfWeek === 0 || dayOfWeek === 6) continue
+          if (cellsMoved > 0) {
+            // Extending: copy booking to new dates
+            const { id, created_at, updated_at, ...rest } = resizing.plan
+            await supabase.from('resource_plans').insert({ ...rest, date: newDate })
+          } else {
+            // Shrinking from right: delete the last dates
+            const delDate = new Date(origDate)
+            delDate.setDate(delDate.getDate() - i + 1)
+            // Find and delete plans on this resource+date with same project
+            const plansOnDate = plans.filter(p => p.resource_id === resizing.resourceId && p.date === delDate.toISOString().split('T')[0] && p.project_id === resizing.plan.project_id)
+            for (const p of plansOnDate) {
+              await supabase.from('resource_plans').delete().eq('id', p.id)
+            }
+          }
+        }
+      } else {
+        // Extend left: add bookings before the original date
+        for (let i = 1; i <= Math.abs(cellsMoved); i++) {
+          const d = new Date(origDate)
+          d.setDate(d.getDate() + (cellsMoved < 0 ? -i : i))
+          const newDate = d.toISOString().split('T')[0]
+          const dayOfWeek = d.getDay()
+          if (dayOfWeek === 0 || dayOfWeek === 6) continue
+          if (cellsMoved < 0) {
+            const { id, created_at, updated_at, ...rest } = resizing.plan
+            await supabase.from('resource_plans').insert({ ...rest, date: newDate })
+          } else {
+            const plansOnDate = plans.filter(p => p.resource_id === resizing.resourceId && p.date === newDate && p.project_id === resizing.plan.project_id)
+            for (const p of plansOnDate) {
+              await supabase.from('resource_plans').delete().eq('id', p.id)
+            }
+          }
+        }
+      }
+      load()
+    } catch(e) { console.error('Resize error:', e) }
+    setResizing(null)
+  }, [resizing, plans])
+
+  React.useEffect(() => {
+    if (!resizing) return
+    const onMove = (e) => handleResizeMove(e)
+    const onUp = () => handleResizeEnd()
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [resizing, handleResizeMove, handleResizeEnd])
 
   const getWeekCapacity = (resourceId) => {
     const weekDates = getDatesInRange(currentDate, 7).filter(d=>!isWeekend(d))
@@ -14120,7 +14203,13 @@ function RessursPage() {
                         return (
                           <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan,e)}}
                             onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
-                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1 }}>
+                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1,position:'relative' }}
+                            onMouseEnter={e=>{const el=e.currentTarget;el.querySelector('.rh-l').style.opacity='1';el.querySelector('.rh-r').style.opacity='1'}}
+                            onMouseLeave={e=>{const el=e.currentTarget;el.querySelector('.rh-l').style.opacity='0';el.querySelector('.rh-r').style.opacity='0'}}>
+                            {/* Left resize handle */}
+                            <div className="rh-l" onMouseDown={e=>handleResizeStart(plan,'left',e)} style={{ position:'absolute',left:0,top:0,bottom:0,width:'6px',cursor:'ew-resize',background:'rgba(255,255,255,0.4)',borderRadius:'5px 0 0 5px',opacity:0,transition:'opacity 0.15s',zIndex:2 }} />
+                            {/* Right resize handle */}
+                            <div className="rh-r" onMouseDown={e=>handleResizeStart(plan,'right',e)} style={{ position:'absolute',right:0,top:0,bottom:0,width:'6px',cursor:'ew-resize',background:'rgba(255,255,255,0.4)',borderRadius:'0 5px 5px 0',opacity:0,transition:'opacity 0.15s',zIndex:2 }} />
                             {viewMode==='maned'?(
                               <div style={{ background:col,borderRadius:'3px',padding:'2px 4px',marginBottom:'1px',overflow:'hidden' }}>
                                 <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name?.slice(0,8)||'—'}</div>
@@ -14147,6 +14236,17 @@ function RessursPage() {
           })}
         </div>
       </div>
+
+      {/* Resize tip */}
+      {resizing && (
+        <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(37,99,235,0.95)',color:'white',borderRadius:'14px',padding:'12px 22px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.35)',display:'flex',alignItems:'center',gap:'10px' }}>
+          <span style={{ fontSize:'18px' }}>↔️</span>
+          <div>
+            <div style={{ fontWeight:'800' }}>Drar {resizing.direction==='right'?'slutt':'start'}dato</div>
+            <div style={{ fontSize:'11px',opacity:0.7 }}>{resizing.cellsMoved>0?'+':''}{resizing.cellsMoved||0} dager · Slipp for å bekrefte</div>
+          </div>
+        </div>
+      )}
 
       {/* Drag tip */}
       {dragging&&(
