@@ -15663,12 +15663,14 @@ function InterChatPage() {
     )
   }
 
+  const isMobChat = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster Intern Chat...</p></div></div>
 
   return (
     <div style={{ display:'flex',height:'calc(100vh - 64px)',fontFamily:'system-ui,sans-serif',overflow:'hidden',background:'#f8fafc' }}>
-      {/* LEFT SIDEBAR */}
-      <div style={{ width:'280px',flexShrink:0,background:'white',borderRight:'1px solid #f1f5f9',display:'flex',flexDirection:'column',height:'100%' }}>
+      {/* LEFT SIDEBAR - hidden on mobile when channel selected */}
+      {(!isMobChat || !selectedChannel) && <div style={{ width: isMobChat ? '100%' : '280px',flexShrink:0,background:'white',borderRight: isMobChat ? 'none' : '1px solid #f1f5f9',display:'flex',flexDirection:'column',height:'100%' }}>
         {/* Header */}
         <div style={{ padding:'16px 16px 12px',borderBottom:'1px solid #f1f5f9' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px' }}>
@@ -15718,10 +15720,10 @@ function InterChatPage() {
             <div style={{ fontSize:'10px',color:'#22c55e',fontWeight:'600' }}>● Online</div>
           </div>
         </div>
-      </div>
+      </div>}
 
-      {/* MAIN AREA */}
-      {selectedChannel ? (
+      {/* MAIN AREA - on mobile show back button */}
+      {(!isMobChat || selectedChannel) && selectedChannel ? (
         <ChatWindow
           channel={selectedChannel}
           user={user}
@@ -15729,8 +15731,9 @@ function InterChatPage() {
           members={members.filter(m=>m.channel_id===selectedChannel.id)}
           projects={projects}
           onRefresh={load}
+          onBack={isMobChat ? ()=>setSelectedChannel(null) : null}
         />
-      ) : (
+      ) : !isMobChat ? (
         <div style={{ flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc' }}>
           <div style={{ textAlign:'center' }}>
             <div style={{ width:'80px',height:'80px',borderRadius:'24px',background:'#f0fdf4',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'36px',margin:'0 auto 20px',border:'1px solid #bbf7d0' }}>💬</div>
@@ -15740,7 +15743,7 @@ function InterChatPage() {
               style={{ padding:'11px 22px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>+ Ny kanal</button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {showNewChannel&&(
         <NewChannelModal
@@ -15754,7 +15757,7 @@ function InterChatPage() {
   )
 }
 
-function ChatWindow({ channel, user, employees, members, projects, onRefresh }) {
+function ChatWindow({ channel, user, employees, members, projects, onRefresh, onBack }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
@@ -15865,6 +15868,7 @@ function ChatWindow({ channel, user, employees, members, projects, onRefresh }) 
       {/* Header */}
       <div style={{ padding:'14px 20px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
         <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
+          {onBack && <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'18px',padding:'4px',display:'flex',alignItems:'center' }}>←</button>}
           <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:chatColor(channel.name)+'18',border:`1px solid ${chatColor(channel.name)}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',fontWeight:'700',color:chatColor(channel.name) }}>
             {channel.type==='direct'?'👤':'#'}
           </div>
