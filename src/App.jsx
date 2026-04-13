@@ -18094,9 +18094,14 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
   const loadChecklists = async () => {
     try {
-      const { data, error } = await supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false})
-      if (error) throw error
-      setChecklists(data||[])
+      const [templates, lists] = await Promise.all([
+        supabase.from('checklist_templates').select('id,name,sections').order('name').then(r=>r.data||[]),
+        supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false}).then(r=>r.data||[])
+      ])
+      setChecklists([
+        ...templates.map(t=>({ id:t.id, title:'📁 '+t.name, sections:t.sections, isMal:true })),
+        ...lists.map(l=>({ id:l.id, title:l.title, sections:l.sections, isMal:false }))
+      ])
     } catch(e) { console.error('Feil ved lasting av sjekklister:', e); setChecklists([]) }
   }
 
@@ -18423,21 +18428,42 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               <button onClick={()=>setShowImportCL(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
             </div>
             <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'8px' }}>
-              {checklists.length===0?<p style={{ color:'#94a3b8',fontSize:'14px',textAlign:'center',padding:'24px' }}>Ingen sjekklister funnet</p>:
-                checklists.map(cl=>{
-                  const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
-                  return (
-                    <button key={cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #f1f5f9',background:'white',cursor:'pointer',width:'100%',textAlign:'left' }}
-                      onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                      <div>
-                        <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
-                        <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
-                      </div>
-                      <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
-                    </button>
-                  )
-                })
-              }
+              {checklists.length===0?<p style={{ color:'#94a3b8',fontSize:'14px',textAlign:'center',padding:'24px' }}>Ingen maler eller sjekklister funnet. Opprett maler i Sjekkliste-modulen.</p>:(
+                <>
+                  {checklists.filter(c=>c.isMal).length>0 && (
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#7c3aed',textTransform:'uppercase',marginBottom:'2px',marginTop:'4px' }}>📁 Maler</div>
+                  )}
+                  {checklists.filter(c=>c.isMal).map(cl=>{
+                    const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
+                    return (
+                      <button key={'t-'+cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #e9d5ff',background:'#faf5ff',cursor:'pointer',width:'100%',textAlign:'left' }}
+                        onMouseEnter={e=>e.currentTarget.style.background='#f3e8ff'} onMouseLeave={e=>e.currentTarget.style.background='#faf5ff'}>
+                        <div>
+                          <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
+                          <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
+                        </div>
+                        <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
+                      </button>
+                    )
+                  })}
+                  {checklists.filter(c=>!c.isMal).length>0 && (
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#059669',textTransform:'uppercase',marginBottom:'2px',marginTop:'8px' }}>📋 Eksisterende sjekklister</div>
+                  )}
+                  {checklists.filter(c=>!c.isMal).map(cl=>{
+                    const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
+                    return (
+                      <button key={'c-'+cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #f1f5f9',background:'white',cursor:'pointer',width:'100%',textAlign:'left' }}
+                        onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                        <div>
+                          <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
+                          <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
+                        </div>
+                        <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
+                      </button>
+                    )
+                  })}
+                </>
+              )}
             </div>
           </div>
         </>
