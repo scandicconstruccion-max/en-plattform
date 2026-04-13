@@ -13623,6 +13623,7 @@ function RessursPage() {
   const [allSkills, setAllSkills] = useState([])
   const [fullscreen, setFullscreen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showDoubleBookings, setShowDoubleBookings] = useState(false)
   const [settings, setSettings] = useState({
     showWeekends: true,
     showHolidays: true,
@@ -13863,7 +13864,7 @@ function RessursPage() {
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:fullscreen?'flex':'block', flexDirection:fullscreen?'column':'initial', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:fullscreen?0:'initial' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:0, position:'sticky', top:0, zIndex:30 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
@@ -13871,9 +13872,9 @@ function RessursPage() {
           </div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
             {doubleBookCount>0&&(
-              <div style={{ background:'#fef2f2',borderRadius:'10px',padding:'8px 14px',border:'1px solid #fecaca',fontSize:'13px',color:'#dc2626',fontWeight:'700' }}>
+              <button onClick={()=>setShowDoubleBookings(true)} style={{ background:'#fef2f2',borderRadius:'10px',padding:'8px 14px',border:'1px solid #fecaca',fontSize:'13px',color:'#dc2626',fontWeight:'700',cursor:'pointer' }}>
                 ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
-              </div>
+              </button>
             )}
             <button onClick={()=>setShowLedigMannskap(true)}
               style={{ padding:'9px 14px', background:'#eff6ff', color:'#2563eb', border:'2px solid #bfdbfe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
@@ -14118,7 +14119,7 @@ function RessursPage() {
       )}
 
       {/* Legend */}
-      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center' }}>
+      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center', position:'sticky', top:0, zIndex:25 }}>
         <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
         {(filterProject!=='alle' ? projects.filter(p=>p.id===filterProject) : projects).slice(0,8).map(p=>(
           <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'5px', cursor:'pointer' }} onClick={()=>setFilterProject(p.id===filterProject?'alle':p.id)}>
@@ -14130,8 +14131,8 @@ function RessursPage() {
       </div>
 
       {/* Grid */}
-      <div id="ressurs-grid-scroll" style={{ overflowX:'auto', overflowY:fullscreen?'auto':'visible', flex:fullscreen?1:'initial' }}>
-        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?68:viewMode==='14'?60:90)}px` }}>
+      <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:fullscreen?'auto':'visible', flex:fullscreen?1:'initial' }}>
+        <div style={{ minWidth: viewMode==='maned' ? `${240+visibleDates.length*68}px` : '100%' }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
             <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
@@ -14140,10 +14141,9 @@ function RessursPage() {
             {visibleDates.map(date=>{
               const d=new Date(date+'T12:00:00')
               const weekend=isWeekend(date); const tod=isToday(date)
-              const colW=viewMode==='maned'?68:viewMode==='14'?60:90
               const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
               return (
-                <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
+                <div key={date} style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
                   <div style={{ fontSize:'10px',color:tod?'#059669':weekend?'#cbd5e1':'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{DAY_SHORT[d.getDay()===0?6:d.getDay()-1]}</div>
                   <div style={{ fontSize:viewMode==='maned'?'12px':'13px',fontWeight:tod?'800':'600',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
                   {msOnDate.length>0&&(
@@ -14169,7 +14169,7 @@ function RessursPage() {
                 const colW=viewMode==='maned'?68:viewMode==='14'?60:90
                 const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
                 return (
-                  <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
+                  <div key={date} style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
                     onClick={()=>setShowNewMilestone(date)}>
                     {msOnDate.map(ms=>(
                       <div key={ms.id} title={ms.title}
@@ -14215,7 +14215,7 @@ function RessursPage() {
                     const cellPlans=getPlansForCell(res.id,date)
                     return (
                       <div key={date}
-                        style={{ width:`${colW}px`,flexShrink:0,minHeight:'56px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'rgba(5,150,105,0.04)':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
+                        style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),minHeight:'56px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'rgba(5,150,105,0.04)':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
                         onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
                         onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
                         onDrop={()=>handleDrop(res.id,date)}>
@@ -14232,8 +14232,13 @@ function RessursPage() {
                     const effStart=Math.max(startIdx,0)
                     const effEnd=endIdx>=0?endIdx:visibleDates.length-1
                     const span=effEnd-effStart+1
-                    const left=effStart*colW+3
-                    const width=span*colW-6
+                    // For month view use fixed px, for uke/14 use percentage of container
+                    const totalCols=visibleDates.length
+                    const leftPct=(effStart/totalCols*100)
+                    const widthPct=(span/totalCols*100)
+                    const useFixed=viewMode==='maned'
+                    const left=useFixed ? effStart*colW+3 : 0
+                    const width=useFixed ? span*colW-6 : 0
                     const isMultiDay=bar.startDate!==bar.endDate
                     const firstPlan=bar.plans[0]
                     const cellPlans=getPlansForCell(bar.resourceId,bar.startDate)
@@ -14241,7 +14246,7 @@ function RessursPage() {
                       <div key={bar.id}
                         draggable onDragStart={e=>{e.stopPropagation();handleDragStart(firstPlan,e)}}
                         onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date:bar.startDate,existingPlans:cellPlans,editPlan:firstPlan})}}
-                        style={{ position:'absolute',top:'6px',bottom:'6px',left:`${left}px`,width:`${width}px`,background:`linear-gradient(135deg,${col},${col}dd)`,borderRadius:'8px',cursor:'grab',userSelect:'none',display:'flex',alignItems:'center',padding:'0 10px',gap:'6px',zIndex:3,boxShadow:'0 1px 4px rgba(0,0,0,0.15)',transition:'box-shadow 0.15s,opacity 0.1s',opacity:dragging?.id===firstPlan.id?0.5:1,overflow:'hidden' }}
+                        style={{ position:'absolute',top:'6px',bottom:'6px',...(viewMode==='maned'?{left:`${left}px`,width:`${width}px`}:{left:`calc(${leftPct}% + 3px)`,width:`calc(${widthPct}% - 6px)`}),background:`linear-gradient(135deg,${col},${col}dd)`,borderRadius:'8px',cursor:'grab',userSelect:'none',display:'flex',alignItems:'center',padding:'0 10px',gap:'6px',zIndex:3,boxShadow:'0 1px 4px rgba(0,0,0,0.15)',transition:'box-shadow 0.15s,opacity 0.1s',opacity:dragging?.id===firstPlan.id?0.5:1,overflow:'hidden' }}
                         onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.25)'}
                         onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.15)'}>
                         {/* Left resize handle */}
@@ -14291,6 +14296,73 @@ function RessursPage() {
           </div>
         </div>
       )}
+
+
+      {/* Dobbeltbooking modal */}
+      {showDoubleBookings && (() => {
+        const dbList = []
+        const seen = {}
+        plans.forEach(p => {
+          const k = `${p.resource_id}_${p.date}`
+          if (!seen[k]) seen[k] = { resourceId:p.resource_id, date:p.date, plans:[], totalH:0 }
+          seen[k].plans.push(p)
+          seen[k].totalH += parseFloat(p.hours)||0
+        })
+        Object.values(seen).filter(x=>x.totalH>8).forEach(x=>dbList.push(x))
+        dbList.sort((a,b)=>a.date.localeCompare(b.date))
+        return (
+          <>
+            <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} onClick={()=>setShowDoubleBookings(false)} />
+            <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(560px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',zIndex:201,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+              <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                <div>
+                  <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#dc2626' }}>⚠️ Dobbeltbookinger ({dbList.length})</h2>
+                  <p style={{ margin:'4px 0 0',fontSize:'13px',color:'#64748b' }}>Ressurser booket over 8 timer på samme dag</p>
+                </div>
+                <button onClick={()=>setShowDoubleBookings(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+              </div>
+              <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
+                {dbList.length===0?<p style={{ color:'#94a3b8',textAlign:'center',padding:'24px' }}>Ingen dobbeltbookinger</p>:
+                  dbList.map((db,i)=>{
+                    const res = employees.find(e=>e.id===db.resourceId) || machines.find(m=>m.id===db.resourceId)
+                    const resName = res?.first_name ? `${res.first_name} ${res.last_name}` : res?.name || 'Ukjent'
+                    const dateStr = new Date(db.date+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'short',day:'numeric',month:'short'})
+                    return (
+                      <div key={i} style={{ background:'#fef2f2',borderRadius:'12px',border:'1px solid #fecaca',padding:'14px 16px',marginBottom:'10px' }}>
+                        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px' }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                            <div style={{ width:'28px',height:'28px',borderRadius:'50%',background:'#dc2626',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'700' }}>{(resName[0]||'?').toUpperCase()}</div>
+                            <div>
+                              <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{resName}</div>
+                              <div style={{ fontSize:'11px',color:'#dc2626' }}>📅 {dateStr}</div>
+                            </div>
+                          </div>
+                          <div style={{ background:'#dc2626',color:'white',borderRadius:'8px',padding:'4px 10px',fontSize:'13px',fontWeight:'800' }}>{db.totalH}t / 8t</div>
+                        </div>
+                        <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
+                          {db.plans.map(p=>{
+                            const proj=projects.find(x=>x.id===p.project_id)
+                            const col=getProjectColor(p.project_id,projects)
+                            return (
+                              <div key={p.id} style={{ display:'flex',alignItems:'center',gap:'8px',background:'white',borderRadius:'8px',padding:'8px 10px',border:'1px solid #fecaca' }}>
+                                <div style={{ width:'10px',height:'10px',borderRadius:'3px',background:col,flexShrink:0 }} />
+                                <span style={{ flex:1,fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{proj?.name||'Ukjent'}</span>
+                                <span style={{ fontSize:'13px',fontWeight:'700',color:'#dc2626' }}>{p.hours}t</span>
+                                <button onClick={()=>{setShowDoubleBookings(false);setShowBookingModal({resourceId:db.resourceId,resourceName:resName,date:db.date,existingPlans:db.plans,editPlan:p})}}
+                                  style={{ background:'white',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 8px',fontSize:'11px',cursor:'pointer',color:'#64748b',fontWeight:'600' }}>Rediger</button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })
+                }
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       {showBookingModal&&(
         <BookingModal
