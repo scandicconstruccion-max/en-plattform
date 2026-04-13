@@ -7852,7 +7852,7 @@ const UE_STATUS = {
 }
 
 const tInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
-const tCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+const tCard = { background: 'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border: '1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
 function TenderStatusBadge({ status }) {
   const cfg = TENDER_STATUS[status] || TENDER_STATUS['Utkast']
@@ -7910,26 +7910,28 @@ function AnbudsPage() {
   const tildelt = tenders.filter(t => t.status === 'Tildelt')
   const totalTildelt = tildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
 
+  const isMobA = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
 
   if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobA ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbudsportal</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>
+            <h1 style={{ fontSize: isMobA ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbud</h1>
+            {!isMobA && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Ny forespørsel</button>
-            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📤 Send til UE</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📥 Ny' : '📥 Ny forespørsel'}</button>
+            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📤 UE' : '📤 Send til UE'}</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobA ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobA ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {[
@@ -7938,23 +7940,23 @@ function AnbudsPage() {
             { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
           ].map(s => (
             <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
-              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
+              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius: isMobA ? '10px' : '14px', padding: isMobA ? '10px' : '16px', cursor:'pointer', textAlign: isMobA ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobA ? '16px' : '22px', marginBottom: isMobA ? '4px' : '8px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobA ? '16px' : '22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize: isMobA ? '10px' : '11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
             </button>
           ))}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+          {!isMobA && <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
             <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
             <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
-          </div>
+          </div>}
         </div>
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobA ? '10px' : '14px 18px', display:'flex', gap: isMobA ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...tInp, maxWidth: isMobA ? '100%' : '260px', flex: isMobA ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth: isMobA ? '100%' : '180px', flex: isMobA ? '1 1 100%' : 'none', fontSize: isMobA ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
           </select>
@@ -7979,27 +7981,27 @@ function AnbudsPage() {
               const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
               return (
                 <div key={t.id} onClick={()=>setSelected(t)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobA ? '12px' : '14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding: isMobA ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobA ? 'flex-start' : 'center', gap: isMobA ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
+                  {!isMobA && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
-                      <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobA ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobA ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobA ? 'calc(100vw - 120px)' : 'none' }}>{t.title}</span>
+                      {!isMobA && <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>}
                       <TenderStatusBadge status={t.status} />
                       <span style={{ background:isIncoming?'#f5f3ff':'#eff6ff', color:isIncoming?'#7c3aed':'#2563eb', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:`1px solid ${isIncoming?'#ddd6fe':'#bfdbfe'}` }}>{isIncoming?'Innkommende':'Utgående UE'}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ Frist {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d igjen)`:''}</span>}
+                    <div style={{ display:'flex', gap: isMobA ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {t.customer_name && <span style={{ fontSize: isMobA ? '11px' : '12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
+                      {!isMobA && proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobA && t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b' }}>⏰ {t.deadline}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobA ? '13px' : '15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
+                    {!isMobA && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobA && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -8013,6 +8015,7 @@ function AnbudsPage() {
 
 function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const isMobAD = typeof window !== 'undefined' && window.innerWidth < 768
   const [t, setT] = useState(init)
   const [ues, setUes] = useState([])
   const [editing, setEditing] = useState(false)
@@ -8069,16 +8072,16 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{t.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobAD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobAD ? '8px' : '16px', flexWrap: isMobAD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobAD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobAD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobAD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobAD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{t.title}</h1>
+                {!isMobAD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>}
                 <TenderStatusBadge status={t.status} />
               </div>
               <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -8088,17 +8091,17 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Inviter UE</button>}
-            {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
-            {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobAD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '📧 UE' : '📧 Inviter UE'}</button>}
+            {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '🏆 Tildel' : '🏆 Tildel anbud'}</button>}
+            {isIncoming && <button onClick={generateQuote} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '📋 Tilbud' : '📋 Generer tilbud'}</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobAD ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobAD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobAD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: isMobOD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobOD ? '1fr' : '2fr 1fr', gap: isMobOD ? '12px' : '20px' }}>
+      <div style={{ padding: isMobAD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobAD ? '1fr' : '2fr 1fr', gap: isMobAD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Description */}
           {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
@@ -8118,7 +8121,22 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                         {ch.markup>0 && <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669' }}>Pris: {fmtT(price)}</div>}
                       </div>
                     </div>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                    {isMobAD ? (
+                      <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                        {(ch.posts||[]).map((p,pi) => {
+                          const ls = (parseFloat(p.qty)||0)*(parseFloat(p.unitCost)||0)
+                          return (
+                            <div key={pi} style={{ background:'white', borderRadius:'8px', padding:'8px 10px' }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                                <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{p.description||'—'}</span>
+                                <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmtT(ls)}</span>
+                              </div>
+                              <div style={{ fontSize:'11px', color:'#64748b' }}>{p.qty} {p.unit} × {fmtT(p.unitCost)}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (<table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                       <thead><tr style={{ background:'white' }}>
                         {['Beskrivelse','Mengde','Enhet','Kost/enh','Sum'].map(h=><th key={h} style={{ padding:'6px 8px', textAlign:h==='Sum'||h==='Kost/enh'?'right':'left', color:'#94a3b8', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
                       </tr></thead>
@@ -8135,6 +8153,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                         })}
                       </tbody>
                     </table>
+                    )}
                   </div>
                 )
               })}
@@ -25757,7 +25776,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
