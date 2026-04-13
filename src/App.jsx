@@ -18255,10 +18255,10 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                 {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik} avvik</span>}
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                <span style={{ fontSize:'13px', color:'#64748b' }}>📅 {ins.date}</span>
-                {ins.location&&<span style={{ fontSize:'13px', color:'#64748b' }}>📍 {ins.location}</span>}
-                {proj&&<span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              <div style={{ display:'flex', gap: isMobBD ? '6px' : '12px', flexWrap:'wrap' }}>
+                <span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📅 {ins.date}</span>
+                {ins.location&&<span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📍 {ins.location}</span>}
+                {!isMobBD && proj&&<span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
               </div>
             </div>
           </div>
@@ -18295,15 +18295,15 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 {items.map(item=>{
                   const st=ITEM_STATUS[item.status]
                   return (
-                    <div key={item.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9' }}>
-                      <button onClick={()=>toggleItemStatus(item)} style={{ padding:'4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth:'52px' }}>{st.label}</button>
+                    <div key={item.id} style={{ display:'flex', alignItems: isMobBD ? 'flex-start' : 'center', gap: isMobBD ? '8px' : '10px', padding: isMobBD ? '8px 10px' : '10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9', flexWrap: isMobBD ? 'wrap' : 'nowrap' }}>
+                      <button onClick={()=>toggleItemStatus(item)} style={{ padding: isMobBD ? '3px 10px' : '4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth: isMobBD ? '42px' : '52px' }}>{st.label}</button>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
+                        <span style={{ fontSize: isMobBD ? '12px' : '13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
                         {item.location_ref && <div style={{ fontSize:'11px', color:'#2563eb', marginTop:'2px' }}>📍 {item.location_ref}</div>}
                       </div>
                       <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
                         {item.status==='avvik'&&<button onClick={()=>convertToDeviation(item)} title="Opprett avvik" style={{ background:'#fef2f2',color:'#dc2626',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer',fontWeight:'600' }}>⚠️</button>}
-                        <button onClick={async ()=>{const ref=prompt('Plassering / romreferanse:',item.location_ref||'');if(ref!==null){await supabase.from('inspection_items').update({location_ref:ref||null}).eq('id',item.id);loadDetails()}}} title="Koble til rom/tegning" style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer' }}>📍</button>
+                        {!isMobBD && <button onClick={async ()=>{const ref=prompt('Plassering / romreferanse:',item.location_ref||'');if(ref!==null){await supabase.from('inspection_items').update({location_ref:ref||null}).eq('id',item.id);loadDetails()}}} title="Koble til rom/tegning" style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer' }}>📍</button>}
                         <button onClick={()=>deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
                       </div>
                     </div>
@@ -18311,9 +18311,9 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 })}
               </div>
               <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex:'1 1 200px' }} />
-                <button onClick={addItem} style={{ padding:'9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700',whiteSpace:'nowrap' }}>+ Legg til</button>
-                <button onClick={()=>{loadChecklists();setShowImportCL(true)}} style={{ padding:'9px 14px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'10px',cursor:'pointer',fontSize:'12px',fontWeight:'600',whiteSpace:'nowrap' }}>📋 Importer sjekkliste</button>
+                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex: isMobBD ? '1 1 100%' : '1 1 200px' }} />
+                <button onClick={addItem} style={{ padding: isMobBD ? '9px 12px' : '9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700',whiteSpace:'nowrap',flex: isMobBD ? 1 : 'none' }}>+ Legg til</button>
+                <button onClick={()=>{loadChecklists();setShowImportCL(true)}} style={{ padding: isMobBD ? '9px 12px' : '9px 14px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '12px',fontWeight:'600',whiteSpace:'nowrap',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📋 Importer' : '📋 Importer sjekkliste'}</button>
               </div>
             </div>
           )}
@@ -18325,7 +18325,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 {followups.map(fu=>{
                   const overdue=fu.due_date&&fu.due_date<today&&!fu.completed
                   return (
-                    <div key={fu.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'12px 14px', background:fu.completed?'#f8fafc':overdue?'#fef2f2':'#fffbeb', borderRadius:'10px', border:`1px solid ${fu.completed?'#f1f5f9':overdue?'#fecaca':'#fde68a'}` }}>
+                    <div key={fu.id} style={{ display:'flex', alignItems: isMobBD ? 'flex-start' : 'center', gap: isMobBD ? '8px' : '10px', padding: isMobBD ? '10px' : '12px 14px', background:fu.completed?'#f8fafc':overdue?'#fef2f2':'#fffbeb', borderRadius:'10px', border:`1px solid ${fu.completed?'#f1f5f9':overdue?'#fecaca':'#fde68a'}` }}>
                       <input type="checkbox" checked={fu.completed} onChange={()=>toggleFollowup(fu)} style={{ width:'16px',height:'16px',accentColor:'#059669',cursor:'pointer',flexShrink:0 }} />
                       <div style={{ flex:1 }}>
                         <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', textDecoration:fu.completed?'line-through':'none' }}>{fu.description}</div>
@@ -18346,7 +18346,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                   <input value={newFollowup.responsible} onChange={e=>setNewFollowup(f=>({...f,responsible:e.target.value}))} placeholder="Ansvarlig person" style={bInp} />
                   <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
                 </div>
-                <button onClick={addFollowup} style={{ padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>Legg til oppfølging</button>
+                <button onClick={addFollowup} style={{ padding: isMobBD ? '10px' : '9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700' }}>{isMobBD ? '+ Oppfølging' : 'Legg til oppfølging'}</button>
               </div>
             </div>
           )}
@@ -18356,14 +18356,14 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Bilder og dokumenter</h3>
                 <div style={{ display:'flex',gap:'6px' }}>
-                  <button onClick={()=>cameraRef.current?.click()} style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📷 Ta bilde</button>
-                  <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
+                  <button onClick={()=>cameraRef.current?.click()} style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'8px',padding: isMobBD ? '7px 10px' : '7px 14px',fontSize: isMobBD ? '12px' : '13px',fontWeight:'600',cursor:'pointer' }}>📷 {isMobBD ? 'Bilde' : 'Ta bilde'}</button>
+                  <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding: isMobBD ? '7px 10px' : '7px 14px',fontSize: isMobBD ? '12px' : '13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
                 </div>
                 <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={uploadCamera} />
                 <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadFile} accept="image/*,.pdf,.doc,.docx" multiple />
               </div>
               {files.length===0 ? <p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen filer lastet opp</p> : (
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: isMobBD ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(140px,1fr))', gap: isMobBD ? '8px' : '10px' }}>
                   {files.map(f=>{
                     const isImg=f.file_type?.startsWith('image/')
                     return (
@@ -18411,7 +18411,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           <div style={bCard}>
             <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Oppsummering</h3>
             {[['Sjekkpunkter',items.length],['OK',ok],['Avvik',avvik],['N/A',items.filter(i=>i.status==='na').length],['Oppfølginger',followups.length],['Åpne',openF],['Filer',files.length]].map(([k,v],i)=>(
-              <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize:'13px' }}>
+              <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize: isMobBD ? '12px' : '13px' }}>
                 <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700',color:'#0f172a' }}>{v}</span>
               </div>
             ))}
@@ -18518,7 +18518,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       {showConvert && (
         <>
           <div onClick={()=>setShowConvert(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(500px,calc(100vw - 32px))',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '85vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', overflow:'auto' }}>
             <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9' }}>
               <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>🔄 Konverter befaringspunkter</h2>
             </div>
