@@ -13793,6 +13793,48 @@ function RessursPage() {
     window.addEventListener('mouseup', onUp)
   }
 
+
+  // ── Merge consecutive single-day plans into visual bars ──
+  const getResourceBars = (resourceId) => {
+    const resPlans = filteredPlans.filter(p => p.resource_id === resourceId).sort((a,b) => a.date.localeCompare(b.date))
+    const bars = []
+    const visited = new Set()
+    
+    for (const plan of resPlans) {
+      if (visited.has(plan.id)) continue
+      // Find consecutive days with same project
+      let endDate = plan.date
+      const barPlans = [plan]
+      visited.add(plan.id)
+      
+      let check = new Date(plan.date + 'T12:00:00')
+      while (true) {
+        check.setDate(check.getDate() + 1)
+        // Skip weekends
+        while (check.getDay() === 0 || check.getDay() === 6) check.setDate(check.getDate() + 1)
+        const checkStr = check.toISOString().split('T')[0]
+        const nextPlan = resPlans.find(p => !visited.has(p.id) && p.date === checkStr && p.project_id === plan.project_id)
+        if (nextPlan) {
+          visited.add(nextPlan.id)
+          barPlans.push(nextPlan)
+          endDate = checkStr
+        } else break
+      }
+      
+      bars.push({
+        id: plan.id,
+        projectId: plan.project_id,
+        startDate: plan.date,
+        endDate: endDate,
+        plans: barPlans,
+        hours: barPlans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0),
+        notes: plan.notes,
+        resourceId,
+      })
+    }
+    return bars
+  }
+
   const getWeekCapacity = (resourceId) => {
     const weekDates = getDatesInRange(currentDate, 7).filter(d=>!isWeekend(d))
     const booked = weekDates.reduce((acc,d)=>acc+getTotalHours(resourceId,d),0)
@@ -14142,72 +14184,81 @@ function RessursPage() {
             </div>
           )}
 
-          {/* Resource rows */}
+          {/* Resource rows — bar-based layout */}
           {resources.map(res=>{
             const cap=getWeekCapacity(res.id)
             const name=res.first_name?`${res.first_name} ${res.last_name}`:res.name
+            const bars=getResourceBars(res.id)
+            const colW=viewMode==='maned'?68:viewMode==='14'?60:90
             return (
-              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9' }} onMouseLeave={()=>setDragOver(null)}>
+              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9', minHeight:'56px' }} onMouseLeave={()=>setDragOver(null)}>
                 <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background:'white',display:'flex',alignItems:'center',gap:'10px' }}>
+                  <div style={{ width:'32px',height:'32px',borderRadius:'50%',background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'700',color:'#4338ca',flexShrink:0 }}>{(res.first_name?.[0]||res.name?.[0]||'?').toUpperCase()}</div>
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
-                    <div style={{ fontSize:'11px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
+                    <div style={{ fontSize:'10px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
                   </div>
                   <div style={{ flexShrink:0,width:'40px' }}>
                     <div style={{ fontSize:'10px',color:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',fontWeight:'700',textAlign:'center',marginBottom:'2px' }}>{cap.pct}%</div>
-                    <div style={{ height:'4px',borderRadius:'2px',background:'#f1f5f9',overflow:'hidden' }}>
-                      <div style={{ height:'100%',borderRadius:'2px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%` }}/>
+                    <div style={{ height:'4px',borderRadius:'999px',background:'#f1f5f9',overflow:'hidden' }}>
+                      <div style={{ height:'100%',borderRadius:'999px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%`,transition:'width 0.3s' }}/>
                     </div>
                   </div>
                 </div>
-                {visibleDates.map(date=>{
-                  const cellPlans=getPlansForCell(res.id,date)
-                  const totalH=getTotalHours(res.id,date)
-                  const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
-                  const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
-                  const colW=viewMode==='maned'?68:viewMode==='14'?60:90
-                  return (
-                    <div key={date}
-                      style={{ width:`${colW}px`,flexShrink:0,minHeight:viewMode==='maned'?'64px':'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
-                      onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
-                      onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
-                      onDrop={()=>handleDrop(res.id,date)}>
-                      {dblBook&&<div style={{ position:'absolute',top:1,right:2,fontSize:'10px',color:'#dc2626',fontWeight:'800' }}>!</div>}
-                      {isDragTarget&&dragCopy&&<div style={{ position:'absolute',top:1,left:2,fontSize:'10px',color:'#2563eb',fontWeight:'800',background:'#eff6ff',borderRadius:'3px',padding:'0 3px' }}>+</div>}
-                      {cellPlans.map(plan=>{
-                        const proj=projects.find(p=>p.id===plan.project_id)
-                        const col=getProjectColor(plan.project_id,projects)
-                        return (
-                          <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan,e)}}
-                            onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
-                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1,position:'relative' }}>
-                            {viewMode!=='maned' && <>
-                            <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(plan,'left',e)}} style={{ position:'absolute',left:0,top:0,bottom:0,width:'7px',cursor:'ew-resize',background:'transparent',zIndex:2 }}
-                              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.5)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
-                            <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(plan,'right',e)}} style={{ position:'absolute',right:0,top:0,bottom:0,width:'7px',cursor:'ew-resize',background:'transparent',zIndex:2 }}
-                              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.5)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
-                            </>}
-                            {viewMode==='maned'?(
-                              <div style={{ background:col,borderRadius:'3px',padding:'2px 4px',marginBottom:'1px',overflow:'hidden' }}>
-                                <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name?.slice(0,8)||'—'}</div>
-                              </div>
-                            ):(
-                              <>
-                                <div style={{ fontSize:'10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{proj?.name||'—'}</div>
-                                {viewMode==='uke'&&<div style={{ fontSize:'10px',color:'rgba(255,255,255,0.85)' }}>{plan.hours}t</div>}
-                              </>
-                            )}
-                          </div>
-                        )
-                      })}
-                      {cellPlans.length===0&&!weekend&&(
-                        <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.15 }}>
-                          <span style={{ fontSize:'16px',color:'#059669' }}>+</span>
+                {/* Date cells with bar overlays */}
+                <div style={{ position:'relative', display:'flex', flex:1 }}>
+                  {/* Background cells for click + drop targets */}
+                  {visibleDates.map(date=>{
+                    const totalH=getTotalHours(res.id,date)
+                    const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
+                    const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
+                    const cellPlans=getPlansForCell(res.id,date)
+                    return (
+                      <div key={date}
+                        style={{ width:`${colW}px`,flexShrink:0,minHeight:'56px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'rgba(5,150,105,0.04)':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
+                        onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
+                        onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
+                        onDrop={()=>handleDrop(res.id,date)}>
+                        {dblBook&&<div style={{ position:'absolute',top:2,right:3,fontSize:'9px',color:'#dc2626',fontWeight:'800',zIndex:5 }}>!</div>}
+                      </div>
+                    )
+                  })}
+                  {/* Bar overlays */}
+                  {bars.filter(bar=>visibleDates.includes(bar.startDate)||visibleDates.includes(bar.endDate)||visibleDates.some(d=>d>=bar.startDate&&d<=bar.endDate)).map(bar=>{
+                    const proj=projects.find(p=>p.id===bar.projectId)
+                    const col=getProjectColor(bar.projectId,projects)
+                    const startIdx=visibleDates.indexOf(bar.startDate)
+                    const endIdx=visibleDates.indexOf(bar.endDate)
+                    const effStart=Math.max(startIdx,0)
+                    const effEnd=endIdx>=0?endIdx:visibleDates.length-1
+                    const span=effEnd-effStart+1
+                    const left=effStart*colW+3
+                    const width=span*colW-6
+                    const isMultiDay=bar.startDate!==bar.endDate
+                    const firstPlan=bar.plans[0]
+                    const cellPlans=getPlansForCell(bar.resourceId,bar.startDate)
+                    return (
+                      <div key={bar.id}
+                        draggable onDragStart={e=>{e.stopPropagation();handleDragStart(firstPlan,e)}}
+                        onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date:bar.startDate,existingPlans:cellPlans,editPlan:firstPlan})}}
+                        style={{ position:'absolute',top:'6px',bottom:'6px',left:`${left}px`,width:`${width}px`,background:`linear-gradient(135deg,${col},${col}dd)`,borderRadius:'8px',cursor:'grab',userSelect:'none',display:'flex',alignItems:'center',padding:'0 10px',gap:'6px',zIndex:3,boxShadow:'0 1px 4px rgba(0,0,0,0.15)',transition:'box-shadow 0.15s,opacity 0.1s',opacity:dragging?.id===firstPlan.id?0.5:1,overflow:'hidden' }}
+                        onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.25)'}
+                        onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.15)'}>
+                        {/* Left resize handle */}
+                        <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(firstPlan,'left',e)}} style={{ position:'absolute',left:0,top:0,bottom:0,width:'8px',cursor:'ew-resize',borderRadius:'8px 0 0 8px',zIndex:4 }}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.35)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
+                        {/* Right resize handle */}
+                        <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(bar.plans[bar.plans.length-1],'right',e)}} style={{ position:'absolute',right:0,top:0,bottom:0,width:'8px',cursor:'ew-resize',borderRadius:'0 8px 8px 0',zIndex:4 }}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.35)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
+                        {/* Content */}
+                        <div style={{ flex:1,overflow:'hidden',minWidth:0 }}>
+                          <div style={{ fontSize: width > 120 ? '12px' : '10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name||'—'}</div>
+                          {width > 80 && <div style={{ fontSize:'10px',color:'rgba(255,255,255,0.8)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{bar.hours}t{isMultiDay?` · ${bar.plans.length}d`:''}{bar.notes?' · '+bar.notes:''}</div>}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )
           })}
