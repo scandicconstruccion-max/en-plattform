@@ -151,7 +151,7 @@ const navGroups = [
   {
     title: 'DOKUMENTASJON, OVERLEVERING & SALG',
     items: [
-      { id: 'befaring', label: 'Befaring', emoji: '🔍' },
+      { id: 'kalender','befaring', label: 'Befaring', emoji: '🔍' },
       { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
       { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
       { id: 'crm',      label: 'CRM',      emoji: '📊' },
@@ -14961,43 +14961,45 @@ function KalenderPage() {
     return `${MONTH_NAMES_NO[curDate.getMonth()]} ${curDate.getFullYear()}`
   }
 
+  const isMobCal = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster kalender...</p></div></div>
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', height:'100vh' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', height:'100vh', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'14px' }}>
-          <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📆 Kalender</h1>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={()=>setShowSharingModal(true)} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#475569', fontWeight:'500' }}>👥 Del kalender</button>
-            <button onClick={()=>setShowNew(today)} style={{ padding:'9px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny hendelse</button>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobCal ? '12px' : '16px 24px', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobCal ? '8px' : '12px', marginBottom: isMobCal ? '10px' : '14px' }}>
+          <h1 style={{ fontSize: isMobCal ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📆 Kalender</h1>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobCal && <button onClick={()=>setShowSharingModal(true)} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#475569', fontWeight:'500' }}>👥 Del</button>}
+            <button onClick={()=>setShowNew(today)} style={{ padding: isMobCal ? '8px 12px' : '9px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobCal ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap' }}>+ Hendelse</button>
           </div>
         </div>
 
-        <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap: isMobCal ? '6px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
           {/* Cal view toggle */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['mine','👤 Min'],['bedrift','🏢 Bedrift']].map(([v,l])=>(
               <button key={v} onClick={()=>setCalView(v)}
-                style={{ padding:'7px 14px', border:'none', background:calView===v?'#059669':'white', color:calView===v?'white':'#64748b', fontWeight:calView===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding: isMobCal ? '6px 10px' : '7px 14px', border:'none', background:calView===v?'#059669':'white', color:calView===v?'white':'#64748b', fontWeight:calView===v?'700':'500', fontSize: isMobCal ? '11px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
           {/* View mode */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['dag','Dag'],['uke','Uke'],['maned','Måned']].map(([v,l])=>(
+            {[['dag','Dag'],['uke','Uke'],['maned', isMobCal ? 'Mnd' : 'Måned']].map(([v,l])=>(
               <button key={v} onClick={()=>setViewMode(v)}
-                style={{ padding:'7px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding: isMobCal ? '6px 10px' : '7px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize: isMobCal ? '11px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
           {/* Nav */}
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto' }}>
-            <button onClick={()=>navigate(-1)} style={{ width:'32px',height:'32px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
-            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px', minWidth:'180px', textAlign:'center' }}>{headerLabel()}</span>
-            <button onClick={()=>navigate(1)} style={{ width:'32px',height:'32px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
-            <button onClick={()=>setCurrentDate(today)} style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobCal ? '6px' : '8px', marginLeft: isMobCal ? '0' : 'auto', width: isMobCal ? '100%' : 'auto', justifyContent: isMobCal ? 'center' : 'flex-end' }}>
+            <button onClick={()=>navigate(-1)} style={{ width: isMobCal ? '28px' : '32px', height: isMobCal ? '28px' : '32px', borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobCal ? '13px' : '14px', minWidth: isMobCal ? '0' : '180px', textAlign:'center' }}>{headerLabel()}</span>
+            <button onClick={()=>navigate(1)} style={{ width: isMobCal ? '28px' : '32px', height: isMobCal ? '28px' : '32px', borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
+            <button onClick={()=>setCurrentDate(today)} style={{ padding: isMobCal ? '5px 10px' : '6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize: isMobCal ? '11px' : '12px',color:'#64748b' }}>I dag</button>
           </div>
         </div>
 
@@ -15085,11 +15087,11 @@ function CalMonthView({ year, month, events, attendees, projects, employees, cal
   const days = getMonthDays(year, month)
 
   return (
-    <div style={{ padding:'16px 24px' }}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius:'14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
+    <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '16px 24px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
         {/* Day headers */}
         {DAY_SHORT_NO.map(d=>(
-          <div key={d} style={{ background:'#f8fafc', padding:'10px', textAlign:'center', fontSize:'12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{d}</div>
+          <div key={d} style={{ background:'#f8fafc', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '6px 2px' : '10px', textAlign:'center', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{d}</div>
         ))}
         {/* Day cells */}
         {days.map(({date,currentMonth})=>{
@@ -15110,21 +15112,21 @@ function CalMonthView({ year, month, events, attendees, projects, employees, cal
 
           return (
             <div key={date} onClick={()=>currentMonth&&onDayClick(date)}
-              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight:'100px', padding:'6px', cursor:currentMonth?'pointer':'default', position:'relative' }}
+              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '60px' : '100px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '3px' : '6px', cursor:currentMonth?'pointer':'default', position:'relative' }}
               onMouseEnter={e=>{if(currentMonth)e.currentTarget.style.background=today_?'#ecfdf5':'#f8fafc'}}
               onMouseLeave={e=>{e.currentTarget.style.background=!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white'}}>
               {/* Date number */}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                <span style={{ width:'24px',height:'24px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:today_?'800':'500',background:today_?'#059669':'transparent',color:today_?'white':!currentMonth?'#cbd5e1':weekend?'#94a3b8':'#0f172a' }}>
+                <span style={{ width: typeof window !== 'undefined' && window.innerWidth < 768 ? '20px' : '24px', height: typeof window !== 'undefined' && window.innerWidth < 768 ? '20px' : '24px', borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '13px',fontWeight:today_?'800':'500',background:today_?'#059669':'transparent',color:today_?'white':!currentMonth?'#cbd5e1':weekend?'#94a3b8':'#0f172a' }}>
                   {new Date(date+'T12:00:00').getDate()}
                 </span>
-                {holiday&&<span style={{ fontSize:'9px',color:'#d97706',fontWeight:'700',textAlign:'right',maxWidth:'60px',lineHeight:1.2 }}>{holiday.title}</span>}
+                {!(typeof window !== 'undefined' && window.innerWidth < 768) && holiday&&<span style={{ fontSize:'9px',color:'#d97706',fontWeight:'700',textAlign:'right',maxWidth:'60px',lineHeight:1.2 }}>{holiday.title}</span>}
               </div>
               {/* Events */}
-              {dayEvs.slice(0,maxShow).map(ev=>(
-                <EventChip key={ev.id} event={ev} projects={projects} compact={false} onClick={onEventClick} />
+              {dayEvs.slice(0, typeof window !== 'undefined' && window.innerWidth < 768 ? 2 : maxShow).map(ev=>(
+                <EventChip key={ev.id} event={ev} projects={projects} compact={typeof window !== 'undefined' && window.innerWidth < 768} onClick={onEventClick} />
               ))}
-              {dayEvs.length>maxShow&&<div style={{ fontSize:'10px',color:'#94a3b8',fontWeight:'600' }}>+{dayEvs.length-maxShow} til</div>}
+              {dayEvs.length>(typeof window !== 'undefined' && window.innerWidth < 768 ? 2 : maxShow)&&<div style={{ fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '10px',color:'#94a3b8',fontWeight:'600' }}>+{dayEvs.length-(typeof window !== 'undefined' && window.innerWidth < 768 ? 2 : maxShow)}</div>}
             </div>
           )
         })}
@@ -15141,7 +15143,7 @@ function CalWeekView({ currentDate, events, attendees, projects, employees, calV
     // Bedrift view: rows=employees, cols=days
     const visEmp = employees.filter(e=>visibleEmployees.includes(e.id))
     return (
-      <div style={{ padding:'0 24px 24px' }}>
+      <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0 8px 12px' : '0 24px 24px' }}>
         <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:'white', borderRadius:'14px', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
             <thead>
@@ -15302,18 +15304,17 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
   const lbl = t => <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>{t}</label>
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'580px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>{isEdit?'Rediger':'Ny'} hendelse</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett hendelse'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '580px',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '92vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>{isEdit?'Rediger hendelse':'Ny hendelse'}</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 14px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+        <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'14px',WebkitOverflowScrolling:'touch' }}>
 
           {/* Type selector */}
           <div>
@@ -15330,7 +15331,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
 
           <div>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Beskriv hendelsen" style={cInp} /></div>
 
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+          <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'12px' }}>
             <div>{lbl('Fra dato')}<input type="date" value={form.start_date} onChange={e=>set('start_date',e.target.value)} style={cInp} /></div>
             <div>{lbl('Til dato (valgfritt)')}<input type="date" value={form.end_date} onChange={e=>set('end_date',e.target.value)} style={cInp} /></div>
           </div>
@@ -15341,7 +15342,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
               Heldagshendelse
             </label>
             {!form.all_day&&(
-              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+              <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr',gap:'12px' }}>
                 <div>{lbl('Fra kl.')}<input type="time" value={form.start_time} onChange={e=>set('start_time',e.target.value)} style={cInp} /></div>
                 <div>{lbl('Til kl.')}<input type="time" value={form.end_time} onChange={e=>set('end_time',e.target.value)} style={cInp} /></div>
               </div>
