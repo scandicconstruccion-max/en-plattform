@@ -14301,11 +14301,11 @@ function RessursPage() {
                         onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.25)'}
                         onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.15)'}>
                         {/* Left resize handle */}
-                        <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(firstPlan,'left',e)}} style={{ position:'absolute',left:0,top:0,bottom:0,width:'8px',cursor:'ew-resize',borderRadius:'8px 0 0 8px',zIndex:4 }}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.35)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
+                        <div draggable={false} onMouseDown={e=>{e.stopPropagation();e.preventDefault();handleResizeStart(firstPlan,'left',e)}} onDragStart={e=>e.preventDefault()} style={{ position:'absolute',left:0,top:0,bottom:0,width:'10px',cursor:'ew-resize',borderRadius:'8px 0 0 8px',zIndex:6,touchAction:'none' }}
+                          onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.5)';e.currentTarget.parentElement.setAttribute('draggable','false')}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.parentElement.setAttribute('draggable','true')}} />
                         {/* Right resize handle */}
-                        <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(bar.plans[bar.plans.length-1],'right',e)}} style={{ position:'absolute',right:0,top:0,bottom:0,width:'8px',cursor:'ew-resize',borderRadius:'0 8px 8px 0',zIndex:4 }}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.35)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
+                        <div draggable={false} onMouseDown={e=>{e.stopPropagation();e.preventDefault();handleResizeStart(bar.plans[bar.plans.length-1],'right',e)}} onDragStart={e=>e.preventDefault()} style={{ position:'absolute',right:0,top:0,bottom:0,width:'10px',cursor:'ew-resize',borderRadius:'0 8px 8px 0',zIndex:6,touchAction:'none' }}
+                          onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.5)';e.currentTarget.parentElement.setAttribute('draggable','false')}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.parentElement.setAttribute('draggable','true')}} />
                         {/* Content */}
                         <div style={{ flex:1,overflow:'hidden',minWidth:0 }}>
                           <div style={{ fontSize: width > 120 ? '12px' : '10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name||'—'}</div>
