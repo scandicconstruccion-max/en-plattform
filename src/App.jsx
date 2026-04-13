@@ -2377,7 +2377,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               )}
               {isText && (
                 <div style={{ width:'90%', maxWidth:'900px', maxHeight:'85vh', overflow:'auto', background:'white', borderRadius:'12px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
-                  <div style={{ padding:'20px 24px' }}>
+                  <div style={{ padding: isMobTL ? '12px' : '20px 24px' }}>
                     <pre style={{ margin:0, fontSize:'13px', color:'#0f172a', fontFamily:'monospace', whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{textContent || 'Kunne ikke laste filen.'}</pre>
                   </div>
                 </div>
@@ -12533,30 +12533,32 @@ function TimelistePage() {
 
   const pendingApproval = timesheets.filter(t=>t.status==='Innlevert')
 
+  const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster timelister...</p></div></div>
 
   if (editingSheet) return <TimesheetEditor sheet={editingSheet} projects={projects} employees={employees} user={user} onBack={()=>{setEditingSheet(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobTL ? '14px' : '20px 24px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobTL ? '8px' : '12px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>
+            <h1 style={{ fontSize: isMobTL ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
+            {!isMobTL && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>}
           </div>
           {pendingApproval.length>0 && (
-            <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'8px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
-              ⏳ {pendingApproval.length} timeliste{pendingApproval.length>1?'r':''} venter godkjenning
+            <div style={{ background:'#fffbeb', borderRadius:'10px', padding: isMobTL ? '6px 10px' : '8px 14px', border:'1px solid #fde68a', fontSize: isMobTL ? '11px' : '13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
+              ⏳ {pendingApproval.length} venter
             </div>
           )}
         </div>
         {/* View tabs */}
-        <div style={{ display:'flex', gap:'6px', marginTop:'16px', flexWrap:'wrap' }}>
-          {[['mine','📋 Mine timelister'],['oversikt','📊 Oversikt'],['godkjenn','✅ Godkjenning']].map(([v,l])=>(
+        <div style={{ display:'flex', gap:'6px', marginTop: isMobTL ? '12px' : '16px', flexWrap:'wrap' }}>
+          {[['mine', isMobTL ? '📋 Mine' : '📋 Mine timelister'],['oversikt','📊 Oversikt'],['godkjenn','✅ Godkjenn']].map(([v,l])=>(
             <button key={v} onClick={()=>setView(v)}
-              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize:'13px', cursor:'pointer', position:'relative' }}>
+              style={{ padding: isMobTL ? '7px 12px' : '8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', position:'relative' }}>
               {l}
               {v==='godkjenn'&&pendingApproval.length>0&&<span style={{ position:'absolute', top:'-4px', right:'-4px', background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'10px', fontWeight:'800', minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px' }}>{pendingApproval.length}</span>}
             </button>
@@ -12570,11 +12572,11 @@ function TimelistePage() {
         {view==='mine' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
             {/* Employee selector + week nav */}
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center', flexWrap:'wrap' }}>
-              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tsInp, maxWidth:'200px', flex:1 }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px' : '16px 20px', display:'flex', gap: isMobTL ? '8px' : '12px', alignItems:'center', flexWrap:'wrap' }}>
+              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tsInp, maxWidth: isMobTL ? '100%' : '200px', flex: isMobTL ? '1 1 100%' : '1', fontSize: isMobTL ? '13px' : '14px' }}>
                 {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginLeft:'auto' }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobTL ? '8px' : '10px', marginLeft: isMobTL ? '0' : 'auto', width: isMobTL ? '100%' : 'auto', justifyContent: isMobTL ? 'center' : 'flex-end' }}>
                 <button onClick={()=>{ let w=selectedWeek-1,y=selectedYear; if(w<1){w=52;y--}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
                 <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', whiteSpace:'nowrap' }}>Uke {selectedWeek}, {selectedYear}</span>
                 <button onClick={()=>{ let w=selectedWeek+1,y=selectedYear; if(w>52){w=1;y++}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
@@ -12599,13 +12601,13 @@ function TimelistePage() {
         {/* ── OVERSIKT ── */}
         {view==='oversikt' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px' : '16px 20px', display:'flex', gap: isMobTL ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
               <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                {[['dag','Dag'],['uke','Uke'],['maned','Måned']].map(([v,l])=>(
-                  <button key={v} onClick={()=>setStatsView(v)} style={{ padding:'8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                {[['dag','Dag'],['uke','Uke'],['maned','Mnd']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setStatsView(v)} style={{ padding: isMobTL ? '7px 12px' : '8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
                 ))}
               </div>
-              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tsInp, maxWidth:'200px' }}>
+              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tsInp, maxWidth: isMobTL ? '100%' : '200px', flex: isMobTL ? '1 1 100%' : 'none', fontSize: isMobTL ? '13px' : '14px' }}>
                 <option value="">Alle ansatte</option>
                 {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
