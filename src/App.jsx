@@ -16067,11 +16067,10 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>💬 Ny kanal</h2>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>💬 Ny kanal</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving||!form.name.trim()} style={{ padding:'8px 20px', background:saving||!form.name.trim()?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Oppretter...':'Opprett kanal'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
