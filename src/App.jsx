@@ -152,7 +152,7 @@ const navGroups = [
     title: 'DOKUMENTASJON, OVERLEVERING & SALG',
     items: [
       { id: 'befaring', label: 'Befaring', emoji: '🔍' },
-      { id: 'bildedok','minbedrift','brukeradmin', label: 'Bildedok', emoji: '📷' },
+      { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
       { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
       { id: 'crm',      label: 'CRM',      emoji: '📊' },
     ]
@@ -25986,7 +25986,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
