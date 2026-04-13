@@ -18557,7 +18557,9 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
-          {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. HMS-befaring uke 12" style={bInp} /></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Befaringstype</label><select value={form.inspection_type} onChange={e=>set('inspection_type',e.target.value)} style={bInp}>{BEFARING_TYPES.map(t=><option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}</select></div>
+          {[['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
           ))}
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
