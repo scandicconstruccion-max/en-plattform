@@ -14997,7 +14997,7 @@ function KalenderPage() {
           {/* Nav */}
           <div style={{ display:'flex', alignItems:'center', gap: isMobCal ? '6px' : '8px', marginLeft: isMobCal ? '0' : 'auto', width: isMobCal ? '100%' : 'auto', justifyContent: isMobCal ? 'center' : 'flex-end' }}>
             <button onClick={()=>navigate(-1)} style={{ width: isMobCal ? '28px' : '32px', height: isMobCal ? '28px' : '32px', borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
-            <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobCal ? '13px' : '14px', minWidth: isMobCal ? '0' : '180px', textAlign:'center' }}>{headerLabel()}</span>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobCal ? '13px' : '14px', minWidth: isMobCal ? '100px' : '180px', textAlign:'center', flex: isMobCal ? 1 : 'none' }}>{headerLabel()}</span>
             <button onClick={()=>navigate(1)} style={{ width: isMobCal ? '28px' : '32px', height: isMobCal ? '28px' : '32px', borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
             <button onClick={()=>setCurrentDate(today)} style={{ padding: isMobCal ? '5px 10px' : '6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize: isMobCal ? '11px' : '12px',color:'#64748b' }}>I dag</button>
           </div>
@@ -15087,8 +15087,8 @@ function CalMonthView({ year, month, events, attendees, projects, employees, cal
   const days = getMonthDays(year, month)
 
   return (
-    <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '16px 24px' }}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
+    <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '4px' : '16px 24px', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
         {/* Day headers */}
         {DAY_SHORT_NO.map(d=>(
           <div key={d} style={{ background:'#f8fafc', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '6px 2px' : '10px', textAlign:'center', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{d}</div>
@@ -15112,7 +15112,7 @@ function CalMonthView({ year, month, events, attendees, projects, employees, cal
 
           return (
             <div key={date} onClick={()=>currentMonth&&onDayClick(date)}
-              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '60px' : '100px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '3px' : '6px', cursor:currentMonth?'pointer':'default', position:'relative' }}
+              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '48px' : '100px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '2px' : '6px', cursor:currentMonth?'pointer':'default', position:'relative', overflow:'hidden' }}
               onMouseEnter={e=>{if(currentMonth)e.currentTarget.style.background=today_?'#ecfdf5':'#f8fafc'}}
               onMouseLeave={e=>{e.currentTarget.style.background=!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white'}}>
               {/* Date number */}
@@ -15510,8 +15510,7 @@ function SharingModal({ user, employees, sharing, onClose, onSaved }) {
           )}
 
           <div style={{ display:'flex',justifyContent:'flex-end',gap:'12px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700', width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 'auto' }}>
               {saving?'Lagrer...':'Lagre delingsinnstillinger'}
             </button>
           </div>
