@@ -24763,7 +24763,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
         </div>
 
         {/* Sidebar — collapsible */}
-        <div style={{ display:'flex', flexDirection:'column', gap:'16px', transition:'width 0.2s', ...(sidebarOpen ? { flex:1, minWidth:'280px' } : { width:'40px', minWidth:'40px', flexShrink:0 }) }}>
+        {!isMobKV && <div style={{ display:'flex', flexDirection:'column', gap:'16px', transition:'width 0.2s', ...(sidebarOpen ? { flex:1, minWidth:'280px' } : { width:'40px', minWidth:'40px', flexShrink:0 }) }}>
           {/* Toggle button */}
           <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#64748b', alignSelf: sidebarOpen ? 'flex-end' : 'center' }}>
             {sidebarOpen ? '▶ Skjul' : '◀'}
@@ -24993,7 +24993,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           <button onClick={handleDelete} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🗑️ Slett kalkulasjon</button>
           </>}
-        </div>
+        </div>}
       </div>
 
       {/* Import fra annen kalkyle modal */}
@@ -26011,7 +26011,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulasjon']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
