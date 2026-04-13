@@ -18010,12 +18010,16 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
     ])
     setItems(it); setFollowups(fu); setFiles(fi)
   }
+  useEffect(()=>{ loadDetails() },[])
   const refresh = async () => { const {data}=await supabase.from('inspections').select('*').eq('id',ins.id).single(); if(data) setIns(data) }
 
   const addItem = async () => {
     if (!newItem.trim()) return
-    await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:newItem.trim(), sort_order:items.length })
-    setNewItem(''); loadDetails()
+    try {
+      const { error } = await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:newItem.trim(), sort_order:items.length })
+      if (error) throw error
+      setNewItem(''); loadDetails()
+    } catch(e) { alert('Feil ved lagring: '+e.message) }
   }
 
   const toggleItemStatus = async (item) => {
