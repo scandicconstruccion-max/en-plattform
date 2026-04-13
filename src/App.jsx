@@ -13740,16 +13740,19 @@ function RessursPage() {
 
   const handleResizeStart = (plan, direction, e) => {
     e.stopPropagation()
-    e.preventDefault()
-    const info = { planId: plan.id, direction, startX: e.clientX, origDate: plan.date, resourceId: plan.resource_id, plan, cellsMoved: 0 }
-    setResizing(info)
+    const startX = e.clientX
+    const startY = e.clientY
+    let moved = false
+    const info = { planId: plan.id, direction, startX, origDate: plan.date, resourceId: plan.resource_id, plan, cellsMoved: 0 }
     resizingRef.current = info
 
     const colW = viewMode==='maned' ? 68 : viewMode==='14' ? 60 : 90
 
     const onMove = (ev) => {
-      if (!resizingRef.current) return
-      const dx = ev.clientX - resizingRef.current.startX
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      if (!moved) { moved = true; setResizing(info) }
       const cellsMoved = Math.round(dx / colW)
       resizingRef.current = { ...resizingRef.current, cellsMoved }
       setResizing(prev => prev ? { ...prev, cellsMoved } : null)
@@ -13761,31 +13764,29 @@ function RessursPage() {
       const r = resizingRef.current
       resizingRef.current = null
       setResizing(null)
-      if (!r || !r.cellsMoved || r.cellsMoved === 0) return
+      if (!moved || !r || !r.cellsMoved || r.cellsMoved === 0) return
 
       try {
         const origDate = new Date(r.origDate + 'T12:00:00')
         const absMoved = Math.abs(r.cellsMoved)
 
         if (r.direction === 'right' && r.cellsMoved > 0) {
-          // Extend right
           for (let i = 1; i <= absMoved; i++) {
             const d = new Date(origDate); d.setDate(d.getDate() + i)
-            if (d.getDay() === 0 || d.getDay() === 6) continue
+            if (d.getDay() === 0 || d.getDay() === 6) { continue }
             const { id, created_at, updated_at, ...rest } = r.plan
             await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
           }
         } else if (r.direction === 'left' && r.cellsMoved < 0) {
-          // Extend left
           for (let i = 1; i <= absMoved; i++) {
             const d = new Date(origDate); d.setDate(d.getDate() - i)
-            if (d.getDay() === 0 || d.getDay() === 6) continue
+            if (d.getDay() === 0 || d.getDay() === 6) { continue }
             const { id, created_at, updated_at, ...rest } = r.plan
             await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
           }
         }
         load()
-      } catch(e) { console.error('Resize error:', e) }
+      } catch(err) { console.error('Resize error:', err) }
     }
 
     window.addEventListener('mousemove', onMove)
@@ -14179,13 +14180,13 @@ function RessursPage() {
                         return (
                           <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan,e)}}
                             onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
-                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1,position:'relative' }}
-                            onMouseEnter={e=>{const el=e.currentTarget;const l=el.querySelector('.rh-l');const r=el.querySelector('.rh-r');if(l)l.style.opacity='1';if(r)r.style.opacity='1'}}
-                            onMouseLeave={e=>{const el=e.currentTarget;const l=el.querySelector('.rh-l');const r=el.querySelector('.rh-r');if(l)l.style.opacity='0';if(r)r.style.opacity='0'}}>
-                            {/* Left resize handle */}
-                            <div className="rh-l" onMouseDown={e=>handleResizeStart(plan,'left',e)} style={{ position:'absolute',left:0,top:0,bottom:0,width:'6px',cursor:'ew-resize',background:'rgba(255,255,255,0.4)',borderRadius:'5px 0 0 5px',opacity:0,transition:'opacity 0.15s',zIndex:2 }} />
-                            {/* Right resize handle */}
-                            <div className="rh-r" onMouseDown={e=>handleResizeStart(plan,'right',e)} style={{ position:'absolute',right:0,top:0,bottom:0,width:'6px',cursor:'ew-resize',background:'rgba(255,255,255,0.4)',borderRadius:'0 5px 5px 0',opacity:0,transition:'opacity 0.15s',zIndex:2 }} />
+                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1,position:'relative' }}>
+                            {viewMode!=='maned' && <>
+                            <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(plan,'left',e)}} style={{ position:'absolute',left:0,top:0,bottom:0,width:'7px',cursor:'ew-resize',background:'transparent',zIndex:2 }}
+                              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.5)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
+                            <div onMouseDown={e=>{e.stopPropagation();handleResizeStart(plan,'right',e)}} style={{ position:'absolute',right:0,top:0,bottom:0,width:'7px',cursor:'ew-resize',background:'transparent',zIndex:2 }}
+                              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.5)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} />
+                            </>}
                             {viewMode==='maned'?(
                               <div style={{ background:col,borderRadius:'3px',padding:'2px 4px',marginBottom:'1px',overflow:'hidden' }}>
                                 <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name?.slice(0,8)||'—'}</div>
@@ -14551,7 +14552,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Timer denne dagen</label>
             <div style={{ background:'#f8fafc',borderRadius:'8px',padding:'7px 12px',fontSize:'12px',color:'#64748b',marginBottom:'8px',border:'1px solid #f1f5f9' }}>
-              ⏰ Standard arbeidstid: {defaultStart} – {defaultEnd}
+              ⏰ Standard arbeidstid: {defaultStartTime} – {defaultEndTime}
             </div>
             <div style={{ display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap' }}>
               {[4,6,7.5,8,10].map(h=>(
