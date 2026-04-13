@@ -13627,6 +13627,7 @@ function RessursPage() {
   const [settings, setSettings] = useState({
     showWeekends: true,
     showHolidays: true,
+    skipWeekends: true,
     workdayStart: '07:00',
     workdayEnd: '15:30',
   })
@@ -13774,14 +13775,14 @@ function RessursPage() {
         if (r.direction === 'right' && r.cellsMoved > 0) {
           for (let i = 1; i <= absMoved; i++) {
             const d = new Date(origDate); d.setDate(d.getDate() + i)
-            if (d.getDay() === 0 || d.getDay() === 6) { continue }
+            if (settings.skipWeekends && (d.getDay() === 0 || d.getDay() === 6)) { continue }
             const { id, created_at, updated_at, ...rest } = r.plan
             await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
           }
         } else if (r.direction === 'left' && r.cellsMoved < 0) {
           for (let i = 1; i <= absMoved; i++) {
             const d = new Date(origDate); d.setDate(d.getDate() - i)
-            if (d.getDay() === 0 || d.getDay() === 6) { continue }
+            if (settings.skipWeekends && (d.getDay() === 0 || d.getDay() === 6)) { continue }
             const { id, created_at, updated_at, ...rest } = r.plan
             await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
           }
@@ -13960,23 +13961,25 @@ function RessursPage() {
                 title="Innstillinger">⚙️</button>
               {showSettings&&(
                 <>
-                  <div style={{ position:'fixed',inset:0,zIndex:49 }} onClick={()=>setShowSettings(false)} />
-                  <div style={{ position:'absolute',top:'110%',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'16px',boxShadow:'0 12px 40px rgba(0,0,0,0.15)',zIndex:50,width:'300px',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
-                    <div style={{ padding:'14px 18px',background:'#f8fafc',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:'8px' }}>
-                      <span style={{ fontSize:'16px' }}>⚙️</span>
-                      <span style={{ fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
+                  <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} onClick={()=>setShowSettings(false)} />
+                  <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',zIndex:101,width:'min(420px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',fontFamily:'system-ui,sans-serif' }}>
+                    <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                      <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                        <span style={{ fontSize:'18px' }}>⚙️</span>
+                        <span style={{ fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
+                      </div>
+                      <button onClick={()=>setShowSettings(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
                     </div>
-                    <div style={{ padding:'14px 18px',display:'flex',flexDirection:'column',gap:'2px' }}>
+                    <div style={{ overflowY:'auto',flex:1,padding:'18px 22px',display:'flex',flexDirection:'column',gap:'2px',WebkitOverflowScrolling:'touch' }}>
                       {/* Section: Visning */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px',marginTop:'4px' }}>Visning</div>
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px' }}>Visning</div>
                       {[
                         ['showWeekends','🗓️','Vis lørdag og søndag','Helger vises i planleggingsrutenettet'],
-                        ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i planleggingsrutenettet'],
+                        ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i rutenettet'],
+                        ['skipWeekends','🚫','Hopp over helger ved dra','Helger blir ikke booket når du drar en booking over en helg'],
                       ].map(([k,emoji,label,desc])=>(
                         <div key={k} onClick={()=>setSettings(s=>({...s,[k]:!s[k]}))}
-                          style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}
-                          onMouseEnter={e=>{if(!settings[k])e.currentTarget.style.background='#f8fafc'}}
-                          onMouseLeave={e=>{if(!settings[k])e.currentTarget.style.background='white'}}>
+                          style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}>
                           <span style={{ fontSize:'18px',flexShrink:0 }}>{emoji}</span>
                           <div style={{ flex:1 }}>
                             <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{label}</div>
@@ -13989,46 +13992,43 @@ function RessursPage() {
                       ))}
 
                       {/* Section: Arbeidstid */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'12px',marginBottom:'8px' }}>Standard arbeidstid</div>
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Standard arbeidstid</div>
                       <div style={{ background:'#f8fafc',borderRadius:'12px',padding:'14px',border:'1px solid #f1f5f9' }}>
                         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
                           <div>
-                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Arbeidsdagen starter</label>
+                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Starter</label>
                             <input type="time" value={settings.workdayStart} onChange={e=>setSettings(s=>({...s,workdayStart:e.target.value}))}
                               style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
                           </div>
                           <div>
-                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Arbeidsdagen slutter</label>
+                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Slutter</label>
                             <input type="time" value={settings.workdayEnd} onChange={e=>setSettings(s=>({...s,workdayEnd:e.target.value}))}
                               style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
                           </div>
                         </div>
                         <div style={{ marginTop:'10px',background:'#eff6ff',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bfdbfe' }}>
                           <div style={{ fontSize:'12px',color:'#2563eb',fontWeight:'600' }}>
-                            ⏰ Standardtid: {settings.workdayStart} – {settings.workdayEnd}
-                          </div>
-                          <div style={{ fontSize:'11px',color:'#64748b',marginTop:'2px' }}>
-                            Brukes automatisk ved ny booking
+                            ⏰ {settings.workdayStart} – {settings.workdayEnd} ({(() => { const [sh,sm]=settings.workdayStart.split(':').map(Number); const [eh,em]=settings.workdayEnd.split(':').map(Number); return (((eh*60+em)-(sh*60+sm))/60).toFixed(1) })()}t/dag)
                           </div>
                         </div>
                       </div>
 
                       {/* Section: Hurtigtilgang */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'12px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
                       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px' }}>
                         {[['07:00','15:30','Normaltid'],['07:00','16:00','Lang dag'],['08:00','16:00','Kontortid'],['06:00','14:00','Tidligvakt']].map(([start,end,label])=>(
                           <button key={label} onClick={()=>setSettings(s=>({...s,workdayStart:start,workdayEnd:end}))}
-                            style={{ padding:'8px',borderRadius:'8px',border:`1px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#e2e8f0'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
-                            {label}<br/><span style={{ fontWeight:'400',opacity:0.8 }}>{start}–{end}</span>
+                            style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#f1f5f9'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
+                            {label}<br/><span style={{ fontWeight:'400',opacity:0.7,fontSize:'11px' }}>{start} – {end}</span>
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div style={{ padding:'12px 18px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px' }}>
-                      <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,workdayStart:'07:00',workdayEnd:'15:30'})}
-                        style={{ flex:1,padding:'9px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
+                    <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px',flexShrink:0 }}>
+                      <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,skipWeekends:true,workdayStart:'07:00',workdayEnd:'15:30'})}
+                        style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
                       <button onClick={()=>setShowSettings(false)}
-                        style={{ flex:2,padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lagre innstillinger</button>
+                        style={{ flex:2,padding:'10px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lukk</button>
                     </div>
                   </div>
                 </>
