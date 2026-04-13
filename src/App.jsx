@@ -152,7 +152,7 @@ const navGroups = [
     title: 'DOKUMENTASJON, OVERLEVERING & SALG',
     items: [
       { id: 'befaring', label: 'Befaring', emoji: '🔍' },
-      { id: 'bildedok','minbedrift', label: 'Bildedok', emoji: '📷' },
+      { id: 'bildedok','minbedrift','brukeradmin', label: 'Bildedok', emoji: '📷' },
       { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
       { id: 'crm',      label: 'CRM',      emoji: '📊' },
     ]
@@ -19910,6 +19910,8 @@ function BrukeradminPage() {
 
   const activeCount = users.filter(u=>u.status==='aktiv').length
 
+  const isMobBA = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -19929,22 +19931,22 @@ function BrukeradminPage() {
   )
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding:'20px 32px' }}>
-        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
+      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding: isMobBA ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom: isMobBA ? '10px' : '16px', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px',fontWeight:'bold',color:'#0f172a',margin:0 }}>👤 Brukere og tilgang</h1>
-            <p style={{ color:'#64748b',marginTop:'4px',fontSize:'14px',marginBottom:0 }}>Administrer brukere, roller og modultilgang</p>
+            <h1 style={{ fontSize: isMobBA ? '18px' : '22px',fontWeight:'bold',color:'#0f172a',margin:0 }}>{isMobBA ? '👤 Brukere' : '👤 Brukere og tilgang'}</h1>
+            {!isMobBA && <p style={{ color:'#64748b',marginTop:'4px',fontSize:'14px',marginBottom:0 }}>Administrer brukere, roller og modultilgang</p>}
           </div>
           <button onClick={()=>setShowInvite(true)}
-            style={{ padding:'10px 20px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>
-            + Inviter bruker
+            style={{ padding: isMobBA ? '9px 12px' : '10px 20px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBA ? '12px' : '14px',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0 }}>
+            {isMobBA ? '+ Inviter' : '+ Inviter bruker'}
           </button>
         </div>
 
         {/* Stats */}
-        <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(5,1fr)' : 'repeat(5,1fr)',gap:'10px' }}>
+        <div style={{ display:'grid',gridTemplateColumns: isMobBA ? 'repeat(3,1fr)' : 'repeat(5,1fr)',gap: isMobBA ? '8px' : '10px' }}>
           {[
             { label:'Totalt', value:users.length, emoji:'👥', bg:'#f8fafc', color:'#0f172a' },
             { label:'Aktive', value:activeCount, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
@@ -19952,20 +19954,20 @@ function BrukeradminPage() {
             { label:'Admin', value:users.filter(u=>u.role==='admin'||u.role==='superadmin').length, emoji:'🔑', bg:'#f5f3ff', color:'#7c3aed' },
             { label:'Inaktive', value:users.filter(u=>u.status==='inaktiv').length, emoji:'🔒', bg:'#fef2f2', color:'#dc2626' },
           ].map(s=>(
-            <div key={s.label} style={{ background:s.bg,borderRadius:'12px',padding:'12px 14px' }}>
-              <div style={{ fontSize:'18px',marginBottom:'4px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'20px',fontWeight:'800',color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:'11px',color:'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{s.label}</div>
+            <div key={s.label} style={{ background:s.bg,borderRadius: isMobBA ? '10px' : '12px',padding: isMobBA ? '8px 10px' : '12px 14px' }}>
+              <div style={{ fontSize: isMobBA ? '14px' : '18px',marginBottom: isMobBA ? '2px' : '4px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobBA ? '16px' : '20px',fontWeight:'800',color:s.color }}>{s.value}</div>
+              <div style={{ fontSize: isMobBA ? '9px' : '11px',color:'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'20px 32px',display:'flex',flexDirection:'column',gap:'16px' }}>
+      <div style={{ padding: isMobBA ? '12px' : '20px 32px',display:'flex',flexDirection:'column',gap: isMobBA ? '12px' : '16px' }}>
         {/* Filters */}
-        <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'14px 18px',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk bruker..." style={{ ...baInp,maxWidth:'220px',flex:1 }} />
-          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ ...baInp,maxWidth:'160px' }}>
+        <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding: isMobBA ? '10px' : '14px 18px',display:'flex',gap: isMobBA ? '8px' : '10px',flexWrap:'wrap',alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...baInp,maxWidth: isMobBA ? '100%' : '220px',flex: isMobBA ? '1 1 100%' : '1' }} />
+          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ ...baInp,maxWidth: isMobBA ? '100%' : '160px',flex: isMobBA ? '1 1 100%' : 'none' }}>
             <option value="alle">Alle roller</option>
             {Object.entries(USER_ROLES).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
@@ -20008,28 +20010,28 @@ function BrukeradminPage() {
               const modCount=(u.module_access||[]).length
               return (
                 <div key={u.id} onClick={()=>setSelectedUser(u)}
-                  style={{ background:'white',borderRadius:'14px',border:`1px solid ${u.status==='inaktiv'?'#fecaca':'#f1f5f9'}`,padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',gap:'16px',transition:'box-shadow 0.15s',opacity:u.status==='inaktiv'?0.7:1 }}
+                  style={{ background:'white',borderRadius: isMobBA ? '12px' : '14px',border:`1px solid ${u.status==='inaktiv'?'#fecaca':'#f1f5f9'}`,padding: isMobBA ? '12px' : '16px 20px',cursor:'pointer',display:'flex',alignItems: isMobBA ? 'flex-start' : 'center',gap: isMobBA ? '10px' : '16px',transition:'box-shadow 0.15s',opacity:u.status==='inaktiv'?0.7:1 }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
                   {/* Avatar */}
-                  <div style={{ width:'44px',height:'44px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0 }}>
+                  <div style={{ width: isMobBA ? '36px' : '44px',height: isMobBA ? '36px' : '44px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize: isMobBA ? '14px' : '18px',flexShrink:0 }}>
                     {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover' }} /> : (u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}
                   </div>
                   <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap' }}>
-                      <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'15px' }}>{u.full_name||u.email}</span>
+                    <div style={{ display:'flex',alignItems:'center',gap:'6px',marginBottom:'4px',flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700',color:'#0f172a',fontSize: isMobBA ? '13px' : '15px' }}>{u.full_name||u.email}</span>
                       {isCurrentUser&&<span style={{ background:'#f0fdf4',color:'#059669',fontSize:'11px',fontWeight:'700',padding:'1px 8px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Deg</span>}
                       <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                       {u.status==='inaktiv'&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>🔒 Inaktiv</span>}
                     </div>
-                    <div style={{ display:'flex',gap:'12px',flexWrap:'wrap',fontSize:'12px',color:'#64748b' }}>
-                      {u.full_name&&<span>✉️ {u.email}</span>}
-                      {u.phone&&<span>📞 {u.phone}</span>}
+                    <div style={{ display:'flex',gap: isMobBA ? '6px' : '12px',flexWrap:'wrap',fontSize: isMobBA ? '11px' : '12px',color:'#64748b' }}>
+                      {!isMobBA && u.full_name&&<span>✉️ {u.email}</span>}
+                      {!isMobBA && u.phone&&<span>📞 {u.phone}</span>}
                       <span>🔩 {modCount} moduler</span>
-                      {u.last_seen&&<span>🕐 Sist aktiv {new Date(u.last_seen).toLocaleDateString('nb-NO')}</span>}
+                      {!isMobBA && u.last_seen&&<span>🕐 {new Date(u.last_seen).toLocaleDateString('nb-NO')}</span>}
                     </div>
                   </div>
-                  <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>
+                  {!isMobBA && <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -20089,18 +20091,18 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
   const userModules = u.module_access||[]
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til brukere</button>
-        <div style={{ display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'16px' }}>
-          <div style={{ display:'flex',alignItems:'flex-start',gap:'14px' }}>
-            <div style={{ width:'56px',height:'56px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:'800',color:cfg.color,flexShrink:0 }}>
+      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake</button>
+        <div style={{ display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '16px', flexWrap: typeof window !== 'undefined' && window.innerWidth < 768 ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex',alignItems:'flex-start',gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!(typeof window !== 'undefined' && window.innerWidth < 768) && <div style={{ width:'56px',height:'56px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:'800',color:cfg.color,flexShrink:0 }}>
               {(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}
-            </div>
-            <div>
-              <div style={{ display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap',marginBottom:'6px' }}>
-                <h1 style={{ margin:0,fontSize:'20px',fontWeight:'800',color:'#0f172a' }}>{u.full_name||u.email}</h1>
+            </div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap',marginBottom:'6px' }}>
+                <h1 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '20px',fontWeight:'800',color:'#0f172a' }}>{u.full_name||u.email}</h1>
                 {isCurrentUser&&<span style={{ background:'#f0fdf4',color:'#059669',fontSize:'11px',fontWeight:'700',padding:'2px 8px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Deg</span>}
                 <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                 {u.status==='inaktiv'&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>🔒 Inaktiv</span>}
@@ -20118,21 +20120,21 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
             </div>
           )}
         </div>
-        <div style={{ display:'flex',gap:'4px',marginTop:'16px' }}>
-          {[['profil','👤 Profil'],['rolle','🔑 Rolle'],['moduler','🔩 Modultilgang']].map(([id,l])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ padding:'8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+        <div style={{ display:'flex',gap:'4px',marginTop: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          {[['profil','👤 Profil'],['rolle','🔑 Rolle'],['moduler', typeof window !== 'undefined' && window.innerWidth < 768 ? '🔩 Moduler' : '🔩 Modultilgang']].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 12px' : '8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '13px',cursor:'pointer',whiteSpace:'nowrap' }}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px',display:'grid',gridTemplateColumns:'2fr 1fr',gap:'20px' }}>
+      <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '24px 32px',display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '2fr 1fr',gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px' }}>
         <div style={{ display:'flex',flexDirection:'column',gap:'16px' }}>
 
           {/* PROFIL TAB */}
           {tab==='profil'&&(
             <div style={{ background:'white',borderRadius:'16px',border:'1px solid #f1f5f9',padding:'20px 24px' }}>
               <h3 style={{ margin:'0 0 16px',fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>👤 Profilinformasjon</h3>
-              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+              <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'12px' }}>
                 <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Fullt navn</label>
                   <input defaultValue={u.full_name||''} onBlur={e=>save({full_name:e.target.value})} style={baInp} placeholder="For- og etternavn" /></div>
                 <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Telefon</label>
