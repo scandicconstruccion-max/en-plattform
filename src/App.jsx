@@ -11590,7 +11590,7 @@ const DEPARTMENTS = ['Ledelse','Prosjekt','Anlegg','Betong','Elektro','Rør','T�
 const CERT_TYPES = ['HMS-kort','Kranførerbevis','Truck-sertifikat','Stillaskurs','Fallsikring','Sveisesertifikat','Elektrosertifikat','Førstehjelp','Maskinførerbevis','Annet']
 
 const eInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const eCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const eCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function EmpStatusBadge({ status }) {
   const cfg = EMP_STATUS[status]||EMP_STATUS['Aktiv']
@@ -11673,33 +11673,35 @@ function AnsattePage() {
   const counts = Object.keys(EMP_STATUS).reduce((acc,s)=>{ acc[s]=employees.filter(e=>e.status===s).length; return acc },{})
   const expiringCerts = employees.flatMap(e=>(e.employee_certifications||[]).filter(c=>{ const d=certDaysLeft(c.expiry_date); return d!==null&&d<=30 }))
 
+  const isMobE = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ansatte...</p></div></div>
   if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobE ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>
+            <h1 style={{ fontSize: isMobE ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
+            {!isMobE && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Importer CSV</button>
-            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny ansatt</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobE && <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Import</button>}
+            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobE ? '9px 12px' : '11px 20px', fontSize: isMobE ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ansatt</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobE ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobE ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(EMP_STATUS).map(([s,cfg])=>(
             <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
-              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
-              <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius: isMobE ? '10px' : '14px', padding: isMobE ? '10px' : '16px', cursor:'pointer', textAlign: isMobE ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobE ? '16px' : '22px', marginBottom: isMobE ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMobE ? '16px' : '22px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+              <div style={{ fontSize: isMobE ? '10px' : '11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
             </button>
           ))}
         </div>
@@ -11722,9 +11724,9 @@ function AnsattePage() {
         )}
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk navn, stilling, telefon..." style={{ ...eInp, maxWidth:'240px', flex:1 }} />
-          <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ ...eInp, maxWidth:'180px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobE ? '10px' : '14px 18px', display:'flex', gap: isMobE ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...eInp, maxWidth: isMobE ? '100%' : '240px', flex: isMobE ? '1 1 100%' : '1' }} />
+          <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ ...eInp, maxWidth: isMobE ? '100%' : '180px', flex: isMobE ? '1 1 48%' : 'none', fontSize: isMobE ? '13px' : '14px' }}>
             <option value="alle">Alle avdelinger</option>
             {DEPARTMENTS.map(d=><option key={d} value={d}>{d}</option>)}
           </select>
@@ -11753,27 +11755,26 @@ function AnsattePage() {
               const cfg = EMP_STATUS[emp.status]
               return (
                 <div key={emp.id} onClick={()=>setSelected(emp)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${expiring.length>0?'#fde68a':'#f1f5f9'}`, padding:'14px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobE ? '12px' : '14px', border:`1px solid ${expiring.length>0?'#fde68a':'#f1f5f9'}`, padding: isMobE ? '12px' : '14px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap: isMobE ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
+                  <div style={{ width: isMobE ? '36px' : '44px', height: isMobE ? '36px' : '44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobE ? '14px' : '18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
                     {emp.first_name?.[0]}{emp.last_name?.[0]}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{emp.first_name} {emp.last_name}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'3px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobE ? '13px' : '15px' }}>{emp.first_name} {emp.last_name}</span>
                       <EmpStatusBadge status={emp.status} />
                       {expiring.length>0 && <span style={{ background:'#fffbeb', color:'#d97706', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>⚠️ {expiring.length} sertifikat</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {emp.position && <span style={{ fontSize:'12px', color:'#64748b' }}>💼 {emp.position}</span>}
-                      {emp.department && <span style={{ fontSize:'12px', color:'#64748b' }}>🏢 {emp.department}</span>}
-                      {emp.phone && <span style={{ fontSize:'12px', color:'#64748b' }}>📞 {emp.phone}</span>}
-                      {emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
-                      {emp.employee_number && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>#{emp.employee_number}</span>}
+                    <div style={{ display:'flex', gap: isMobE ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {emp.position && <span style={{ fontSize: isMobE ? '11px' : '12px', color:'#64748b' }}>💼 {emp.position}</span>}
+                      {!isMobE && emp.department && <span style={{ fontSize:'12px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                      {emp.phone && <span style={{ fontSize: isMobE ? '11px' : '12px', color:'#64748b' }}>📞 {emp.phone}</span>}
+                      {!isMobE && emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
                     </div>
                   </div>
-                  {emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobE && emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
+                  {!isMobE && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -11874,45 +11875,47 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
     { id:'salary', label:'Lønn', emoji:'💰' },
   ]
 
+  const isMobED = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ansatte</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'16px' }}>
-            <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
-                <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>{emp.first_name} {emp.last_name}</h1>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobED ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ansatte</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobED ? '8px' : '16px', flexWrap: isMobED ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobED ? '10px' : '16px', flex:1, minWidth:0 }}>
+            {!isMobED && <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobED ? '6px' : '10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize: isMobED ? '16px' : '22px', fontWeight:'bold', color:'#0f172a' }}>{emp.first_name} {emp.last_name}</h1>
                 {emp.employee_number&&<span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>#{emp.employee_number}</span>}
                 <EmpStatusBadge status={emp.status} />
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                {emp.position&&<span style={{ fontSize:'13px', color:'#64748b' }}>💼 {emp.position}</span>}
-                {emp.department&&<span style={{ fontSize:'13px', color:'#64748b' }}>🏢 {emp.department}</span>}
-                {emp.contract_type&&<span style={{ fontSize:'13px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
-                {emp.phone&&<span style={{ fontSize:'13px', color:'#64748b' }}>📞 {emp.phone}</span>}
+              <div style={{ display:'flex', gap: isMobED ? '6px' : '12px', flexWrap:'wrap' }}>
+                {emp.position&&<span style={{ fontSize: isMobED ? '11px' : '13px', color:'#64748b' }}>💼 {emp.position}</span>}
+                {!isMobED && emp.department&&<span style={{ fontSize:'13px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                {!isMobED && emp.contract_type&&<span style={{ fontSize:'13px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
+                {emp.phone&&<span style={{ fontSize: isMobED ? '11px' : '13px', color:'#64748b' }}>📞 {emp.phone}</span>}
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobED ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobED ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobED ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobED ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div style={{ display:'flex', gap:'4px', marginTop:'20px' }}>
+        <div style={{ display:'flex', gap:'4px', marginTop: isMobED ? '14px' : '20px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>setActiveTab(t.id)}
-              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:activeTab===t.id?'#059669':'#f8fafc', color:activeTab===t.id?'white':'#64748b', fontWeight:activeTab===t.id?'700':'500', fontSize:'13px', cursor:'pointer' }}>
-              {t.emoji} {t.label}
+              style={{ padding: isMobED ? '7px 10px' : '8px 16px', borderRadius:'10px', border:'none', background:activeTab===t.id?'#059669':'#f8fafc', color:activeTab===t.id?'white':'#64748b', fontWeight:activeTab===t.id?'700':'500', fontSize: isMobED ? '11px' : '13px', cursor:'pointer', whiteSpace:'nowrap' }}>
+              {t.emoji} {isMobED ? t.label.replace('Informasjon','Info').replace('Kompetanser','Komp.').replace('Sertifikater','Sert.').replace('Prosjekter','Prosj.') : t.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobED ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobED ? '1fr' : '2fr 1fr', gap: isMobED ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
           {/* INFO TAB */}
@@ -25779,7 +25782,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
