@@ -13736,85 +13736,61 @@ function RessursPage() {
 
 
   // ── Resize handlers (drag edges to extend/shrink bookings) ──
+  const resizingRef = React.useRef(null)
+
   const handleResizeStart = (plan, direction, e) => {
     e.stopPropagation()
     e.preventDefault()
-    setResizing({ planId: plan.id, direction, startX: e.clientX, origDate: plan.date, resourceId: plan.resource_id, plan })
-  }
+    const info = { planId: plan.id, direction, startX: e.clientX, origDate: plan.date, resourceId: plan.resource_id, plan, cellsMoved: 0 }
+    setResizing(info)
+    resizingRef.current = info
 
-  const handleResizeMove = React.useCallback((e) => {
-    if (!resizing) return
-    // Calculate how many cells we've moved
     const colW = viewMode==='maned' ? 68 : viewMode==='14' ? 60 : 90
-    const dx = e.clientX - resizing.startX
-    const cellsMoved = Math.round(dx / colW)
-    if (cellsMoved === 0) return
-    setResizing(prev => ({ ...prev, cellsMoved }))
-  }, [resizing, viewMode])
 
-  const handleResizeEnd = React.useCallback(async () => {
-    if (!resizing || !resizing.cellsMoved) { setResizing(null); return }
-    const cellsMoved = resizing.cellsMoved || 0
-    if (cellsMoved === 0) { setResizing(null); return }
-    
-    try {
-      const origDate = new Date(resizing.origDate + 'T12:00:00')
-      
-      if (resizing.direction === 'right') {
-        // Extend right: add new bookings for each day extended
-        for (let i = 1; i <= Math.abs(cellsMoved); i++) {
-          const d = new Date(origDate)
-          d.setDate(d.getDate() + (cellsMoved > 0 ? i : -i))
-          const newDate = d.toISOString().split('T')[0]
-          const dayOfWeek = d.getDay()
-          if (dayOfWeek === 0 || dayOfWeek === 6) continue
-          if (cellsMoved > 0) {
-            // Extending: copy booking to new dates
-            const { id, created_at, updated_at, ...rest } = resizing.plan
-            await supabase.from('resource_plans').insert({ ...rest, date: newDate })
-          } else {
-            // Shrinking from right: delete the last dates
-            const delDate = new Date(origDate)
-            delDate.setDate(delDate.getDate() - i + 1)
-            // Find and delete plans on this resource+date with same project
-            const plansOnDate = plans.filter(p => p.resource_id === resizing.resourceId && p.date === delDate.toISOString().split('T')[0] && p.project_id === resizing.plan.project_id)
-            for (const p of plansOnDate) {
-              await supabase.from('resource_plans').delete().eq('id', p.id)
-            }
+    const onMove = (ev) => {
+      if (!resizingRef.current) return
+      const dx = ev.clientX - resizingRef.current.startX
+      const cellsMoved = Math.round(dx / colW)
+      resizingRef.current = { ...resizingRef.current, cellsMoved }
+      setResizing(prev => prev ? { ...prev, cellsMoved } : null)
+    }
+
+    const onUp = async () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      const r = resizingRef.current
+      resizingRef.current = null
+      setResizing(null)
+      if (!r || !r.cellsMoved || r.cellsMoved === 0) return
+
+      try {
+        const origDate = new Date(r.origDate + 'T12:00:00')
+        const absMoved = Math.abs(r.cellsMoved)
+
+        if (r.direction === 'right' && r.cellsMoved > 0) {
+          // Extend right
+          for (let i = 1; i <= absMoved; i++) {
+            const d = new Date(origDate); d.setDate(d.getDate() + i)
+            if (d.getDay() === 0 || d.getDay() === 6) continue
+            const { id, created_at, updated_at, ...rest } = r.plan
+            await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
+          }
+        } else if (r.direction === 'left' && r.cellsMoved < 0) {
+          // Extend left
+          for (let i = 1; i <= absMoved; i++) {
+            const d = new Date(origDate); d.setDate(d.getDate() - i)
+            if (d.getDay() === 0 || d.getDay() === 6) continue
+            const { id, created_at, updated_at, ...rest } = r.plan
+            await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
           }
         }
-      } else {
-        // Extend left: add bookings before the original date
-        for (let i = 1; i <= Math.abs(cellsMoved); i++) {
-          const d = new Date(origDate)
-          d.setDate(d.getDate() + (cellsMoved < 0 ? -i : i))
-          const newDate = d.toISOString().split('T')[0]
-          const dayOfWeek = d.getDay()
-          if (dayOfWeek === 0 || dayOfWeek === 6) continue
-          if (cellsMoved < 0) {
-            const { id, created_at, updated_at, ...rest } = resizing.plan
-            await supabase.from('resource_plans').insert({ ...rest, date: newDate })
-          } else {
-            const plansOnDate = plans.filter(p => p.resource_id === resizing.resourceId && p.date === newDate && p.project_id === resizing.plan.project_id)
-            for (const p of plansOnDate) {
-              await supabase.from('resource_plans').delete().eq('id', p.id)
-            }
-          }
-        }
-      }
-      load()
-    } catch(e) { console.error('Resize error:', e) }
-    setResizing(null)
-  }, [resizing, plans])
+        load()
+      } catch(e) { console.error('Resize error:', e) }
+    }
 
-  React.useEffect(() => {
-    if (!resizing) return
-    const onMove = (e) => handleResizeMove(e)
-    const onUp = () => handleResizeEnd()
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-  }, [resizing, handleResizeMove, handleResizeEnd])
+  }
 
   const getWeekCapacity = (resourceId) => {
     const weekDates = getDatesInRange(currentDate, 7).filter(d=>!isWeekend(d))
@@ -14204,8 +14180,8 @@ function RessursPage() {
                           <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan,e)}}
                             onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
                             style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1,position:'relative' }}
-                            onMouseEnter={e=>{const el=e.currentTarget;el.querySelector('.rh-l').style.opacity='1';el.querySelector('.rh-r').style.opacity='1'}}
-                            onMouseLeave={e=>{const el=e.currentTarget;el.querySelector('.rh-l').style.opacity='0';el.querySelector('.rh-r').style.opacity='0'}}>
+                            onMouseEnter={e=>{const el=e.currentTarget;const l=el.querySelector('.rh-l');const r=el.querySelector('.rh-r');if(l)l.style.opacity='1';if(r)r.style.opacity='1'}}
+                            onMouseLeave={e=>{const el=e.currentTarget;const l=el.querySelector('.rh-l');const r=el.querySelector('.rh-r');if(l)l.style.opacity='0';if(r)r.style.opacity='0'}}>
                             {/* Left resize handle */}
                             <div className="rh-l" onMouseDown={e=>handleResizeStart(plan,'left',e)} style={{ position:'absolute',left:0,top:0,bottom:0,width:'6px',cursor:'ew-resize',background:'rgba(255,255,255,0.4)',borderRadius:'5px 0 0 5px',opacity:0,transition:'opacity 0.15s',zIndex:2 }} />
                             {/* Right resize handle */}
