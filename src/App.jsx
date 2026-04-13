@@ -18252,8 +18252,8 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             <div style={{ minWidth:0 }}>
               <div style={{ display:'flex', alignItems:'center', gap: isMobBD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'6px' }}>
                 <h1 style={{ margin:0, fontSize: isMobBD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
-                <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
-                {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik} avvik</span>}
+                <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
+                {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700',padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik}</span>}
               </div>
               <div style={{ display:'flex', gap: isMobBD ? '6px' : '12px', flexWrap:'wrap' }}>
                 <span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📅 {ins.date}</span>
@@ -18262,9 +18262,9 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
-            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600' }}>{isMobBD ? '📄 PDF' : '📄 PDF-rapport'}</button>
-            <button onClick={()=>{setSendItems(items.map(i=>i.id));setShowSend(true)}} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600' }}>{isMobBD ? '📧 Send' : '📧 Send rapport'}</button>
+          <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap', width: isMobBD ? '100%' : 'auto' }}>
+            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📄 PDF' : '📄 PDF-rapport'}</button>
+            <button onClick={()=>{setSendItems(items.map(i=>i.id));setShowSend(true)}} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📧 Send' : '📧 Send rapport'}</button>
             {!isMobBD && <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>}
             <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobBD ? '7px 10px' : '9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize: isMobBD ? '12px' : '13px' }}>🗑️</button>
@@ -18277,13 +18277,13 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobBD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobBD ? '1fr' : '2fr 1fr', gap: isMobBD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
 
           {tab==='sjekkliste'&&(
             <div style={bCard}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>☑️ Sjekkpunkter</h3>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobBD ? '10px' : '14px', flexWrap:'wrap', gap:'8px' }}>
+                <h3 style={{ margin:0, fontSize: isMobBD ? '13px' : '14px', fontWeight:'700', color:'#0f172a' }}>☑️ Sjekkpunkter</h3>
                 {items.length>0&&(
                   <div style={{ display:'flex', gap:'8px', fontSize:'12px' }}>
                     <span style={{ background:'#f0fdf4',color:'#16a34a',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>✅ {ok} OK</span>
