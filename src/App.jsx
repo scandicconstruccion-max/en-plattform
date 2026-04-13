@@ -13748,7 +13748,17 @@ function RessursPage() {
   const handleDragStart = (plan, e) => {
     setDragging(plan)
     setDragCopy(e?.altKey||e?.ctrlKey||false)
-    if (e?.dataTransfer) { e.dataTransfer.effectAllowed = e?.altKey||e?.ctrlKey ? 'copy' : 'move' }
+    if (e?.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copyMove'
+      // Create custom drag image
+      const ghost = document.createElement('div')
+      const proj = projects.find(p=>p.id===plan.project_id)
+      ghost.textContent = (proj?.name||'Booking') + ' — ' + plan.hours + 't'
+      ghost.style.cssText = 'position:fixed;top:-100px;left:-100px;background:#0f172a;color:white;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;font-family:system-ui,sans-serif;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.3);pointer-events:none;z-index:9999'
+      document.body.appendChild(ghost)
+      e.dataTransfer.setDragImage(ghost, 0, 0)
+      setTimeout(()=>document.body.removeChild(ghost), 0)
+    }
   }
 
   const handleDrop = async (resourceId, date) => {
@@ -14248,11 +14258,13 @@ function RessursPage() {
                     const cellPlans=getPlansForCell(res.id,date)
                     return (
                       <div key={date} id={`cell-${res.id}-${date}`}
-                        style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),minHeight:'56px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':(conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date)?'#fef2f2':dblBook?'#fef2f2':tod?'rgba(5,150,105,0.04)':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',transition:'background 0.3s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:(conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date)?'3px solid #dc2626':'none',position:'relative',animation:conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date?'conflictPulse 1.5s ease-in-out infinite':'none' }}
+                        style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),minHeight:'56px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#dbeafe':'#dcfce7':(conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date)?'#fef2f2':dblBook?'#fef2f2':tod?'rgba(5,150,105,0.04)':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:dragging?'copy':'pointer',transition:'background 0.15s',outline:isDragTarget?`3px solid ${dragCopy?'#2563eb':'#059669'}`:(conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date)?'3px solid #dc2626':'none',outlineOffset:isDragTarget?'-3px':'0',position:'relative',animation:conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date?'conflictPulse 1.5s ease-in-out infinite':'none',zIndex:isDragTarget?5:'auto' }}
                         onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
                         onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
-                        onDrop={()=>handleDrop(res.id,date)}>
-                        {dblBook&&<div style={{ position:'absolute',top:2,right:3,fontSize:'9px',color:'#dc2626',fontWeight:'800',zIndex:5 }}>!</div>}
+                        onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOver(null)}}
+                        onDrop={e=>{e.preventDefault();handleDrop(res.id,date)}}>
+                        {dblBook&&!isDragTarget&&<div style={{ position:'absolute',top:2,right:3,fontSize:'9px',color:'#dc2626',fontWeight:'800',zIndex:5 }}>!</div>}
+                        {isDragTarget&&<div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',zIndex:4,pointerEvents:'none' }}><div style={{ background:dragCopy?'#2563eb':'#059669',color:'white',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'700',boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>{dragCopy?'+ Kopi':'→ Hit'}</div></div>}
                         {conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date&&(
                           <div style={{ position:'absolute',top:'-4px',left:'50%',transform:'translate(-50%,-100%)',background:'#1e293b',color:'white',borderRadius:'10px',padding:'8px 12px',fontSize:'11px',fontWeight:'600',zIndex:10,whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(0,0,0,0.3)',pointerEvents:'none' }}>
                             ⚠️ {totalH}t booket — overskrider 8t
@@ -14283,9 +14295,9 @@ function RessursPage() {
                     const cellPlans=getPlansForCell(bar.resourceId,bar.startDate)
                     return (
                       <div key={bar.id}
-                        draggable onDragStart={e=>{e.stopPropagation();handleDragStart(firstPlan,e)}}
+                        draggable onDragStart={e=>{e.stopPropagation();handleDragStart(firstPlan,e)}} onDragEnd={()=>{setDragging(null);setDragOver(null);setDragCopy(false)}}
                         onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date:bar.startDate,existingPlans:cellPlans,editPlan:firstPlan})}}
-                        style={{ position:'absolute',top:'6px',bottom:'6px',...(viewMode==='maned'?{left:`${left}px`,width:`${width}px`}:{left:`calc(${leftPct}% + 3px)`,width:`calc(${widthPct}% - 6px)`}),background:`linear-gradient(135deg,${col},${col}dd)`,borderRadius:'8px',cursor:'grab',userSelect:'none',display:'flex',alignItems:'center',padding:'0 10px',gap:'6px',zIndex:3,boxShadow:'0 1px 4px rgba(0,0,0,0.15)',transition:'box-shadow 0.15s,opacity 0.1s',opacity:dragging?.id===firstPlan.id?0.5:1,overflow:'hidden' }}
+                        style={{ position:'absolute',top:'6px',bottom:'6px',...(viewMode==='maned'?{left:`${left}px`,width:`${width}px`}:{left:`calc(${leftPct}% + 3px)`,width:`calc(${widthPct}% - 6px)`}),background:dragging?.id===firstPlan.id?`${col}88`:`linear-gradient(135deg,${col},${col}dd)`,borderRadius:'8px',cursor:dragging?'grabbing':'grab',userSelect:'none',display:'flex',alignItems:'center',padding:'0 10px',gap:'6px',zIndex:dragging&&dragging.id!==firstPlan.id?1:3,boxShadow:dragging?.id===firstPlan.id?'none':'0 1px 4px rgba(0,0,0,0.15)',transition:'box-shadow 0.15s,opacity 0.15s,transform 0.15s',opacity:dragging?.id===firstPlan.id?0.35:1,transform:dragging?.id===firstPlan.id?'scale(0.95)':'scale(1)',overflow:'hidden' }}
                         onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.25)'}
                         onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.15)'}>
                         {/* Left resize handle */}
@@ -14321,20 +14333,26 @@ function RessursPage() {
       )}
 
       {/* Drag tip */}
-      {dragging&&(
-        <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(15,23,42,0.95)',color:'white',borderRadius:'14px',padding:'12px 22px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.35)',display:'flex',alignItems:'center',gap:'14px',backdropFilter:'blur(8px)' }}>
-          <span style={{ fontSize:'22px' }}>{dragCopy?'📋':'↕️'}</span>
-          <div>
-            <div style={{ fontWeight:'800',fontSize:'14px' }}>{dragCopy?'Kopierer booking':'Flytter booking'}</div>
-            <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.55)',marginTop:'2px' }}>
-              {dragCopy?'Slipp på ny celle for å kopiere':'Hold Alt eller Ctrl mens du drar for å kopiere'}
+      {dragging&&(()=>{
+        const dragProj=projects.find(p=>p.id===dragging.project_id)
+        const dragRes=employees.find(e=>e.id===dragging.resource_id)||machines.find(m=>m.id===dragging.resource_id)
+        const dragResName=dragRes?.first_name?`${dragRes.first_name} ${dragRes.last_name}`:dragRes?.name||''
+        return (
+          <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:dragCopy?'rgba(37,99,235,0.95)':'rgba(15,23,42,0.95)',color:'white',borderRadius:'16px',padding:'14px 24px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',display:'flex',alignItems:'center',gap:'16px',backdropFilter:'blur(8px)',maxWidth:'90vw' }}>
+            <div style={{ width:'40px',height:'40px',borderRadius:'10px',background:getProjectColor(dragging.project_id,projects),display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0 }}>{dragCopy?'📋':'↕️'}</div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontWeight:'800',fontSize:'14px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{dragCopy?'Kopierer':'Flytter'}: {dragProj?.name||'Booking'}</div>
+              <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.6)',marginTop:'2px' }}>
+                {dragResName} · {dragging.date} · {dragging.hours}t
+              </div>
+            </div>
+            <div style={{ display:'flex',flexDirection:'column',gap:'4px',flexShrink:0 }}>
+              <div style={{ background:dragCopy?'rgba(255,255,255,0.2)':'rgba(5,150,105,0.8)',borderRadius:'6px',padding:'3px 10px',fontSize:'11px',textAlign:'center',fontWeight:'700' }}>{dragCopy?'Kopierer':'Flytt'}</div>
+              <div style={{ fontSize:'9px',opacity:0.5,textAlign:'center' }}>{dragCopy?'Slipp for å kopiere':'Alt = Kopier'}</div>
             </div>
           </div>
-          <div style={{ background:'rgba(255,255,255,0.1)',borderRadius:'8px',padding:'4px 10px',fontSize:'11px',color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap' }}>
-            {dragCopy?'📋 Kopi':'↕️ Flytt'}
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
 
       {/* Dobbeltbooking modal */}
