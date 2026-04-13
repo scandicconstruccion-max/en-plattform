@@ -151,7 +151,7 @@ const navGroups = [
   {
     title: 'DOKUMENTASJON, OVERLEVERING & SALG',
     items: [
-      { id: 'kalender','befaring', label: 'Befaring', emoji: '🔍' },
+      { id: 'befaring', label: 'Befaring', emoji: '🔍' },
       { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
       { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
       { id: 'crm',      label: 'CRM',      emoji: '📊' },
