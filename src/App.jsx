@@ -9254,7 +9254,7 @@ function EndringsmeldingPage() {
           {(em.images||[]).length > 0 && (
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px' }}>
               <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📸 Bilder</h3>
-              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap: isMobBild ? '6px' : '8px', flexWrap:'wrap' }}>
                 {em.images.map((img, i) => <img key={i} src={img.url} alt={img.name} style={{ width:'120px', height:'120px', objectFit:'cover', borderRadius:'10px', border:'1px solid #e2e8f0', cursor:'pointer' }} onClick={() => window.open(img.url, '_blank')} />)}
               </div>
             </div>
@@ -18687,6 +18687,8 @@ function BildedokPage() {
     finally { setUploading(false) }
   }
 
+  const isMobBild = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster bilder...</p></div></div>
 
   const faseGroups = BYGGEFASER.map(fase => ({ ...fase, photos: filtered.filter(p=>p.fase===fase.id) }))
@@ -18697,23 +18699,23 @@ function BildedokPage() {
     byDate[d].push(p)
   })
 
-  const selStyle = { padding:'8px 32px 8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',appearance:'none',cursor:'pointer',fontWeight:'500',color:'#0f172a' }
+  const selStyle = { padding: isMobBild ? '7px 28px 7px 10px' : '8px 32px 8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize: isMobBild ? '12px' : '13px',outline:'none',background:'white',appearance:'none',cursor:'pointer',fontWeight:'500',color:'#0f172a', flex: isMobBild ? '1 1 45%' : 'none' }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobBild ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobBild ? '10px' : '16px', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a', margin:0 }}>Bildedokumentasjon</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>{filtered.length} bilder totalt</p>
+            <h1 style={{ fontSize: isMobBild ? '18px' : '22px', fontWeight:'800', color:'#0f172a', margin:0 }}>{isMobBild ? '📷 Bildedok' : 'Bildedokumentasjon'}</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize: isMobBild ? '12px' : '14px', marginBottom:0 }}>{filtered.length} bilder</p>
           </div>
-          <button onClick={()=>setShowUploadModal(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700', display:'flex', alignItems:'center', gap:'8px' }}>
-            + Last opp bilder
+          <button onClick={()=>setShowUploadModal(true)} style={{ padding: isMobBild ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobBild ? '12px' : '14px', fontWeight:'700', display:'flex', alignItems:'center', gap:'6px', whiteSpace:'nowrap', flexShrink:0 }}>
+            {isMobBild ? '📷 Last opp' : '+ Last opp bilder'}
           </button>
         </div>
-        <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', borderRadius:'10px', padding:'4px', width:'fit-content', marginBottom:'16px' }}>
-          {[{id:'mappe',label:'Mappestruktur',icon:'⊞'},{id:'tidslinje',label:'Tidslinje',icon:'◷'}].map(t=>(
-            <button key={t.id} onClick={()=>setView(t.id)} style={{ padding:'7px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600', background:view===t.id?'white':'transparent', color:view===t.id?'#0f172a':'#64748b', boxShadow:view===t.id?'0 1px 3px rgba(0,0,0,0.1)':'none', display:'flex', alignItems:'center', gap:'6px' }}>
+        <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', borderRadius:'10px', padding:'4px', width:'fit-content', marginBottom: isMobBild ? '10px' : '16px' }}>
+          {[{id:'mappe',label: isMobBild ? 'Mapper' : 'Mappestruktur',icon:'⊞'},{id:'tidslinje',label:'Tidslinje',icon:'◷'}].map(t=>(
+            <button key={t.id} onClick={()=>setView(t.id)} style={{ padding: isMobBild ? '6px 12px' : '7px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize: isMobBild ? '12px' : '13px', fontWeight:'600', background:view===t.id?'white':'transparent', color:view===t.id?'#0f172a':'#64748b', boxShadow:view===t.id?'0 1px 3px rgba(0,0,0,0.1)':'none', display:'flex', alignItems:'center', gap:'6px' }}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -18728,35 +18730,35 @@ function BildedokPage() {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px' }}>
+      <div style={{ padding: isMobBild ? '12px' : '24px 32px' }}>
         {view==='mappe' ? (
           <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
             {faseGroups.map(fase => {
               const expanded = expandedFaser.has(fase.id)
               const toggle = () => setExpandedFaser(prev=>{ const n=new Set(prev); n.has(fase.id)?n.delete(fase.id):n.add(fase.id); return n })
               return (
-              <div key={fase.id} style={{ background:'white', borderRadius:'16px', border:'1px solid #e2e8f0', overflow:'hidden' }}>
-                <div onClick={toggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 20px', cursor:'pointer', userSelect:'none', transition:'background 0.1s' }}
+              <div key={fase.id} style={{ background:'white', borderRadius: isMobBild ? '12px' : '16px', border:'1px solid #e2e8f0', overflow:'hidden' }}>
+                <div onClick={toggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding: isMobBild ? '10px 12px' : '14px 20px', cursor:'pointer', userSelect:'none', transition:'background 0.1s' }}
                   onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-                    <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:fase.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{fase.emoji||'📁'}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap: isMobBild ? '8px' : '12px' }}>
+                    {!isMobBild && <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:fase.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{fase.emoji||'📁'}</div>}
                     <div>
-                      <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{fase.label}</span>
-                      <div style={{ fontSize:'12px',color:'#94a3b8',marginTop:'1px' }}>{fase.photos.length} bilder</div>
+                      <span style={{ fontWeight:'700', fontSize: isMobBild ? '13px' : '15px', color:'#0f172a' }}>{isMobBild ? (fase.emoji+' ') : ''}{fase.label}</span>
+                      <div style={{ fontSize: isMobBild ? '11px' : '12px',color:'#94a3b8',marginTop:'1px' }}>{fase.photos.length} bilder</div>
                     </div>
-                    <span style={{ background:fase.bg, color:fase.color, border:`1px solid ${fase.color}30`, borderRadius:'999px', padding:'2px 10px', fontSize:'12px', fontWeight:'700' }}>{fase.photos.length}</span>
+                    <span style={{ background:fase.bg, color:fase.color, border:`1px solid ${fase.color}30`, borderRadius:'999px', padding:'2px 10px', fontSize: isMobBild ? '11px' : '12px', fontWeight:'700' }}>{fase.photos.length}</span>
                   </div>
-                  <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
-                    {fase.photos.slice(0,4).map((p,i)=>(
+                  <div style={{ display:'flex',alignItems:'center',gap: isMobBild ? '4px' : '8px' }}>
+                    {!isMobBild && fase.photos.slice(0,4).map((p,i)=>(
                       <img key={p.id} src={p.file_url} alt="" style={{ width:'30px',height:'30px',borderRadius:'6px',objectFit:'cover',border:'2px solid white',marginLeft:i>0?'-8px':0 }} />
                     ))}
-                    <button onClick={e=>{e.stopPropagation();setUploadFase(fase.id);setShowUploadModal(true)}} style={{ padding:'5px 12px', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', marginLeft:'4px' }}>+ Legg til</button>
-                    <span style={{ color:'#94a3b8',fontSize:'18px',transform:expanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block',marginLeft:'4px' }}>▾</span>
+                    {!isMobBild && <button onClick={e=>{e.stopPropagation();setUploadFase(fase.id);setShowUploadModal(true)}} style={{ padding:'5px 12px', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', marginLeft:'4px' }}>+ Legg til</button>}
+                    <span style={{ color:'#94a3b8',fontSize:'18px',transform:expanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block' }}>▾</span>
                   </div>
                 </div>
                 {expanded && (fase.photos.length > 0 ? (
-                  <div style={{ padding:'4px 20px 20px', borderTop:'1px solid #f1f5f9' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:'10px', marginTop:'12px' }}>
+                  <div style={{ padding: isMobBild ? '4px 10px 12px' : '4px 20px 20px', borderTop:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'grid', gridTemplateColumns: isMobBild ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(160px,1fr))', gap: isMobBild ? '8px' : '10px', marginTop:'12px' }}>
                       {fase.photos.map(photo => (
                         <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
                       ))}
@@ -18787,7 +18789,7 @@ function BildedokPage() {
                   <span style={{ color:'#94a3b8', fontSize:'13px' }}>{datePhotos.length} bilder</span>
                   <div style={{ flex:1, height:'1px', background:'#f1f5f9' }} />
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: isMobBild ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(160px,1fr))', gap: isMobBild ? '8px' : '10px' }}>
                   {datePhotos.map(photo => {
                     const fase = BYGGEFASER.find(f=>f.id===photo.fase)
                     return <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
@@ -18856,14 +18858,14 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
   }
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px',fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px',fontFamily:'system-ui,sans-serif' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'540px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',overflow:'hidden',maxHeight:'90vh',display:'flex',flexDirection:'column' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📷 Last opp bilder</h2>
+      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '540px',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',overflow:'hidden',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '17px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>📷 Last opp bilder</h2>
           <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px',overflowY:'auto' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'14px',overflowY:'auto',WebkitOverflowScrolling:'touch' }}>
           <div onDrop={e=>{e.preventDefault();handleFiles(e.dataTransfer.files)}} onDragOver={e=>e.preventDefault()} onClick={()=>fileRef.current?.click()}
             style={{ border:'2px dashed #e2e8f0',borderRadius:'14px',padding:'28px',textAlign:'center',cursor:'pointer',background:'#f8fafc' }}
             onMouseEnter={e=>e.currentTarget.style.borderColor='#059669'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
@@ -18886,14 +18888,13 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
               ))}
             </div>
           </div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
+          <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'10px' }}>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Rom / område</label><input value={rom} onChange={e=>setRom(e.target.value)} placeholder="F.eks. Bad 2. etg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notat</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           <div style={{ display:'flex',justifyContent:'flex-end',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={()=>{ if(!files.length) return alert('Velg minst ett bilde'); onUpload(files,fase,projectId,rom,note) }} disabled={uploading||!files.length} style={{ padding:'10px 24px',background:uploading||!files.length?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{uploading?'Laster opp...':'Last opp'}</button>
+            <button onClick={()=>{ if(!files.length) return alert('Velg minst ett bilde'); onUpload(files,fase,projectId,rom,note) }} disabled={uploading||!files.length} style={{ padding:'10px 24px',background:uploading||!files.length?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700', width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 'auto' }}>{uploading?'Laster opp...':'Last opp'}</button>
           </div>
         </div>
       </div>
