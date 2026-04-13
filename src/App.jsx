@@ -15144,7 +15144,7 @@ function CalWeekView({ currentDate, events, attendees, projects, employees, calV
     const visEmp = employees.filter(e=>visibleEmployees.includes(e.id))
     return (
       <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0 8px 12px' : '0 24px 24px' }}>
-        <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
+        <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:'white', borderRadius:'14px', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
             <thead>
               <tr>
@@ -17274,7 +17274,7 @@ function CRMPage() {
 
         {/* PIPELINE VIEW */}
         {view==='pipeline' && (
-          <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
+          <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(5,280px)', gap:'14px', minWidth:'max-content' }}>
               {['lead','kontaktet','tilbud_sendt','vunnet','tapt'].map(status=>{
                 const cfg=CRM_STATUS[status]
