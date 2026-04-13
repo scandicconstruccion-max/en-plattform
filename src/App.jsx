@@ -13863,9 +13863,9 @@ function RessursPage() {
   const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:fullscreen?'flex':'block', flexDirection:fullscreen?'column':'initial', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'auto', overflow:'hidden' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:0, position:'sticky', top:0, zIndex:30 }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
@@ -14064,7 +14064,7 @@ function RessursPage() {
 
       {/* Milestone panel */}
       {showMilestones && (
-        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'16px 24px' }}>
+        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'16px 24px', flexShrink:0, maxHeight:'200px', overflowY:'auto' }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px', flexWrap:'wrap', gap:'10px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
               <span style={{ fontSize:'16px', fontWeight:'800', color:'#7c3aed' }}>🏁 Milepæler</span>
@@ -14108,7 +14108,7 @@ function RessursPage() {
 
       {/* Month view scroll hint */}
       {viewMode==='maned'&&(
-        <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center' }}>
+        <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 }}>
           <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'600' }}>
             📅 Månedsvisning — {visibleDates.length} dager · Skroll horisontalt for å se hele måneden
           </span>
@@ -14119,7 +14119,7 @@ function RessursPage() {
       )}
 
       {/* Legend */}
-      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center', position:'sticky', top:0, zIndex:25 }}>
+      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center', flexShrink:0 }}>
         <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
         {(filterProject!=='alle' ? projects.filter(p=>p.id===filterProject) : projects).slice(0,8).map(p=>(
           <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'5px', cursor:'pointer' }} onClick={()=>setFilterProject(p.id===filterProject?'alle':p.id)}>
@@ -14131,7 +14131,7 @@ function RessursPage() {
       </div>
 
       {/* Grid */}
-      <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:fullscreen?'auto':'visible', flex:fullscreen?1:'initial' }}>
+      <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:'auto', flex:1 }}>
         <div style={{ minWidth: viewMode==='maned' ? `${240+visibleDates.length*68}px` : '100%' }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
