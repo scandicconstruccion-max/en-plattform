@@ -152,7 +152,7 @@ const navGroups = [
     title: 'DOKUMENTASJON, OVERLEVERING & SALG',
     items: [
       { id: 'befaring', label: 'Befaring', emoji: '🔍' },
-      { id: 'bildedok', label: 'Bildedok', emoji: '📷' },
+      { id: 'bildedok','minbedrift', label: 'Bildedok', emoji: '📷' },
       { id: 'fdv',      label: 'FDV',      emoji: '🏛️' },
       { id: 'crm',      label: 'CRM',      emoji: '📊' },
     ]
@@ -19447,7 +19447,7 @@ const MODULE_CATALOG = [
 ]
 
 const mbInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
-const mbCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const mbCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 const mbLbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
 const mbSec = t => <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'12px', marginTop:'8px' }}>{t}</div>
 
@@ -19538,6 +19538,8 @@ function MinBedriftPage() {
   const totalCost = grunnpakkeCost + tilleggCost
   const activeAddons = MODULE_CATALOG.filter(m => !m.required && activeModules.includes(m.id))
 
+  const isMobMB = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -19548,35 +19550,35 @@ function MinBedriftPage() {
   )
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            {settings?.logo_url
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobMB ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobMB ? '10px' : '16px', gap:'10px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobMB ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobMB && (settings?.logo_url
               ? <img src={settings.logo_url} alt="Logo" style={{ width:'52px', height:'52px', borderRadius:'12px', objectFit:'contain', border:'1px solid #f1f5f9', background:'white' }} />
               : <div style={{ width:'52px', height:'52px', borderRadius:'12px', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px' }}>🏢</div>
-            }
-            <div>
-              <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>{settings?.name || 'Min bedrift'}</h1>
-              <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>{settings?.org_number ? `Org.nr: ${settings.org_number}` : 'Legg til bedriftsinformasjon'}</p>
+            )}
+            <div style={{ minWidth:0 }}>
+              <h1 style={{ fontSize: isMobMB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>{settings?.name || 'Min bedrift'}</h1>
+              {!isMobMB && <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>{settings?.org_number ? `Org.nr: ${settings.org_number}` : 'Legg til bedriftsinformasjon'}</p>}
             </div>
           </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'2px' }}>Månedlig kostnad</div>
-            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
-            <div style={{ fontSize:'11px', color:'#94a3b8' }}>eks. mva · {numUsers} bruker{numUsers>1?'e':''}</div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            {!isMobMB && <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'2px' }}>Månedlig kostnad</div>}
+            <div style={{ fontSize: isMobMB ? '16px' : '22px', fontWeight:'800', color:'#059669' }}>{totalCost.toLocaleString('nb-NO')} kr</div>
+            <div style={{ fontSize: isMobMB ? '10px' : '11px', color:'#94a3b8' }}>{isMobMB ? '/mnd' : 'eks. mva · '+numUsers+' bruker'+(numUsers>1?'e':'')}</div>
           </div>
         </div>
         <div style={{ display:'flex', gap:'4px' }}>
-          {[['info','🏢 Bedriftsinformasjon'],['moduler','📦 Moduler og priser']].map(([id, label]) => (
+          {[['info', isMobMB ? '🏢 Info' : '🏢 Bedriftsinformasjon'],['moduler', isMobMB ? '📦 Moduler' : '📦 Moduler og priser']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
-              style={{ padding:'8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize:'13px', cursor:'pointer' }}>{label}</button>
+              style={{ padding: isMobMB ? '7px 12px' : '8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize: isMobMB ? '12px' : '13px', cursor:'pointer' }}>{label}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px', maxWidth:'900px' }}>
+      <div style={{ padding: isMobMB ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobMB ? '12px' : '20px', maxWidth:'900px' }}>
 
         {/* TAB: BEDRIFTSINFORMASJON */}
         {tab === 'info' && (
@@ -19584,10 +19586,10 @@ function MinBedriftPage() {
             {/* Logo */}
             <div style={mbCard}>
               {mbSec('Firmalogo')}
-              <div style={{ display:'flex', alignItems:'center', gap:'20px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobMB ? '12px' : '20px', flexWrap: isMobMB ? 'wrap' : 'nowrap' }}>
                 {settings?.logo_url
-                  ? <img src={settings.logo_url} alt="Logo" style={{ width:'80px', height:'80px', objectFit:'contain', borderRadius:'12px', border:'1px solid #f1f5f9' }} />
-                  : <div style={{ width:'80px', height:'80px', borderRadius:'12px', background:'#f8fafc', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px' }}>🏢</div>
+                  ? <img src={settings.logo_url} alt="Logo" style={{ width: isMobMB ? '60px' : '80px', height: isMobMB ? '60px' : '80px', objectFit:'contain', borderRadius:'12px', border:'1px solid #f1f5f9' }} />
+                  : <div style={{ width: isMobMB ? '60px' : '80px', height: isMobMB ? '60px' : '80px', borderRadius:'12px', background:'#f8fafc', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobMB ? '22px' : '28px' }}>🏢</div>
                 }
                 <div>
                   <div style={{ fontSize:'13px', color:'#475569', marginBottom:'10px' }}>Logoen brukes på tilbud, fakturaer og e-poster til kunder.</div>
@@ -19649,8 +19651,8 @@ function MinBedriftPage() {
 
             <div style={{ display:'flex', justifyContent:'flex-end' }}>
               <button onClick={handleSaveInfo} disabled={saving}
-                style={{ padding:'12px 28px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', cursor:saving?'not-allowed':'pointer', fontSize:'15px', fontWeight:'700' }}>
-                {saving ? 'Lagrer...' : '✅ Lagre bedriftsinformasjon'}
+                style={{ padding: isMobMB ? '12px' : '12px 28px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', cursor:saving?'not-allowed':'pointer', fontSize: isMobMB ? '14px' : '15px', fontWeight:'700', width: isMobMB ? '100%' : 'auto' }}>
+                {saving ? 'Lagrer...' : isMobMB ? '✅ Lagre' : '✅ Lagre bedriftsinformasjon'}
               </button>
             </div>
           </>
@@ -19661,7 +19663,7 @@ function MinBedriftPage() {
           <>
             {/* Brukere */}
             <div style={{ ...mbCard, background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'20px' }}>
+              <div style={{ display:'flex', alignItems: isMobMB ? 'flex-start' : 'center', justifyContent:'space-between', gap: isMobMB ? '12px' : '20px', flexDirection: isMobMB ? 'column' : 'row' }}>
                 <div>
                   <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
                     <span style={{ fontSize:'18px' }}>🔹</span>
@@ -19689,19 +19691,19 @@ function MinBedriftPage() {
             </div>
 
             {/* Tilleggsmoduler header */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px' }}>
+            <div style={{ display:'flex', alignItems: isMobMB ? 'flex-start' : 'center', justifyContent:'space-between', marginTop:'8px', flexDirection: isMobMB ? 'column' : 'row', gap: isMobMB ? '8px' : '0' }}>
               <div>
-                <h2 style={{ margin:'0 0 2px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Tilleggsmoduler</h2>
-                <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Legg til moduler etter behov. Alle priser per måned, eks. mva. Aktiveres og deaktiveres umiddelbart.</p>
+                <h2 style={{ margin:'0 0 2px', fontSize: isMobMB ? '15px' : '16px', fontWeight:'700', color:'#0f172a' }}>Tilleggsmoduler</h2>
+                {!isMobMB && <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Legg til moduler etter behov. Alle priser per måned, eks. mva.</p>}
               </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:'12px', color:'#64748b' }}>Total månedlig kostnad</div>
-                <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
+              <div style={{ textAlign: isMobMB ? 'left' : 'right' }}>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>Total</div>
+                <div style={{ fontSize: isMobMB ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
               </div>
             </div>
 
             {/* Module grid */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobMB ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
               {MODULE_CATALOG.filter(m => !m.required).map(mod => {
                 const isActive = activeModules.includes(mod.id)
                 return (
