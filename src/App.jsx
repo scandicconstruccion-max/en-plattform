@@ -15714,7 +15714,7 @@ function InterChatPage() {
             <div style={{ position:'absolute',bottom:0,right:0,width:'10px',height:'10px',borderRadius:'50%',background:'#22c55e',border:'2px solid white' }}/>
           </div>
           <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{displayName}</div>
+            <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.email?.split('@')[0] || 'Bruker'}</div>
             <div style={{ fontSize:'10px',color:'#22c55e',fontWeight:'600' }}>● Online</div>
           </div>
         </div>
