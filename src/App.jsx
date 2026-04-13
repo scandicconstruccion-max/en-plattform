@@ -18093,8 +18093,11 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const cameraRef = React.useRef(null)
 
   const loadChecklists = async () => {
-    const { data } = await supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false})
-    setChecklists(data||[])
+    try {
+      const { data, error } = await supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false})
+      if (error) throw error
+      setChecklists(data||[])
+    } catch(e) { console.error('Feil ved lasting av sjekklister:', e); setChecklists([]) }
   }
 
   const importFromChecklist = async (cl) => {
@@ -18414,7 +18417,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       {showImportCL && (
         <>
           <div onClick={()=>setShowImportCL(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius: isMobBD ? '0' : '20px',width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))',height: isMobBD ? '100vh' : 'auto',maxHeight: isMobBD ? '100vh' : '80vh',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',display:'flex',flexDirection:'column', inset: isMobBD ? 0 : 'auto', transform: isMobBD ? 'none' : 'translate(-50%,-50%)' }}>
+          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '80vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
               <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📋 Importer sjekkliste</h2>
               <button onClick={()=>setShowImportCL(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
@@ -18444,7 +18447,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       {showSend && (
         <>
           <div onClick={()=>setShowSend(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius: isMobBD ? '0' : '20px',width: isMobBD ? '100%' : 'min(560px,calc(100vw - 32px))',height: isMobBD ? '100vh' : 'auto',maxHeight: isMobBD ? '100vh' : '90vh',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',display:'flex',flexDirection:'column', inset: isMobBD ? 0 : 'auto', transform: isMobBD ? 'none' : 'translate(-50%,-50%)' }}>
+          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(560px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '90vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
               <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📧 Send befaringsrapport</h2>
               <button onClick={()=>setShowSend(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
