@@ -17460,7 +17460,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobBD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobBD ? '1fr' : '2fr 1fr', gap: isMobBD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
           {/* OVERSIKT */}
@@ -17861,7 +17861,7 @@ const INS_STATUS = {
 }
 
 const bInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
-const bCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const bCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function BefaringPage() {
   const { user } = useAuth()
@@ -17895,18 +17895,20 @@ function BefaringPage() {
 
   const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
 
+  const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
   if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobB ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobB ? '12px' : '16px', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>
+            <h1 style={{ fontSize: isMobB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
+            {!isMobB && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>}
           </div>
-          <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny befaring</button>
+          <button onClick={()=>setShowNew(true)} style={{ padding: isMobB ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobB ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>{isMobB ? '+ Befaring' : '+ Ny befaring'}</button>
         </div>
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
           {[
@@ -17915,23 +17917,23 @@ function BefaringPage() {
             { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
             { label:'Åpne oppfølg.', value:openFollowups, emoji:'⏰', bg:openFollowups>0?'#fffbeb':'#f8fafc', color:openFollowups>0?'#d97706':'#64748b' },
           ].map(s=>(
-            <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px 16px' }}>
-              <div style={{ fontSize:'18px', marginBottom:'4px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'20px', fontWeight:'800', color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
+            <div key={s.label} style={{ background:s.bg, borderRadius: isMobB ? '10px' : '12px', padding: isMobB ? '10px' : '14px 16px' }}>
+              <div style={{ fontSize: isMobB ? '14px' : '18px', marginBottom: isMobB ? '2px' : '4px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobB ? '16px' : '20px', fontWeight:'800', color:s.color }}>{s.value}</div>
+              <div style={{ fontSize: isMobB ? '9px' : '11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk befaring, sted..." style={{ ...bInp, maxWidth:'220px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth:'160px' }}>
+      <div style={{ padding: isMobB ? '12px' : '20px 32px', display:'flex', flexDirection:'column', gap: isMobB ? '12px' : '16px', overflowX:'hidden' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobB ? '10px' : '14px 18px', display:'flex', gap: isMobB ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...bInp, maxWidth: isMobB ? '100%' : '220px', flex: isMobB ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '160px', flex: isMobB ? '1 1 48%' : 'none' }}>
             <option value="alle">Alle statuser</option>
             {Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth:'180px' }}>
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '180px', flex: isMobB ? '1 1 48%' : 'none' }}>
             <option value="alle">Alle prosjekter</option>
             {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
@@ -17956,24 +17958,24 @@ function BefaringPage() {
               const avvik=items.filter(i=>i.status==='avvik').length
               return (
                 <div key={ins.id} onClick={()=>setSelected(ins)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobB ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobB ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobB ? 'flex-start' : 'center', gap: isMobB ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>
+                  {!isMobB && <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{ins.title}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobB ? '13px' : '15px' }}>{ins.title}</span>
                       <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
                       {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
                       {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {ins.date}</span>
-                      {ins.location&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {ins.location}</span>}
-                      {proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} punkter</span>}
+                    <div style={{ display:'flex', gap: isMobB ? '6px' : '12px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📅 {ins.date}</span>
+                      {ins.location&&<span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📍 {ins.location}</span>}
+                      {!isMobB && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobB && items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} punkter</span>}
                     </div>
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobB && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -18146,16 +18148,18 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
     na:    { label:'N/A',   color:'#94a3b8', bg:'#f8fafc', next:'ok' },
   }
 
+  const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til befaringer</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px',height:'52px',borderRadius:'14px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',flexShrink:0 }}>{cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobBD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobBD ? '8px' : '16px', flexWrap: isMobBD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobBD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobBD && <div style={{ width:'52px',height:'52px',borderRadius:'14px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',flexShrink:0 }}>{cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobBD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize: isMobBD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
                 <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                 {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik} avvik</span>}
               </div>
@@ -18166,16 +18170,16 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            <button onClick={exportPDF} style={{ padding:'9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>📄 PDF-rapport</button>
-            <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600' }}>{isMobBD ? '📄 PDF' : '📄 PDF-rapport'}</button>
+            {!isMobBD && <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobBD ? '7px 10px' : '9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize: isMobBD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
-        <div style={{ display:'flex', gap:'4px', marginTop:'16px', flexWrap:'wrap' }}>
-          {[['sjekkliste',`☑️ Sjekkliste (${items.length})`],['oppfolging',`⏰ Oppfølging (${openF})`],['filer',`📎 Filer (${files.length})`],['info','ℹ️ Info']].map(([id,l])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ padding:'8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+        <div style={{ display:'flex', gap:'4px', marginTop: isMobBD ? '12px' : '16px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          {[['sjekkliste', isMobBD ? `☑️ Sjekk (${items.length})` : `☑️ Sjekkliste (${items.length})`],['oppfolging', isMobBD ? `⏰ Oppf. (${openF})` : `⏰ Oppfølging (${openF})`],['filer',`📎 Filer (${files.length})`],['info','ℹ️ Info']].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobBD ? '7px 10px' : '8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize: isMobBD ? '11px' : '13px',cursor:'pointer',whiteSpace:'nowrap' }}>{l}</button>
           ))}
         </div>
       </div>
@@ -18379,18 +18383,17 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔍 {isEdit?'Rediger':'Ny'} befaring</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett befaring'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '560px',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>{isEdit?'🔍 Rediger befaring':'🔍 Ny befaring'}</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 14px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
+        <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
           {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
           ))}
