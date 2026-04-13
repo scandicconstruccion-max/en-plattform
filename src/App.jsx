@@ -7925,8 +7925,8 @@ function AnbudsPage() {
             {!isMobA && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📥 Ny' : '📥 Ny forespørsel'}</button>
-            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📤 UE' : '📤 Send til UE'}</button>
+            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📥 Forespørsel' : '📥 Ny forespørsel'}</button>
+            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📤 Til UE' : '📤 Send til UE'}</button>
           </div>
         </div>
       </div>
@@ -8282,27 +8282,28 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { grandTotal } = calcTender(chapters, form.global_markup)
+  const isMobAE = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobAE ? 'stretch' : 'center', justifyContent:'center', padding: isMobAE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{isIncoming?'📥':'📤'} {isEdit?'Rediger':'Nytt'} {isIncoming?'innkommende anbud':'utgående anbud til UE'}</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobAE ? '0' : '20px', width:'100%', maxWidth: isMobAE ? '100%' : '900px', maxHeight: isMobAE ? '100vh' : '94vh', height: isMobAE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobAE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobAE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobAE ? '8px' : '16px', flex:1, minWidth:0 }}>
+            <h2 style={{ margin:0, fontSize: isMobAE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{isIncoming?'📥':'📤'} {isEdit?'Rediger':'Nytt'} {isMobAE ? 'anbud' : (isIncoming?'innkommende anbud':'utgående anbud til UE')}</h2>
             <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Informasjon'],['2','Kalkyle / Poster']].map(([n,l])=>(
-                <button key={n} onClick={()=>setStep(+n)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize:'13px', cursor:'pointer' }}>{n}. {l}</button>
+              {[['1', isMobAE ? 'Info' : 'Informasjon'],['2', isMobAE ? 'Kalkyle' : 'Kalkyle / Poster']].map(([n,l])=>(
+                <button key={n} onClick={()=>setStep(+n)} style={{ padding: isMobAE ? '4px 10px' : '6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize: isMobAE ? '11px' : '13px', cursor:'pointer' }}>{n}. {l}</button>
               ))}
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtT(grandTotal)}</strong></span>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            {!isMobAE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtT(grandTotal)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobAE ? '14px' : '24px', WebkitOverflowScrolling:'touch' }}>
           {step===1 && (
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
@@ -8326,15 +8327,15 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                 const { cost, price } = calcTenderChapter(ch)
                 return (
                   <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-                    <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...tInp, flex:1, background:'transparent', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...tInp, width:'100px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtT(price)}</span>
-                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
+                    <div style={{ background:'#f8fafc', padding: isMobAE ? '10px 12px' : '12px 18px', display:'flex', alignItems:'center', gap: isMobAE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobAE ? 'wrap' : 'nowrap' }}>
+                      <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...tInp, flex:1, background:'transparent', fontWeight:'700', minWidth: isMobAE ? '120px' : 'auto', fontSize: isMobAE ? '13px' : '14px' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...tInp, width: isMobAE ? '60px' : '100px', fontSize: isMobAE ? '12px' : '14px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobAE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtT(price)}</span>
+                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
-                    <div style={{ padding:'14px 18px' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <div style={{ padding: isMobAE ? '10px' : '14px 18px', overflowX: isMobAE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobAE ? '550px' : 'auto' }}>
                         <thead><tr>{['Beskrivelse','Mengde','Enhet','Kostpris/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=4?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
                         <tbody>
                           {ch.posts.map(p => {
@@ -8366,12 +8367,12 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
             </div>
           )}
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>← Tilbake</button>}</div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step===1&&<button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Kalkyle →</button>}
-            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett anbud'}</button>}
+        <div style={{ padding: isMobAE ? '12px 14px' : '16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0, gap:'8px' }}>
+          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding: isMobAE ? '8px 12px' : '10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobAE ? '12px' : '14px' }}>← Tilbake</button>}</div>
+          {isMobAE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmtT(grandTotal)}</span>}
+          <div style={{ display:'flex', gap: isMobAE ? '6px' : '10px' }}>
+            {step===1&&<button onClick={()=>setStep(2)} style={{ padding: isMobAE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAE ? '12px' : '14px', fontWeight:'600' }}>{isMobAE ? 'Neste →' : 'Neste: Kalkyle →'}</button>}
+            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding: isMobAE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobAE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
           </div>
         </div>
       </div>
