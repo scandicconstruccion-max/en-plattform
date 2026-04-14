@@ -38,8 +38,14 @@ function AuthProvider({ children }) {
   const loadProfile = async (authUser) => {
     if (!authUser) { setProfile(null); return }
     try {
-      const { data } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role').eq('id', authUser.id).single()
-      setProfile(data || null)
+      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role').eq('id', authUser.id).single()
+      if (error) {
+        // Fallback without platform_role if column doesn't exist yet
+        const { data: fallback } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
+        setProfile(fallback || null)
+      } else {
+        setProfile(data || null)
+      }
     } catch(e) { setProfile(null) }
   }
 
@@ -26620,7 +26626,7 @@ function EMViewPage() {
 }
 
 function AppContent() {
-  const { user, loading, supabase, displayName } = useAuth()
+  const { user, loading, supabase, displayName, isPlatformOwner } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
@@ -26647,9 +26653,9 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!user) return
-    supabase.from('company_settings').select('active_modules,subscription_status,trial_start_date,trial_ends_at').limit(1).single()
-      .then(({ data }) => {
-        if (!data) { setActiveModules(['grunnpakke']); return }
+    supabase.from('company_settings').select('*').limit(1).single()
+      .then(({ data, error }) => {
+        if (error || !data) { setActiveModules(['grunnpakke']); return }
         
         const status = data.subscription_status || 'active'
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
@@ -26660,7 +26666,6 @@ function AppContent() {
         setTrialInfo({ daysLeft, isExpired, status, trialEnd })
         
         if (isExpired) {
-          // Trial expired — lock to no modules (system locked)
           setActiveModules([])
           setShowTrialExpired(true)
         } else {
