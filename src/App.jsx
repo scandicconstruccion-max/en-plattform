@@ -1133,7 +1133,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       </div>
 
       <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px', overflowX:'hidden', maxWidth:'100%' }}>
-        <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap: isMobH ? '10px' : '20px', overflow:'hidden', minWidth:0 }}>
           {/* Underprosjekter-seksjon */}
           {childProjects.length > 0 && (
             <div style={card}>
@@ -1227,7 +1227,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
         </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap: isMobH ? '10px' : '16px', overflow:'hidden', minWidth:0 }}>
           {/* Endringsmeldinger-sammendrag */}
           {endringsmeldinger.length > 0 && (() => {
             const godkjent = endringsmeldinger.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
@@ -1258,21 +1258,21 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                       <span style={{ color:'#64748b', flexShrink:0 }}>Budsjett</span>
                       <span style={{ fontWeight:'600', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</span>
                     </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                      <span style={{ color:'#059669' }}>+ Godkjente endringer</span>
-                      <span style={{ fontWeight:'600', color:'#059669' }}>+{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</span>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '11px' : '12px', marginBottom:'4px', gap:'4px' }}>
+                      <span style={{ color:'#059669', flexShrink:0 }}>{isMobH ? '+ Endringer' : '+ Godkjente endringer'}</span>
+                      <span style={{ fontWeight:'600', color:'#059669', textAlign:'right' }}>+{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</span>
                     </div>
                     <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a' }}>Justert budsjett</span>
-                      <span style={{ fontWeight:'800', color:'#0f172a' }}>{Math.round(Number(project.budget) + totalGodkjent).toLocaleString('nb-NO')} kr</span>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '12px' : '13px', gap:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', flexShrink:0 }}>{isMobH ? 'Justert' : 'Justert budsjett'}</span>
+                      <span style={{ fontWeight:'800', color:'#0f172a', textAlign:'right' }}>{Math.round(Number(project.budget) + totalGodkjent).toLocaleString('nb-NO')} kr</span>
                     </div>
                     <div style={{ marginTop:'8px', height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden' }}>
                       <div style={{ height:'100%', borderRadius:'3px', background:'#059669', width: `${Math.min(100, (Number(project.budget) / (Number(project.budget) + totalGodkjent)) * 100)}%` }} />
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>
-                      <span>Opprinnelig</span>
-                      <span>+{(totalGodkjent / Number(project.budget) * 100).toFixed(1)}% endringer</span>
+                      <span>Oppr.</span>
+                      <span>+{(totalGodkjent / Number(project.budget) * 100).toFixed(1)}%</span>
                     </div>
                   </div>
                 )}
@@ -1281,7 +1281,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                   {endringsmeldinger.slice(0, 5).map(em => {
                     const emSt = { Utkast:'#64748b', Sendt:'#2563eb', Godkjent:'#16a34a', Avvist:'#dc2626', 'Under forhandling':'#d97706', Fakturert:'#7c3aed' }[em.status] || '#64748b'
                     return (
-                      <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'12px' }}>
+                      <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize: isMobH ? '11px' : '12px', gap:'6px' }}>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{em.title}</div>
                           <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'1px' }}>
@@ -1289,7 +1289,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                             <span style={{ color: emSt, fontSize:'10px', fontWeight:'600' }}>{em.status}</span>
                           </div>
                         </div>
-                        <span style={{ fontWeight:'700', color: emSt, fontSize:'12px', flexShrink:0 }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</span>
+                        <span style={{ fontWeight:'700', color: emSt, fontSize: isMobH ? '11px' : '12px', flexShrink:0, marginLeft:'6px' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')}</span>
                       </div>
                     )
                   })}
@@ -1301,11 +1301,11 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
-            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', wordBreak:'break-all' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
+            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
           </div>
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏢 Kunde</h3>
-            {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.client_name}</p>{project.client_contact && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', wordBreak:'break-all' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
+            {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.client_name}</p>{project.client_contact && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
           </div>
           {(project.resident_name||project.resident_phone||project.resident_email) && (
             <div style={card}>
