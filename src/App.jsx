@@ -222,6 +222,7 @@ const moduleSections = [
 ]
 
 function ModuleCard({ module, onNavigate, isMobile }) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
   const m = moduleCards.find(x => x.id === module)
   if (!m) return null
   return (
@@ -984,6 +985,7 @@ function ProsjekterPage({ onNavigateDetail }) {
 
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user } = useAuth()
+  const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
   const [checklists, setChecklists] = useState([])
@@ -2123,6 +2125,7 @@ function ProsjektfilerPage() {
 }
 
 function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
+  const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
   const [showPreview, setShowPreview] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -5695,6 +5698,7 @@ function MaskinPage() {
 }
 
 function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
+  const isMobTD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const [m, setM] = useState(init)
@@ -8746,6 +8750,7 @@ const EM_STATUS = {
 }
 
 function EndringsmeldingPage() {
+  const isMobBild = typeof window !== 'undefined' && window.innerWidth < 768
   const { user } = useAuth()
   const [endringer, setEndringer] = useState([])
   const [projects, setProjects] = useState([])
@@ -17598,6 +17603,7 @@ function CRMPage() {
 }
 
 function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
+  const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
   const [c, setC] = useState(init)
   const [cts, setCts] = useState(contacts)
@@ -19087,8 +19093,8 @@ function BildedokThumbnail({ photo, fase, projects, onClick, onDelete }) {
   return (
     <div style={{ borderRadius:'12px', overflow:'hidden', background:'white', border:'1px solid #f1f5f9', position:'relative', cursor:'pointer' }}
       onClick={onClick}
-      onMouseEnter={e=>{ e.currentTarget.querySelector('.pa').style.opacity='1'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)' }}
-      onMouseLeave={e=>{ e.currentTarget.querySelector('.pa').style.opacity='0'; e.currentTarget.style.boxShadow='none' }}>
+      onMouseEnter={e=>{ const pa=e.currentTarget.querySelector('.pa'); if(pa) pa.style.opacity='1'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)' }}
+      onMouseLeave={e=>{ const pa=e.currentTarget.querySelector('.pa'); if(pa) pa.style.opacity='0'; e.currentTarget.style.boxShadow='none' }}>
       <img src={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'140px', objectFit:'cover', display:'block' }} />
       {photo.upload_method==='manuell'&&<div style={{ position:'absolute',top:'7px',left:'7px',background:'rgba(0,0,0,0.55)',color:'white',borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'600' }}>Manuell opplasting</div>}
       {fase&&<div style={{ position:'absolute',bottom:'7px',left:'7px',background:fase.bg,color:fase.color,borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'700' }}>{fase.label}</div>}
