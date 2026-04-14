@@ -1000,8 +1000,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
   const [showCreateSub, setShowCreateSub] = useState(false)
-  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
-  const card = { background:'white', borderRadius: isMobH ? '12px' : '16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding: isMobH ? '14px' : '24px' }
+  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw', boxSizing:'border-box' }
+  const card = { background:'white', borderRadius: isMobH ? '12px' : '16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding: isMobH ? '14px' : '24px', overflow:'hidden', wordBreak:'break-word' }
 
   const load = async () => {
     try {
@@ -1132,7 +1132,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         )}
       </div>
 
-      <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px' }}>
+      <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px', overflowX:'hidden', maxWidth:'100%' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
           {/* Underprosjekter-seksjon */}
           {childProjects.length > 0 && (
