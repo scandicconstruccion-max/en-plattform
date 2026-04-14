@@ -4585,7 +4585,7 @@ function HmsPage() {
   const counts = Object.keys(HMS_TYPES).reduce((acc, t) => { acc[t] = records.filter(r => r.type === t).length; return acc }, {})
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui, sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster HMS & Risiko...</p></div></div>
-  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { setSelected(null); loadData() }} />
+  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); loadData() }} />
 
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -5559,6 +5559,11 @@ function MaskinPage() {
   const [visning, setVisning] = useState('liste') // 'liste' | 'rutenett'
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const load = async () => {
     try {
@@ -5591,7 +5596,7 @@ function MaskinPage() {
     </div>
   )
 
-  if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+  if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -6448,6 +6453,11 @@ function TilbudPage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [purringTarget, setPurringTarget] = useState(null)
 
   const load = async () => {
@@ -6478,7 +6488,7 @@ function TilbudPage() {
 
   const isMobT = typeof window !== 'undefined' && window.innerWidth < 768
 
-  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -7915,6 +7925,11 @@ function AnbudsPage() {
   const [showNew, setShowNew] = useState(false)
   const [newType, setNewType] = useState(null)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const load = async () => {
     try {
@@ -7944,7 +7959,7 @@ function AnbudsPage() {
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
 
-  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -9515,6 +9530,11 @@ function OrdrePage() {
   const [showNew, setShowNew] = useState(false)
   const [showFromQuote, setShowFromQuote] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const load = async () => {
     try {
@@ -9541,7 +9561,7 @@ function OrdrePage() {
   const isMobO = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ordrer...</p></div></div>
-  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -10242,6 +10262,11 @@ function FakturaPage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(null) // null|'manual'|'order'|'quote'|'partial'|'changes'|'kalkulation'
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [calculations, setCalculations] = useState([])
 
   const load = async () => {
@@ -10288,7 +10313,7 @@ function FakturaPage() {
   const isMobF = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
-  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -11656,6 +11681,11 @@ function AnsattePage() {
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [visning, setVisning] = useState('liste')
 
   const load = async () => {
@@ -11707,7 +11737,7 @@ function AnsattePage() {
   const isMobE = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ansatte...</p></div></div>
-  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -17450,7 +17480,7 @@ function CRMPage() {
   }
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
-  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -18202,7 +18232,7 @@ function BefaringPage() {
   const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
-  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -20158,6 +20188,11 @@ function BrukeradminPage() {
   const [companyModules, setCompanyModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState(null)
+  React.useEffect(() => {
+    if (selectedUser && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelectedUser(null))
+    }
+  }, [selectedUser])
   const [showInvite, setShowInvite] = useState(false)
   const [search, setSearch] = useState('')
   const [filterRole, setFilterRole] = useState('alle')
@@ -21048,6 +21083,11 @@ function KalkulasjonPage({ onNavigate }) {
   const [showEditor, setShowEditor] = useState(false)
   const [editKalk, setEditKalk] = useState(null)
   const [viewKalk, setViewKalk] = useState(null)
+  React.useEffect(() => {
+    if (viewKalk && window.__enterDetailView) {
+      window.__enterDetailView(() => setViewKalk(null))
+    }
+  }, [viewKalk])
   const [showFaktorerPage, setShowFaktorerPage] = useState(false)
   const [showBibliotekPage, setShowBibliotekPage] = useState(false)
   const [showPrisbokPage, setShowPrisbokPage] = useState(false)
@@ -26343,14 +26383,38 @@ function AppContent() {
   }
 
   const [page, setPage] = React.useState(getPageFromHash)
+  const [subPage, setSubPage] = React.useState(null) // tracks detail views within modules
+  const detailCleanupRef = React.useRef(null) // callback to close current detail view
+
+  // When entering a detail view, call this to register back-navigation
+  // Make available globally for child components
+  window.__enterDetailView = null
+  const enterDetailView = (cleanupFn) => {
+    detailCleanupRef.current = cleanupFn
+    window.history.pushState({ page, detail: true }, '', '#' + page)
+  }
+  window.__enterDetailView = enterDetailView
 
   const navigate = (p) => {
-    if (p === page) { setMobileMenuOpen(false); return }
+    if (p === page && !subPage) { setMobileMenuOpen(false); return }
     window.history.pushState({ page: p }, '', '#' + p)
     setPage(p)
     setProjectId(null)
+    setSubPage(null)
     setMobileMenuOpen(false)
     window.scrollTo(0, 0)
+  }
+
+  // Push a sub-page state (detail view within a module)
+  const pushSubPage = (parentPage, detail) => {
+    window.history.pushState({ page: parentPage, sub: detail }, '', '#' + parentPage)
+    setSubPage(detail)
+  }
+
+  // Go back from sub-page to parent
+  const popSubPage = () => {
+    setSubPage(null)
+    // Don't use history.back() — just clear sub state, browser back will handle the rest
   }
 
   // Check if current page is a locked module
@@ -26364,12 +26428,23 @@ function AppContent() {
 
   React.useEffect(() => {
     const onPop = (e) => {
-      const p = e.state?.page || getPageFromHash()
+      const state = e.state || {}
+      // If we're going back from a detail view, just close it
+      if (detailCleanupRef.current && !state.detail) {
+        const cleanup = detailCleanupRef.current
+        detailCleanupRef.current = null
+        cleanup()
+        return
+      }
+      const p = state.page || getPageFromHash()
       setPage(p)
-      if (e.state?.projectId) setProjectId(e.state.projectId)
+      if (state.projectId) setProjectId(state.projectId)
       else setProjectId(null)
-      if (e.state?.checklistId) setChecklistId(e.state.checklistId)
+      if (state.checklistId) setChecklistId(state.checklistId)
       else setChecklistId(null)
+      if (state.sub) setSubPage(state.sub)
+      else setSubPage(null)
+      detailCleanupRef.current = null
       setMobileMenuOpen(false)
     }
     window.addEventListener('popstate', onPop)
