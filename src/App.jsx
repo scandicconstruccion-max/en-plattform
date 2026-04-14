@@ -19635,16 +19635,17 @@ const MODULE_CATALOG = [
     name: 'Grunnpakke',
     desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Kundeoversikt og Varsler',
     emoji: '🔹',
-    pricePerUser: 139,
+    pricePerUser: 199,
     required: true,
     includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'],
   },
   {
     id: 'kalkulator',
     name: 'Kalkulasjon',
-    desc: 'Kostnadskalkulasjon med påslag, fortjeneste og tilbudsgenerering',
+    desc: 'Kostnadskalkulasjon med påslag, fortjeneste og tilbudsgenerering. Fast pris per bedrift.',
     emoji: '🧮',
-    price: 99,
+    price: 1499,
+    perCompany: true,
     navId: 'kalkulator',
     standalone: true, // Can be purchased without grunnpakke
   },
@@ -19847,7 +19848,7 @@ function MinBedriftPage() {
 
   // Cost calculation
   const grunnpakke = MODULE_CATALOG.find(m => m.id === 'grunnpakke')
-  const grunnpakkeCost = (grunnpakke?.pricePerUser || 139) * numUsers
+  const grunnpakkeCost = (grunnpakke?.pricePerUser || 199) * numUsers
   const tilleggCost = MODULE_CATALOG
     .filter(m => !m.required && activeModules.includes(m.id))
     .reduce((acc, m) => acc + (m.price || 0), 0)
@@ -19994,7 +19995,7 @@ function MinBedriftPage() {
                   </div>
                 </div>
                 <div style={{ textAlign:'right', flexShrink:0 }}>
-                  <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>139 kr/bruker/mnd</div>
+                  <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>199 kr/bruker/mnd eks. mva</div>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', justifyContent:'flex-end' }}>
                     <label style={{ fontSize:'13px', color:'#475569', fontWeight:'600' }}>Antall brukere:</label>
                     <input type="number" value={numUsers} min="1" max="100"
@@ -20036,7 +20037,8 @@ function MinBedriftPage() {
                       </div>
                     </div>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'4px' }}>
-                      <div style={{ fontSize:'16px', fontWeight:'800', color:isActive?'#059669':'#0f172a' }}>{mod.price} kr/mnd</div>
+                      <div style={{ fontSize:'16px', fontWeight:'800', color:isActive?'#059669':'#0f172a' }}>{mod.price.toLocaleString('nb-NO')} kr/mnd</div>
+                      {mod.perCompany && <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>per bedrift, uavhengig av antall brukere</div>}
                       <button
                         onClick={() => setConfirmModule({ mod, action: isActive ? 'remove' : 'add' })}
                         style={{ padding:'7px 16px', borderRadius:'8px', border:'none', background:isActive?'#fef2f2':'#059669', color:isActive?'#dc2626':'white', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
@@ -20056,7 +20058,7 @@ function MinBedriftPage() {
                   <div key={mod.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
                     <span style={{ fontSize:'16px' }}>{mod.emoji}</span>
                     <span style={{ flex:1, fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{mod.name}</span>
-                    <span style={{ fontSize:'13px', color:'#64748b' }}>{mod.price} kr/mnd</span>
+                    <span style={{ fontSize:'13px', color:'#64748b' }}>{mod.price.toLocaleString('nb-NO')} kr/mnd{mod.perCompany?' (bedrift)':''}</span>
                     <button onClick={() => setConfirmModule({ mod, action:'remove' })}
                       style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer', fontWeight:'600' }}>Avslutt</button>
                   </div>
@@ -26341,10 +26343,31 @@ function AppContent() {
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
+  const [trialInfo, setTrialInfo] = React.useState(null) // { daysLeft, isExpired, status }
+  const [showTrialExpired, setShowTrialExpired] = React.useState(false)
+
   React.useEffect(() => {
     if (!user) return
-    supabase.from('company_settings').select('active_modules').limit(1).single()
-      .then(({ data }) => setActiveModules(data?.active_modules || ['grunnpakke']))
+    supabase.from('company_settings').select('active_modules,subscription_status,trial_start_date,trial_ends_at').limit(1).single()
+      .then(({ data }) => {
+        if (!data) { setActiveModules(['grunnpakke']); return }
+        
+        const status = data.subscription_status || 'active'
+        const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
+        const now = new Date()
+        const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / (1000*60*60*24)) : null
+        const isExpired = status === 'trial' && trialEnd && now > trialEnd
+        
+        setTrialInfo({ daysLeft, isExpired, status, trialEnd })
+        
+        if (isExpired) {
+          // Trial expired — lock to no modules (system locked)
+          setActiveModules([])
+          setShowTrialExpired(true)
+        } else {
+          setActiveModules(data.active_modules || ['grunnpakke'])
+        }
+      })
       .catch(() => setActiveModules(['grunnpakke']))
   }, [user])
 
@@ -26363,7 +26386,8 @@ function AppContent() {
   const isModuleActive = (navId) => {
     if (!activeModules) return true // still loading, show as active
     const requiredModule = navToModule[navId]
-    if (!requiredModule) return true // always accessible
+    if (!requiredModule) return true // always accessible (dashboard, minbedrift, brukeradmin, varsler)
+    if (trialInfo?.status === 'trial' && !trialInfo?.isExpired) return true // trial active = all modules
     return activeModules.includes(requiredModule)
   }
 
@@ -26619,6 +26643,59 @@ function AppContent() {
             )}
           </div>
         </div>
+
+        {/* Trial banner */}
+        {trialInfo?.status === 'trial' && !trialInfo.isExpired && (
+          <div style={{ margin:'0', padding:'10px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap',
+            background: trialInfo.daysLeft <= 3 ? 'linear-gradient(135deg,#fef2f2,#fff7ed)' : 'linear-gradient(135deg,#f0fdf4,#eff6ff)',
+            borderBottom: trialInfo.daysLeft <= 3 ? '1px solid #fecaca' : '1px solid #bbf7d0' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <span style={{ fontSize:'16px' }}>{trialInfo.daysLeft <= 3 ? '⚠️' : '🎉'}</span>
+              <span style={{ fontSize:'13px', fontWeight:'600', color: trialInfo.daysLeft <= 3 ? '#dc2626' : '#059669' }}>
+                {trialInfo.daysLeft <= 0 ? 'Prøveperioden utløper i dag!' : trialInfo.daysLeft === 1 ? '1 dag igjen av prøveperioden' : `${trialInfo.daysLeft} dager igjen av prøveperioden`}
+              </span>
+            </div>
+            <button onClick={()=>navigate('minbedrift')} style={{ padding:'6px 14px', background: trialInfo.daysLeft <= 3 ? '#dc2626' : '#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
+              {trialInfo.daysLeft <= 3 ? '🔓 Kjøp nå' : '📦 Se moduler'}
+            </button>
+          </div>
+        )}
+
+        {/* Trial expired lockout */}
+        {showTrialExpired && (
+          <>
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+              <div style={{ background:'white', borderRadius:'24px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', fontFamily:'system-ui,sans-serif' }}>
+                <div style={{ width:'80px', height:'80px', borderRadius:'50%', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', fontSize:'36px' }}>🔒</div>
+                <h2 style={{ margin:'0 0 8px', fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>Prøveperioden er utløpt</h2>
+                <p style={{ margin:'0 0 24px', fontSize:'14px', color:'#64748b', lineHeight:1.6 }}>
+                  Din 15-dagers gratis prøveperiode er dessverre over. For å fortsette å bruke En Plattform, velg en plan som passer din bedrift.
+                </p>
+                <div style={{ background:'#f8fafc', borderRadius:'16px', padding:'20px', marginBottom:'24px', textAlign:'left' }}>
+                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'12px' }}>Velg din plan:</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0' }}>
+                      <span style={{ fontSize:'18px' }}>🔹</span>
+                      <div style={{ flex:1 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#059669' }}>Grunnpakke</div><div style={{ fontSize:'11px', color:'#64748b' }}>9 moduler · 199 kr/bruker/mnd</div></div>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#eff6ff', borderRadius:'10px', border:'1px solid #bfdbfe' }}>
+                      <span style={{ fontSize:'18px' }}>🧮</span>
+                      <div style={{ flex:1 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#2563eb' }}>Kun Kalkulasjon</div><div style={{ fontSize:'11px', color:'#64748b' }}>Kalkulasjonsmodul · 1 499 kr/mnd per bedrift</div></div>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={()=>{setShowTrialExpired(false);navigate('minbedrift')}}
+                  style={{ width:'100%', padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor:'pointer', marginBottom:'10px' }}>
+                  📦 Velg plan og fortsett
+                </button>
+                <button onClick={async()=>{await supabase.auth.signOut()}}
+                  style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', color:'#64748b', cursor:'pointer' }}>
+                  Logg ut
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Kontormodul-tips på mobil */}
         {showDesktopTip && (
