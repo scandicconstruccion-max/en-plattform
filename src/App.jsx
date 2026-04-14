@@ -19911,20 +19911,136 @@ function SuperAdminPage() {
               </div>
             </div>
 
+            {/* Inntekt per modul */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>💰 Inntekt per modul</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                {(() => {
+                  const modRevenue = {}
+                  companies.filter(c=>c.subscription_status==='active').forEach(c=>{
+                    const mods = c.active_modules||[]
+                    if (mods.includes('grunnpakke')) {
+                      modRevenue['grunnpakke'] = (modRevenue['grunnpakke']||0) + 199 * (c.num_users||1)
+                    }
+                    MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{
+                      modRevenue[m.id] = (modRevenue[m.id]||0) + (m.price||0)
+                    })
+                  })
+                  return Object.entries(modRevenue).sort((a,b)=>b[1]-a[1]).map(([modId,rev])=>{
+                    const mod = MODULE_CATALOG.find(m=>m.id===modId)
+                    return (
+                      <div key={modId} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                          <span style={{ fontSize:'14px' }}>{mod?.emoji||'📦'}</span>
+                          <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{mod?.name||modId}</span>
+                          {mod?.perCompany && <span style={{ fontSize:'9px', color:'#94a3b8', background:'#f1f5f9', padding:'1px 6px', borderRadius:'4px' }}>per bedrift</span>}
+                        </div>
+                        <span style={{ fontSize:'14px', fontWeight:'800', color:'#059669' }}>{fmt(rev)} kr/mnd</span>
+                      </div>
+                    )
+                  })
+                })()}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 12px', borderTop:'2px solid #e2e8f0', marginTop:'4px', fontWeight:'800' }}>
+                  <span style={{ color:'#0f172a' }}>Total MRR</span>
+                  <span style={{ color:'#059669', fontSize:'16px' }}>{fmt(totalMRR)} kr/mnd</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Konvertering + Nøkkeltall */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr', gap:'12px' }}>
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>📈 Konvertering</h3>
+                {(() => {
+                  const totalSignups = companies.length
+                  const converted = activeCompanies.length
+                  const convRate = totalSignups > 0 ? Math.round(converted/totalSignups*100) : 0
+                  const avgUsersPerCompany = activeCompanies.length > 0 ? (activeCompanies.reduce((s,c)=>s+(c.num_users||1),0)/activeCompanies.length).toFixed(1) : '0'
+                  const avgRevenuePerCustomer = activeCompanies.length > 0 ? Math.round(totalMRR/activeCompanies.length) : 0
+                  const totalUsers = allUsers.length
+                  return (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                      {[
+                        ['Konverteringsrate', `${convRate}%`, `${converted} av ${totalSignups} registrerte`],
+                        ['Snitt brukere/kunde', avgUsersPerCompany, 'aktive kunder'],
+                        ['Snitt MRR/kunde', `${fmt(avgRevenuePerCustomer)} kr`, 'per aktiv kunde'],
+                        ['ARR (årlig)', `${fmt(totalMRR*12)} kr`, 'basert på nåværende MRR'],
+                        ['Totalt brukere', totalUsers, `${allUsers.filter(u=>u.status==='aktiv').length} aktive`],
+                      ].map(([label,value,sub],i)=>(
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #f8fafc' }}>
+                          <div>
+                            <div style={{ fontSize:'12px', color:'#64748b' }}>{label}</div>
+                            {sub && <div style={{ fontSize:'10px', color:'#94a3b8' }}>{sub}</div>}
+                          </div>
+                          <span style={{ fontSize:'15px', fontWeight:'800', color:'#0f172a' }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>⚠️ Trenger oppfølging</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {/* Trials som utløper snart */}
+                  {trialCompanies.filter(c=>{
+                    const daysLeft = c.trial_ends_at ? Math.ceil((new Date(c.trial_ends_at)-new Date())/86400000) : null
+                    return daysLeft !== null && daysLeft <= 5
+                  }).map(c=>{
+                    const daysLeft = Math.ceil((new Date(c.trial_ends_at)-new Date())/86400000)
+                    return (
+                      <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background: daysLeft <= 1 ? '#fef2f2' : '#fffbeb', borderRadius:'8px', border:`1px solid ${daysLeft<=1?'#fecaca':'#fde68a'}` }}>
+                        <span style={{ fontSize:'14px' }}>{daysLeft <= 1 ? '🔴' : '🟡'}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                          <div style={{ fontSize:'10px', color: daysLeft<=1?'#dc2626':'#d97706' }}>{daysLeft <= 0 ? 'Utløpt i dag!' : `${daysLeft} dager igjen`}</div>
+                        </div>
+                        <button onClick={()=>{setTab('kunder');setSelectedCompany(c)}} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'10px', cursor:'pointer', color:'#64748b', fontWeight:'600' }}>Vis</button>
+                      </div>
+                    )
+                  })}
+                  {/* Utløpte som ikke har kjøpt */}
+                  {expiredCompanies.slice(0,3).map(c=>(
+                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #f1f5f9' }}>
+                      <span style={{ fontSize:'14px' }}>💤</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Utløpt — ingen kjøp</div>
+                      </div>
+                      <button onClick={()=>{setTab('kunder');setSelectedCompany(c)}} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'10px', cursor:'pointer', color:'#64748b', fontWeight:'600' }}>Vis</button>
+                    </div>
+                  ))}
+                  {trialCompanies.filter(c=>{ const d=c.trial_ends_at?Math.ceil((new Date(c.trial_ends_at)-new Date())/86400000):null; return d!==null&&d<=5 }).length===0 && expiredCompanies.length===0 && (
+                    <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'12px' }}>Ingen oppfølgingspunkter nå</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Siste registreringer */}
             <div style={saCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>🆕 Siste registreringer</h3>
-              {companies.slice(0,5).map(c=>{
-                const daysAgo = Math.floor((Date.now()-new Date(c.created_at))/86400000)
+              {companies.length === 0 ? <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px' }}>Ingen registreringer ennå</p> :
+              companies.slice(0,8).map(c=>{
+                const daysAgo = Math.floor((Date.now()-new Date(c.created_at||Date.now()))/86400000)
                 const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null
                 const daysLeft = trialEnd ? Math.ceil((trialEnd-new Date())/86400000) : null
+                const mods = c.active_modules||[]
+                let mrr = 0
+                if (c.subscription_status==='active') {
+                  if (mods.includes('grunnpakke')) mrr += 199 * (c.num_users||1)
+                  MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ mrr += m.price||0 })
+                }
                 return (
-                  <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 0', borderBottom:'1px solid #f8fafc' }}>
+                  <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 0', borderBottom:'1px solid #f8fafc', cursor:'pointer' }}
+                    onClick={()=>{setTab('kunder');setSelectedCompany(c)}}>
                     <div style={{ width:'36px', height:'36px', borderRadius:'50%', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', color:'#4338ca' }}>{(c.name?.[0]||'?').toUpperCase()}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
-                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{daysAgo===0?'I dag':daysAgo===1?'I går':`${daysAgo} dager siden`} · {c.num_users||1} bruker{(c.num_users||1)>1?'e':''}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{daysAgo===0?'I dag':daysAgo===1?'I går':`${daysAgo}d siden`} · {c.num_users||1} bruker{(c.num_users||1)>1?'e':''} · {mods.length} moduler</div>
                     </div>
+                    {c.subscription_status==='active' && <span style={{ fontSize:'12px', fontWeight:'700', color:'#059669' }}>{fmt(mrr)} kr</span>}
                     <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
                       background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
                       color: c.subscription_status==='active'?'#059669':c.subscription_status==='trial'?'#d97706':'#dc2626',
