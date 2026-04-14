@@ -810,7 +810,12 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [viewMode, setViewMode] = useState('grid')
+  const isMobProj = typeof window !== 'undefined' && window.innerWidth < 768
+  const viewKey = isMobProj ? 'ep_proj_view_mobile' : 'ep_proj_view_desktop'
+  const [viewMode, setViewModeState] = useState(() => {
+    try { return localStorage.getItem(viewKey) || (isMobProj ? 'list' : 'grid') } catch(e) { return isMobProj ? 'list' : 'grid' }
+  })
+  const setViewMode = (v) => { setViewModeState(v); try { localStorage.setItem(viewKey, v) } catch(e) {} }
   const [sortBy, setSortBy] = useState('created_desc')
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
