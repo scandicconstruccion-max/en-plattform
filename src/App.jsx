@@ -19633,11 +19633,11 @@ const MODULE_CATALOG = [
   {
     id: 'grunnpakke',
     name: 'Grunnpakke',
-    desc: 'Dashboard, Prosjekter, Sjekklister, Avvik, HMS & Risiko og Maskiner',
+    desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Kundeoversikt og Varsler',
     emoji: '🔹',
     pricePerUser: 139,
-    required: false,
-    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner'],
+    required: true,
+    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'],
   },
   {
     id: 'kalkulator',
@@ -19687,14 +19687,6 @@ const MODULE_CATALOG = [
     emoji: '🧾',
     price: 49,
     navId: 'faktura',
-  },
-  {
-    id: 'endringsmeldinger',
-    name: 'Endringsmeldinger',
-    desc: 'Håndtering av endringsmeldinger',
-    emoji: '🔄',
-    price: 25,
-    navId: 'ordre',
   },
   {
     id: 'ansatte',
@@ -19860,7 +19852,7 @@ function MinBedriftPage() {
     .filter(m => !m.required && activeModules.includes(m.id))
     .reduce((acc, m) => acc + (m.price || 0), 0)
   const totalCost = grunnpakkeCost + tilleggCost
-  const activeAddons = MODULE_CATALOG.filter(m => !m.required && activeModules.includes(m.id))
+  const activeAddons = MODULE_CATALOG.filter(m => !m.required && m.id !== 'grunnpakke' && activeModules.includes(m.id))
 
   const isMobMB = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -19994,9 +19986,9 @@ function MinBedriftPage() {
                     <h3 style={{ margin:0, fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Grunnpakke</h3>
                     <span style={{ background:'#059669', color:'white', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>Alltid inkludert</span>
                   </div>
-                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#475569' }}>Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko og Maskiner</p>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#475569' }}>Alle grunnleggende moduler for prosjektstyring og kvalitetssikring</p>
                   <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                    {['Dashboard','Prosjekter','Sjekklister','Avvik','HMS & Risiko','Maskiner'].map(m => (
+                    {['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'].map(m => (
                       <span key={m} style={{ background:'white', color:'#059669', border:'1px solid #bbf7d0', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px' }}>✓ {m}</span>
                     ))}
                   </div>
@@ -20028,7 +20020,7 @@ function MinBedriftPage() {
 
             {/* Module grid */}
             <div style={{ display:'grid', gridTemplateColumns: isMobMB ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
-              {MODULE_CATALOG.filter(m => !m.required).map(mod => {
+              {MODULE_CATALOG.filter(m => !m.required && m.id !== 'grunnpakke').map(mod => {
                 const isActive = activeModules.includes(mod.id)
                 return (
                   <div key={mod.id}
