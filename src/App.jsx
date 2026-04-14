@@ -38,7 +38,7 @@ function AuthProvider({ children }) {
   const loadProfile = async (authUser) => {
     if (!authUser) { setProfile(null); return }
     try {
-      const { data } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
+      const { data } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role').eq('id', authUser.id).single()
       setProfile(data || null)
     } catch(e) { setProfile(null) }
   }
@@ -58,8 +58,9 @@ function AuthProvider({ children }) {
 
   // Display name: full_name from profile, fallback to email prefix
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
+  const isPlatformOwner = profile?.platform_role === 'platform_owner'
 
-  return <AuthContext.Provider value={{ user, profile, displayName, loading, supabase }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, loading, supabase }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -166,6 +167,11 @@ const navGroups = [
     ]
   },
 ]
+
+// Platform owner nav (only visible for system owner)
+const platformOwnerNav = { title: '👑 PLATTFORM', items: [
+  { id: 'superadmin', label: 'Kontrollpanel', emoji: '👑' },
+]}
 // Flat list for backwards compatibility
 const navItems = navGroups.flatMap(g => g.items)
 
@@ -19768,6 +19774,279 @@ const mbCard = { background:'white', borderRadius: typeof window !== 'undefined'
 const mbLbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
 const mbSec = t => <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'12px', marginTop:'8px' }}>{t}</div>
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUPERADMIN — Platform Owner Control Panel
+// ═══════════════════════════════════════════════════════════════════════
+function SuperAdminPage() {
+  const { user } = useAuth()
+  const [companies, setCompanies] = useState([])
+  const [allUsers, setAllUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('oversikt')
+  const [selectedCompany, setSelectedCompany] = useState(null)
+  const [notifications, setNotifications] = useState([])
+
+  const load = async () => {
+    try {
+      const [comp, users, notifs] = await Promise.all([
+        supabase.from('company_settings').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('user_profiles').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('notifications').select('*').eq('type','system').order('created_at',{ascending:false}).limit(50).then(r=>r.data||[]),
+      ])
+      setCompanies(comp); setAllUsers(users); setNotifications(notifs)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Calculations
+  const trialCompanies = companies.filter(c=>c.subscription_status==='trial')
+  const activeCompanies = companies.filter(c=>c.subscription_status==='active')
+  const expiredCompanies = companies.filter(c=>c.subscription_status==='expired'||c.subscription_status==='cancelled')
+  
+  const totalMRR = companies.filter(c=>c.subscription_status==='active').reduce((acc,c)=>{
+    const mods = c.active_modules||[]
+    let cost = 0
+    if (mods.includes('grunnpakke')) cost += 199 * (c.num_users||1)
+    MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{
+      cost += m.price||0
+    })
+    return acc + cost
+  }, 0)
+
+  const potentialMRR = trialCompanies.reduce((acc,c)=>{
+    const mods = c.active_modules||[]
+    let cost = 199 * (c.num_users||1)
+    MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke').forEach(m=>{ cost += m.price||0 })
+    return acc + cost
+  }, 0)
+
+  // Module popularity
+  const modulePop = {}
+  companies.filter(c=>c.subscription_status==='active').forEach(c=>{
+    (c.active_modules||[]).forEach(m=>{ modulePop[m]=(modulePop[m]||0)+1 })
+  })
+
+  const extendTrial = async (companyId, days) => {
+    const comp = companies.find(c=>c.id===companyId)
+    if (!comp) return
+    const newEnd = new Date(comp.trial_ends_at || Date.now())
+    newEnd.setDate(newEnd.getDate() + days)
+    await supabase.from('company_settings').update({ trial_ends_at: newEnd.toISOString(), subscription_status:'trial' }).eq('id', companyId)
+    load()
+  }
+
+  const setCompanyStatus = async (companyId, status) => {
+    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
+    load()
+  }
+
+  const isMobSA = typeof window !== 'undefined' && window.innerWidth < 768
+  const saCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobSA ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+  const fmt = v => Math.round(v).toLocaleString('nb-NO')
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #7c3aed',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster kontrollpanel...</p></div></div>
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      {/* Header */}
+      <div style={{ background:'linear-gradient(135deg,#1e1b4b,#312e81)', padding: isMobSA ? '14px' : '20px 32px', color:'white' }}>
+        <h1 style={{ fontSize: isMobSA ? '18px' : '22px', fontWeight:'800', margin:0 }}>👑 Kontrollpanel</h1>
+        <p style={{ margin:'4px 0 0', fontSize:'13px', opacity:0.7 }}>Plattformadministrasjon — En Plattform</p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'0 24px', display:'flex', gap:'0', overflowX:'auto' }}>
+        {[['oversikt','📊 Oversikt'],['kunder','🏢 Kunder'],['brukere','👤 Brukere'],['varsler','🔔 Hendelser']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobSA ? '10px 12px' : '12px 18px', border:'none', borderBottom: tab===id ? '3px solid #7c3aed' : '3px solid transparent', background:'transparent', cursor:'pointer', fontSize: isMobSA ? '12px' : '13px', fontWeight: tab===id?'700':'500', color: tab===id?'#7c3aed':'#64748b', whiteSpace:'nowrap' }}>{label}</button>
+        ))}
+      </div>
+
+      <div style={{ padding: isMobSA ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobSA ? '12px' : '20px' }}>
+
+        {/* OVERSIKT TAB */}
+        {tab==='oversikt' && (
+          <>
+            {/* KPI cards */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobSA ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
+              {[
+                { label:'MRR', value:`${fmt(totalMRR)} kr`, sub:'Månedlig inntekt', color:'#059669', bg:'#f0fdf4', border:'#bbf7d0' },
+                { label:'Aktive kunder', value:activeCompanies.length, sub:`${allUsers.filter(u=>u.status==='aktiv').length} brukere totalt`, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+                { label:'I prøveperiode', value:trialCompanies.length, sub:`Potensiell MRR: ${fmt(potentialMRR)} kr`, color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
+                { label:'Utløpt/Kansellert', value:expiredCompanies.length, sub:'Trenger oppfølging', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+              ].map((kpi,i)=>(
+                <div key={i} style={{ background:kpi.bg, borderRadius:'14px', border:`1px solid ${kpi.border}`, padding: isMobSA ? '12px' : '18px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:kpi.color, textTransform:'uppercase', marginBottom:'6px' }}>{kpi.label}</div>
+                  <div style={{ fontSize: isMobSA ? '20px' : '26px', fontWeight:'800', color:'#0f172a' }}>{kpi.value}</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'4px' }}>{kpi.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Populære moduler */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>📦 Modulpopularitet (aktive kunder)</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {Object.entries(modulePop).sort((a,b)=>b[1]-a[1]).map(([modId,count])=>{
+                  const mod = MODULE_CATALOG.find(m=>m.id===modId)
+                  const pct = activeCompanies.length > 0 ? Math.round(count/activeCompanies.length*100) : 0
+                  return (
+                    <div key={modId} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                      <span style={{ fontSize:'16px', width:'24px', textAlign:'center' }}>{mod?.emoji||'📦'}</span>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', width:'140px' }}>{mod?.name||modId}</span>
+                      <div style={{ flex:1, height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
+                        <div style={{ height:'100%', borderRadius:'4px', background:'#7c3aed', width:`${pct}%`, transition:'width 0.3s' }}/>
+                      </div>
+                      <span style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', width:'50px', textAlign:'right' }}>{count} ({pct}%)</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Siste registreringer */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>🆕 Siste registreringer</h3>
+              {companies.slice(0,5).map(c=>{
+                const daysAgo = Math.floor((Date.now()-new Date(c.created_at))/86400000)
+                const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null
+                const daysLeft = trialEnd ? Math.ceil((trialEnd-new Date())/86400000) : null
+                return (
+                  <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 0', borderBottom:'1px solid #f8fafc' }}>
+                    <div style={{ width:'36px', height:'36px', borderRadius:'50%', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', color:'#4338ca' }}>{(c.name?.[0]||'?').toUpperCase()}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{daysAgo===0?'I dag':daysAgo===1?'I går':`${daysAgo} dager siden`} · {c.num_users||1} bruker{(c.num_users||1)>1?'e':''}</div>
+                    </div>
+                    <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
+                      background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
+                      color: c.subscription_status==='active'?'#059669':c.subscription_status==='trial'?'#d97706':'#dc2626',
+                      border: `1px solid ${c.subscription_status==='active'?'#bbf7d0':c.subscription_status==='trial'?'#fde68a':'#fecaca'}`
+                    }}>{c.subscription_status==='active'?'Aktiv':c.subscription_status==='trial'?(daysLeft!==null?`${daysLeft}d igjen`:'Prøve'):'Utløpt'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* KUNDER TAB */}
+        {tab==='kunder' && (
+          <>
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              {companies.map(c=>{
+                const users = allUsers.filter(u=>u.email) // TODO: filter by company when multi-tenant
+                const mods = c.active_modules||[]
+                const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null
+                const daysLeft = trialEnd ? Math.ceil((trialEnd-new Date())/86400000) : null
+                let mrr = 0
+                if (mods.includes('grunnpakke')) mrr += 199 * (c.num_users||1)
+                MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ mrr += m.price||0 })
+                return (
+                  <div key={c.id} style={{ ...saCard, cursor:'pointer' }}
+                    onClick={()=>setSelectedCompany(selectedCompany?.id===c.id?null:c)}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
+                        <div style={{ width:'40px', height:'40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{c.email||'Ingen e-post'} · {c.num_users||1} brukere · {mods.length} moduler</div>
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                        {c.subscription_status==='active' && <span style={{ fontWeight:'800', fontSize:'14px', color:'#059669' }}>{fmt(mrr)} kr/mnd</span>}
+                        <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
+                          background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
+                          color: c.subscription_status==='active'?'#059669':c.subscription_status==='trial'?'#d97706':'#dc2626'
+                        }}>{c.subscription_status==='trial'?`Prøve (${daysLeft||0}d)`:c.subscription_status==='active'?'Aktiv':'Utløpt'}</span>
+                      </div>
+                    </div>
+                    {/* Expanded details */}
+                    {selectedCompany?.id===c.id && (
+                      <div style={{ marginTop:'14px', paddingTop:'14px', borderTop:'1px solid #f1f5f9' }}>
+                        <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr', gap:'10px', marginBottom:'14px' }}>
+                          {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial start',c.trial_start_date?new Date(c.trial_start_date).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
+                            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px' }}>
+                              <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{k}</div>
+                              <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px', wordBreak:'break-word' }}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>AKTIVE MODULER</div>
+                          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                            {mods.map(m=>{
+                              const mod=MODULE_CATALOG.find(x=>x.id===m)
+                              return <span key={m} style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'2px 10px', fontSize:'11px', fontWeight:'600' }}>{mod?.emoji||''} {mod?.name||m}</span>
+                            })}
+                          </div>
+                        </div>
+                        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                          {c.subscription_status==='trial' && <>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,7)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+7 dager trial</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+15 dager trial</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
+                          </>}
+                          {c.subscription_status==='expired' && <>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Gi ny prøveperiode</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
+                          </>}
+                          {c.subscription_status==='active' && <>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'cancelled')}} style={{ padding:'8px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Kanseller</button>
+                          </>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* BRUKERE TAB */}
+        {tab==='brukere' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>{allUsers.length} brukere totalt</div>
+            {allUsers.map(u=>(
+              <div key={u.id} style={{ ...saCard, padding:'12px 16px', display:'flex', alignItems:'center', gap:'12px' }}>
+                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.full_name||u.email}</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>{u.email} · {u.role} · {u.status}</div>
+                </div>
+                <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0 }}>
+                  {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* HENDELSER TAB */}
+        {tab==='varsler' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>Systemhendelser og varsler</div>
+            {notifications.length===0 ? <p style={{ color:'#94a3b8', textAlign:'center', padding:'40px', fontSize:'14px' }}>Ingen hendelser ennå</p> :
+              notifications.map(n=>(
+                <div key={n.id} style={{ ...saCard, padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+                  <span style={{ fontSize:'18px', flexShrink:0, marginTop:'2px' }}>{n.title?.includes('registrert')?'🆕':n.title?.includes('kjøpt')?'💰':'🔔'}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{n.title}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{n.message}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>{new Date(n.created_at).toLocaleString('nb-NO')}</div>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function MinBedriftPage() {
   const { user } = useAuth()
   const [tab, setTab] = useState('info')
@@ -19829,9 +20108,29 @@ function MinBedriftPage() {
       : activeModules.filter(m => m !== modId)
     setActiveModules(newModules)
     try {
-      await supabase.from('company_settings')
-        .update({ active_modules: newModules, updated_at: new Date().toISOString() })
-        .eq('id', settings.id)
+      // If first module purchase during trial, upgrade to active
+      const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
+      if (settings.subscription_status === 'trial' && action === 'add') {
+        updates.subscription_status = 'active'
+      }
+      await supabase.from('company_settings').update(updates).eq('id', settings.id)
+      // Notify platform owner about purchase
+      if (action === 'add') {
+        const mod = MODULE_CATALOG.find(m=>m.id===modId)
+        try {
+          const { data: owners } = await supabase.from('user_profiles').select('id').eq('platform_role','platform_owner')
+          if (owners?.length) {
+            for (const owner of owners) {
+              await supabase.from('notifications').insert({
+                user_id: owner.id,
+                title: '💰 Ny modulkjøp',
+                message: `${settings.name} har kjøpt ${mod?.name||modId} (${mod?.perCompany?mod.price+' kr/mnd bedrift':(mod?.price||0)+' kr/mnd'})`,
+                type: 'system',
+              })
+            }
+          }
+        } catch(e) { console.error(e) }
+      }
     } catch(e) { alert('Feil: ' + e.message); setActiveModules(activeModules) }
     setConfirmModule(null)
   }
@@ -26380,7 +26679,7 @@ function AppContent() {
     ansatte: 'ansatte', timelister: 'timelister', ressursplan: 'ressursplan',
     kalender: 'kalender', chat: 'chat',
     befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
-    minbedrift: null, brukeradmin: null, // admin always accessible
+    minbedrift: null, brukeradmin: null, superadmin: null, // admin always accessible
   }
 
   const isModuleActive = (navId) => {
@@ -26513,7 +26812,7 @@ function AppContent() {
             </div>
             {/* Nav */}
             <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
-              {navGroups.map((group, gi) => (
+              {[...navGroups, ...(isPlatformOwner ? [platformOwnerNav] : [])].map((group, gi) => (
                 <div key={gi} style={{ marginBottom:'4px' }}>
                   <div style={{ padding:'10px 12px 4px', fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.08em' }}>{group.title}</div>
                   {group.items.map(item => {
@@ -26570,7 +26869,7 @@ function AppContent() {
           {collapsed ? '›' : '‹'}
         </button>
         <nav style={{ flex: 1, overflowY: 'auto', padding: '8px', marginTop: '46px' }}>
-          {navGroups.map((group, gi) => (
+          {[...navGroups, ...(isPlatformOwner ? [platformOwnerNav] : [])].map((group, gi) => (
             <div key={gi} style={{ marginBottom: '4px' }}>
               {!collapsed && (
                 <div style={{ padding: '10px 12px 4px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.08em', userSelect: 'none' }}>
@@ -26740,6 +27039,7 @@ function AppContent() {
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'brukeradmin' && <BrukeradminPage />}
+        {page === 'superadmin' && isPlatformOwner && <SuperAdminPage />}
         {page === 'varsler' && <VarslerPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
