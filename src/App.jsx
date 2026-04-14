@@ -995,7 +995,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
   const [showCreateSub, setShowCreateSub] = useState(false)
-  const f = { fontFamily:'system-ui, sans-serif' }
+  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
   const card = { background:'white', borderRadius: isMobH ? '12px' : '16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding: isMobH ? '14px' : '24px' }
 
   const load = async () => {
@@ -1050,15 +1050,15 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const contactCards = (items, empty) => items?.length > 0 ? (
     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
       {items.map((item,i) => (
-        <div key={i} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', display:'flex', justifyContent:'space-between' }}>
+        <div key={i} style={{ background:'#f8fafc', borderRadius:'12px', padding: isMobH ? '10px' : '14px', display:'flex', justifyContent:'space-between', flexDirection: isMobH ? 'column' : 'row', gap: isMobH ? '6px' : '0' }}>
           <div>
-            <p style={{ margin:'0 0 3px', fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{item.company || item.name}</p>
-            {(item.trade||item.discipline) && <p style={{ margin:'0 0 3px', fontSize:'13px', color:'#64748b' }}>{item.trade||item.discipline}</p>}
-            {item.contact_person && <p style={{ margin:0, fontSize:'13px', color:'#475569' }}>{item.contact_person}</p>}
+            <p style={{ margin:'0 0 3px', fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{item.company || item.name}</p>
+            {(item.trade||item.discipline) && <p style={{ margin:'0 0 3px', fontSize: isMobH ? '11px' : '13px', color:'#64748b' }}>{item.trade||item.discipline}</p>}
+            {item.contact_person && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>{item.contact_person}</p>}
           </div>
-          <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:'4px' }}>
-            {item.phone && <a href={`tel:${item.phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {item.phone}</a>}
-            {item.email && <a href={`mailto:${item.email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {item.email}</a>}
+          <div style={{ textAlign: isMobH ? 'left' : 'right', display:'flex', flexDirection: isMobH ? 'row' : 'column', gap: isMobH ? '12px' : '4px' }}>
+            {item.phone && <a href={`tel:${item.phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {item.phone}</a>}
+            {item.email && <a href={`mailto:${item.email}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis' }}>✉️ {isMobH ? 'E-post' : item.email}</a>}
           </div>
         </div>
       ))}
@@ -1094,7 +1094,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake</button>
         {parentProject && (
           <div style={{ marginBottom:'8px', fontSize:'13px', color:'#64748b' }}>
-            Overordnet: <button onClick={() => { if (onNavigateDetail) onNavigateDetail(parentProject.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize:'13px', padding:0 }}>{parentProject.name} ({parentProject.project_number})</button>
+            Overordnet: <button onClick={() => { if (onNavigateDetail) onNavigateDetail(parentProject.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize: isMobH ? '11px' : '13px', padding:0, overflow:'hidden', textOverflow:'ellipsis', maxWidth: isMobH ? '60vw' : 'none' }}>{parentProject.name}</button>
           </div>
         )}
         <div style={{ display:'flex', alignItems: isMobH ? 'flex-start' : 'center', justifyContent:'space-between', gap: isMobH ? '10px' : '16px', flexWrap: isMobH ? 'wrap' : 'nowrap' }}>
@@ -1138,7 +1138,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {childProjects.map(cp => (
-                  <div key={cp.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer' }}
+                  <div key={cp.id} style={{ background:'#f8fafc', borderRadius:'10px', padding: isMobH ? '10px' : '12px 14px', display:'flex', alignItems:'center', gap: isMobH ? '8px' : '12px', cursor:'pointer' }}
                     onClick={() => { if (onNavigateDetail) onNavigateDetail(cp.id) }}>
                     <div style={{ width:'34px', height:'34px', borderRadius:'8px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>📂</div>
                     <div style={{ flex:1, minWidth:0 }}>
@@ -1175,7 +1175,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                   return (
                     <div key={cl.id}
                       onClick={() => { if (onNavigateChecklist) onNavigateChecklist(cl.id) }}
-                      style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', cursor: onNavigateChecklist ? 'pointer' : 'default', border:'1px solid #f1f5f9', transition:'border-color 0.15s' }}
+                      style={{ background:'#f8fafc', borderRadius:'10px', padding: isMobH ? '10px' : '12px 14px', cursor: onNavigateChecklist ? 'pointer' : 'default', border:'1px solid #f1f5f9', transition:'border-color 0.15s' }}
                       onMouseEnter={e => e.currentTarget.style.borderColor='#e2e8f0'}
                       onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
@@ -1249,8 +1249,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                 {/* Budsjett-kontekst */}
                 {project.budget && (
                   <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 12px', marginBottom:'12px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                      <span style={{ color:'#64748b' }}>Opprinnelig budsjett</span>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '11px' : '12px', marginBottom:'4px', gap:'4px' }}>
+                      <span style={{ color:'#64748b', flexShrink:0 }}>Budsjett</span>
                       <span style={{ fontWeight:'600', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</span>
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
@@ -1296,16 +1296,16 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
-            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
+            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', wordBreak:'break-all' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
           </div>
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏢 Kunde</h3>
-            {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.client_name}</p>{project.client_contact && <p style={{ margin:0, fontSize:'13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
+            {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.client_name}</p>{project.client_contact && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', wordBreak:'break-all' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
           </div>
           {(project.resident_name||project.resident_phone||project.resident_email) && (
             <div style={card}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏠 Beboer / Kontakt</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}>
                 {project.resident_name && <p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.resident_name}</p>}
                 {project.resident_phone && <a href={`tel:${project.resident_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.resident_phone}</a>}
                 {project.resident_email && <a href={`mailto:${project.resident_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.resident_email}</a>}
