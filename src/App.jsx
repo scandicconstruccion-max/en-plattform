@@ -996,7 +996,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [activeTab, setActiveTab] = useState('ue')
   const [showCreateSub, setShowCreateSub] = useState(false)
   const f = { fontFamily:'system-ui, sans-serif' }
-  const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding:'24px' }
+  const card = { background:'white', borderRadius: isMobH ? '12px' : '16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding: isMobH ? '14px' : '24px' }
 
   const load = async () => {
     try {
@@ -1090,39 +1090,39 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
   return (
     <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake til prosjekter</button>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobH ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake</button>
         {parentProject && (
           <div style={{ marginBottom:'8px', fontSize:'13px', color:'#64748b' }}>
             Overordnet: <button onClick={() => { if (onNavigateDetail) onNavigateDetail(parentProject.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize:'13px', padding:0 }}>{parentProject.name} ({parentProject.project_number})</button>
           </div>
         )}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📂' : '🏗️'}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
+        <div style={{ display:'flex', alignItems: isMobH ? 'flex-start' : 'center', justifyContent:'space-between', gap: isMobH ? '10px' : '16px', flexWrap: isMobH ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobH && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📂' : '🏗️'}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '6px' : '10px', flexWrap:'wrap' }}>
+                <h1 style={{ margin:0, fontSize: isMobH ? '17px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
                 <StatusBadge status={project.status} />
               </div>
-              {project.project_number && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#94a3b8' }}>#{project.project_number}</p>}
+              {project.project_number && <p style={{ margin:'3px 0 0', fontSize: isMobH ? '11px' : '13px', color:'#94a3b8' }}>#{project.project_number}</p>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'6px', width: isMobH ? '100%' : 'auto' }}>
             {project.status === 'arkivert' ? (
               <button onClick={async () => { await db.updateProject(projectId, { status: 'fullfort' }); load() }}
-                style={{ padding:'9px 16px', border:'1px solid #7c3aed', borderRadius:'10px', background:'#faf5ff', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#7c3aed' }}>📦 Gjenopprett</button>
+                style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #7c3aed', borderRadius:'10px', background:'#faf5ff', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'600', color:'#7c3aed', flex: isMobH ? 1 : 'none' }}>📦 {isMobH ? 'Gjenopp.' : 'Gjenopprett'}</button>
             ) : (
-              <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500', color:'#059669' }}>+ Underprosjekt</button>
+              <button onClick={() => setShowCreateSub(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500', color:'#059669', flex: isMobH ? 1 : 'none' }}>{isMobH ? '+ Under' : '+ Underprosjekt'}</button>
             )}
-            <button onClick={() => setShowEdit(true)} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>✏️ Rediger</button>
-            <button onClick={() => setShowDelete(true)} style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
+            <button onClick={() => setShowEdit(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500' }}>✏️</button>
+            <button onClick={() => setShowDelete(true)} style={{ padding: isMobH ? '8px 10px' : '9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '14px' }}>🗑️</button>
           </div>
         </div>
         {project.status === 'arkivert' && (
           <div style={{ marginTop:'12px', background:'#f5f3ff', border:'1px solid #e9d5ff', borderRadius:'10px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'10px' }}>
             <span style={{ fontSize:'16px' }}>📦</span>
-            <span style={{ fontSize:'13px', color:'#7c3aed', fontWeight:'500' }}>Dette prosjektet er arkivert. Det vises ikke i dropdowns eller oversikter med mindre «Vis arkiverte» er aktivert.</span>
+            <span style={{ fontSize: isMobH ? '11px' : '13px', color:'#7c3aed', fontWeight:'500' }}>{isMobH ? 'Prosjektet er arkivert' : 'Dette prosjektet er arkivert. Det vises ikke i dropdowns eller oversikter med mindre «Vis arkiverte» er aktivert.'}</span>
           </div>
         )}
       </div>
@@ -1213,8 +1213,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
 
           <div style={card}>
-            <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'16px', marginLeft:'-24px', marginRight:'-24px', paddingLeft:'24px' }}>
-              {tabs.map(t => <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding:'10px 16px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab===t.id ? '600':'400', background:'transparent', color: activeTab===t.id ? '#059669':'#64748b', borderBottom: activeTab===t.id ? '2px solid #059669':'2px solid transparent', fontFamily:'system-ui, sans-serif' }}>{t.label}</button>)}
+            <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'16px', marginLeft: isMobH ? '-14px' : '-24px', marginRight: isMobH ? '-14px' : '-24px', paddingLeft: isMobH ? '14px' : '24px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+              {tabs.map(t => <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: isMobH ? '8px 10px' : '10px 16px', border:'none', cursor:'pointer', fontSize: isMobH ? '11px' : '13px', fontWeight: activeTab===t.id ? '600':'400', background:'transparent', color: activeTab===t.id ? '#059669':'#64748b', borderBottom: activeTab===t.id ? '2px solid #059669':'2px solid transparent', fontFamily:'system-ui, sans-serif', whiteSpace:'nowrap' }}>{t.label}</button>)}
             </div>
             {activeTab==='ue' && contactCards(project.subcontractors, 'Ingen underentreprenører registrert')}
             {activeTab==='ark' && contactCards(project.architects, 'Ingen arkitekter registrert')}
@@ -1236,7 +1236,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                 {/* Akkumulert beløp */}
                 <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0', textAlign:'center', marginBottom:'12px' }}>
                   <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', marginBottom:'2px' }}>GODKJENT TILLEGGSARBEID</div>
-                  <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</div>
+                  <div style={{ fontSize: isMobH ? '18px' : '22px', fontWeight:'800', color:'#059669' }}>{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</div>
                 </div>
                 {/* Avventende */}
                 {totalAvventer > 0 && (
