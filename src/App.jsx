@@ -2200,20 +2200,41 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
       }
       setPreviewLoading(false)
     } else {
-      // Bilder og PDF: bruk blob-URL for å garantere at det fungerer
+      // Bilder og PDF: prøv flere strategier
       try {
+        // Strategi 1: Sjekk om file_url allerede er en full URL
+        if (file.file_url?.startsWith('http')) {
+          setPreviewUrl(file.file_url)
+          setPreviewLoading(false)
+          return
+        }
+        // Strategi 2: Hent public URL
+        const { data: pubData } = supabase.storage.from('plattform-files').getPublicUrl(file.file_url)
+        if (pubData?.publicUrl) {
+          setPreviewUrl(pubData.publicUrl)
+          setPreviewLoading(false)
+          return
+        }
+        // Strategi 3: Signert URL som fallback
+        const signed = await getSignedUrl()
+        if (signed) {
+          setPreviewUrl(signed)
+          setPreviewLoading(false)
+          return
+        }
+        // Strategi 4: Blob-download
         const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
         if (!error && data) {
           const url = URL.createObjectURL(data)
           setPreviewUrl(url)
-        } else {
-          // Fallback til signert URL
-          const signed = await getSignedUrl()
-          setPreviewUrl(signed)
         }
       } catch(e) {
-        const signed = await getSignedUrl()
-        setPreviewUrl(signed)
+        console.error('Preview error:', e)
+        // Siste fallback: prøv signert URL
+        try {
+          const signed = await getSignedUrl()
+          setPreviewUrl(signed)
+        } catch(e2) { console.error('Signed URL fallback error:', e2) }
       }
       setPreviewLoading(false)
     }
