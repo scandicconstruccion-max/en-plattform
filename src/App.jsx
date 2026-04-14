@@ -222,7 +222,6 @@ const moduleSections = [
 ]
 
 function ModuleCard({ module, onNavigate, isMobile }) {
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
   const m = moduleCards.find(x => x.id === module)
   if (!m) return null
   return (
