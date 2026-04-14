@@ -820,8 +820,8 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const f = { fontFamily:'system-ui, sans-serif' }
-  const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
+  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
+  const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
@@ -924,7 +924,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             {!search && <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>}
           </div>
         ) : viewMode === 'grid' ? (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobProj ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: isMobProj ? '10px' : '16px' }}>
             {filtered.map(p => {
               const childCount = projects.filter(c => c.parent_id === p.id).length
               const parentName = p.parent_id ? projects.find(pp => pp.id === p.parent_id)?.name : null
@@ -1050,7 +1050,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
   if (!project) return <div style={{ ...f, textAlign:'center', padding:'60px' }}><p>Prosjekt ikke funnet</p><button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 16px', cursor:'pointer' }}>← Tilbake</button></div>
 
-  const tabs = [{id:'ue',label:`Underentreprenører (${project.subcontractors?.length||0})`},{id:'ark',label:`Arkitekter (${project.architects?.length||0})`},{id:'rad',label:`Rådgivere (${project.consultants?.length||0})`}]
+  const tabs = [{id:'ue',label: isMobH ? `UE (${project.subcontractors?.length||0})` : `Underentreprenører (${project.subcontractors?.length||0})`},{id:'ark',label: isMobH ? `Arki. (${project.architects?.length||0})` : `Arkitekter (${project.architects?.length||0})`},{id:'rad',label: isMobH ? `Rådg. (${project.consultants?.length||0})` : `Rådgivere (${project.consultants?.length||0})`}]
 
   const contactCards = (items, empty) => items?.length > 0 ? (
     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
@@ -1138,8 +1138,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           {childProjects.length > 0 && (
             <div style={card}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>📁 Underprosjekter ({childProjects.length})</h3>
-                <button onClick={() => setShowCreateSub(true)} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+                <h3 style={{ margin:0, fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>📁 Underprosjekter ({childProjects.length})</h3>
+                <button onClick={() => setShowCreateSub(true)} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding: isMobH ? '6px 10px' : '6px 14px', fontSize: isMobH ? '11px' : '12px', fontWeight:'600', cursor:'pointer', flexShrink:0 }}>{isMobH ? '+ Ny' : '+ Legg til'}</button>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {childProjects.map(cp => (
@@ -1160,10 +1160,10 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           {/* Sjekklister tilknyttet prosjektet */}
           <div style={card}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-              <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>✅ Sjekklister ({checklists.length})</h3>
+              <h3 style={{ margin:0, fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>✅ Sjekklister ({checklists.length})</h3>
               {onNavigateChecklist && (
                 <button onClick={() => onNavigateChecklist('new', projectId)}
-                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny sjekkliste</button>
+                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding: isMobH ? '6px 10px' : '6px 14px', fontSize: isMobH ? '11px' : '12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>{isMobH ? '+ Ny' : '+ Ny sjekkliste'}</button>
               )}
             </div>
             {checklists.length === 0 ? (
@@ -1185,8 +1185,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                       onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cl.title}</div>
-                          <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{done}/{total} punkter · {new Date(cl.created_at).toLocaleDateString('nb-NO')}</div>
+                          <div style={{ fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cl.title}</div>
+                          <div style={{ fontSize: isMobH ? '11px' : '12px', color:'#94a3b8', marginTop:'2px' }}>{done}/{total} · {new Date(cl.created_at).toLocaleDateString('nb-NO')}</div>
                         </div>
                         <span style={{ background: sBg, color: sColor, padding:'2px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'600', flexShrink:0 }}>{sLabel}</span>
                       </div>
@@ -1208,9 +1208,9 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
 
           <div style={card}>
-            <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
+            <h3 style={{ margin:'0 0 12px', fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
-              {project.address && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Adresse</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{project.address}</p></div>}
+              {project.address && <div style={{ background:'#f8fafc', borderRadius:'10px', padding: isMobH ? '10px' : '12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Adresse</p><p style={{ margin:0, fontSize: isMobH ? '13px' : '14px', fontWeight:'500', color:'#0f172a', wordBreak:'break-word' }}>{project.address}</p></div>}
               {(project.start_date||project.end_date) && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Periode</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{project.start_date && new Date(project.start_date).toLocaleDateString('nb-NO')}{project.end_date && ` – ${new Date(project.end_date).toLocaleDateString('nb-NO')}`}</p></div>}
               {project.budget && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Budsjett</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</p></div>}
             </div>
@@ -1218,7 +1218,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
 
           <div style={card}>
-            <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'16px', marginLeft: isMobH ? '-14px' : '-24px', marginRight: isMobH ? '-14px' : '-24px', paddingLeft: isMobH ? '14px' : '24px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+            <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'12px', marginLeft: isMobH ? '-14px' : '-24px', marginRight: isMobH ? '-14px' : '-24px', paddingLeft: isMobH ? '10px' : '24px', overflowX:'auto', WebkitOverflowScrolling:'touch', gap:'0' }}>
               {tabs.map(t => <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: isMobH ? '8px 10px' : '10px 16px', border:'none', cursor:'pointer', fontSize: isMobH ? '11px' : '13px', fontWeight: activeTab===t.id ? '600':'400', background:'transparent', color: activeTab===t.id ? '#059669':'#64748b', borderBottom: activeTab===t.id ? '2px solid #059669':'2px solid transparent', fontFamily:'system-ui, sans-serif', whiteSpace:'nowrap' }}>{t.label}</button>)}
             </div>
             {activeTab==='ue' && contactCards(project.subcontractors, 'Ingen underentreprenører registrert')}
@@ -1325,7 +1325,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
-          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', padding:'28px', width:'min(440px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif' }}>
+          <div style={{ position:'fixed', top: isMobH ? 'auto' : '50%', bottom: isMobH ? 0 : 'auto', left: isMobH ? 0 : '50%', right: isMobH ? 0 : 'auto', transform: isMobH ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobH ? '20px 20px 0 0' : '20px', padding: isMobH ? '20px' : '28px', width: isMobH ? '100%' : 'min(440px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif', maxHeight: isMobH ? '80vh' : 'none', overflowY:'auto' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Hva vil du gjøre med prosjektet?</h3>
             <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}><strong>{project.name}</strong>{project.project_number ? ` (${project.project_number})` : ''}</p>
 
