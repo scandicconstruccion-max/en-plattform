@@ -835,6 +835,39 @@ function ProsjekterPage({ onNavigateDetail }) {
   const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
   const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
 
+  const savePayment = async (companyId, paymentDate) => {
+    try {
+      const comp = companies.find(c=>c.id===companyId)
+      const history = comp?.payment_history || []
+      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
+      // Next due = payment date + 1 month
+      const nextDue = new Date(paymentDate)
+      nextDue.setMonth(nextDue.getMonth()+1)
+      await supabase.from('company_settings').update({
+        last_payment_date: paymentDate,
+        next_due_date: nextDue.toISOString().split('T')[0],
+        payment_history: history,
+        updated_at: new Date().toISOString()
+      }).eq('id', companyId)
+      setPaymentModal(null)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  const addTimelineEvent = async (companyId, event) => {
+    const comp = companies.find(c=>c.id===companyId)
+    const timeline = comp?.timeline || []
+    timeline.push({ ...event, timestamp: new Date().toISOString() })
+    await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId)
+  }
+
+  // Enhanced status change — also logs to timeline
+  const setCompanyStatusWithLog = async (companyId, status) => {
+    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
+    await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status })
+    load()
+  }
+
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
@@ -19795,6 +19828,9 @@ function SuperAdminPage() {
   const [saSearch, setSaSearch] = useState('')
   const [saFilter, setSaFilter] = useState('alle')
   const [editNote, setEditNote] = useState(null) // { companyId, note }
+  const [emailModal, setEmailModal] = useState(null) // { to, companyName, subject, body }
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [paymentModal, setPaymentModal] = useState(null) // { companyId }
   const [storageInfo, setStorageInfo] = useState(null)
   const [savingNote, setSavingNote] = useState(false)
 
@@ -19897,13 +19933,11 @@ function SuperAdminPage() {
     const newEnd = new Date(comp.trial_ends_at || Date.now())
     newEnd.setDate(newEnd.getDate() + days)
     await supabase.from('company_settings').update({ trial_ends_at: newEnd.toISOString(), subscription_status:'trial' }).eq('id', companyId)
+    await addTimelineEvent(companyId, { type:'trial_extend', label: `Trial forlenget med ${days} dager` })
     load()
   }
 
-  const setCompanyStatus = async (companyId, status) => {
-    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
-    load()
-  }
+  const setCompanyStatus = setCompanyStatusWithLog
 
   const isMobSA = typeof window !== 'undefined' && window.innerWidth < 768
   const saCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobSA ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
@@ -20229,13 +20263,64 @@ function SuperAdminPage() {
                     {/* Expanded details */}
                     {selectedCompany?.id===c.id && (
                       <div style={{ marginTop:'14px', paddingTop:'14px', borderTop:'1px solid #f1f5f9' }}>
-                        <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr', gap:'10px', marginBottom:'14px' }}>
+                        <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr 1fr', gap:'10px', marginBottom:'14px' }}>
                           {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial start',c.trial_start_date?new Date(c.trial_start_date).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
                             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px' }}>
                               <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{k}</div>
                               <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px', wordBreak:'break-word' }}>{v}</div>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Betalingsstatus */}
+                        {c.subscription_status==='active' && (
+                          <div style={{ marginBottom:'12px' }}>
+                            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>BETALING</div>
+                            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex:'1 1 140px' }}>
+                                <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>SISTE BETALING</div>
+                                <div style={{ fontSize:'13px', fontWeight:'700', color: c.last_payment_date ? '#059669' : '#dc2626', marginTop:'2px' }}>
+                                  {c.last_payment_date ? new Date(c.last_payment_date).toLocaleDateString('nb-NO') : 'Ingen registrert'}
+                                </div>
+                              </div>
+                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex:'1 1 140px' }}>
+                                <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>NESTE FORFALL</div>
+                                <div style={{ fontSize:'13px', fontWeight:'700', color: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#dc2626' : '#0f172a', marginTop:'2px' }}>
+                                  {c.next_due_date ? new Date(c.next_due_date).toLocaleDateString('nb-NO') : '—'}
+                                  {c.next_due_date && new Date(c.next_due_date) < new Date() && <span style={{ color:'#dc2626', fontSize:'10px', fontWeight:'700', marginLeft:'6px' }}>FORFALT</span>}
+                                </div>
+                              </div>
+                              <button onClick={(e)=>{e.stopPropagation();setPaymentModal({companyId:c.id, date: new Date().toISOString().split('T')[0]})}}
+                                style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>💳 Registrer betaling</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tidslinje */}
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>TIDSLINJE</div>
+                          <div style={{ position:'relative', paddingLeft:'20px' }}>
+                            <div style={{ position:'absolute', left:'6px', top:'4px', bottom:'4px', width:'2px', background:'#e2e8f0' }}/>
+                            {[
+                              // Auto-generated events
+                              c.created_at && { ts: c.created_at, icon:'🆕', label:'Registrert', color:'#2563eb' },
+                              c.trial_start_date && { ts: c.trial_start_date, icon:'🎉', label:'Prøveperiode startet', color:'#d97706' },
+                              c.trial_ends_at && c.subscription_status==='trial' && { ts: c.trial_ends_at, icon:'⏰', label:'Prøveperiode utløper', color:'#dc2626', future: new Date(c.trial_ends_at)>new Date() },
+                              c.last_payment_date && { ts: c.last_payment_date, icon:'💳', label:'Betaling registrert', color:'#059669' },
+                              // Manual timeline events
+                              ...(c.timeline||[]).map(e=>({ ts: e.timestamp, icon: e.type==='status'?'🔄':e.type==='trial_extend'?'📅':e.type==='note'?'📝':'📌', label: e.label, color:'#7c3aed' })),
+                            ].filter(Boolean).sort((a,b)=>new Date(b.ts)-new Date(a.ts)).slice(0,10).map((evt,i)=>(
+                              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', marginBottom:'8px', position:'relative' }}>
+                                <div style={{ width:'14px', height:'14px', borderRadius:'50%', background: evt.future ? '#f8fafc' : (evt.color+'15'), border: `2px solid ${evt.color}`, flexShrink:0, zIndex:1, marginTop:'1px' }}/>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ display:'flex', justifyContent:'space-between', gap:'8px' }}>
+                                    <span style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a' }}>{evt.icon} {evt.label}</span>
+                                    <span style={{ fontSize:'10px', color:'#94a3b8', flexShrink:0 }}>{new Date(evt.ts).toLocaleDateString('nb-NO')}{evt.future?' (planlagt)':''}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         <div style={{ marginBottom:'12px' }}>
                           <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>AKTIVE MODULER</div>
@@ -20253,6 +20338,14 @@ function SuperAdminPage() {
                             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
                               {c.email && <a href={`mailto:${c.email}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#eff6ff', borderRadius:'8px', border:'1px solid #bfdbfe', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#2563eb' }}>✉️ {c.email}</a>}
                               {c.phone && <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#059669' }}>📞 {c.phone}</a>}
+                              {c.email && <button onClick={(e)=>{e.stopPropagation();setEmailModal({
+                                to: c.email,
+                                companyName: c.name||'',
+                                subject: c.subscription_status==='trial' ? `Din prøveperiode på En Plattform` : `Oppdatering fra En Plattform`,
+                                body: c.subscription_status==='trial'
+                                  ? `Hei ${c.name||''}!\n\nVi ser at du tester En Plattform. Prøveperioden din ${c.trial_ends_at ? 'utløper '+new Date(c.trial_ends_at).toLocaleDateString('nb-NO') : 'er aktiv'}.\n\nHar du spørsmål om systemet? Vi hjelper gjerne!\n\nMvh\nEn Plattform`
+                                  : `Hei ${c.name||''}!\n\n\n\nMvh\nEn Plattform`
+                              })}} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#faf5ff', borderRadius:'8px', border:'1px solid #e9d5ff', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#7c3aed' }}>✍️ Send e-post</button>}
                             </div>
                           </div>
                         )}
