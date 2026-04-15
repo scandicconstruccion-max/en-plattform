@@ -19792,6 +19792,38 @@ function SuperAdminPage() {
   const [tab, setTab] = useState('oversikt')
   const [selectedCompany, setSelectedCompany] = useState(null)
   const [notifications, setNotifications] = useState([])
+  const [saSearch, setSaSearch] = useState('')
+  const [saFilter, setSaFilter] = useState('alle')
+  const [editNote, setEditNote] = useState(null) // { companyId, note }
+  const [savingNote, setSavingNote] = useState(false)
+
+  const saveCompanyNote = async (companyId, note) => {
+    setSavingNote(true)
+    try {
+      await supabase.from('company_settings').update({ admin_notes: note, updated_at: new Date().toISOString() }).eq('id', companyId)
+      setEditNote(null)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSavingNote(false) }
+  }
+
+  const exportCSV = () => {
+    const headers = ['Bedrift','Status','E-post','Telefon','Org.nr','Brukere','Moduler','MRR','Registrert','Trial slutt','Notater']
+    const rows = companies.map(c => {
+      const mods = c.active_modules||[]
+      let mrr = 0
+      if (c.subscription_status==='active') {
+        if (mods.includes('grunnpakke')) mrr += 199*(c.num_users||1)
+        MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{mrr+=m.price||0})
+      }
+      return [c.name||'', c.subscription_status||'', c.email||'', c.phone||'', c.org_number||'', c.num_users||1, mods.join('; '), mrr, c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'', c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'', (c.admin_notes||'').replace(/[\n,]/g,' ')]
+    })
+    const csv = [headers.join(','), ...rows.map(r=>r.map(v=>'"'+v+'"').join(','))].join('\n')
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href=url; a.download=`kunder_${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const load = async () => {
     try {
@@ -20056,8 +20088,31 @@ function SuperAdminPage() {
         {/* KUNDER TAB */}
         {tab==='kunder' && (
           <>
+            {/* Search + filter + export */}
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+              <input value={saSearch} onChange={e=>setSaSearch(e.target.value)} placeholder="🔍 Søk bedrift, e-post, org.nr..." style={{ flex:'1 1 200px', padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', background:'white' }} />
+              <select value={saFilter} onChange={e=>setSaFilter(e.target.value)} style={{ padding:'9px 14px', border:`2px solid ${saFilter!=='alle'?'#7c3aed':'#e2e8f0'}`, borderRadius:'10px', fontSize:'13px', outline:'none', background:'white', color:saFilter!=='alle'?'#7c3aed':'#475569', fontWeight:saFilter!=='alle'?'700':'400', cursor:'pointer' }}>
+                <option value="alle">Alle ({companies.length})</option>
+                <option value="trial">Prøveperiode ({trialCompanies.length})</option>
+                <option value="active">Aktive ({activeCompanies.length})</option>
+                <option value="expired">Utløpt ({expiredCompanies.length})</option>
+              </select>
+              <button onClick={exportCSV} style={{ padding:'9px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', display:'flex', alignItems:'center', gap:'6px' }}>📥 Eksporter CSV</button>
+              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'auto' }}>
+                {companies.filter(c=>{
+                  if (saFilter!=='alle'&&c.subscription_status!==saFilter) return false
+                  if (saSearch&&![c.name,c.email,c.org_number,c.phone].some(v=>v?.toLowerCase().includes(saSearch.toLowerCase()))) return false
+                  return true
+                }).length} treff
+              </span>
+            </div>
+
             <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-              {companies.map(c=>{
+              {companies.filter(c=>{
+                if (saFilter!=='alle'&&c.subscription_status!==saFilter) return false
+                if (saSearch&&![c.name,c.email,c.org_number,c.phone].some(v=>v?.toLowerCase().includes(saSearch.toLowerCase()))) return false
+                return true
+              }).map(c=>{
                 const users = allUsers.filter(u=>u.email) // TODO: filter by company when multi-tenant
                 const mods = c.active_modules||[]
                 const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null
@@ -20073,7 +20128,7 @@ function SuperAdminPage() {
                         <div style={{ width:'40px', height:'40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
                         <div style={{ minWidth:0 }}>
                           <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
-                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{c.email||'Ingen e-post'} · {c.num_users||1} brukere · {mods.length} moduler</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{c.email||''}{c.phone?' · '+c.phone:''} · {c.num_users||1} brukere · {mods.length} moduler</div>
                         </div>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
@@ -20082,6 +20137,7 @@ function SuperAdminPage() {
                           background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
                           color: c.subscription_status==='active'?'#059669':c.subscription_status==='trial'?'#d97706':'#dc2626'
                         }}>{c.subscription_status==='trial'?`Prøve (${daysLeft||0}d)`:c.subscription_status==='active'?'Aktiv':'Utløpt'}</span>
+                        {c.admin_notes && <span title={c.admin_notes} style={{ fontSize:'14px', cursor:'help' }}>📝</span>}
                       </div>
                     </div>
                     {/* Expanded details */}
@@ -20104,14 +20160,53 @@ function SuperAdminPage() {
                             })}
                           </div>
                         </div>
+                        {/* Kontaktinfo — klikkbar */}
+                        {(c.email||c.phone) && (
+                          <div style={{ marginBottom:'12px' }}>
+                            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>KONTAKT</div>
+                            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                              {c.email && <a href={`mailto:${c.email}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#eff6ff', borderRadius:'8px', border:'1px solid #bfdbfe', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#2563eb' }}>✉️ {c.email}</a>}
+                              {c.phone && <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#059669' }}>📞 {c.phone}</a>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Interne notater */}
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>INTERNE NOTATER</div>
+                          {editNote?.companyId===c.id ? (
+                            <div onClick={e=>e.stopPropagation()}>
+                              <textarea value={editNote.note} onChange={e=>setEditNote({...editNote,note:e.target.value})} rows={3}
+                                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }}
+                                placeholder="Skriv interne notater om denne kunden..." />
+                              <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
+                                <button onClick={()=>saveCompanyNote(c.id,editNote.note)} disabled={savingNote}
+                                  style={{ padding:'6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>{savingNote?'Lagrer...':'Lagre'}</button>
+                                <button onClick={()=>setEditNote(null)}
+                                  style={{ padding:'6px 14px', background:'#f1f5f9', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#64748b' }}>Avbryt</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div onClick={e=>{e.stopPropagation();setEditNote({companyId:c.id,note:c.admin_notes||''})}}
+                              style={{ background:'#fefce8', borderRadius:'8px', padding:'10px 12px', border:'1px solid #fde68a', cursor:'pointer', minHeight:'40px' }}>
+                              {c.admin_notes ? (
+                                <div style={{ fontSize:'12px', color:'#92400e', whiteSpace:'pre-wrap', lineHeight:1.5 }}>{c.admin_notes}</div>
+                              ) : (
+                                <div style={{ fontSize:'12px', color:'#d4a574', fontStyle:'italic' }}>Klikk for å legge til notater...</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Handlingsknapper */}
                         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
                           {c.subscription_status==='trial' && <>
-                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,7)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+7 dager trial</button>
-                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+15 dager trial</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,7)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+7 dager</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+15 dager</button>
                             <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
                           </>}
                           {c.subscription_status==='expired' && <>
-                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Gi ny prøveperiode</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Ny prøveperiode</button>
                             <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
                           </>}
                           {c.subscription_status==='active' && <>
