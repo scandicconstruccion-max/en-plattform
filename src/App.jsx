@@ -6995,6 +6995,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     customer_email: initial?.customer_email || '',
     customer_address: initial?.customer_address || '',
     customer_orgnr: initial?.customer_orgnr || '',
+    customer_id: initial?.customer_id || null,
     valid_until: initial?.valid_until || '',
     payment_terms: initial?.payment_terms || '30 dager netto',
     delivery_time: initial?.delivery_time || '',
@@ -7028,7 +7029,52 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, chapters, updated_at: new Date().toISOString(), project_id: form.project_id || null }
+      // Auto-create or find customer in crm_customers (kundeoversikt)
+      let customerId = initial?.customer_id || null
+      if (form.customer_name?.trim()) {
+        try {
+          let existingCustomer = null
+          // 1. Match on org.nr if available (most reliable)
+          if (form.customer_orgnr?.trim()) {
+            const { data } = await supabase.from('crm_customers').select('id,name').eq('orgnr', form.customer_orgnr.trim()).limit(1)
+            if (data?.length) existingCustomer = data[0]
+          }
+          // 2. Fallback: match on name + email
+          if (!existingCustomer && form.customer_email?.trim()) {
+            const { data } = await supabase.from('crm_customers').select('id,name').eq('email', form.customer_email.trim()).limit(1)
+            if (data?.length) existingCustomer = data[0]
+          }
+          // 3. Fallback: match on exact name
+          if (!existingCustomer) {
+            const { data } = await supabase.from('crm_customers').select('id,name').ilike('name', form.customer_name.trim()).limit(1)
+            if (data?.length) existingCustomer = data[0]
+          }
+          if (existingCustomer) {
+            customerId = existingCustomer.id
+            // Update existing customer with latest info from quote
+            const updates = { updated_at: new Date().toISOString() }
+            if (form.customer_email?.trim()) updates.email = form.customer_email.trim()
+            if (form.customer_address?.trim()) updates.address = form.customer_address.trim()
+            if (form.customer_orgnr?.trim()) updates.orgnr = form.customer_orgnr.trim()
+            await supabase.from('crm_customers').update(updates).eq('id', customerId)
+          } else {
+            // Create new customer
+            const { data: newCust, error: custErr } = await supabase.from('crm_customers').insert({
+              name: form.customer_name.trim(),
+              email: form.customer_email?.trim()||null,
+              address: form.customer_address?.trim()||null,
+              orgnr: form.customer_orgnr?.trim()||null,
+              type: form.customer_orgnr?.trim() ? 'bedrift' : 'privat',
+              status: 'tilbud_sendt',
+              created_by: user?.id,
+              notes: 'Automatisk opprettet fra tilbudsmodulen',
+            }).select('id').single()
+            if (!custErr && newCust) customerId = newCust.id
+          }
+        } catch(e) { console.error('Auto-customer error:', e) }
+      }
+
+      const payload = { ...form, chapters, updated_at: new Date().toISOString(), project_id: form.project_id || null, customer_id: customerId }
       if (isEdit) {
         const { error } = await supabase.from('quotes').update(payload).eq('id', initial.id)
         if (error) throw error
@@ -17722,7 +17768,19 @@ function CRMPage() {
                 created_by: user?.id,
               })
               if (error) { errors.push(`${c.name}: ${error.message}`); console.error('Import error:', error) }
-              else imported++
+              else {
+                imported++
+                // Link all quotes for this customer to the new CRM record
+                // We need the new customer ID - fetch it
+                try {
+                  const { data: newCust } = await supabase.from('crm_customers').select('id').eq('name', c.name).order('created_at',{ascending:false}).limit(1)
+                  if (newCust?.[0]) {
+                    for (const q of c.quotes) {
+                      await supabase.from('quotes').update({ customer_id: newCust[0].id }).eq('id', q.id)
+                    }
+                  }
+                } catch(e) { console.error('Link quotes error:', e) }
+              }
             } catch(e) { errors.push(`${c.name}: ${e.message}`) }
           }
           if (errors.length > 0) alert(`Importert ${imported} av ${customersToImport.length}.\n\nFeil:\n${errors.join('\n')}`)
@@ -17862,9 +17920,12 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 
   // Link quote to this customer as activity
   const linkQuote = async (quote) => {
+    // Link quote to this customer
+    await supabase.from('quotes').update({ customer_id: c.id }).eq('id', quote.id)
+    // Log activity
     await supabase.from('crm_activities').insert({
       customer_id:c.id, type:'note',
-      title:`Tilbud hentet inn: ${quote.title}`,
+      title:`Tilbud koblet: ${quote.title}`,
       description:`Tilbudsnr: ${quote.quote_number} · Total: ${(quote.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0).toLocaleString('nb-NO')} kr`,
       date:new Date().toISOString().split('T')[0], created_by:user?.id
     })
@@ -17872,8 +17933,8 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   }
 
   // Linked data
-  const linkedQuotes = quotes.filter(q=>q.customer_name&&q.customer_name.toLowerCase()===c.name.toLowerCase())
-  const linkedInvoices = invoices.filter(i=>i.customer_name&&i.customer_name.toLowerCase()===c.name.toLowerCase())
+  const linkedQuotes = quotes.filter(q=>(q.customer_id&&q.customer_id===c.id)||(q.customer_name&&q.customer_name.toLowerCase().trim()===c.name.toLowerCase().trim()))
+  const linkedInvoices = invoices.filter(i=>(i.customer_id&&i.customer_id===c.id)||(i.customer_name&&i.customer_name.toLowerCase().trim()===c.name.toLowerCase().trim()))
   const openTasks = acts.filter(a=>a.type==='task'&&!a.completed)
   const today = new Date().toISOString().split('T')[0]
 
@@ -18277,28 +18338,32 @@ function ActivityModal({ customerId, defaultType, user, onClose, onSaved }) {
 
 function QuotePickerModal({ quotes, customer, onClose, onLink }) {
   const [selected, setSelected] = useState('')
-  const relevant = quotes.filter(q=>q.status!=='Avslått')
-  const q = relevant.find(x=>x.id===selected)
+  const [showAll, setShowAll] = useState(false)
+  const customerQuotes = quotes.filter(q=>q.status!=='Avslått'&&((q.customer_id&&q.customer_id===customer.id)||(q.customer_name&&q.customer_name.toLowerCase().trim()===customer.name.toLowerCase().trim())))
+  const otherQuotes = quotes.filter(q=>q.status!=='Avslått'&&!(q.customer_id&&q.customer_id===customer.id)&&(!q.customer_name||q.customer_name.toLowerCase().trim()!==customer.name.toLowerCase().trim()))
+  const visible = showAll ? [...customerQuotes, ...otherQuotes] : customerQuotes.length > 0 ? customerQuotes : otherQuotes
+  const q = visible.find(x=>x.id===selected)
   const total = q?(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0):0
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'500px',maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Hent tilbud til {customer.name}</h2>
+          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Tilbud for {customer.name}</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={()=>selected&&onLink(relevant.find(x=>x.id===selected))} disabled={!selected} style={{ padding:'8px 20px', background:selected?'#059669':'#94a3b8', color:'white', border:'none', borderRadius:'10px', cursor:selected?'pointer':'not-allowed', fontSize:'14px', fontWeight:'700' }}>Koble til og logg aktivitet</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+            <button onClick={()=>selected&&onLink(visible.find(x=>x.id===selected))} disabled={!selected} style={{ padding:'8px 20px', background:selected?'#059669':'#94a3b8', color:'white', border:'none', borderRadius:'10px', cursor:selected?'pointer':'not-allowed', fontSize:'14px', fontWeight:'700' }}>Koble</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'16px 22px',display:'flex',flexDirection:'column',gap:'8px' }}>
-          <p style={{ margin:'0 0 8px',fontSize:'13px',color:'#64748b' }}>Velg et tilbud fra tilbudsmodulen for å koble det til denne kunden og logge det som aktivitet.</p>
-          {relevant.map(q=>{
+          {customerQuotes.length > 0 && <div style={{ fontSize:'12px',fontWeight:'700',color:'#059669',marginBottom:'4px' }}>Tilbud til {customer.name} ({customerQuotes.length})</div>}
+          {customerQuotes.length === 0 && <div style={{ fontSize:'12px',color:'#94a3b8',marginBottom:'4px' }}>Ingen tilbud funnet med kundenavn «{customer.name}»</div>}
+          {visible.map(q=>{
+            const isMatch = q.customer_name?.toLowerCase().trim()===customer.name.toLowerCase().trim()
             const t=(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0)
             return (
               <div key={q.id} onClick={()=>setSelected(q.id)}
-                style={{ padding:'12px 16px',borderRadius:'12px',border:`2px solid ${selected===q.id?'#059669':'#e2e8f0'}`,background:selected===q.id?'#f0fdf4':'white',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                style={{ padding:'12px 16px',borderRadius:'12px',border:`2px solid ${selected===q.id?'#059669':'#e2e8f0'}`,background:selected===q.id?'#f0fdf4':isMatch?'white':'#f8fafc',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',opacity:isMatch?1:0.7 }}>
                 <div>
                   <div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{q.title}</div>
                   <div style={{ fontSize:'12px',color:'#64748b' }}>{q.quote_number} · {q.status}{q.customer_name?` · ${q.customer_name}`:''}</div>
@@ -18307,9 +18372,11 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
               </div>
             )
           })}
-          {relevant.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen aktive tilbud funnet</p>}
+          {!showAll && otherQuotes.length > 0 && (
+            <button onClick={()=>setShowAll(true)} style={{ padding:'10px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:'10px',cursor:'pointer',fontSize:'12px',color:'#64748b',textAlign:'center',fontWeight:'600' }}>Vis alle tilbud ({otherQuotes.length} andre)</button>
+          )}
+          {visible.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen tilbud funnet</p>}
         </div>
-
       </div>
     </div>
   )
