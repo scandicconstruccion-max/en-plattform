@@ -18,8 +18,10 @@ const MobileStyles = () => (
     }
     @keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }
     @keyframes spin { to { transform: rotate(360deg) } }
+@keyframes conflictPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4) } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0) } }
   `}</style>
 )
+const EP_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAeAB4AAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAEJAQADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9U6KKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKgvb62020murueK1tYVLyTTOERFHUkngCvkj4yft2W2nSTaX8P7ZL6ZSUfWLxD5QOf+WUfBb/ebA9jTtc8nMc1wmV0/aYqduy6v0X9I+tdR1Oz0i0e6v7uCytk+9NcSCNF+rEgCvLvEP7Vnws8NyPFP4ttruVf4NPikuQfo0alf1r84fGHxA8SeP743fiLWrzVps5H2iUlE/3U+6o9gBXP1XKfmWL47rNtYSiku8tX9ytb72fojP8At1/DOI4X+2ZvdLID+biof+G8fhr/AM8Nd/8AANP/AI5X56UU+VHjvjXNf7v3f8E/Qv8A4bx+Gv8Azw13/wAA0/8AjlH/AA3j8Nf+eGu/+Aaf/HK/PSiiyF/rrmv937v+CfoX/wAN4/DX/nhrv/gGn/xyj/hvH4a/88Nd/wDANP8A45X56UUWQf665r/d+7/gn6F/8N4/DX/nhrv/AIBp/wDHKP8AhvH4a/8APDXf/ANP/jlfnpRRZB/rrmv937v+CfoX/wAN4/DX/nhrv/gGn/xyj/hvH4a/88Nd/wDANP8A45X56UUWQf665r/d+7/gn6F/8N4/DX/nhrv/AIBp/wDHKP8AhvH4a/8APDXf/ANP/jlfnpRRZB/rrmv937v+CfoX/wAN4/DX/nhrv/gGn/xyj/hvH4a/88Nd/wDANP8A45X56UUWQf665r/d+7/gn6F/8N4/DX/nhrv/AIBp/wDHKfF+3d8NJGwya3GPVrJcfo5r88aKOVD/ANdc1/u/d/wT9MdD/bA+FWuOkf8Awkh0+VjgJfWksQ/F9pUfia9U0HxPo/im0+1aNqtlq1vx+9srhJlGemSpOK/HqtDQ/EOqeGb9L7SNRutMvEOVntJmicfipFLlPTwvHeJi7YmipL+7dP8AG/6H7EUV8LfCT9u3WNGaDT/HVp/bNkMJ/adqoS5QcDLrwr/htP1r7O8G+NNF+IHh+21vQL+PUdOuB8ssfVT3VgeVYdweRUtWP0vLM7wWbR/2efvdYvRr5fqro26KKKR7oUUUUAFFFFABWfr+v6d4W0a81bVruKw060jMs9xMcKij+Z7ADkkgDk1oV+fn7Z/xyl8b+LpPB+lXJ/sDR5ds5jb5bm6HDE46hOVA9dx9KaVzwM7zank+EdeSvJ6RXd/5LdnM/tGftM6n8aNRbTtPEumeE7d8w2hbD3JHSSbHGfReQvuea8Qor6C/Zs/ZWv8A4uvDr+uGTTfCEchCsvE1+ynBWP0QEEF/UEDJyV02PwGMcdn+N0vOpL7kv0S/rU8i8C/DfxL8S9V/s/w3pFxqdwMF2jGI4h6u5wqj6mvo3wZ/wT812/RZvE/iO00kEZ+zWERuZPoWJVR+G6vtDwx4U0fwZpEWl6HptvpdhF92C2QKM+p7k+55Na1RzH6vl/BOCoRUsY3Ul90fw1/H5HyzZ/8ABPrwakZF14j12aTHDQmGMZ+hjb+dZOs/8E89JkhkOk+MLy3lx8gvbRJVz6EqV/OvryildnvS4YyiUeV0F97/AMz80viJ+yF8RPh9az3v2CLXtOi5a40lzKyr6tGQH+uAQPWvFCCpIIwR1Br9mK8E/aD/AGVNF+LFhNqWiQ22ieK0y4uFTZFdn+7MAOvo4GR3yKpS7nxObcEqEHVy6TbX2X+j/R/efnFRWl4k8N6n4P1690XWbOTT9TspDFPby4yrD3HBBGCGBIIIIJBBrNqj8nlGUJOMlZoKKKKCQooooAKKKKACiiigAooooAKKKKACu9+D/wAZ/EHwY8SR6lo8xltHYC702ViIblO4Po3ow5B9RkHgqKDehXq4apGtRlyyWzR+tfwx+J+hfFrwrb65oNz5sL/LNbvgS20mOY5F7EfkRggkGutr8tv2e/jPefBfx5b6gGZ9GuysGpW3UPFn74H95Mkj8R3r9Q7O7hv7SC6tpVmt50WSORDlXUjII9iDWbVj+huHs7jnOGvPSpHSS/Jryf4MmooopH1YUUUUAeaftE/Ew/Cn4UaxrMDbdRkAtLH/AK7yZAb/AICAzf8AAa/LSSR5pGd2LuxLMzHJJPUk19ef8FCfFrS634V8MxvhILeTUZkHcu3lpn6COT/vqvkGtFsfgXGWOlisydBP3aat83q/8vkes/s1fBf/AIXT8Qo7G781NCsU+06hLEcEpnCxg9i549QAx7V+m2maba6Np1rYWNvHaWVrEsMMES7UjRRhVA7AAV4p+xr4Bj8GfBbTr2SER6hrjHUJn7lDxCPpsAP/AAM17pUNn6XwtlcMvwEajX7yok2/J7L5L8bhRRRSPsgooooAKKKKAPnn9r/4FW3xF8F3HiXTbX/ip9HhMgaMfNc268vG3qQMsvvkd6/O2v2XIBGDyK/LP9o/wInw7+MniPSreEQWDzfa7RF+6IpRvAHspJX/AIDVxZ+Ocb5XClKGYUlbmdpevR/o/keaUUUVR+VBRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABX6BfsNfFB/Fvw8uPDF7JvvvD7KsJY8vbPkp/3yQy/TbX5+17j+xp4tbwx8dtIgaRkttWilsJQDwSV3Jkf76KPxpPY+q4Zx0sDmdJ392b5X89vudmfpPRRRWZ/RwUUUUAfm7+2xqD3v7QGrwscraWtrCo9AYlk/m5rwkAkgAZJ7Cvbf2zbYwftD+I3IIE0VpIM9x9mjX/ANlrxWCZreeOVcbkYMM9Mg5rVbH8w5028zxPN/PL82fsNoGmLouhabp6KES0to4FVRgAKoUAflV+obO6S9tILiPmOZFkX6EZFTVkf05FJRSjsFFFFBQUUUUAFFFFABXwv/wUK0tYfGvhTUQgDXGnyQF8cny5N2Pw839a+6K+JP8AgofqAk13wVY8boba6mPr87Rj/wBp1S3PjOL1F5PVv3jb/wACX6HyFRRRVn89BRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABXVfCjUH0r4o+ELyM7Wh1e0f8BMuR+VcrXQ/Dq2N58QfDFuoJaXVLVAB1yZVFB04ZtV4OO91+Z+u9FFFZH9XhRRRQB8Ff8FAPDT2HxJ0LW1XEGo6d5JOOskTnd/47JH+VfLlfo7+2f8ADp/HHwfuL+1iMuoaDJ9vQKMsYsYmA/4Dhv8AgFfnFWi2P564twbwuaTnbSdpL8n+KZ+pf7NnjUePPgr4Y1BpPMuobYWVznr5kP7sk+7BQ3/Aq9Nr4B/Yi+MkfgzxfP4S1W6WHSNaYNbvK2EiuwMAe28fL9Qtff1Q1Y/YOHcxjmWX05396K5Zeq/z3CiiikfShRRRQAUUUUAFfmx+2V41/wCEv+OOp28b7rXRok02P03LlpPx3u4/4CK+5Pjv8VrX4P8Aw61HWnkj/tFkMGn27kZlnYYXjuF+8fZTX5YXl5PqN5PdXMrTXM8jSyyucs7Mckn3JNXFH5TxzmMVThgIPVvml6dF89/kQ0UUVR+OhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABXq37LPht/E/x58JQhcx2tz9vkY9FEKmQH/vpVH1IrymvtD/AIJ//Dp4odd8bXUOBKP7OsmYdQCGlYfiEGfZqT2PoeH8G8bmdGmlonzP0Wv/AAPmfZFFFFZn9LhRRRQBHPBHdQSQzIssMilHRxkMpGCCPSvy6/aJ+EE/wc+I17pqRv8A2NdE3OmzNyGhJ+5nuyH5T+B71+pNcF8Z/hBpPxo8HS6JqR+z3CHzbO+RAz20uMBh6qehXIyPQgENOx8nxHkv9sYW1P8AiQ1j5918/wA7H5SAlSCCQRyCK+7P2XP2srPxJYWXhLxpfC212MCGz1O4bCXo6Kjt2l7ZP3/Xcefjz4kfDTX/AIU+J7jQ/ENmba5jJaKZfmhuI88SRt/Ep/MdCAQQOWq7XPxLLsyxeQ4pyirNaSi+vk/Ps+nofsxRX50fB/8AbK8XfDsQafrRPinQ0AUR3MmLmFeANkvOQAOjZ9iK+pPBv7Znwz8Voq3OqTeHrojJh1WEqM98SLuT8yD7VFmftuX8T5bj4q9RQl2lp+Oz+/5HudFcZZ/Gj4f38ZeDxv4edQMnOpwgge4LZFZOs/tIfDHQoZJbjxrpMwQZK2U/2lj9BHuJ/Cke9LHYSEeaVWKX+Jf5npNcn8Svif4e+E/hyTWvEV59ntxlYoYxumuHxkJGvc/kB1JA5r5v+I37fumW1tPbeCtGnvLo/Kl/qgEcK8feEYJZvxK18j+PPiN4j+JmsHU/EmqzancjIjEhwkSk52og4UewFUkfE5txjhMLB08E/aT7/ZXz6/L7zc+Nnxl1f41+MZNY1AG2s4gYrHT1fclrFnp7serNjk+gAA8/ooqz8Sr16mKqyrVpXlLVsKKKKDAKKKKACiiigAooooAKKKKACiiigAooq5oui33iLVbXTNMtZb6/upBFDbwrud2PQAUDScmoxV2zS8CeCtT+IfizTfD+kQNNe3sojGBkRr/E7eiqMkn0Ffq34D8GWHw98H6V4d01cWenwCJWIwXPVnPuzEsfc15h+zT+zjZ/BXRWv78peeK76IC6nXlLdevkx+2cZb+Ij0Ar26obufvvCuRSyug6+IX72f4Lt69X8uwUUUVJ90FFFFABRRRQBxvxT+E3h74v+G20jX7XzApL291F8s1s5H3kb8sg8HHIr4B+Mf7KnjH4UTT3cVs2v+H1JK6jZIWMa/8ATVByn15X3r9MKKadj5fOOHsJnC5qi5an8y3+fdfj5n4z0V+nvxB/ZY+HXxFkluLvRRpeoSHLXuksLdyfUqAUY+5UmvDfEH/BPE+Y76H4y+T+GDULLkfWRG5/75q7o/KsXwbmeHb9ilUXk0n9zt+Fz40or6en/wCCfvjxT+513w7IP9uadf5Qmov+Hf8A8Q/+gz4Z/wDAq4/+MUXR474czZf8w8vwPmaivpn/AId//EP/AKDPhn/wKuP/AIxR/wAO/wD4h/8AQZ8M/wDgVcf/ABii6F/q7m3/AEDyPmaivpn/AId//EP/AKDPhn/wKuP/AIxR/wAO/wD4h/8AQZ8M/wDgVcf/ABii6D/V3Nv+geR8zUV9M/8ADv8A+If/AEGfDP8A4FXH/wAYo/4d/wDxD/6DPhn/AMCrj/4xRdB/q7m3/QPI+ZqK+mf+Hf8A8Q/+gz4Z/wDAq4/+MUf8O/8A4h/9Bnwz/wCBVx/8Youg/wBXc2/6B5HzNRX0z/w7/wDiH/0GfDP/AIFXH/xij/h3/wDEP/oM+Gf/AAKuP/jFF0H+rubf9A8j5mor6Z/4d/8AxD/6DPhn/wACrj/4xR/w7/8AiH/0GfDP/gVcf/GKLoP9Xc2/6B5HzNRX0z/w7/8AiH/0GfDP/gVcf/GKfF/wT+8flv3mt+G1X1W4uGP/AKJFF0P/AFdzb/oHkfMdFfX2h/8ABPLUpHRtZ8Y2tugPzJY2bSkj0DMy4/I17H4G/Yw+G/g6RJ7qxn8SXS/x6tIHjB9o1AU/8CBouj08LwfmuIfvwUF3bX5K7Ph74W/Arxh8XrxU0LTHFiGxJqd0DHbR+vz4+Y+y5PtX318CP2bvD/wTsFuIwuqeJJY9txqkqYIz1SIfwL+p7nsPWbW0gsbaO3toY7eCNdqRRKFVR6ADgCpahu5+oZNwxhMqaqy9+p3fT0XT11YUUUUj7IKKKKACiiigAooooAKKKKACivJPiD+1P8Ovh1JLb3etDVNQjOGstJUXDg+hYEIp9iwNeG+IP+Chx8x00Pwb8n8M+oXvJ+saLx/31Tsz57F8QZZgm41qyv2V2/wvb5n2bRXwLP8A8FAvHjH9zoXh2Mf7cM7fymFRf8PAPiH/ANAbwz/4C3H/AMfp2Z474zyn+aX/AICz7/or4A/4eAfEP/oDeGf/AAFuP/j9H/DwD4h/9Abwz/4C3H/x+izF/rnlP80v/AT7/or4A/4eAfEP/oDeGf8AwFuP/j9H/DwD4h/9Abwz/wCAtx/8fosw/wBc8p/ml/4Cff8ARXwB/wAPAPiH/wBAbwz/AOAtx/8AH6P+HgHxD/6A3hn/AMBbj/4/RZh/rnlP80v/AAE+/wCivgD/AIeAfEP/AKA3hn/wFuP/AI/R/wAPAPiH/wBAbwz/AOAtx/8AH6LMP9c8p/ml/wCAn3/RXwB/w8A+If8A0BvDP/gLcf8Ax+j/AIeAfEP/AKA3hn/wFuP/AI/RZh/rnlP80v8AwE+/6K+AP+HgHxD/AOgN4Z/8Bbj/AOP0f8PAPiH/ANAbwz/4C3H/AMfosw/1zyn+aX/gJ9/0V8Af8PAPiH/0BvDP/gLcf/H6fF/wUB8fhv3mieG2X0W3uFP/AKONFmP/AFzyn+aX/gJ9+UV8S6H/AMFDdSjdF1nwda3CE/M9jeNEQPUKytn8xXsfgb9s/wCG/jGRILq+n8N3TfwatGEjJ9pFJUf8CIpWZ6eF4kyrFvlhWSfneP52R7vRUVrdwX1tHcW00dxBIu5JYmDKw9QRwRUtI+lTvqgooooGFFFFABRRRQAUUVwHxr+MGl/BfwXPrd+BcXTnyrKxD7WuJccD2UdSew9yAQwr16eGpSrVnaMVdsufFP4teHfhB4dbVtfuvL3ZW3tIsNNcv/dRf5k8Dua+AvjH+1X4x+K809pFctoHh9iQunWTlTIv/TVxy/04X2rzv4gfEPXfid4ludc8QXrXd5McKvSOBO0ca/wqPT6k5JJPN1olY/Bs84oxOZydLDtwpdur9f8ALb1CiiimfDhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRWhoPh/U/FGqwaZpFhcalfznbHb20Zd2/AdvU9BX1Z8L/ANge81G1jvfHOqvpm7DDTdNKvKB3DyEFQfZQ31ovY9fL8pxmaS5cLTvbd7JfN6fLc+Q6K/UDw3+yx8L/AAzbJFF4UtL9x96bUibl3Pqd5IH0AA9q6d/g34BktxA3gjw6YR0T+yoMD6fJU8x9tT4ExjjepWin83/kfkxRX6c+KP2Tfhf4otyjeGYtLl/hn0t2t2X8Adp/FTXzj8Vf2D9a0C3kvvBWoHxBboMtYXW2O6A5+6wwr/T5T6A07o8nHcIZng4ucEqiX8u/3Oz+654p8Lfjr4w+EN4r6FqbmxLZk0y6JktpPX5M/KfdcH3r76+BH7SPh7412C26FdL8SRR7rjS5XyWx1eI/xr+o7jufzN1LTbvR7+eyv7aazvIHKS286FHjYdQVPINO0nVr3QtSttQ066lsr62cSw3EDlXjYdCCOlDVzlyfiLF5PNQbcqfWL6enZ/gfsdRXh37Mn7Rlt8aNCOn6kUtvFlhEDdRABVuU6ecg+uNy9ifQivcazP37B4yjj6EcRh5XjL+rPzQUUUUHaFFFFAEdxcRWlvLPNIsUMSl3dzgKoGSSfTFfl1+0R8X5/jH8Rr3Ukkf+xrUm202FsgLCD9/HZnPzH8B2r7L/AG1PiG/gr4Py6dazGK/16YWKleohxulP0IAX/gdfnLVxR+O8b5nKVSOXU3ovel69F8t/muwUUUVR+UhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABW14N8Hat4+8SWOhaJaNeajePsjReijuzHsoGST2ArFr9D/wBjD4OL4C+H6+I9Qtgmu66glBdcPDa9Y056bvvn6r6Um7H0WRZTLOMWqF7RWsn5f5vZff0O7+BnwF0L4I+HxBZot7rU6D7bqki/PK391f7qA9F/E5NenUUVmf0bh8NSwlKNGhHlitkgooooOkKKKKAPFP2h/wBmfSPjTpst/aeXpni2CLFvfAYSfA4imA6r2DDlevIG0/nBruhah4Y1i80rVbSSx1G0kMU9vKMMjDt7+xHBHIr9iq+T/wBur4PLrXh638d6Zbj7dpuIdR8teZLcnCucDko3H+63+zVJ9D8z4tyCnXoyzDDxtOOskvtLv6rfzR8a+BPGup/DzxZpviDSJ2hvbKUSDBwJF/iRvVWGQR6Gv1b8BeNLD4h+D9K8RaY2bO/hEqqTkxt0ZD7qwIP0r8hq+zv+Cf3xDdxr/gu6myqAajZIzdBkLKo/ExnH+8ackfMcGZnLDYv6lN+5U28pL/NafcfZVFFFQfuYUUUUAfBP7f8A4lfUPiXoeihswadpvnYz0klc7v8Ax2OOvl2vbf2zbkz/ALQ/iNCSRDFaIM9h9mjb/wBmrxKtVsfzNn9V1s1xEn/M192n6BRRRQeAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAdR8LvB7eP/iJ4d8PKCUv72OKXHURZzIfwQMfwr9bYYUt4UiiQRxooVUUYCgcACvza/Yv08Xv7QegyHGLWG6mwf8Arg6f+z1+lFRI/beBaEY4KrX6ylb5JL9WwoooqT9LCiiigAooooAKzvEeh23ifw/qWj3i7rS/tpLWUEZ+V1Kn9DWjRQTKKmnGWzPx21/Rbjw3rupaTeLtu7C5ktZl9HRirfqDXo37LniSTwx8ePCM6ttS6uvsMi9mEwMYH/fTKfqBVT9pPTxpvx38bQjGG1F5uP8ApoA//s1ct8Ork2fxB8MXCkhotUtXBHXIlU1qfzBBPAZklH/l3P8AKR+u9FFFZH9QhRRRQB+b37bOnPZfH/VZmGBeWlrOvuBEI/5xmvCK+vv+ChPhJotb8K+Jo0yk9vJp0zjoCjeYmfqJJP8AvmvkGtFsfzVxFQeHzXERfWV//Atf1CiiimfOBRRRQAUUUUAFFFFABRRRQAUUUUAFFFFAHsn7IOqLpf7QnhYu4SOc3FuxJxktBIFH/fW2v00r8ePDeu3HhfxDpmsWhxdafcx3UXOPmRgw/lX66eGfENl4t8PadrOnSrNZX0CXETqc/Kwzj6jofcVEj9n4ExUZYatheqlzfJpL8LfiadFFFSfqIUUUUAFFFFABRRXJ/FXxxb/Dj4ea74hnlSNrO1doA+PnmIxGgz1y5UUGVWrCjTlVm7KKbfoj80Pj7qi6x8avG1yjiRP7WuIldTkEI5QEH0wtZvwm059W+KXhCzQZafV7RPoDMuT+Wa5aaZ7iZ5ZXLyOxZmY5JJ5JNe3/ALGnhJvE/wAdtInaNnttJilv5SBwCF2pk/77qfwrXY/mXCxlmGZwstZzT+93Z+k9FFFZH9PhRRRQB5p+0T8Mz8VvhRrGjQLu1GMC7sf+u8eSF/4ECy/8Cr8tJI3hkaORSjqSrKwwQR1BFfstXwH+2j8CX8GeJn8aaRb/APEj1aXN3HEnFtcnkk46K/Jz/eyO4qos/LONcplWhHMKS1jpL06P5dfXyPmOiiirPxoKKKKACiiigAooooAKKKKACiiigAooooAK+vP2I/j1Bo8q/D3XJzHFdTF9JnkI2rI33oD6bjyv+0SOpFfIdKjtG6srFWU5DA4INDVz1crzGrlWKjiaXTdd11X9ddT9l6K+Tf2bv2xrTXre18NePLtLPVUAjt9ZmYLFcjsJT0V/9ro3fB6/WEciTRpJG6vG4DKynIIPQg1nax/R+XZlhs0oqthpX7rqn2a/ryHUUUUj1AooqG7vINPtpbm6njtreJd0k0zhEQepJ4AoE2lqyavgH9tD47Q+PfEEXhHRLkTaJpMpa5nibKXNyOOOxVBkA9yW9Aa6n9pn9sMahFdeFfAN3/o0itFe63H1cHgpAewx1frz8uOp+PKtLqfjvFfEcMRF5fg5Xj9qS2fkv1fyCv0C/Ya+F7+Evh5ceJ72PZfeIGVoQw5S2TIT/volm+m2vlL9nT4J3fxo8dQWrxsmgWLLNqdyDjEeeI1P958YHoMntX6fWlrDY2sNtbxrDbwosccaDCooGAAPQAUSfQXBWUynUeY1VorqPm+r+S09W+xLRRRUH7IFFFFABVDXdDsPE2j3mlapaR32n3cZint5RlXU9v8A645B5FX6KCZRUk4yV0z81/2jP2ZdU+DOotqOnebqfhO4c+Td7cvbE9I5sfo3RvY8V4fX7JXdpBf20tvcwx3FvKpSSKVQyOp6gg8EV8mfGr9hi01aWbVfh/LFp1wxLSaPdORAxz/yyfnZ/unj3FWn3PxzPODqlOUsRlqvH+TqvTuvLf1PiCiug8YfD/xJ4AvjaeItFvNJmzgfaIiEf/df7rD3BNc/VH5hUpzpScKiaa6PRhRRRQZhRRRQAUUUUAFFFFABRRRQAUUUUAFelfDb9onx58K4Ra6LrLPpwORYXqieAf7oPKf8BIrzWig6KGJrYWftKE3GXdOx9ieG/wDgobdJCqa/4Phnl/in027Ma/hG6t/6FXWyf8FBvBwtA0fhzXGuu8bCEJ/31vJ/8dr4OopWR9TT4uzenHl9qn6xX+R9eeJ/+Chep3ELR+H/AAja2UnQT6jdNP8A+OIE/wDQjXgHxJ+OfjT4sOq+IdZkntFOUsYAIrdT67F4Y+7ZPvXBVoaH4e1TxNfpY6Rp11qd45wsFpC0rn8FBoskeZi86zLMv3daq5J9Fon8la5n13vwf+C/iD4zeI49O0iAxWaMPtepSoTDbJ3JPdsdFHJ9hkj3T4QfsJ6tq8kGo+PLn+yLHh/7LtXDXMnQ4dhlUH0yfpX2h4U8JaP4H0SDSNC0+HTNOg+5BAuBk9ST1JPcnJNJs+oyXhDEYuSrY5clPt9p/wCS9dfLqZnwz+GuifCjwna6BoVv5dvEN0sz8y3Eh+9I57sfyAwAAABXVUUVB+20qUKMFTpq0VokugUUUUGoUUUUAFFFFABRRRQBW1HTLPV7R7W/tIL22f70NxGJEb6qQQa8u8Q/sp/CzxJI8s/hK2tJW/j0+WS2A+ixsF/SvWqKDkr4TD4pWr04y9Un+Z88T/sKfDOU5X+2YfZL0H+aGof+GDvhr/z313/wMT/43X0bRTuzy3kGVP8A5h4/cfOX/DB3w1/5767/AOBif/G6P+GDvhr/AM99d/8AAxP/AI3X0bRRdi/sDKv+geP3Hzl/wwd8Nf8Anvrv/gYn/wAbo/4YO+Gv/PfXf/AxP/jdfRtFF2H9gZV/0Dx+4+cv+GDvhr/z313/AMDE/wDjdH/DB3w1/wCe+u/+Bif/ABuvo2ii7D+wMq/6B4/cfOX/AAwd8Nf+e+u/+Bif/G6P+GDvhr/z313/AMDE/wDjdfRtFF2H9gZV/wBA8fuPnL/hg74a/wDPfXf/AAMT/wCN0f8ADB3w1/5767/4GJ/8br6Noouw/sDKv+geP3Hzl/wwd8Nf+e+u/wDgYn/xuj/hg74a/wDPfXf/AAMT/wCN19G0UXYf2BlX/QPH7j5y/wCGDvhr/wA99d/8DE/+N0+L9hH4aRtln1uQejXq4/RBX0VRRdj/ALAyr/oHj9x4xof7H/wq0N0k/wCEbOoSqch767llH4puCn8RXqmg+GNH8LWn2XRtKstJt+P3VlbpCpx0yFAzWnRSPRw+BwuE/wB3pRj6JIKKKKDuCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP//Z";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -36,8 +38,14 @@ function AuthProvider({ children }) {
   const loadProfile = async (authUser) => {
     if (!authUser) { setProfile(null); return }
     try {
-      const { data } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
-      setProfile(data || null)
+      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role').eq('id', authUser.id).single()
+      if (error) {
+        // Fallback without platform_role if column doesn't exist yet
+        const { data: fallback } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
+        setProfile(fallback || null)
+      } else {
+        setProfile(data || null)
+      }
     } catch(e) { setProfile(null) }
   }
 
@@ -56,8 +64,9 @@ function AuthProvider({ children }) {
 
   // Display name: full_name from profile, fallback to email prefix
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
+  const isPlatformOwner = profile?.platform_role === 'platform_owner'
 
-  return <AuthContext.Provider value={{ user, profile, displayName, loading, supabase }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, loading, supabase }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -160,10 +169,15 @@ const navGroups = [
     title: 'ADMIN',
     items: [
       { id: 'minbedrift', label: 'Min bedrift', emoji: '🏢' },
-      { id: 'brukeradmin',label: 'Brukere',     emoji: '👤' },
+      { id: 'brukeradmin', label: 'Brukere',     emoji: '👤' },
     ]
   },
 ]
+
+// Platform owner nav (only visible for system owner)
+const platformOwnerNav = { title: '👑 PLATTFORM', items: [
+  { id: 'superadmin', label: 'Kontrollpanel', emoji: '👑' },
+]}
 // Flat list for backwards compatibility
 const navItems = navGroups.flatMap(g => g.items)
 
@@ -630,7 +644,7 @@ function ProjectSelect({ value, onChange, projects, required, placeholder, style
   const options = React.useMemo(() => projectOptions(projects || []), [projects])
   const indent = (depth) => {
     if (depth === 0) return ''
-    return '\u00A0\u00A0'.repeat(depth) + '└ '
+    return '\u00A0\u00A0\u00A0\u00A0'.repeat(depth) + '└ '
   }
   return (
     <select value={value || ''} onChange={e => onChange(e.target.value)} required={required}
@@ -687,7 +701,7 @@ function ContactSection({ title, items, onChange }) {
       </div>
       {items.map((item, i) => (
         <div key={i} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', marginBottom:'10px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'8px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'8px' }}>
             <FInput value={item.company || item.name || ''} onChange={e => update(i, 'company', e.target.value)} placeholder="Firma" />
             <FInput value={item.trade || item.discipline || ''} onChange={e => update(i, 'trade', e.target.value)} placeholder="Fag/disiplin" />
             <FInput value={item.contact_person || ''} onChange={e => update(i, 'contact_person', e.target.value)} placeholder="Kontaktperson" />
@@ -708,7 +722,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
   const [form, setForm] = useState(initial || emptyProsjekt)
   const [pnrError, setPnrError] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const g2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }
+  const g2 = { display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }
   const sec = (label) => <h3 style={{ margin:'8px 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a', borderBottom:'1px solid #f1f5f9', paddingBottom:'8px' }}>{label}</h3>
   // Filtrer ut seg selv fra overordnet-listen (kan ikke være sitt eget parent)
   const parentProjects = (allProjects || []).filter(p => p.id !== initial?.id)
@@ -808,13 +822,51 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [viewMode, setViewMode] = useState('grid')
+  const isMobProj = typeof window !== 'undefined' && window.innerWidth < 768
+  const viewKey = isMobProj ? 'ep_proj_view_mobile' : 'ep_proj_view_desktop'
+  const [viewMode, setViewModeState] = useState(() => {
+    try { return localStorage.getItem(viewKey) || (isMobProj ? 'list' : 'grid') } catch(e) { return isMobProj ? 'list' : 'grid' }
+  })
+  const setViewMode = (v) => { setViewModeState(v); try { localStorage.setItem(viewKey, v) } catch(e) {} }
   const [sortBy, setSortBy] = useState('created_desc')
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const f = { fontFamily:'system-ui, sans-serif' }
-  const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
+  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
+  const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
+
+  const savePayment = async (companyId, paymentDate) => {
+    try {
+      const comp = companies.find(c=>c.id===companyId)
+      const history = comp?.payment_history || []
+      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
+      // Next due = payment date + 1 month
+      const nextDue = new Date(paymentDate)
+      nextDue.setMonth(nextDue.getMonth()+1)
+      await supabase.from('company_settings').update({
+        last_payment_date: paymentDate,
+        next_due_date: nextDue.toISOString().split('T')[0],
+        payment_history: history,
+        updated_at: new Date().toISOString()
+      }).eq('id', companyId)
+      setPaymentModal(null)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  const addTimelineEvent = async (companyId, event) => {
+    const comp = companies.find(c=>c.id===companyId)
+    const timeline = comp?.timeline || []
+    timeline.push({ ...event, timestamp: new Date().toISOString() })
+    await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId)
+  }
+
+  // Enhanced status change — also logs to timeline
+  const setCompanyStatusWithLog = async (companyId, status) => {
+    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
+    await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status })
+    load()
+  }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
@@ -871,17 +923,17 @@ function ProsjekterPage({ onNavigateDetail }) {
 
   return (
     <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
+            <h1 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
           </div>
-          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>
+          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '9px 14px' : '10px 18px', fontSize:'13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Nytt prosjekt</button>
         </div>
       </div>
-      <div style={{ padding:'24px 32px' }}>
-        <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap', alignItems:'center' }}>
+      <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '24px 32px' }}>
+        <div style={{ display:'flex', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '12px', marginBottom: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px', flexWrap:'wrap', alignItems:'center' }}>
           <div style={{ position:'relative', flex:1, minWidth:'200px' }}>
             <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter prosjekt..." style={{ ...inp, paddingLeft:'36px' }} />
@@ -917,7 +969,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             {!search && <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt prosjekt</button>}
           </div>
         ) : viewMode === 'grid' ? (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobProj ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: isMobProj ? '10px' : '16px' }}>
             {filtered.map(p => {
               const childCount = projects.filter(c => c.parent_id === p.id).length
               const parentName = p.parent_id ? projects.find(pp => pp.id === p.parent_id)?.name : null
@@ -943,28 +995,33 @@ function ProsjekterPage({ onNavigateDetail }) {
             )})}
           </div>
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:'4px', overflowX:'hidden', width:'100%' }}>
             {filtered.map(p => {
               const depth = p._depth || p.depth || 0
               const childCount = projects.filter(c => c.parent_id === p.id).length
+              const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+              const indent = isMob ? Math.min(depth * 12, 24) : depth * 28
               return (
               <button key={p.id} onClick={() => onNavigateDetail(p.id)}
-                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:'14px', marginLeft: depth * 28 }}>
-                {depth > 0 && <span style={{ color:'#d1d5db', fontSize:'14px', flexShrink:0 }}>└</span>}
-                <div style={{ width:'38px', height:'38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{p.name}</span>
-                    {p.project_number && <span style={{ fontSize:'12px', color:'#94a3b8' }}>#{p.project_number}</span>}
-                    {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 8px', borderRadius:'999px' }}>{childCount} under</span>}
+                style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding: isMob ? '10px 10px' : '14px 18px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap: isMob ? '8px' : '14px', marginLeft: indent, width: isMob ? `calc(100% - ${indent}px)` : 'auto', maxWidth:'100%', overflow:'hidden', boxSizing:'border-box' }}>
+                {depth > 0 && !isMob && <span style={{ color:'#d1d5db', fontSize:'14px', flexShrink:0 }}>└</span>}
+                <div style={{ width: isMob ? '30px' : '38px', height: isMob ? '30px' : '38px', borderRadius:'10px', background: depth > 0 ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMob ? '14px' : '18px', flexShrink:0 }}>{depth > 0 ? '📂' : '🏗️'}</div>
+                <div style={{ flex:1, minWidth:0, overflow:'hidden' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                    <span style={{ fontWeight:'600', color:'#0f172a', fontSize: isMob ? '13px' : '14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
+                    {p.project_number && !isMob && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>#{p.project_number}</span>}
+                    {childCount > 0 && <span style={{ fontSize:'11px', color:'#059669', background:'#ecfdf5', padding:'1px 6px', borderRadius:'999px', flexShrink:0 }}>{childCount}</span>}
                   </div>
+                  {isMob && p.project_number && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'1px' }}>#{p.project_number}</div>}
+                  {!isMob && (
                   <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
                     {p.client_name && <span>{p.client_name}</span>}
                     {p.address && <span>{p.address}</span>}
                   </div>
+                  )}
                 </div>
                 <StatusBadge status={p.status} />
-                <span style={{ color:'#cbd5e1' }}>›</span>
+                <span style={{ color:'#cbd5e1', flexShrink:0 }}>›</span>
               </button>
             )})}
           </div>
@@ -977,6 +1034,7 @@ function ProsjekterPage({ onNavigateDetail }) {
 
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user } = useAuth()
+  const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
   const [checklists, setChecklists] = useState([])
@@ -987,8 +1045,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
   const [showCreateSub, setShowCreateSub] = useState(false)
-  const f = { fontFamily:'system-ui, sans-serif' }
-  const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding:'24px' }
+  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw', boxSizing:'border-box' }
+  const card = { background:'white', borderRadius: isMobH ? '12px' : '16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding: isMobH ? '14px' : '24px', overflow:'hidden', wordBreak:'break-word' }
 
   const load = async () => {
     try {
@@ -1037,20 +1095,20 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
   if (!project) return <div style={{ ...f, textAlign:'center', padding:'60px' }}><p>Prosjekt ikke funnet</p><button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 16px', cursor:'pointer' }}>← Tilbake</button></div>
 
-  const tabs = [{id:'ue',label:`Underentreprenører (${project.subcontractors?.length||0})`},{id:'ark',label:`Arkitekter (${project.architects?.length||0})`},{id:'rad',label:`Rådgivere (${project.consultants?.length||0})`}]
+  const tabs = [{id:'ue',label: isMobH ? `UE (${project.subcontractors?.length||0})` : `Underentreprenører (${project.subcontractors?.length||0})`},{id:'ark',label: isMobH ? `Arki. (${project.architects?.length||0})` : `Arkitekter (${project.architects?.length||0})`},{id:'rad',label: isMobH ? `Rådg. (${project.consultants?.length||0})` : `Rådgivere (${project.consultants?.length||0})`}]
 
   const contactCards = (items, empty) => items?.length > 0 ? (
     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
       {items.map((item,i) => (
-        <div key={i} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', display:'flex', justifyContent:'space-between' }}>
+        <div key={i} style={{ background:'#f8fafc', borderRadius:'12px', padding: isMobH ? '10px' : '14px', display:'flex', justifyContent:'space-between', flexDirection: isMobH ? 'column' : 'row', gap: isMobH ? '6px' : '0' }}>
           <div>
-            <p style={{ margin:'0 0 3px', fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{item.company || item.name}</p>
-            {(item.trade||item.discipline) && <p style={{ margin:'0 0 3px', fontSize:'13px', color:'#64748b' }}>{item.trade||item.discipline}</p>}
-            {item.contact_person && <p style={{ margin:0, fontSize:'13px', color:'#475569' }}>{item.contact_person}</p>}
+            <p style={{ margin:'0 0 3px', fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{item.company || item.name}</p>
+            {(item.trade||item.discipline) && <p style={{ margin:'0 0 3px', fontSize: isMobH ? '11px' : '13px', color:'#64748b' }}>{item.trade||item.discipline}</p>}
+            {item.contact_person && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>{item.contact_person}</p>}
           </div>
-          <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:'4px' }}>
-            {item.phone && <a href={`tel:${item.phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {item.phone}</a>}
-            {item.email && <a href={`mailto:${item.email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {item.email}</a>}
+          <div style={{ textAlign: isMobH ? 'left' : 'right', display:'flex', flexDirection: isMobH ? 'row' : 'column', gap: isMobH ? '12px' : '4px' }}>
+            {item.phone && <a href={`tel:${item.phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {item.phone}</a>}
+            {item.email && <a href={`mailto:${item.email}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis' }}>✉️ {isMobH ? 'E-post' : item.email}</a>}
           </div>
         </div>
       ))}
@@ -1082,55 +1140,55 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
   return (
     <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake til prosjekter</button>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobH ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0, fontFamily:'system-ui, sans-serif' }}>← Tilbake</button>
         {parentProject && (
           <div style={{ marginBottom:'8px', fontSize:'13px', color:'#64748b' }}>
-            Overordnet: <button onClick={() => { if (onNavigateDetail) onNavigateDetail(parentProject.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize:'13px', padding:0 }}>{parentProject.name} ({parentProject.project_number})</button>
+            Overordnet: <button onClick={() => { if (onNavigateDetail) onNavigateDetail(parentProject.id) }} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize: isMobH ? '11px' : '13px', padding:0, overflow:'hidden', textOverflow:'ellipsis', maxWidth: isMobH ? '60vw' : 'none' }}>{parentProject.name}</button>
           </div>
         )}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📂' : '🏗️'}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
+        <div style={{ display:'flex', alignItems: isMobH ? 'flex-start' : 'center', justifyContent:'space-between', gap: isMobH ? '10px' : '16px', flexWrap: isMobH ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobH && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background: project.parent_id ? '#f0fdf4' : '#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{project.parent_id ? '📂' : '🏗️'}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '6px' : '10px', flexWrap:'wrap' }}>
+                <h1 style={{ margin:0, fontSize: isMobH ? '17px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
                 <StatusBadge status={project.status} />
               </div>
-              {project.project_number && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#94a3b8' }}>#{project.project_number}</p>}
+              {project.project_number && <p style={{ margin:'3px 0 0', fontSize: isMobH ? '11px' : '13px', color:'#94a3b8' }}>#{project.project_number}</p>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'6px', width: isMobH ? '100%' : 'auto' }}>
             {project.status === 'arkivert' ? (
               <button onClick={async () => { await db.updateProject(projectId, { status: 'fullfort' }); load() }}
-                style={{ padding:'9px 16px', border:'1px solid #7c3aed', borderRadius:'10px', background:'#faf5ff', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#7c3aed' }}>📦 Gjenopprett</button>
+                style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #7c3aed', borderRadius:'10px', background:'#faf5ff', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'600', color:'#7c3aed', flex: isMobH ? 1 : 'none' }}>📦 {isMobH ? 'Gjenopp.' : 'Gjenopprett'}</button>
             ) : (
-              <button onClick={() => setShowCreateSub(true)} style={{ padding:'9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500', color:'#059669' }}>+ Underprosjekt</button>
+              <button onClick={() => setShowCreateSub(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500', color:'#059669', flex: isMobH ? 1 : 'none' }}>{isMobH ? '+ Under' : '+ Underprosjekt'}</button>
             )}
-            <button onClick={() => setShowEdit(true)} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>✏️ Rediger</button>
-            <button onClick={() => setShowDelete(true)} style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
+            <button onClick={() => setShowEdit(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500' }}>✏️</button>
+            <button onClick={() => setShowDelete(true)} style={{ padding: isMobH ? '8px 10px' : '9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '14px' }}>🗑️</button>
           </div>
         </div>
         {project.status === 'arkivert' && (
           <div style={{ marginTop:'12px', background:'#f5f3ff', border:'1px solid #e9d5ff', borderRadius:'10px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'10px' }}>
             <span style={{ fontSize:'16px' }}>📦</span>
-            <span style={{ fontSize:'13px', color:'#7c3aed', fontWeight:'500' }}>Dette prosjektet er arkivert. Det vises ikke i dropdowns eller oversikter med mindre «Vis arkiverte» er aktivert.</span>
+            <span style={{ fontSize: isMobH ? '11px' : '13px', color:'#7c3aed', fontWeight:'500' }}>{isMobH ? 'Prosjektet er arkivert' : 'Dette prosjektet er arkivert. Det vises ikke i dropdowns eller oversikter med mindre «Vis arkiverte» er aktivert.'}</span>
           </div>
         )}
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
-        <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px', overflowX:'hidden', maxWidth:'100%' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap: isMobH ? '10px' : '20px', overflow:'hidden', minWidth:0 }}>
           {/* Underprosjekter-seksjon */}
           {childProjects.length > 0 && (
             <div style={card}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>📁 Underprosjekter ({childProjects.length})</h3>
-                <button onClick={() => setShowCreateSub(true)} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+                <h3 style={{ margin:0, fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>📁 Underprosjekter ({childProjects.length})</h3>
+                <button onClick={() => setShowCreateSub(true)} style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding: isMobH ? '6px 10px' : '6px 14px', fontSize: isMobH ? '11px' : '12px', fontWeight:'600', cursor:'pointer', flexShrink:0 }}>{isMobH ? '+ Ny' : '+ Legg til'}</button>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {childProjects.map(cp => (
-                  <div key={cp.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer' }}
+                  <div key={cp.id} style={{ background:'#f8fafc', borderRadius:'10px', padding: isMobH ? '10px' : '12px 14px', display:'flex', alignItems:'center', gap: isMobH ? '8px' : '12px', cursor:'pointer' }}
                     onClick={() => { if (onNavigateDetail) onNavigateDetail(cp.id) }}>
                     <div style={{ width:'34px', height:'34px', borderRadius:'8px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>📂</div>
                     <div style={{ flex:1, minWidth:0 }}>
@@ -1147,10 +1205,10 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           {/* Sjekklister tilknyttet prosjektet */}
           <div style={card}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-              <h3 style={{ margin:0, fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>✅ Sjekklister ({checklists.length})</h3>
+              <h3 style={{ margin:0, fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>✅ Sjekklister ({checklists.length})</h3>
               {onNavigateChecklist && (
                 <button onClick={() => onNavigateChecklist('new', projectId)}
-                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny sjekkliste</button>
+                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding: isMobH ? '6px 10px' : '6px 14px', fontSize: isMobH ? '11px' : '12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>{isMobH ? '+ Ny' : '+ Ny sjekkliste'}</button>
               )}
             </div>
             {checklists.length === 0 ? (
@@ -1167,13 +1225,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                   return (
                     <div key={cl.id}
                       onClick={() => { if (onNavigateChecklist) onNavigateChecklist(cl.id) }}
-                      style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', cursor: onNavigateChecklist ? 'pointer' : 'default', border:'1px solid #f1f5f9', transition:'border-color 0.15s' }}
+                      style={{ background:'#f8fafc', borderRadius:'10px', padding: isMobH ? '10px' : '12px 14px', cursor: onNavigateChecklist ? 'pointer' : 'default', border:'1px solid #f1f5f9', transition:'border-color 0.15s' }}
                       onMouseEnter={e => e.currentTarget.style.borderColor='#e2e8f0'}
                       onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontWeight:'600', color:'#0f172a', fontSize:'14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cl.title}</div>
-                          <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{done}/{total} punkter · {new Date(cl.created_at).toLocaleDateString('nb-NO')}</div>
+                          <div style={{ fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cl.title}</div>
+                          <div style={{ fontSize: isMobH ? '11px' : '12px', color:'#94a3b8', marginTop:'2px' }}>{done}/{total} · {new Date(cl.created_at).toLocaleDateString('nb-NO')}</div>
                         </div>
                         <span style={{ background: sBg, color: sColor, padding:'2px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'600', flexShrink:0 }}>{sLabel}</span>
                       </div>
@@ -1195,9 +1253,9 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
 
           <div style={card}>
-            <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-              {project.address && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Adresse</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{project.address}</p></div>}
+            <h3 style={{ margin:'0 0 12px', fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>Prosjektinformasjon</h3>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
+              {project.address && <div style={{ background:'#f8fafc', borderRadius:'10px', padding: isMobH ? '10px' : '12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Adresse</p><p style={{ margin:0, fontSize: isMobH ? '13px' : '14px', fontWeight:'500', color:'#0f172a', wordBreak:'break-word' }}>{project.address}</p></div>}
               {(project.start_date||project.end_date) && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Periode</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{project.start_date && new Date(project.start_date).toLocaleDateString('nb-NO')}{project.end_date && ` – ${new Date(project.end_date).toLocaleDateString('nb-NO')}`}</p></div>}
               {project.budget && <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}><p style={{ margin:'0 0 3px', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Budsjett</p><p style={{ margin:0, fontSize:'14px', fontWeight:'500', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</p></div>}
             </div>
@@ -1205,8 +1263,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
 
           <div style={card}>
-            <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'16px', marginLeft:'-24px', marginRight:'-24px', paddingLeft:'24px' }}>
-              {tabs.map(t => <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding:'10px 16px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab===t.id ? '600':'400', background:'transparent', color: activeTab===t.id ? '#059669':'#64748b', borderBottom: activeTab===t.id ? '2px solid #059669':'2px solid transparent', fontFamily:'system-ui, sans-serif' }}>{t.label}</button>)}
+            <div style={{ display:'flex', borderBottom:'1px solid #f1f5f9', marginBottom:'12px', marginLeft: isMobH ? '-14px' : '-24px', marginRight: isMobH ? '-14px' : '-24px', paddingLeft: isMobH ? '10px' : '24px', overflowX:'auto', WebkitOverflowScrolling:'touch', gap:'0' }}>
+              {tabs.map(t => <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: isMobH ? '8px 10px' : '10px 16px', border:'none', cursor:'pointer', fontSize: isMobH ? '11px' : '13px', fontWeight: activeTab===t.id ? '600':'400', background:'transparent', color: activeTab===t.id ? '#059669':'#64748b', borderBottom: activeTab===t.id ? '2px solid #059669':'2px solid transparent', fontFamily:'system-ui, sans-serif', whiteSpace:'nowrap' }}>{t.label}</button>)}
             </div>
             {activeTab==='ue' && contactCards(project.subcontractors, 'Ingen underentreprenører registrert')}
             {activeTab==='ark' && contactCards(project.architects, 'Ingen arkitekter registrert')}
@@ -1214,7 +1272,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
         </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap: isMobH ? '10px' : '16px', overflow:'hidden', minWidth:0 }}>
           {/* Endringsmeldinger-sammendrag */}
           {endringsmeldinger.length > 0 && (() => {
             const godkjent = endringsmeldinger.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
@@ -1228,7 +1286,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                 {/* Akkumulert beløp */}
                 <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0', textAlign:'center', marginBottom:'12px' }}>
                   <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', marginBottom:'2px' }}>GODKJENT TILLEGGSARBEID</div>
-                  <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</div>
+                  <div style={{ fontSize: isMobH ? '18px' : '22px', fontWeight:'800', color:'#059669' }}>{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</div>
                 </div>
                 {/* Avventende */}
                 {totalAvventer > 0 && (
@@ -1241,25 +1299,25 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                 {/* Budsjett-kontekst */}
                 {project.budget && (
                   <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 12px', marginBottom:'12px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                      <span style={{ color:'#64748b' }}>Opprinnelig budsjett</span>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '11px' : '12px', marginBottom:'4px', gap:'4px' }}>
+                      <span style={{ color:'#64748b', flexShrink:0 }}>Budsjett</span>
                       <span style={{ fontWeight:'600', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</span>
                     </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                      <span style={{ color:'#059669' }}>+ Godkjente endringer</span>
-                      <span style={{ fontWeight:'600', color:'#059669' }}>+{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</span>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '11px' : '12px', marginBottom:'4px', gap:'4px' }}>
+                      <span style={{ color:'#059669', flexShrink:0 }}>{isMobH ? '+ Endringer' : '+ Godkjente endringer'}</span>
+                      <span style={{ fontWeight:'600', color:'#059669', textAlign:'right' }}>+{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</span>
                     </div>
                     <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a' }}>Justert budsjett</span>
-                      <span style={{ fontWeight:'800', color:'#0f172a' }}>{Math.round(Number(project.budget) + totalGodkjent).toLocaleString('nb-NO')} kr</span>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '12px' : '13px', gap:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', flexShrink:0 }}>{isMobH ? 'Justert' : 'Justert budsjett'}</span>
+                      <span style={{ fontWeight:'800', color:'#0f172a', textAlign:'right' }}>{Math.round(Number(project.budget) + totalGodkjent).toLocaleString('nb-NO')} kr</span>
                     </div>
                     <div style={{ marginTop:'8px', height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden' }}>
                       <div style={{ height:'100%', borderRadius:'3px', background:'#059669', width: `${Math.min(100, (Number(project.budget) / (Number(project.budget) + totalGodkjent)) * 100)}%` }} />
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>
-                      <span>Opprinnelig</span>
-                      <span>+{(totalGodkjent / Number(project.budget) * 100).toFixed(1)}% endringer</span>
+                      <span>Oppr.</span>
+                      <span>+{(totalGodkjent / Number(project.budget) * 100).toFixed(1)}%</span>
                     </div>
                   </div>
                 )}
@@ -1268,7 +1326,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                   {endringsmeldinger.slice(0, 5).map(em => {
                     const emSt = { Utkast:'#64748b', Sendt:'#2563eb', Godkjent:'#16a34a', Avvist:'#dc2626', 'Under forhandling':'#d97706', Fakturert:'#7c3aed' }[em.status] || '#64748b'
                     return (
-                      <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'12px' }}>
+                      <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize: isMobH ? '11px' : '12px', gap:'6px' }}>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{em.title}</div>
                           <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'1px' }}>
@@ -1276,7 +1334,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
                             <span style={{ color: emSt, fontSize:'10px', fontWeight:'600' }}>{em.status}</span>
                           </div>
                         </div>
-                        <span style={{ fontWeight:'700', color: emSt, fontSize:'12px', flexShrink:0 }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</span>
+                        <span style={{ fontWeight:'700', color: emSt, fontSize: isMobH ? '11px' : '12px', flexShrink:0, marginLeft:'6px' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')}</span>
                       </div>
                     )
                   })}
@@ -1288,16 +1346,16 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
-            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
+            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
           </div>
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏢 Kunde</h3>
-            {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.client_name}</p>{project.client_contact && <p style={{ margin:0, fontSize:'13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
+            {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.client_name}</p>{project.client_contact && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
           </div>
           {(project.resident_name||project.resident_phone||project.resident_email) && (
             <div style={card}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏠 Beboer / Kontakt</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}>
                 {project.resident_name && <p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize:'14px' }}>{project.resident_name}</p>}
                 {project.resident_phone && <a href={`tel:${project.resident_phone}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>📞 {project.resident_phone}</a>}
                 {project.resident_email && <a href={`mailto:${project.resident_email}`} style={{ fontSize:'13px', color:'#059669', textDecoration:'none' }}>✉️ {project.resident_email}</a>}
@@ -1312,7 +1370,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
-          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', padding:'28px', width:'min(440px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif' }}>
+          <div style={{ position:'fixed', top: isMobH ? 'auto' : '50%', bottom: isMobH ? 0 : 'auto', left: isMobH ? 0 : '50%', right: isMobH ? 0 : 'auto', transform: isMobH ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobH ? '20px 20px 0 0' : '20px', padding: isMobH ? '20px' : '28px', width: isMobH ? '100%' : 'min(440px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif', maxHeight: isMobH ? '80vh' : 'none', overflowY:'auto' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Hva vil du gjøre med prosjektet?</h3>
             <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}><strong>{project.name}</strong>{project.project_number ? ` (${project.project_number})` : ''}</p>
 
@@ -1404,6 +1462,7 @@ function ProsjektfilerPage() {
   const [deleteTarget, setDeleteTarget] = useState(null) // file to confirm delete
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const dragCounter = React.useRef(0)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const fileInputRef = React.useRef()
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
 
@@ -1442,7 +1501,7 @@ function ProsjektfilerPage() {
     try {
       const [filesRes, projRes] = await Promise.all([
         supabase.from('project_files').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('id, name').order('name')
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')
       ])
       setFiles(filesRes.data || [])
       setProjects(projRes.data || [])
@@ -1671,23 +1730,126 @@ function ProsjektfilerPage() {
         </div>
       )}
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-          ⬆️ Last opp fil
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer' }}>
+          ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
         </button>
       </div>
 
       {/* Project selector */}
-      <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: '12px 32px' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMob ? '10px 16px' : '12px 32px' }}>
         <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
-          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '200px' }}>
+          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }}>
           <option value="all">Velg prosjekt</option>
-          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
         </select>
       </div>
 
-      {/* Two-panel layout */}
+      {/* MOBIL: Stacked layout */}
+      {isMob ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+          {selectedProject === 'all' ? (
+            <div style={{ textAlign: 'center', padding: '40px 16px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '10px' }}>🏗️</div>
+              <div style={{ fontSize: '15px', fontWeight: '600', color: '#64748b' }}>Velg et prosjekt</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Velg prosjekt i feltet over</div>
+            </div>
+          ) : !selectedCategory ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {FILE_CATEGORIES.map(cat => {
+                const catCount = countForCat(cat.id)
+                const hasSubs = cat.sub.length > 0
+                const isExpanded = expandedCats[cat.id]
+                return (
+                  <div key={cat.id}>
+                    <button onClick={() => { if (hasSubs) { toggleCat(cat.id) } else { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false) } }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #f1f5f9', background: 'white', cursor: 'pointer', textAlign: 'left' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>{cat.emoji}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{cat.name}</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>{cat.label}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: catCount > 0 ? '#059669' : '#94a3b8' }}>{catCount} fil{catCount !== 1 ? 'er' : ''}</span>
+                        <span style={{ color: '#cbd5e1', fontSize: '16px' }}>{hasSubs ? (isExpanded ? '▾' : '▸') : '›'}</span>
+                      </div>
+                    </button>
+                    {hasSubs && isExpanded && (
+                      <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                        {cat.sub.map(sub => {
+                          const subCount = countForSub(cat.id, sub)
+                          return (
+                            <button key={sub} onClick={() => { setSelectedCategory(cat.id); setSelectedSub(sub); setShowArchive(false) }}
+                              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', border: '1px solid #f1f5f9', background: '#f8fafc', cursor: 'pointer', textAlign: 'left' }}>
+                              <span style={{ fontSize: '14px' }}>📂</span>
+                              <span style={{ flex: 1, fontSize: '13px', fontWeight: '500', color: '#374151' }}>{sub}</span>
+                              <span style={{ fontSize: '12px', color: '#94a3b8' }}>{subCount}</span>
+                              <span style={{ color: '#cbd5e1' }}>›</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <>
+              <button onClick={() => { setSelectedCategory(null); setSelectedSub(null) }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '13px', fontWeight: '600', padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                ← Tilbake til kategorier
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..."
+                    style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
+                  style={{ padding: '8px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '18px', flexShrink: 0 }}>⬆️</button>
+              </div>
+              {catSupportsRevision && (
+                <button onClick={() => setShowArchive(v => !v)}
+                  style={{ width: '100%', padding: '8px', background: showArchive ? '#f0fdf4' : 'white', color: showArchive ? '#059669' : '#64748b', border: `1px solid ${showArchive ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
+                  🗄️ {showArchive ? 'Skjul arkiverte revisjoner' : 'Vis arkiverte revisjoner'}
+                </button>
+              )}
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
+              ) : fileGroups.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px', background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: '36px', marginBottom: '10px' }}>📭</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>Ingen filer</div>
+                  <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
+                    style={{ marginTop: '12px', padding: '8px 18px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>⬆️ Last opp</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({fileGroups.length})</div>
+                  {fileGroups.map(group => {
+                    const current = group[0]
+                    const docGroup = current.document_group || current.id
+                    const archived = archivedPanelFiles.filter(f => (f.document_group || f.id) === docGroup)
+                    return (
+                      <div key={current.id} style={{ marginBottom: '8px' }}>
+                        <FileRow file={current} isArchived={false} catBg={selectedCat?.bg} catColor={selectedCat?.color} supportsRevision={catSupportsRevision} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={handleNewRevision} uploading={uploading} />
+                        {showArchive && archived.map(f => (
+                          <div key={f.id} style={{ marginTop: '3px', marginLeft: '12px' }}>
+                            <FileRow file={f} isArchived={true} catBg="#fef2f2" catColor="#dc2626" supportsRevision={false} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={null} uploading={false} />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+      /* DESKTOP: Two-panel layout */
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
         {/* LEFT: Category list */}
@@ -1841,6 +2003,7 @@ function ProsjektfilerPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Local delete confirmation dialog */}
       {deleteTarget && (
@@ -1961,7 +2124,7 @@ function ProsjektfilerPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
                   <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
                     <option value="">Velg prosjekt</option>
-                    {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                    {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2011,6 +2174,7 @@ function ProsjektfilerPage() {
 }
 
 function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
+  const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
   const [showPreview, setShowPreview] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -2081,20 +2245,41 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
       }
       setPreviewLoading(false)
     } else {
-      // Bilder og PDF: bruk blob-URL for å garantere at det fungerer
+      // Bilder og PDF: prøv flere strategier
       try {
+        // Strategi 1: Sjekk om file_url allerede er en full URL
+        if (file.file_url?.startsWith('http')) {
+          setPreviewUrl(file.file_url)
+          setPreviewLoading(false)
+          return
+        }
+        // Strategi 2: Hent public URL
+        const { data: pubData } = supabase.storage.from('plattform-files').getPublicUrl(file.file_url)
+        if (pubData?.publicUrl) {
+          setPreviewUrl(pubData.publicUrl)
+          setPreviewLoading(false)
+          return
+        }
+        // Strategi 3: Signert URL som fallback
+        const signed = await getSignedUrl()
+        if (signed) {
+          setPreviewUrl(signed)
+          setPreviewLoading(false)
+          return
+        }
+        // Strategi 4: Blob-download
         const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
         if (!error && data) {
           const url = URL.createObjectURL(data)
           setPreviewUrl(url)
-        } else {
-          // Fallback til signert URL
-          const signed = await getSignedUrl()
-          setPreviewUrl(signed)
         }
       } catch(e) {
-        const signed = await getSignedUrl()
-        setPreviewUrl(signed)
+        console.error('Preview error:', e)
+        // Siste fallback: prøv signert URL
+        try {
+          const signed = await getSignedUrl()
+          setPreviewUrl(signed)
+        } catch(e2) { console.error('Signed URL fallback error:', e2) }
       }
       setPreviewLoading(false)
     }
@@ -2115,103 +2300,96 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
     else onDownload(file)
   }
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
     <>
     <div style={{ background: isArchived ? '#fef9f9' : 'white', borderRadius: '12px',
-      border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: '12px 16px',
-      display: 'flex', alignItems: 'center', gap: '12px', opacity: isArchived ? 0.85 : 1 }}
+      border: `1px solid ${isArchived ? '#fecaca' : '#f1f5f9'}`, padding: isMob ? '10px 12px' : '12px 16px',
+      display: 'flex', flexDirection: isMob ? 'column' : 'row', alignItems: isMob ? 'stretch' : 'center', gap: isMob ? '8px' : '12px', opacity: isArchived ? 0.85 : 1 }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-      <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />
-      {/* Thumbnail for bilder */}
-      {isImage && thumbUrl ? (
-        <div onClick={openPreview} style={{ width: '42px', height: '42px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }}>
-          <img src={thumbUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      ) : (
-        <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0, cursor: canPreview ? 'pointer' : 'default' }}
-          onClick={() => { if (canPreview) openPreview() }}>
-          {getFileEmoji(file.name, file.file_type)}
-        </div>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div onClick={handleNameClick}
-          style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : (canPreview ? '#2563eb' : '#0f172a'), fontSize: '14px',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
-          textDecoration: canPreview ? 'none' : 'none' }}
-          onMouseEnter={e => { if (canPreview) e.currentTarget.style.textDecoration = 'underline' }}
-          onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
-          {file.name}
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
-          {file.revision_label && (
-            <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`,
-              borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '1px 8px',
-              display: 'flex', alignItems: 'center', gap: '3px' }}>
-              {file.revision_label}
-              {!isArchived && <span>✓</span>}
-              {isArchived && <span>🗄️</span>}
+      {/* Top row: icon + name + actions (mobil) eller alt på én rad (desktop) */}
+      <div style={{ display:'flex', alignItems:'center', gap: isMob ? '8px' : '12px', minWidth:0 }}>
+        {!isMob && <input type="checkbox" style={{ width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer', accentColor: '#059669' }} />}
+        {/* Thumbnail for bilder */}
+        {isImage && thumbUrl ? (
+          <div onClick={openPreview} style={{ width: isMob ? '34px' : '42px', height: isMob ? '34px' : '42px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }}>
+            <img src={thumbUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+        ) : (
+          <div style={{ width: isMob ? '30px' : '36px', height: isMob ? '30px' : '36px', borderRadius: '9px', background: isArchived ? '#fef2f2' : (catBg || '#f8fafc'),
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMob ? '15px' : '18px', flexShrink: 0, cursor: canPreview ? 'pointer' : 'default' }}
+            onClick={() => { if (canPreview) openPreview() }}>
+            {getFileEmoji(file.name, file.file_type)}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div onClick={handleNameClick}
+            style={{ fontWeight: '600', color: isArchived ? '#9ca3af' : (canPreview ? '#2563eb' : '#0f172a'), fontSize: isMob ? '13px' : '14px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+            onMouseEnter={e => { if (canPreview) e.currentTarget.style.textDecoration = 'underline' }}
+            onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+            {file.name}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '3px', flexWrap: 'wrap' }}>
+            {file.revision_label && (
+              <span style={{ background: revBg, color: revColor, border: `1px solid ${revBorder}`,
+                borderRadius: '999px', fontSize: '10px', fontWeight: '700', padding: '1px 6px',
+                display: 'flex', alignItems: 'center', gap: '3px' }}>
+                {file.revision_label}
+                {!isArchived && <span>✓</span>}
+                {isArchived && <span>🗄️</span>}
+              </span>
+            )}
+            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+              {file.file_size ? formatFileSize(file.file_size) : ''}
+              {file.file_size && '  '}
+              {new Date(file.created_at).toLocaleDateString('nb-NO')}
             </span>
-          )}
-          {canPreview && <span style={{ fontSize: '11px', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: '4px' }}>Klikk for å vise</span>}
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            {file.file_size ? formatFileSize(file.file_size) : ''}
-            {file.file_size && '  '}
-            {new Date(file.created_at).toLocaleDateString('nb-NO')}
-            {file.description ? `  ·  ${file.description}` : ''}
-          </span>
-          {file.revision_note && <span style={{ fontSize: '11px', color: '#7c3aed', background: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>📝 {file.revision_note}</span>}
-          {(file.revision_log?.length > 0) && (
-            <button onClick={(e) => { e.stopPropagation(); setShowHistory(!showHistory) }}
-              style={{ fontSize: '11px', color: '#2563eb', background: '#eff6ff', padding: '1px 8px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: '500' }}>
-              📋 {file.revision_log.length} revisjon{file.revision_log.length > 1 ? 'er' : ''}
-            </button>
-          )}
+          </div>
         </div>
-        {/* Endringslogg inline */}
-        {showHistory && file.revision_log?.length > 0 && (
-          <div style={{ marginTop: '8px', background: '#f8fafc', borderRadius: '8px', padding: '10px 12px', border: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.04em' }}>ENDRINGSLOGG</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {[...file.revision_log].reverse().map((entry, i) => (
-                <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '12px' }}>
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i === 0 ? '#059669' : '#cbd5e1', marginTop: '5px', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: '600', color: '#059669' }}>{entry.revision}</span>
-                      <span style={{ color: '#94a3b8' }}>{new Date(entry.date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      <span style={{ color: '#64748b' }}>{entry.user_email?.split('@')[0]}</span>
-                    </div>
-                    <div style={{ color: '#374151', marginTop: '2px', lineHeight: 1.4 }}>{entry.note}</div>
-                    {entry.file_size && entry.prev_file_size && (
-                      <div style={{ color: '#94a3b8', marginTop: '2px', fontSize: '11px' }}>
-                        Filstørrelse: {formatFileSize(entry.prev_file_size)} → {formatFileSize(entry.file_size)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Mobil: kompakte knapper på høyre side */}
+        {isMob && (
+          <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
+            {canPreview && <button onClick={openPreview} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>👁️</button>}
+            <button onClick={() => onDownload(file)} style={{ background:'#f8fafc', color:'#475569', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>⬇️</button>
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
-        {supportsRevision && !isArchived && onNewRevision && (
-          <label style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669',
-            border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer',
-            fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-            🔄 Ny revisjon
-            <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
-          </label>
-        )}
-        {canPreview && <button onClick={openPreview} title="Forhåndsvisning"
-          style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
-        <button onClick={() => onDownload(file)} title="Last ned"
-          style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
-        <button onClick={() => onDelete(file)} title="Slett"
-          style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
-      </div>
+      {/* Desktop: ekstra info og knapper */}
+      {!isMob && (
+        <>
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
+            {supportsRevision && !isArchived && onNewRevision && (
+              <label style={{ padding: '6px 12px', background: '#f0fdf4', color: '#059669',
+                border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer',
+                fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                🔄 Ny revisjon
+                <input type="file" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
+              </label>
+            )}
+            {canPreview && <button onClick={openPreview} title="Forhåndsvisning"
+              style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
+            <button onClick={() => onDownload(file)} title="Last ned"
+              style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⬇️</button>
+            <button onClick={() => onDelete(file)} title="Slett"
+              style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>🗑️</button>
+          </div>
+        </>
+      )}
+      {/* Mobil: revisjon + slett som egen rad */}
+      {isMob && (supportsRevision && !isArchived && onNewRevision || true) && (
+        <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end' }}>
+          {supportsRevision && !isArchived && onNewRevision && (
+            <label style={{ padding:'5px 10px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px' }}>
+              🔄 Ny revisjon
+              <input type="file" style={{ display:'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
+            </label>
+          )}
+          <button onClick={() => onDelete(file)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'11px' }}>🗑️</button>
+        </div>
+      )}
     </div>
 
     {/* ── Forhåndsvisning fullskjerm-modal ── */}
@@ -2273,7 +2451,7 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               )}
               {isText && (
                 <div style={{ width:'90%', maxWidth:'900px', maxHeight:'85vh', overflow:'auto', background:'white', borderRadius:'12px', boxShadow:'0 8px 40px rgba(0,0,0,0.3)' }}>
-                  <div style={{ padding:'20px 24px' }}>
+                  <div style={{ padding: isMobTL ? '12px' : '20px 24px' }}>
                     <pre style={{ margin:0, fontSize:'13px', color:'#0f172a', fontFamily:'monospace', whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{textContent || 'Kunne ikke laste filen.'}</pre>
                   </div>
                 </div>
@@ -2415,7 +2593,7 @@ function SjekklistePage({ onNavigateDetail }) {
     try {
       const [cl, pr, tmpl] = await Promise.all([
         supabase.from('checklists').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || []),
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || []),
         supabase.from('checklist_templates').select('*').order('name').then(r => r.data || []),
       ])
       setChecklists(cl)
@@ -2526,17 +2704,19 @@ function SjekklistePage({ onNavigateDetail }) {
 
   const uncategorized = templates.filter(t => !CATEGORY_LABELS[t.category])
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={f}>
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div style={{ ...f, overflowX: 'hidden', maxWidth: '100vw' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '16px' : '20px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>Sjekklister</h1>
-            <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
+            <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Sjekklister</h1>
+            <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny mal</button>}
-            {view === 'lister' && <button onClick={() => setShowNew(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>+ Ny sjekkliste</button>}
+            {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: isMob ? '8px 12px' : '10px 18px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Ny mal</button>}
+            {view === 'lister' && <button onClick={() => setShowNew(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 12px' : '10px 18px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Ny sjekkliste</button>}
           </div>
         </div>
         {/* Tabs */}
@@ -2547,20 +2727,20 @@ function SjekklistePage({ onNavigateDetail }) {
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', overflowX: 'hidden' }}>
         {view === 'lister' ? (
           <>
             {/* Filters */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+            <div style={{ display: 'flex', gap: isMob ? '8px' : '12px', marginBottom: isMob ? '12px' : '20px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: isMob ? '100%' : '200px' }}>
                 <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>🔍</span>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter sjekkliste..." style={{ ...inp, paddingLeft: '36px' }} />
               </div>
-              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: '180px', background: 'white' }}>
+              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '180px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
                 <option value="all">Alle prosjekter</option>
-                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: '160px', background: 'white' }}>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '160px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
                 {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
@@ -2581,19 +2761,19 @@ function SjekklistePage({ onNavigateDetail }) {
                   const projectName = projects.find(p => p.id === c.project_id)?.name || '–'
                   return (
                     <button key={c.id} onClick={() => onNavigateDetail(c.id)}
-                      style={{ ...card, padding: '16px 20px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '16px' }}
+                      style={{ ...card, padding: isMob ? '12px' : '16px 20px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: isMob ? '10px' : '16px' }}
                       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
                       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'}>
-                      <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>✅</div>
+                      {!isMob && <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>✅</div>}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: isMob ? '6px' : '10px', marginBottom: isMob ? '3px' : '6px', flexWrap: isMob ? 'wrap' : 'nowrap' }}>
+                          <span style={{ fontWeight: '600', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMob ? 'calc(100% - 80px)' : 'none' }}>{c.title}</span>
                           {statusBadge(c.status)}
                         </div>
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', gap: isMob ? '6px' : '12px', fontSize: isMob ? '11px' : '12px', color: '#64748b', marginBottom: isMob ? '5px' : '8px', flexWrap: 'wrap' }}>
                           <span>📁 {projectName}</span>
-                          <span>📝 {c.items?.length || 0} punkter</span>
-                          <span>📅 {new Date(c.created_at).toLocaleDateString('nb-NO')}</span>
+                          <span>📝 {c.items?.length || 0}</span>
+                          {!isMob && <span>📅 {new Date(c.created_at).toLocaleDateString('nb-NO')}</span>}
                         </div>
                         {/* Progress bar */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2627,7 +2807,7 @@ function SjekklistePage({ onNavigateDetail }) {
                       <span style={{ fontSize: '12px', color: '#94a3b8' }}>{group.templates.length} maler</span>
                     </button>
                     {expandedMalKat[group.cat] && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
                       {group.templates.map(tmpl => (
                         <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -2691,7 +2871,7 @@ function SjekklistePage({ onNavigateDetail }) {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
                 <select value={newForm.project_id} onChange={e => setNewForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
                   <option value="">Velg prosjekt</option>
-                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                 </select>
               </div>
               <div>
@@ -3290,7 +3470,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
                     <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       + Bilde
-                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) addItemImage(item.idx, e.target.files[0]); e.target.value = '' }} />
+                      <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) addItemImage(item.idx, e.target.files[0]); e.target.value = '' }} />
                     </label>
                     <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       📷 Kamera
@@ -3412,7 +3592,7 @@ function AvvikPage() {
     try {
       const [devData, projData] = await Promise.all([
         supabase.from('deviations').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || [])
       ])
       setDeviations(devData)
       setProjects(projData)
@@ -3448,6 +3628,8 @@ function AvvikPage() {
     </div>
   )
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (selected) return (
     <AvvikDetaljer
       deviation={selected}
@@ -3458,31 +3640,31 @@ function AvvikPage() {
   )
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', overflowX: 'hidden', maxWidth: '100vw' }}>
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '24px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '16px' : '24px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div>
-            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>⚠️ Avvik</h1>
-            <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>Registrer, følg opp og lukk avvik</p>
+            <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>⚠️ Avvik</h1>
+            {!isMob && <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>Registrer, følg opp og lukk avvik</p>}
           </div>
           <button onClick={() => setShowNew(true)}
-            style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '12px', padding: '11px 20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 12px' : '11px 20px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
             + Registrer avvik
           </button>
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', display: 'flex', flexDirection: 'column', gap: isMob ? '12px' : '20px', overflowX: 'hidden' }}>
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMob ? '8px' : '16px' }}>
           {[
             { label: 'Åpne avvik', value: counts.open, color: '#dc2626', bg: '#fef2f2', emoji: '🔴' },
             { label: 'Under behandling', value: counts.inProgress, color: '#d97706', bg: '#fffbeb', emoji: '🟡' },
             { label: 'Lukkede avvik', value: counts.closed, color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
             { label: 'Kritiske (åpne)', value: counts.critical, color: '#dc2626', bg: '#fef2f2', emoji: '🚨' },
           ].map((s, i) => (
-            <div key={i} style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div key={i} style={{ background: 'white', borderRadius: isMob ? '10px' : '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '20px' }}>{s.emoji}</span>
                 <span style={{ background: s.bg, color: s.color, fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>{s.value}</span>
@@ -3494,25 +3676,25 @@ function AvvikPage() {
         </div>
 
         {/* Filters */}
-        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '16px 20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '16px 20px', display: 'flex', gap: isMob ? '8px' : '12px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk i avvik..."
-            style={{ ...inp, maxWidth: '240px', flex: '1' }} />
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: '180px' }}>
+            style={{ ...inp, maxWidth: isMob ? '100%' : '240px', flex: isMob ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '180px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             <option value="Åpen">Åpen</option>
             <option value="Under behandling">Under behandling</option>
             <option value="Lukket">Lukket</option>
           </select>
-          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: '160px' }}>
+          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle alvorligheter</option>
             <option value="Lav">Lav</option>
             <option value="Medium">Medium</option>
             <option value="Høy">Høy</option>
             <option value="Kritisk">Kritisk</option>
           </select>
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: '220px' }}>
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           {(filterStatus !== 'alle' || filterSeverity !== 'alle' || filterProject !== 'alle' || search) && (
             <button onClick={() => { setFilterStatus('alle'); setFilterSeverity('alle'); setFilterProject('alle'); setSearch('') }}
@@ -3538,25 +3720,25 @@ function AvvikPage() {
               const proj = projects.find(p => p.id === dev.project_id)
               return (
                 <div key={dev.id} onClick={() => setSelected(dev)}
-                  style={{ background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9', padding: '18px 20px', cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s', display: 'flex', alignItems: 'flex-start', gap: '16px' }}
+                  style={{ background: 'white', borderRadius: isMob ? '12px' : '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s', display: 'flex', alignItems: 'flex-start', gap: isMob ? '10px' : '16px' }}
                   onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = '#e2e8f0' }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#f1f5f9' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                  {!isMob && <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
                     {dev.severity === 'Kritisk' ? '🚨' : dev.severity === 'Høy' ? '⚠️' : dev.severity === 'Medium' ? '📋' : '📝'}
-                  </div>
+                  </div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '15px' }}>{dev.title}</span>
+                      <span style={{ fontWeight: '700', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMob ? 'calc(100vw - 120px)' : 'none' }}>{dev.title}</span>
                       <SeverityBadge severity={dev.severity} />
                       <AvvikStatusBadge status={dev.status} />
                     </div>
-                    {dev.description && <p style={{ margin: '0 0 8px', color: '#64748b', fontSize: '13px', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '600px' }}>{dev.description}</p>}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                      {proj && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
-                      {dev.location && <span style={{ fontSize: '12px', color: '#64748b' }}>📍 {dev.location}</span>}
-                      {dev.assigned_to_name && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to_name}</span>}
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>
-                      {dev.images?.length > 0 && <span style={{ fontSize: '12px', color: '#94a3b8' }}>📎 {dev.images.length} bilde{dev.images.length > 1 ? 'r' : ''}</span>}
+                    {dev.description && !isMob && <p style={{ margin: '0 0 8px', color: '#64748b', fontSize: '13px', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '600px' }}>{dev.description}</p>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMob ? '6px' : '16px', flexWrap: 'wrap' }}>
+                      {proj && <span style={{ fontSize: isMob ? '11px' : '12px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
+                      {dev.location && <span style={{ fontSize: isMob ? '11px' : '12px', color: '#64748b' }}>📍 {dev.location}</span>}
+                      {!isMob && dev.assigned_to_name && <span style={{ fontSize: '12px', color: '#64748b' }}>👤 {dev.assigned_to_name}</span>}
+                      {!isMob && <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(dev.created_at).toLocaleDateString('nb-NO')}</span>}
+                      {dev.images?.length > 0 && <span style={{ fontSize: isMob ? '11px' : '12px', color: '#94a3b8' }}>📎 {dev.images.length}</span>}
                     </div>
                   </div>
                   <span style={{ color: '#94a3b8', fontSize: '18px', flexShrink: 0 }}>›</span>
@@ -3673,7 +3855,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
               <option value="">Velg prosjekt...</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
 
@@ -3734,7 +3916,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
               style={{ border: `2px dashed ${dragOver ? '#059669' : '#e2e8f0'}`, borderRadius: '12px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: dragOver ? '#f0fdf4' : '#f8fafc', transition: 'all 0.15s' }}>
               <div style={{ fontSize: '24px', marginBottom: '6px' }}>📷</div>
               <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Dra bilder hit eller <span style={{ color: '#059669', fontWeight: '600' }}>klikk for å velge</span></p>
-              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
             {images.length > 0 && (
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
@@ -4047,23 +4229,25 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const statusFlow = ['Åpen', 'Under behandling', 'Lukket']
   const currentIdx = statusFlow.indexOf(dev.status)
 
-  const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+  const isMobD = typeof window !== 'undefined' && window.innerWidth < 768
+
+  const card = { background: 'white', borderRadius: isMobD ? '12px' : '16px', border: '1px solid #f1f5f9', padding: isMobD ? '14px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', overflowX: 'hidden', maxWidth: '100vw' }}>
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '20px 32px' }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMobD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, fontFamily: 'system-ui, sans-serif' }}>
           ← Tilbake til avvik
         </button>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-            <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: isMobD ? '8px' : '16px', flexWrap: isMobD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobD ? '10px' : '14px', flex: 1, minWidth: 0 }}>
+            {!isMobD && <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
               {dev.severity === 'Kritisk' ? '🚨' : '⚠️'}
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
+            </div>}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobD ? '6px' : '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                <h1 style={{ margin: 0, fontSize: isMobD ? '16px' : '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
                 <SeverityBadge severity={dev.severity} />
                 <AvvikStatusBadge status={dev.status} />
               </div>
@@ -4074,18 +4258,18 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0 }}>
             <button onClick={exportAvvikPDF} disabled={exporting}
-              style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '500', color: exporting ? '#94a3b8' : '#374151' }}>
-              {exporting ? '⏳...' : '📄 PDF'}
+              style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500', color: exporting ? '#94a3b8' : '#374151' }}>
+              {exporting ? '⏳' : '📄'}
             </button>
-            <button onClick={() => setShowEdit(true)} style={{ padding: '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding: '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: '13px' }}>🗑️</button>
+            <button onClick={() => setShowEdit(true)} style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobD ? '7px 10px' : '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: isMobD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+      <div style={{ padding: isMobD ? '12px' : '24px 32px', display: 'grid', gridTemplateColumns: isMobD ? '1fr' : '2fr 1fr', gap: isMobD ? '12px' : '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
           {/* Beskrivelse */}
@@ -4263,7 +4447,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
               <option value="">Velg prosjekt...</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -4362,16 +4546,17 @@ const hmsInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0'
 const hmsCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
 function HmsModalShell({ title, onClose, size, children }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const maxWidth = size === 'xl' ? '860px' : size === 'lg' ? '680px' : '520px'
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? '0' : '16px' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
+      <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? '0' : '20px', width: '100%', maxWidth: isMob ? '100%' : maxWidth, maxHeight: isMob ? '100vh' : '92vh', height: isMob ? '100vh' : 'auto', display: 'flex', flexDirection: 'column', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ padding: isMob ? '14px 16px' : '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: isMob ? '15px' : '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ overflowY: 'auto', flex: 1 }}>{children}</div>
+        <div style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>{children}</div>
       </div>
     </div>
   )
@@ -4394,7 +4579,7 @@ function HmsPage() {
     try {
       const [recs, projs] = await Promise.all([
         supabase.from('hms_records').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name').order('name').then(r => r.data || [])
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || [])
       ])
       setRecords(recs); setProjects(projs)
     } catch (e) { console.error(e) }
@@ -4445,18 +4630,20 @@ function HmsPage() {
   const counts = Object.keys(HMS_TYPES).reduce((acc, t) => { acc[t] = records.filter(r => r.type === t).length; return acc }, {})
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui, sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster HMS & Risiko...</p></div></div>
-  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { setSelected(null); loadData() }} />
+  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); loadData() }} />
+
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ fontFamily:'system-ui, sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMob ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🛡️ HMS & Risiko</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>SJA, RUH, Risikoanalyse, Mottakskontroll og HMS-håndbok</p>
+            <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🛡️ HMS & Risiko</h1>
+            {!isMob && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>SJA, RUH, Risikoanalyse, Mottakskontroll og HMS-håndbok</p>}
           </div>
           <div style={{ position:'relative' }}>
-            <button onClick={() => setShowNew(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt HMS-skjema ▾</button>
+            <button onClick={() => setShowNew(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMob ? '9px 12px' : '11px 20px', fontSize: isMob ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ HMS-skjema ▾</button>
             {showNew && (
               <>
                 <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setShowNew(false)} />
@@ -4475,24 +4662,24 @@ function HmsPage() {
           </div>
         </div>
       </div>
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:'12px' }}>
+      <div style={{ padding: isMob ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMob ? '12px' : '20px', overflowX:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMob ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)', gap: isMob ? '8px' : '12px' }}>
           {Object.entries(HMS_TYPES).map(([key, cfg]) => (
             <button key={key} onClick={() => setActiveTab(activeTab === key ? 'alle' : key)}
-              style={{ background: activeTab===key ? cfg.bg : 'white', border:`1px solid ${activeTab===key ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'20px', fontWeight:'800', color: activeTab===key ? cfg.color : '#0f172a' }}>{counts[key]}</div>
-              <div style={{ fontSize:'11px', color: activeTab===key ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{cfg.label}</div>
+              style={{ background: activeTab===key ? cfg.bg : 'white', border:`1px solid ${activeTab===key ? cfg.border : '#f1f5f9'}`, borderRadius: isMob ? '10px' : '14px', padding: isMob ? '10px' : '16px', cursor:'pointer', textAlign: isMob ? 'center' : 'left', transition:'all 0.15s' }}>
+              <div style={{ fontSize: isMob ? '18px' : '22px', marginBottom: isMob ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMob ? '16px' : '20px', fontWeight:'800', color: activeTab===key ? cfg.color : '#0f172a' }}>{counts[key]}</div>
+              <div style={{ fontSize: isMob ? '10px' : '11px', color: activeTab===key ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{cfg.label}</div>
             </button>
           ))}
         </div>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth:'200px', flex:1 }} />
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth:'220px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMob ? '10px' : '14px 18px', display:'flex', gap: isMob ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth: isMob ? '100%' : '200px', flex: isMob ? '1 1 100%' : '1' }} />
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth:'160px' }}>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(HMS_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -4512,19 +4699,19 @@ function HmsPage() {
               const proj = projects.find(p => p.id === rec.project_id)
               return (
                 <div key={rec.id} onClick={() => setSelected(rec)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMob ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap: isMob ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg?.emoji}</div>
+                  {!isMob && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg?.bg||'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg?.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'5px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{rec.title}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMob ? '6px' : '10px', flexWrap:'wrap', marginBottom: isMob ? '3px' : '5px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMob ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMob ? 'calc(100vw - 100px)' : 'none' }}>{rec.title}</span>
                       <HmsTypeBadge type={rec.type} />
                       <HmsStatusBadge status={rec.status} />
                     </div>
-                    <div style={{ display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap' }}>
-                      {proj && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {rec.data?.dato && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {rec.data.dato}</span>}
-                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(rec.created_at).toLocaleDateString('nb-NO')}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMob ? '6px' : '14px', flexWrap:'wrap' }}>
+                      {proj && <span style={{ fontSize: isMob ? '11px' : '12px', color:'#059669', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMob && rec.data?.dato && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {rec.data.dato}</span>}
+                      {!isMob && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(rec.created_at).toLocaleDateString('nb-NO')}</span>}
                     </div>
                   </div>
                   <span style={{ color:'#94a3b8', fontSize:'18px', flexShrink:0 }}>›</span>
@@ -4545,6 +4732,7 @@ function HmsPage() {
 
 function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
   const confirm = useConfirm()
+  const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [rec, setRec] = useState(initialRecord)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -4570,16 +4758,16 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
   const refreshRec = async () => { const { data } = await supabase.from('hms_records').select('*').eq('id', rec.id).single(); if (data) setRec(data) }
 
   return (
-    <div style={{ fontFamily:'system-ui, sans-serif' }}>
+    <div style={{ fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print { .no-print { display:none !important } }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til HMS & Risiko</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg?.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{rec.title}</h1>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobH ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til HMS & Risiko</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobH ? '8px' : '16px', flexWrap: isMobH ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobH ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobH && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg?.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobH ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{rec.title}</h1>
                 <HmsTypeBadge type={rec.type} />
                 <HmsStatusBadge status={rec.status} />
               </div>
@@ -4589,14 +4777,14 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-            <button onClick={() => window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
-            <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobH ? '6px' : '8px', flexShrink:0 }}>
+            <button onClick={() => window.print()} style={{ padding: isMobH ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '13px' }}>{isMobH ? '🖨️' : '🖨️ Skriv ut'}</button>
+            <button onClick={() => setEditing(true)} style={{ padding: isMobH ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobH ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobH ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobH ? '1fr' : '2fr 1fr', gap: isMobH ? '12px' : '20px' }}>
         <div>
           {rec.type === 'sja'             && <SjaView rec={rec} proj={proj} />}
           {rec.type === 'ruh'             && <RuhView rec={rec} proj={proj} />}
@@ -4675,10 +4863,10 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <HmsModalShell title={`🦺 ${isEdit?'Rediger':'Ny'} SJA – Sikker Jobb Analyse`} onClose={onClose} size="xl">
-      <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+      <form onSubmit={handleSave} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '24px', display:'flex', flexDirection:'column', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel / Jobbtype *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Arbeid i høyde – takarbeid" style={hmsInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><input value={ansvarlig} onChange={e=>setAnsvarlig(e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -4687,7 +4875,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
         </div>
         <div>
           <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Nødnummer</h3>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
             {[['brann','🔥 Brann','110'],['politi','👮 Politi','112'],['ambulanse','🚑 Ambulanse','113'],['intern','☎️ Intern','Internnr']].map(([k,lbl,ph]) => (
               <div key={k}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{lbl}</label><input value={nodNummer[k]} onChange={e=>setNodNummer(v=>({...v,[k]:e.target.value}))} placeholder={ph} style={hmsInp} /></div>
             ))}
@@ -4710,13 +4898,13 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
                     {operasjoner.length>1 && <button type="button" onClick={()=>removeOp(op.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
                   </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
                   <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Arbeidsoperasjon</label><input value={op.operasjon} onChange={e=>updateOp(op.id,'operasjon',e.target.value)} placeholder="Hva skal gjøres" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Identifisert fare</label><input value={op.fare} onChange={e=>updateOp(op.id,'fare',e.target.value)} placeholder="Hva kan gå galt?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={op.konsekvens} onChange={e=>updateOp(op.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
                   <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Tiltak</label><input value={op.tiltak} onChange={e=>updateOp(op.id,'tiltak',e.target.value)} placeholder="Hva gjøres for å redusere risikoen?" style={hmsInp} /></div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet: <strong>{op.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={op.sannsynlighet} onChange={e=>updateOp(op.id,'sannsynlighet',+e.target.value)} style={{ width:'100%', accentColor:'#2563eb' }} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Alvorlighet: <strong>{op.alvorlighet}</strong>/5</label><input type="range" min="1" max="5" value={op.alvorlighet} onChange={e=>updateOp(op.id,'alvorlighet',+e.target.value)} style={{ width:'100%', accentColor:'#2563eb' }} /></div>
                 </div>
@@ -4754,7 +4942,7 @@ function SjaView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#2563eb' }}>🦺 Sikker Jobb Analyse</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Dato',d.dato],['Sted',d.sted],['Ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -4765,7 +4953,7 @@ function SjaView({ rec, proj }) {
       {d.nodNummer && (
         <div style={{ ...hmsCard, background:'#fef2f2', border:'1px solid #fecaca' }}>
           <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Nødnummer</h3>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'8px' }}>
             {[['🔥 Brann',d.nodNummer.brann||'110'],['👮 Politi',d.nodNummer.politi||'112'],['🚑 Ambulanse',d.nodNummer.ambulanse||'113'],['☎️ Intern',d.nodNummer.intern]].filter(r=>r[1]).map(([k,v]) => (
               <div key={k} style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center', border:'1px solid #fecaca' }}><div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'600', marginBottom:'4px' }}>{k}</div><div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{v}</div></div>
             ))}
@@ -4783,7 +4971,7 @@ function SjaView({ rec, proj }) {
                   <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{op.operasjon||`Operasjon ${i+1}`}</span>
                   <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
                   {op.fare&&<div><strong>Fare:</strong> {op.fare}</div>}
                   {op.konsekvens&&<div><strong>Konsekvens:</strong> {op.konsekvens}</div>}
                   {op.tiltak&&<div><strong>Tiltak:</strong> {op.tiltak}</div>}
@@ -4836,9 +5024,9 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
   return (
     <HmsModalShell title={`🚨 ${isEdit?'Rediger':'Ny'} RUH – Uønsket Hendelse`} onClose={onClose} size="lg">
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="Kort beskrivelse av hendelsen" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Hendelsestype</label><select value={form.hendelsestype} onChange={e=>set('hendelsestype',e.target.value)} style={hmsInp}>{TYPER.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
@@ -4877,7 +5065,7 @@ function RuhView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>🚨 Rapport om Uønsket Hendelse</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Hendelsestype',d.hendelsestype],['Dato',d.dato],['Tidspunkt',d.tidspunkt],['Sted',d.sted],['Rapportert av',d.ansvarlig],['Involverte',d.involverte],['Vitner',d.vitner]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -4925,9 +5113,9 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
   return (
     <HmsModalShell title={`📊 ${isEdit?'Rediger':'Ny'} Risikoanalyse`} onClose={onClose} size="xl">
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={hmsInp} placeholder="Navn på risikoanalysen" /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
           <div><label style={lbl()}>Ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -4953,7 +5141,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
                     {risikoer.length>1 && <button type="button" onClick={()=>removeR(r.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
                   </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Fare / Risiko</label><input value={r.fare} onChange={e=>updateR(r.id,'fare',e.target.value)} placeholder="Hva er faren?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Årsak</label><input value={r.arsak} onChange={e=>updateR(r.id,'arsak',e.target.value)} placeholder="Hva kan forårsake det?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={r.konsekvens} onChange={e=>updateR(r.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
@@ -4981,7 +5169,7 @@ function RisikoView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#7c3aed' }}>📊 Risikoanalyse</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Dato',d.dato],['Område',d.omrade],['Ansvarlig',d.ansvarlig]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -4997,7 +5185,7 @@ function RisikoView({ rec, proj }) {
                 <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{r.fare||`Risiko ${i+1}`}</span>
                 <span style={{ background:'white', color:rc.color, fontSize:'13px', fontWeight:'800', padding:'4px 12px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px', fontSize:'13px', color:'#475569' }}>
                 {r.arsak&&<div><strong>Årsak:</strong> {r.arsak}</div>}
                 {r.konsekvens&&<div><strong>Konsekvens:</strong> {r.konsekvens}</div>}
                 {r.tiltak&&<div><strong>Tiltak:</strong> {r.tiltak}</div>}
@@ -5050,9 +5238,9 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
   return (
     <HmsModalShell title={`📦 ${isEdit?'Rediger':'Ny'} Mottakskontroll`} onClose={onClose} size="xl">
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Mottak stål – leveranse 14" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Leverandør</label><input value={form.leverandor} onChange={e=>set('leverandor',e.target.value)} placeholder="Firmanavn" style={hmsInp} /></div>
           <div><label style={lbl()}>Ordrenummer</label><input value={form.ordrenummer} onChange={e=>set('ordrenummer',e.target.value)} placeholder="Bestillingsnr." style={hmsInp} /></div>
@@ -5115,7 +5303,7 @@ function MottakskontrollView({ rec, proj }) {
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
       <div style={hmsCard}>
         <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#0891b2' }}>📦 Mottakskontroll</h3>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'12px' }}>
           {[['Prosjekt',proj?.name],['Dato',d.dato],['Leverandør',d.leverandor],['Ordrenr.',d.ordrenummer],['Mottatt av',d.mottattAv],['Sted',d.sted],['Transportør',d.transportor],['Fraktseddel',d.fraktseddel]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div><div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div></div>
           ))}
@@ -5204,7 +5392,7 @@ function HandbokModal({ user, initial, onClose, onSaved }) {
     <HmsModalShell title={`📗 ${isEdit?'Rediger':'Ny'} HMS-håndbok`} onClose={onClose} size="xl">
       <form onSubmit={handleSave} style={{ display:'flex', flexDirection:'column', height:'100%', maxHeight:'80vh' }}>
         {/* Toppinfo */}
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
           <div><label style={lbl()}>Bedrift</label><input value={form.bedrift} onChange={e=>set('bedrift',e.target.value)} placeholder="Bedriftens navn" style={hmsInp} /></div>
           <div><label style={lbl()}>HMS-ansvarlig *</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} required placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Revisjonsansvarlig</label><input value={form.revisjonsansvarlig} onChange={e=>set('revisjonsansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
@@ -5289,7 +5477,7 @@ function HandbokView({ rec, proj }) {
             </span>
           )}
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)', gap:'8px' }}>
           {[['Bedrift',d.bedrift],['Versjon',d.versjon],['Dato',d.dato],['HMS-ansvarlig',d.ansvarlig],['Revisjonsansvarlig',d.revisjonsansvarlig],['Neste revisjon',d.neste_revisjon]].filter(r=>r[1]).map(([k,v]) => (
             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
               <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -5382,7 +5570,7 @@ function getRequiredCerts(machine) {
 }
 
 const mInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const mCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const mCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function MaskinStatusBadge({ status }) {
   const cfg = MASKIN_STATUS[status] || MASKIN_STATUS['På lager']
@@ -5416,12 +5604,17 @@ function MaskinPage() {
   const [visning, setVisning] = useState('liste') // 'liste' | 'rutenett'
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const load = async () => {
     try {
       const [m, p] = await Promise.all([
         supabase.from('machines').select('*').order('name').then(r => r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data||[])
       ])
       setMaskiner(m); setProjects(p)
     } catch(e) { console.error(e) }
@@ -5448,7 +5641,7 @@ function MaskinPage() {
     </div>
   )
 
-  if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+  if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -5465,7 +5658,7 @@ function MaskinPage() {
 
       <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
         {/* Status stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(MASKIN_STATUS).map(([s,cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus===s?'alle':s)}
               style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}>
@@ -5580,7 +5773,9 @@ function MaskinPage() {
 }
 
 function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
+  const isMobTD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const [m, setM] = useState(init)
   const [logs, setLogs] = useState([])
   const [editing, setEditing] = useState(false)
@@ -5605,39 +5800,39 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
   }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til maskiner</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'56px', height:'56px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px', flexShrink:0 }}>{cfg?.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{m.name}</h1>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMob ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til maskiner</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMob ? '8px' : '16px', flexWrap: isMob ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMob ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMob && <div style={{ width:'56px', height:'56px', borderRadius:'14px', background:cfg?.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px', flexShrink:0 }}>{cfg?.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMob ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMob ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{m.name}</h1>
                 <MaskinStatusBadge status={m.status} />
                 {m.next_service && <ServiceBadge date={m.next_service} />}
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                {m.category && <span style={{ fontSize:'13px', color:'#64748b' }}>📋 {m.category}</span>}
-                {m.type && <span style={{ fontSize:'13px', color:'#64748b' }}>🔩 {m.type}</span>}
-                {m.brand && <span style={{ fontSize:'13px', color:'#64748b' }}>🏷️ {m.brand} {m.model}</span>}
-                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              <div style={{ display:'flex', gap: isMob ? '6px' : '12px', flexWrap:'wrap' }}>
+                {m.category && <span style={{ fontSize: isMob ? '11px' : '13px', color:'#64748b' }}>📋 {m.category}</span>}
+                {!isMob && m.type && <span style={{ fontSize:'13px', color:'#64748b' }}>🔩 {m.type}</span>}
+                {m.brand && <span style={{ fontSize: isMob ? '11px' : '13px', color:'#64748b' }}>🏷️ {m.brand} {m.model}</span>}
+                {proj && <span style={{ fontSize: isMob ? '11px' : '13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-            <button onClick={()=>setShowStatusModal(true)} style={{ padding:'9px 16px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🔄 Endre status</button>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMob ? '6px' : '8px', flexShrink:0 }}>
+            <button onClick={()=>setShowStatusModal(true)} style={{ padding: isMob ? '7px 10px' : '9px 16px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '11px' : '13px', fontWeight:'600', whiteSpace:'nowrap' }}>{isMob ? '🔄 Status' : '🔄 Endre status'}</button>
+            <button onClick={()=>setEditing(true)} style={{ padding: isMob ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMob ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMob ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMob ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobTD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobTD ? '1fr' : '2fr 1fr', gap: isMobTD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           <div style={mCard}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Maskininformasjon</h3>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
               {[['Kategori',m.category],['Type',m.type],['Merke',m.brand],['Modell',m.model],['Serienummer',m.serial_number],['Årsmodell',m.year],['Siste service',m.last_service],['Neste service',m.next_service],['Prosjekt',proj?.name]].filter(r=>r[1]).map(([k,v])=>(
                 <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                   <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -5771,7 +5966,11 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const [newStatus, setNewStatus] = useState(maskin.status)
   const [projectId, setProjectId] = useState(maskin.current_project_id||'')
   const [employeeName, setEmployeeName] = useState('')
+  const [employeeMode, setEmployeeMode] = useState('select') // 'select' | 'manual'
   const [employees, setEmployees] = useState([])
+  const [hasEmployeeAccess, setHasEmployeeAccess] = useState(false)
+  const [estimatedDays, setEstimatedDays] = useState('')
+  const [estimatedReturn, setEstimatedReturn] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [certWarning, setCertWarning] = useState(null)
@@ -5779,7 +5978,16 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const requiredCerts = getRequiredCerts(maskin)
 
   useEffect(() => {
-    supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data }) => setEmployees(data || []))
+    supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data, error }) => {
+      if (!error && data && data.length > 0) {
+        setEmployees(data)
+        setHasEmployeeAccess(true)
+        setEmployeeMode('select')
+      } else {
+        setHasEmployeeAccess(false)
+        setEmployeeMode('manual')
+      }
+    })
   }, [])
 
   const handleEmployeeSelect = async (empId) => {
@@ -5798,7 +6006,21 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
     }
   }
 
+  // Beregn estimert returdato fra antall dager
+  useEffect(() => {
+    if (estimatedDays && !isNaN(estimatedDays)) {
+      const d = new Date()
+      d.setDate(d.getDate() + parseInt(estimatedDays))
+      setEstimatedReturn(d.toISOString().split('T')[0])
+    } else if (!estimatedDays) {
+      setEstimatedReturn('')
+    }
+  }, [estimatedDays])
+
   const handleSave = async () => {
+    if (newStatus === 'På prosjekt' && !projectId) {
+      return alert('Du må velge et prosjekt når maskinen settes på prosjekt')
+    }
     setSaving(true)
     try {
       const updates = { status:newStatus, updated_at:new Date().toISOString() }
@@ -5807,16 +6029,18 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
       if (newStatus === 'På prosjekt') {
         updates.current_employee_name = employeeName || null
         updates.checked_out_at = new Date().toISOString()
+        updates.estimated_return = estimatedReturn || null
       } else {
         updates.current_employee_name = null
         updates.checked_out_at = null
+        updates.estimated_return = null
       }
       const { error:mErr } = await supabase.from('machines').update(updates).eq('id', maskin.id)
       if (mErr) throw mErr
 
       const proj = projects.find(p=>p.id===projectId)
       let action = `Status endret til ${newStatus}`
-      if (newStatus==='På prosjekt'&&proj) action = `Utlånt til ${proj.name}${employeeName ? ' ('+employeeName+')' : ''}`
+      if (newStatus==='På prosjekt'&&proj) action = `Utlånt til ${proj.name}${employeeName ? ' ('+employeeName+')' : ''}${estimatedReturn ? ' · Retur: '+estimatedReturn : ''}`
       else if (newStatus==='På lager') action = `Returnert til lager${employeeName ? ' av '+employeeName : ''}`
       else if (newStatus==='Service') action = 'Sendt til service'
       else if (newStatus==='Utrangert') action = 'Merket som utrangert'
@@ -5828,18 +6052,20 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
     finally { setSaving(false) }
   }
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Endre status – {maskin.name}</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '0' : '20px', width:'100%', maxWidth: isMob ? '100%' : '480px', maxHeight: isMob ? '100vh' : '92vh', height: isMob ? '100vh' : 'auto', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+        <div style={{ padding: isMob ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: isMob ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>🔄 Endre status{!isMob && ` – ${maskin.name}`}</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding: isMob ? '16px' : '24px', display:'flex', flexDirection:'column', gap: isMob ? '12px' : '16px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch' }}>
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Ny status</label>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
               {Object.entries(MASKIN_STATUS).map(([s,cfg]) => (
                 <button key={s} type="button" onClick={()=>setNewStatus(s)}
                   style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${newStatus===s?cfg.border:'#e2e8f0'}`, background:newStatus===s?cfg.bg:'white', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
@@ -5851,19 +6077,42 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
           </div>
           {newStatus==='På prosjekt' && (
             <div>
-              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt</label>
-              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={mInp}>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label>
+              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ ...mInp, borderColor: !projectId ? '#fecaca' : '#e2e8f0' }}>
                 <option value="">Velg prosjekt...</option>
-                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
+              {!projectId && <div style={{ fontSize:'11px', color:'#dc2626', marginTop:'4px' }}>Prosjekt er påkrevd</div>}
+            </div>
+          )}
+          {newStatus==='På prosjekt' && (
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>⏱️ Estimert tid på prosjekt</label>
+              <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                <input type="number" value={estimatedDays} onChange={e=>setEstimatedDays(e.target.value)} placeholder="Antall dager" min="1" style={{ ...mInp, flex:1 }} />
+                <span style={{ fontSize:'13px', color:'#64748b', whiteSpace:'nowrap' }}>dager</span>
+              </div>
+              {estimatedReturn && <div style={{ fontSize:'12px', color:'#059669', marginTop:'4px' }}>📅 Estimert retur: {new Date(estimatedReturn).toLocaleDateString('nb-NO')}</div>}
             </div>
           )}
           <div>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>👤 Ansatt (henter/leverer)</label>
-            <select value={employees.find(e => e.name === employeeName)?.id || ''} onChange={e => handleEmployeeSelect(e.target.value)} style={mInp}>
-              <option value="">Velg ansatt...</option>
-              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
-            </select>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+              <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>👤 Ansatt (henter/leverer)</label>
+              {hasEmployeeAccess && (
+                <button type="button" onClick={() => setEmployeeMode(m => m === 'select' ? 'manual' : 'select')}
+                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'500' }}>
+                  {employeeMode === 'select' ? 'Skriv inn manuelt' : 'Velg fra liste'}
+                </button>
+              )}
+            </div>
+            {employeeMode === 'select' && hasEmployeeAccess ? (
+              <select value={employees.find(e => e.name === employeeName)?.id || ''} onChange={e => handleEmployeeSelect(e.target.value)} style={mInp}>
+                <option value="">Velg ansatt...</option>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
+              </select>
+            ) : (
+              <input value={employeeName} onChange={e => { setEmployeeName(e.target.value); setCertWarning(null) }} placeholder="Skriv inn navn på ansatt..." style={mInp} />
+            )}
 
             {/* Sertifikatkrav og advarsel */}
             {requiredCerts.length > 0 && (
@@ -5979,7 +6228,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
         <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Navn / Beskrivelse *')}<input value={form.name} onChange={e=>set('name',e.target.value)} required placeholder="F.eks. Slagborrmaskin Makita, Rullestillas 4m" style={mInp} /></div>
 
             {/* Kategori */}
@@ -6002,7 +6251,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 
             <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={mInp}>{Object.keys(MASKIN_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
             {form.status==='På prosjekt' && (
-              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             )}
             <div>{lbl('Merke')}<input value={form.brand} onChange={e=>set('brand',e.target.value)} placeholder="F.eks. Makita, Hilti, Layher..." style={mInp} /></div>
             <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={mInp} /></div>
@@ -6218,7 +6467,7 @@ const QUOTE_STATUS = {
 }
 
 const qInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
-const qCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+const qCard = { background: 'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border: '1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
 function QuoteStatusBadge({ status }) {
   const cfg = QUOTE_STATUS[status] || QUOTE_STATUS['Utkast']
@@ -6249,13 +6498,18 @@ function TilbudPage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [purringTarget, setPurringTarget] = useState(null)
 
   const load = async () => {
     try {
       const [q, p] = await Promise.all([
         supabase.from('quotes').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data || [])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data || [])
       ])
       setQuotes(q); setProjects(p)
     } catch(e) { console.error(e) }
@@ -6277,35 +6531,37 @@ function TilbudPage() {
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster tilbud...</p></div></div>
 
-  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+  const isMobT = typeof window !== 'undefined' && window.innerWidth < 768
+
+  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobT ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Tilbud</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Opprett, send og følg opp tilbud til kunder</p>
+            <h1 style={{ fontSize: isMobT ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Tilbud</h1>
+            {!isMobT && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Opprett, send og følg opp tilbud til kunder</p>}
           </div>
-          <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Nytt tilbud</button>
+          <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobT ? '9px 12px' : '11px 20px', fontSize: isMobT ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Nytt tilbud</button>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr) 1.4fr', gap:'12px' }}>
+      <div style={{ padding: isMobT ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobT ? '12px' : '20px', overflowX:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobT ? 'repeat(2, 1fr)' : 'repeat(4,1fr) 1.4fr', gap: isMobT ? '8px' : '12px' }}>
           {Object.entries(QUOTE_STATUS).map(([s, cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
-              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'20px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{counts[s]||0}</div>
-              <div style={{ fontSize:'11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius: isMobT ? '10px' : '14px', padding: isMobT ? '10px' : '16px', cursor:'pointer', textAlign: isMobT ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobT ? '16px' : '20px', marginBottom: isMobT ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMobT ? '16px' : '22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{counts[s]||0}</div>
+              <div style={{ fontSize: isMobT ? '10px' : '11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
             </button>
           ))}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+          {!isMobT && <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
             <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
             <div style={{ fontSize:'18px', fontWeight:'800' }}>{fmt(totalAkseptert)}</div>
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total akseptert</div>
-          </div>
+          </div>}
         </div>
 
         {/* Purring-banner for utløpte tilbud */}
@@ -6349,8 +6605,8 @@ function TilbudPage() {
           </div>
         )}
 
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk tilbud, kunde, nummer..." style={{ ...qInp, maxWidth:'260px', flex:1 }} />
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobT ? '10px' : '14px 18px', display:'flex', gap: isMobT ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk tilbud..." style={{ ...qInp, maxWidth: isMobT ? '100%' : '260px', flex: isMobT ? '1 1 100%' : '1' }} />
           {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} tilbud</span>
         </div>
@@ -6370,28 +6626,28 @@ function TilbudPage() {
               const isExpired = q.valid_until && new Date(q.valid_until) < new Date() && q.status === 'Sendt'
               return (
                 <div key={q.id} onClick={() => setSelected(q)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${isExpired ? '#fecaca' : '#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobT ? '12px' : '14px', border:`1px solid ${isExpired ? '#fecaca' : '#f1f5f9'}`, padding: isMobT ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobT ? 'flex-start' : 'center', gap: isMobT ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  {!isMobT && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{q.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobT ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobT ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobT ? 'calc(100vw - 130px)' : 'none' }}>{q.title}</span>
+                      {!isMobT && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>}
                       <QuoteStatusBadge status={q.status} />
                       {(q.revision_number || 1) > 1 && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px' }}>Rev.{q.revision_number}</span>}
                       {isExpired && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'12px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>⏰ Utløpt</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {q.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {q.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {q.valid_until && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Gyldig til {q.valid_until}</span>}
+                    <div style={{ display:'flex', gap: isMobT ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {q.customer_name && <span style={{ fontSize: isMobT ? '11px' : '12px', color:'#64748b' }}>👤 {q.customer_name}</span>}
+                      {!isMobT && proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobT && q.valid_until && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Gyldig til {q.valid_until}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>inkl. påslag</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobT ? '13px' : '16px', color:'#0f172a' }}>{fmt(grandTotal)}</div>
+                    {!isMobT && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>inkl. påslag</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobT && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -6492,47 +6748,49 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 
   const handlePrint = () => window.print()
 
+  const isMobTD = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print { .no-print { display:none !important } body { background:white } }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til tilbud</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{q.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobTD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til tilbud</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobTD ? '8px' : '16px', flexWrap: isMobTD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobTD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobTD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobTD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobTD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace: isMobTD ? 'nowrap' : 'normal', maxWidth: isMobTD ? 'calc(100vw - 100px)' : 'none' }}>{q.title}</h1>
+                {!isMobTD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{q.quote_number}</span>}
                 {(q.revision_number || 1) > 1 && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>Rev. {q.revision_number}</span>}
                 <QuoteStatusBadge status={q.status} />
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                {q.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {q.customer_name}</span>}
-                {proj && <span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                {q.revision_note && <span style={{ fontSize:'12px', color:'#7c3aed', fontStyle:'italic' }}>📝 {q.revision_note}</span>}
+              <div style={{ display:'flex', gap: isMobTD ? '6px' : '12px', flexWrap:'wrap' }}>
+                {q.customer_name && <span style={{ fontSize: isMobTD ? '11px' : '13px', color:'#64748b' }}>👤 {q.customer_name}</span>}
+                {proj && <span style={{ fontSize: isMobTD ? '11px' : '13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                {!isMobTD && q.revision_note && <span style={{ fontSize:'12px', color:'#7c3aed', fontStyle:'italic' }}>📝 {q.revision_note}</span>}
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>}
-            {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding:'9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send purring</button>}
-            <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>
-            <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut / PDF</button>
-            {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>}
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobTD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Send' : '📧 Send til kunde'}</button>}
+            {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Purring' : '📧 Send purring'}</button>}
+            {!isMobTD && <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>}
+            {!isMobTD && <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
+            {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTD ? '12px' : '13px' }}>✏️</button>}
+            <button onClick={handleDelete} style={{ padding: isMobTD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobTD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobTD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobTD ? '1fr' : '2fr 1fr', gap: isMobTD ? '12px' : '20px' }}>
         {/* Left - print area */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
           <div style={qCard}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobTD ? '1fr' : '1fr 1fr', gap: isMobTD ? '12px' : '16px' }}>
               <div>
-                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom: isMobTD ? '6px' : '10px' }}>Kunde</div>
                 {[['Navn', q.customer_name], ['Adresse', q.customer_address], ['Org.nr', q.customer_orgnr], ['E-post', q.customer_email]].filter(r=>r[1]).map(([k,v]) => (
                   <div key={k} style={{ marginBottom:'5px', fontSize:'13px' }}><span style={{ color:'#94a3b8' }}>{k}: </span><span style={{ color:'#0f172a', fontWeight:'500' }}>{v}</span></div>
                 ))}
@@ -6552,18 +6810,39 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
             const { sum, total } = calcChapter(ch)
             return (
               <div key={ci} style={qCard}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobTD ? '10px' : '14px', gap:'8px' }}>
+                  <h3 style={{ margin:0, fontSize: isMobTD ? '13px' : '15px', fontWeight:'700', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
                   <div style={{ textAlign:'right' }}>
                     {ch.markup > 0 && <div style={{ fontSize:'11px', color:'#94a3b8' }}>Påslag {ch.markup}%</div>}
                     <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmt(total)}</div>
                   </div>
                 </div>
+                {isMobTD ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {(ch.posts || []).map((p, pi) => {
+                      const lineSum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <div key={pi} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{p.description || '—'}</span>
+                            <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmt(lineSum)}</span>
+                          </div>
+                          <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#64748b' }}>
+                            <span>{p.qty} {p.unit}</span>
+                            {p.unitPriceWork > 0 && <span>Arb: {fmt(p.unitPriceWork)}</span>}
+                            {p.unitPriceMaterial > 0 && <span>Mat: {fmt(p.unitPriceMaterial)}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                   <thead>
                     <tr style={{ background:'#f8fafc' }}>
-                      {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h => (
-                        <th key={h} style={{ padding:'8px 10px', textAlign: h==='Sum'||h==='Arbeid/enh'||h==='Material/enh' ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                      {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map((h,hi) => (
+                        <th key={hi} style={{ padding:'8px 10px', textAlign: hi>=3 ? 'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -6583,6 +6862,8 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                     })}
                   </tbody>
                 </table>
+                </div>
+                )}
                 {ch.description && <p style={{ margin:'10px 0 0', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{ch.description}</p>}
               </div>
             )
@@ -6590,7 +6871,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 
           {/* Totals */}
           <div style={{ ...qCard, background:'#f8fafc' }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'320px', marginLeft:'auto' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth: isMobTD ? '100%' : '320px', marginLeft: isMobTD ? '0' : 'auto' }}>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}>
                 <span>Kapittelsum</span><span style={{ fontWeight:'600' }}>{fmt(chapterTotals)}</span>
               </div>
@@ -6600,7 +6881,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
                   <span style={{ fontWeight:'600' }}>{fmt(grandTotal - chapterTotals)}</span>
                 </div>
               )}
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px', marginTop:'4px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobTD ? '15px' : '17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px', marginTop:'4px' }}>
                 <span>Total eks. mva</span><span style={{ color:'#059669' }}>{fmt(grandTotal)}</span>
               </div>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#94a3b8' }}>
@@ -6794,37 +7075,38 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { grandTotal } = calcQuote(chapters, form.global_markup)
+  const isMobTE = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobTE ? 'stretch' : 'center', justifyContent:'center', padding: isMobTE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobTE ? '0' : '20px', width:'100%', maxWidth: isMobTE ? '100%' : '900px', maxHeight: isMobTE ? '100vh' : '94vh', height: isMobTE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobTE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         {/* Modal header */}
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 {isEdit ? 'Rediger' : 'Nytt'} tilbud</h2>
+        <div style={{ padding: isMobTE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobTE ? '8px' : '16px', flex:1, minWidth:0 }}>
+            <h2 style={{ margin:0, fontSize: isMobTE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>📋 {isEdit ? 'Rediger' : 'Nytt'} tilbud</h2>
             <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Informasjon'],['2','Kapitler & Poster']].map(([n, lbl]) => (
+              {[['1', isMobTE ? 'Info' : 'Informasjon'],['2', isMobTE ? 'Poster' : 'Kapitler & Poster']].map(([n, label]) => (
                 <button key={n} onClick={() => setStep(+n)}
-                  style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize:'13px', cursor:'pointer' }}>
-                  {n}. {lbl}
+                  style={{ padding: isMobTE ? '4px 10px' : '6px 14px', borderRadius:'8px', border:'none', background: step===+n ? '#059669' : '#f1f5f9', color: step===+n ? 'white' : '#64748b', fontWeight: step===+n ? '700':'500', fontSize: isMobTE ? '11px' : '13px', cursor:'pointer' }}>
+                  {n}. {label}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmt(grandTotal)}</strong></span>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobTE ? '6px' : '10px', flexShrink:0 }}>
+            {!isMobTE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmt(grandTotal)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobTE ? '14px' : '24px', WebkitOverflowScrolling:'touch' }}>
           {/* STEP 1 - Info */}
           {step === 1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tilbudstittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbud betongarbeider Blokk B" style={qInp} /></div>
               <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={qInp} /></div>
@@ -6848,16 +7130,16 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
                 return (
                   <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
                     {/* Chapter header */}
-                    <div style={{ background:'#f8fafc', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...qInp, width:'100px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
-                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                    <div style={{ background:'#f8fafc', padding: isMobTE ? '10px 12px' : '14px 18px', display:'flex', alignItems:'center', gap: isMobTE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobTE ? 'wrap' : 'nowrap' }}>
+                      <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapittelittel" style={{ ...qInp, flex:1, background:'transparent', border:'1px solid #e2e8f0', fontWeight:'700', minWidth: isMobTE ? '120px' : 'auto', fontSize: isMobTE ? '13px' : '14px' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...qInp, width: isMobTE ? '60px' : '100px', fontSize: isMobTE ? '12px' : '14px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobTE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmt(total)}</span>
+                      {chapters.length > 1 && <button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
                     {/* Posts table */}
-                    <div style={{ padding:'14px 18px' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <div style={{ padding: isMobTE ? '10px' : '14px 18px', overflowX: isMobTE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobTE ? '600px' : 'auto' }}>
                         <thead>
                           <tr>
                             {['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i) => (
@@ -6908,14 +7190,14 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+        <div style={{ padding: isMobTE ? '12px 14px' : '16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0, gap:'8px' }}>
           <div style={{ display:'flex', gap:'8px' }}>
-            {step === 2 && <button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'500' }}>← Tilbake</button>}
+            {step === 2 && <button onClick={()=>setStep(1)} style={{ padding: isMobTE ? '8px 12px' : '10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTE ? '12px' : '14px', fontWeight:'500' }}>← Tilbake</button>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step === 1 && <button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Kapitler →</button>}
-            {step === 2 && <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett tilbud'}</button>}
+          {isMobTE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmt(grandTotal)}</span>}
+          <div style={{ display:'flex', gap: isMobTE ? '6px' : '10px' }}>
+            {step === 1 && <button onClick={()=>setStep(2)} style={{ padding: isMobTE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTE ? '12px' : '14px', fontWeight:'600' }}>{isMobTE ? 'Neste →' : 'Neste: Kapitler →'}</button>}
+            {step === 2 && <button onClick={handleSave} disabled={saving} style={{ padding: isMobTE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobTE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
           </div>
         </div>
       </div>
@@ -7512,7 +7794,7 @@ function UESvarPage() {
               <span style={{ fontSize:'12px', color:'#94a3b8' }}>{foresp.foresporsel_nr}</span>
             </div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>PROSJEKT</div>
               <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{foresp.prosjekt_navn}</div>
@@ -7655,7 +7937,7 @@ const UE_STATUS = {
 }
 
 const tInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
-const tCard = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
+const tCard = { background: 'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border: '1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
 
 function TenderStatusBadge({ status }) {
   const cfg = TENDER_STATUS[status] || TENDER_STATUS['Utkast']
@@ -7688,12 +7970,17 @@ function AnbudsPage() {
   const [showNew, setShowNew] = useState(false)
   const [newType, setNewType] = useState(null)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const load = async () => {
     try {
       const [t, p] = await Promise.all([
         supabase.from('tenders').select('*').order('created_at', { ascending: false }).then(r => r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r => r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data||[])
       ])
       setTenders(t); setProjects(p)
     } catch(e) { console.error(e) }
@@ -7713,51 +8000,53 @@ function AnbudsPage() {
   const tildelt = tenders.filter(t => t.status === 'Tildelt')
   const totalTildelt = tildelt.reduce((acc,t) => acc + (t.awarded_amount||calcTender(t.chapters||[], t.global_markup).grandTotal), 0)
 
+  const isMobA = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
 
-  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
+  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobA ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbudsportal</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>
+            <h1 style={{ fontSize: isMobA ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📑 Anbud</h1>
+            {!isMobA && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Innkommende forespørsler, utgående anbud til UE og kalkyle</p>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Ny forespørsel</button>
-            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📤 Send til UE</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            <button onClick={() => { setNewType('incoming'); setShowNew(true) }} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📥 Forespørsel' : '📥 Ny forespørsel'}</button>
+            <button onClick={() => { setNewType('outgoing'); setShowNew(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobA ? '9px 10px' : '10px 16px', fontSize: isMobA ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobA ? '📤 Til UE' : '📤 Send til UE'}</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobA ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobA ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {[
             { label:'Innkommende', value:incoming.length, emoji:'📥', bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', filter:'incoming' },
             { label:'Utgående til UE', value:outgoing.length, emoji:'📤', bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', filter:'outgoing' },
             { label:'Tildelt', value:tildelt.length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', filter:'Tildelt' },
           ].map(s => (
             <button key={s.label} onClick={() => s.filter === 'incoming' || s.filter === 'outgoing' ? setFilterType(filterType===s.filter?'alle':s.filter) : setFilterStatus(filterStatus===s.filter?'alle':s.filter)}
-              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
+              style={{ background: (filterType===s.filter||filterStatus===s.filter)?s.bg:'white', border:`1px solid ${(filterType===s.filter||filterStatus===s.filter)?s.border:'#f1f5f9'}`, borderRadius: isMobA ? '10px' : '14px', padding: isMobA ? '10px' : '16px', cursor:'pointer', textAlign: isMobA ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobA ? '16px' : '22px', marginBottom: isMobA ? '4px' : '8px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobA ? '16px' : '22px', fontWeight:'800', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize: isMobA ? '10px' : '11px', color:(filterType===s.filter||filterStatus===s.filter)?s.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s.label}</div>
             </button>
           ))}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
+          {!isMobA && <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'16px', color:'white' }}>
             <div style={{ fontSize:'20px', marginBottom:'8px' }}>💰</div>
             <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtT(totalTildelt)}</div>
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Total tildelt</div>
-          </div>
+          </div>}
         </div>
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk anbud, kunde, nummer..." style={{ ...tInp, maxWidth:'260px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth:'180px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobA ? '10px' : '14px 18px', display:'flex', gap: isMobA ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...tInp, maxWidth: isMobA ? '100%' : '260px', flex: isMobA ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...tInp, maxWidth: isMobA ? '100%' : '180px', flex: isMobA ? '1 1 100%' : 'none', fontSize: isMobA ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(TENDER_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
           </select>
@@ -7782,27 +8071,27 @@ function AnbudsPage() {
               const deadlineDays = t.deadline ? Math.ceil((new Date(t.deadline)-new Date())/(1000*60*60*24)) : null
               return (
                 <div key={t.id} onClick={()=>setSelected(t)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobA ? '12px' : '14px', border:`1px solid ${deadlineDays!==null&&deadlineDays<=3&&t.status==='Sendt'?'#fecaca':'#f1f5f9'}`, padding: isMobA ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobA ? 'flex-start' : 'center', gap: isMobA ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
+                  {!isMobA && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{t.title}</span>
-                      <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobA ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobA ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobA ? 'calc(100vw - 120px)' : 'none' }}>{t.title}</span>
+                      {!isMobA && <span style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>}
                       <TenderStatusBadge status={t.status} />
                       <span style={{ background:isIncoming?'#f5f3ff':'#eff6ff', color:isIncoming?'#7c3aed':'#2563eb', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:`1px solid ${isIncoming?'#ddd6fe':'#bfdbfe'}` }}>{isIncoming?'Innkommende':'Utgående UE'}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {t.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b', fontWeight:deadlineDays!==null&&deadlineDays<=3?'700':'400' }}>⏰ Frist {t.deadline}{deadlineDays!==null&&deadlineDays<=3?` (${deadlineDays}d igjen)`:''}</span>}
+                    <div style={{ display:'flex', gap: isMobA ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {t.customer_name && <span style={{ fontSize: isMobA ? '11px' : '12px', color:'#64748b' }}>👤 {t.customer_name}</span>}
+                      {!isMobA && proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobA && t.deadline && <span style={{ fontSize:'12px', color:deadlineDays!==null&&deadlineDays<=3?'#dc2626':'#64748b' }}>⏰ {t.deadline}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobA ? '13px' : '15px', color:'#0f172a' }}>{fmtT(t.awarded_amount||grandTotal)}</div>
+                    {!isMobA && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobA && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -7816,6 +8105,7 @@ function AnbudsPage() {
 
 function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const isMobAD = typeof window !== 'undefined' && window.innerWidth < 768
   const [t, setT] = useState(init)
   const [ues, setUes] = useState([])
   const [editing, setEditing] = useState(false)
@@ -7872,16 +8162,16 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{t.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobAD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til anbud</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobAD ? '8px' : '16px', flexWrap: isMobAD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobAD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobAD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:isIncoming?'#f5f3ff':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{isIncoming?'📥':'📤'}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobAD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobAD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{t.title}</h1>
+                {!isMobAD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{t.tender_number}</span>}
                 <TenderStatusBadge status={t.status} />
               </div>
               <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -7891,17 +8181,17 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Inviter UE</button>}
-            {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🏆 Tildel anbud</button>}
-            {isIncoming && <button onClick={generateQuote} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Generer tilbud</button>}
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobAD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {!isIncoming && t.status==='Utkast' && <button onClick={()=>setShowInviteUE(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '📧 UE' : '📧 Inviter UE'}</button>}
+            {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '🏆 Tildel' : '🏆 Tildel anbud'}</button>}
+            {isIncoming && <button onClick={generateQuote} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '📋 Tilbud' : '📋 Generer tilbud'}</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobAD ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobAD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobAD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobAD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobAD ? '1fr' : '2fr 1fr', gap: isMobAD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Description */}
           {t.description && <div style={tCard}><h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📄 Beskrivelse</h3><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{t.description}</p></div>}
@@ -7921,7 +8211,22 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                         {ch.markup>0 && <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669' }}>Pris: {fmtT(price)}</div>}
                       </div>
                     </div>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                    {isMobAD ? (
+                      <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                        {(ch.posts||[]).map((p,pi) => {
+                          const ls = (parseFloat(p.qty)||0)*(parseFloat(p.unitCost)||0)
+                          return (
+                            <div key={pi} style={{ background:'white', borderRadius:'8px', padding:'8px 10px' }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                                <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{p.description||'—'}</span>
+                                <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmtT(ls)}</span>
+                              </div>
+                              <div style={{ fontSize:'11px', color:'#64748b' }}>{p.qty} {p.unit} × {fmtT(p.unitCost)}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (<table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                       <thead><tr style={{ background:'white' }}>
                         {['Beskrivelse','Mengde','Enhet','Kost/enh','Sum'].map(h=><th key={h} style={{ padding:'6px 8px', textAlign:h==='Sum'||h==='Kost/enh'?'right':'left', color:'#94a3b8', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
                       </tr></thead>
@@ -7938,6 +8243,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
                         })}
                       </tbody>
                     </table>
+                    )}
                   </div>
                 )
               })}
@@ -8066,32 +8372,33 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { grandTotal } = calcTender(chapters, form.global_markup)
+  const isMobAE = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobAE ? 'stretch' : 'center', justifyContent:'center', padding: isMobAE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{isIncoming?'📥':'📤'} {isEdit?'Rediger':'Nytt'} {isIncoming?'innkommende anbud':'utgående anbud til UE'}</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobAE ? '0' : '20px', width:'100%', maxWidth: isMobAE ? '100%' : '900px', maxHeight: isMobAE ? '100vh' : '94vh', height: isMobAE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobAE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobAE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobAE ? '8px' : '16px', flex:1, minWidth:0 }}>
+            <h2 style={{ margin:0, fontSize: isMobAE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{isIncoming?'📥':'📤'} {isEdit?'Rediger':'Nytt'} {isMobAE ? 'anbud' : (isIncoming?'innkommende anbud':'utgående anbud til UE')}</h2>
             <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Informasjon'],['2','Kalkyle / Poster']].map(([n,l])=>(
-                <button key={n} onClick={()=>setStep(+n)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize:'13px', cursor:'pointer' }}>{n}. {l}</button>
+              {[['1', isMobAE ? 'Info' : 'Informasjon'],['2', isMobAE ? 'Kalkyle' : 'Kalkyle / Poster']].map(([n,l])=>(
+                <button key={n} onClick={()=>setStep(+n)} style={{ padding: isMobAE ? '4px 10px' : '6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize: isMobAE ? '11px' : '13px', cursor:'pointer' }}>{n}. {l}</button>
               ))}
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtT(grandTotal)}</strong></span>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            {!isMobAE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtT(grandTotal)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobAE ? '14px' : '24px', WebkitOverflowScrolling:'touch' }}>
           {step===1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
               <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 {isIncoming?'Byggherre / Oppdragsgiver':'Kontakt / UE-koordinator'}</div></div>
               <div>{lbl(isIncoming?'Byggherre':'Kontaktnavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={tInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="epost@firma.no" style={tInp} /></div>
@@ -8110,15 +8417,15 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                 const { cost, price } = calcTenderChapter(ch)
                 return (
                   <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-                    <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...tInp, flex:1, background:'transparent', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" min="0" max="100" style={{ ...tInp, width:'100px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtT(price)}</span>
-                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
+                    <div style={{ background:'#f8fafc', padding: isMobAE ? '10px 12px' : '12px 18px', display:'flex', alignItems:'center', gap: isMobAE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobAE ? 'wrap' : 'nowrap' }}>
+                      <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...tInp, flex:1, background:'transparent', fontWeight:'700', minWidth: isMobAE ? '120px' : 'auto', fontSize: isMobAE ? '13px' : '14px' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" min="0" max="100" style={{ ...tInp, width: isMobAE ? '60px' : '100px', fontSize: isMobAE ? '12px' : '14px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobAE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtT(price)}</span>
+                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
-                    <div style={{ padding:'14px 18px' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <div style={{ padding: isMobAE ? '10px' : '14px 18px', overflowX: isMobAE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobAE ? '550px' : 'auto' }}>
                         <thead><tr>{['Beskrivelse','Mengde','Enhet','Kostpris/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=4?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
                         <tbody>
                           {ch.posts.map(p => {
@@ -8150,12 +8457,12 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
             </div>
           )}
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>← Tilbake</button>}</div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step===1&&<button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Kalkyle →</button>}
-            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett anbud'}</button>}
+        <div style={{ padding: isMobAE ? '12px 14px' : '16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0, gap:'8px' }}>
+          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding: isMobAE ? '8px 12px' : '10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobAE ? '12px' : '14px' }}>← Tilbake</button>}</div>
+          {isMobAE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmtT(grandTotal)}</span>}
+          <div style={{ display:'flex', gap: isMobAE ? '6px' : '10px' }}>
+            {step===1&&<button onClick={()=>setStep(2)} style={{ padding: isMobAE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAE ? '12px' : '14px', fontWeight:'600' }}>{isMobAE ? 'Neste →' : 'Neste: Kalkyle →'}</button>}
+            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding: isMobAE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobAE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
           </div>
         </div>
       </div>
@@ -8287,7 +8594,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
                       </div>
                     </div>
                   )}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                     <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Firmanavn * {ue.customer_id&&<span style={{ color:'#059669', fontWeight:'500' }}>✓ Koblet</span>}</label><input value={ue.company_name} onChange={e=>updateUE(ue.id,'company_name',e.target.value)} placeholder="UE Firma AS" style={{ ...tInp, borderColor: ue.dupWarning?'#fde68a':ue.customer_id?'#bbf7d0':'#e2e8f0' }} /></div>
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Kontaktperson</label><input value={ue.contact_name} onChange={e=>updateUE(ue.id,'contact_name',e.target.value)} placeholder="Fullt navn" style={tInp} /></div>
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>E-post *</label><input type="email" value={ue.email} onChange={e=>updateUE(ue.id,'email',e.target.value)} placeholder="ue@firma.no" style={{ ...tInp, borderColor: ue.dupWarning?'#fde68a':'#e2e8f0' }} /></div>
@@ -8361,7 +8668,7 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Knytt til prosjekt</label>
                 <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={tInp}>
                   <option value="">Ingen</option>
-                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                 </select>
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
@@ -8498,7 +8805,7 @@ const ORDER_STATUS = {
 }
 
 const oInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const oCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const oCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function OrderStatusBadge({ status }) {
   const cfg = ORDER_STATUS[status] || ORDER_STATUS['Utkast']
@@ -8528,6 +8835,7 @@ const EM_STATUS = {
 }
 
 function EndringsmeldingPage() {
+  const isMobBild = typeof window !== 'undefined' && window.innerWidth < 768
   const { user } = useAuth()
   const [endringer, setEndringer] = useState([])
   const [projects, setProjects] = useState([])
@@ -8546,7 +8854,7 @@ function EndringsmeldingPage() {
     try {
       const [emRes, prRes] = await Promise.all([
         supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('id, name').order('name'),
+        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'),
       ])
       setEndringer(emRes.data || [])
       setProjects(prRes.data || [])
@@ -8564,6 +8872,8 @@ function EndringsmeldingPage() {
 
   const totalTillegg = filtered.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
   const totalIkkeFakturert = filtered.filter(e => e.status === 'Godkjent').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+
+  const isMobEM = typeof window !== 'undefined' && window.innerWidth < 768
 
   // ── PDF-rapport per prosjekt ──
   const [showPdfPicker, setShowPdfPicker] = useState(false)
@@ -8862,10 +9172,10 @@ function EndringsmeldingPage() {
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
           <form onSubmit={handleSave} style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'14px' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
               <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
-              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             </div>
 
             <div>{lbl('Årsak til endring')}<select value={form.reason} onChange={e=>set('reason',e.target.value)} style={{ ...inp, background:'white' }}>
@@ -8882,7 +9192,7 @@ function EndringsmeldingPage() {
 
             <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px' }}>
               <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>💰 Kostnadskonsekvens</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'10px' }}>
                 <div>{lbl('Timer')}<input type="number" value={form.hours} onChange={e=>set('hours',e.target.value)} placeholder="0" style={inp} /></div>
                 <div>{lbl('Materialer (kr)')}<input type="number" value={form.materials_cost} onChange={e=>set('materials_cost',e.target.value)} placeholder="0" style={inp} /></div>
                 <div>{lbl('UE (kr)')}<input type="number" value={form.ue_cost} onChange={e=>set('ue_cost',e.target.value)} placeholder="0" style={inp} /></div>
@@ -8903,7 +9213,7 @@ function EndringsmeldingPage() {
                   </div>
                 ))}
                 <label style={{ width:'80px', height:'80px', borderRadius:'8px', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'#94a3b8', fontSize:'24px' }}>
-                  +<input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload} />
+                  +<input type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={handleImageUpload} />
                 </label>
               </div>
             </div>
@@ -8994,30 +9304,30 @@ function EndringsmeldingPage() {
     const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
     const proj = projects.find(p => p.id === em.project_id)
     return (
-      <div style={f}>
-        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-          <button onClick={() => setViewEm(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#64748b', marginBottom:'12px' }}>← Tilbake til oversikt</button>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold' }}>{em.title}</h1>
-                <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'3px 12px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>{st.emoji} {em.status}</span>
+      <div style={{ ...f, overflowX:'hidden', maxWidth:'100vw' }}>
+        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobEM ? '14px' : '20px 32px' }}>
+          <button onClick={() => setViewEm(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'13px', color:'#64748b', marginBottom:'10px' }}>← Tilbake til oversikt</button>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobEM ? '8px' : '16px', flexWrap: isMobEM ? 'wrap' : 'nowrap' }}>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobEM ? '6px' : '10px', marginBottom:'4px', flexWrap:'wrap' }}>
+                <h1 style={{ margin:0, fontSize: isMobEM ? '16px' : '20px', fontWeight:'bold' }}>{em.title}</h1>
+                <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700' }}>{st.emoji} {em.status}</span>
               </div>
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
+              <p style={{ margin:0, color:'#94a3b8', fontSize: isMobEM ? '11px' : '13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
             </div>
-            <div style={{ display:'flex', gap:'8px' }}>
-              {em.status === 'Utkast' && <button onClick={() => sendToCustomer(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📧 Send til kunde</button>}
-              <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', cursor:'pointer' }}>✏️ Rediger</button>
+            <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+              {em.status === 'Utkast' && <button onClick={() => sendToCustomer(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📧 Send' : '📧 Send til kunde'}</button>}
+              <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '12px' : '14px', cursor:'pointer' }}>✏️</button>
             </div>
           </div>
         </div>
-        <div style={{ padding:'24px 32px', maxWidth:'800px' }}>
+        <div style={{ padding: isMobEM ? '12px' : '24px 32px', maxWidth:'800px' }}>
           {em.reason && <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', fontSize:'13px', color:'#92400e' }}>🏷️ Årsak: <strong>{em.reason}</strong></div>}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px', marginBottom:'16px' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
             <p style={{ margin:0, fontSize:'14px', color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{em.description || '—'}</p>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', marginBottom:'16px' }}>
             <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
               <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
               <div style={{ fontSize:'12px', color:'#64748b' }}>Totalt beløp</div>
@@ -9035,7 +9345,7 @@ function EndringsmeldingPage() {
           {(em.images||[]).length > 0 && (
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px' }}>
               <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📸 Bilder</h3>
-              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap: isMobBild ? '6px' : '8px', flexWrap:'wrap' }}>
                 {em.images.map((img, i) => <img key={i} src={img.url} alt={img.name} style={{ width:'120px', height:'120px', objectFit:'cover', borderRadius:'10px', border:'1px solid #e2e8f0', cursor:'pointer' }} onClick={() => window.open(img.url, '_blank')} />)}
               </div>
             </div>
@@ -9052,9 +9362,9 @@ function EndringsmeldingPage() {
             <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📋 Aktivitetslogg</h3>
             {(em.activity_log || []).slice().reverse().map((log, i) => (
               <div key={i} style={{ display:'flex', gap:'10px', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
-                <span style={{ color:'#94a3b8', fontSize:'12px', width:'130px', flexShrink:0 }}>{new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
-                <span style={{ color:'#374151' }}>{log.action}</span>
-                <span style={{ color:'#94a3b8', marginLeft:'auto' }}>{log.by}</span>
+                <span style={{ color:'#94a3b8', fontSize: isMobEM ? '10px' : '12px', width: isMobEM ? 'auto' : '130px', flexShrink:0 }}>{new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+                <span style={{ color:'#374151', fontSize: isMobEM ? '12px' : '13px' }}>{log.action}</span>
+                {!isMobEM && <span style={{ color:'#94a3b8', marginLeft:'auto' }}>{log.by}</span>}
               </div>
             ))}
             {(!em.activity_log || em.activity_log.length === 0) && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert</p>}
@@ -9066,16 +9376,16 @@ function EndringsmeldingPage() {
 
   // ── List View ──────────────────────────────────────────────────────────────
   return (
-    <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ ...f, overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobEM ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>
+            <h1 style={{ margin:0, fontSize: isMobEM ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
+            {!isMobEM && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>}
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => setShowPdfPicker(!showPdfPicker)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📄 PDF-rapport</button>
-            <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny endringsmelding</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobEM && <button onClick={() => setShowPdfPicker(!showPdfPicker)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📄 PDF</button>}
+            <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>
           </div>
         </div>
         {/* PDF prosjektvelger */}
@@ -9108,7 +9418,7 @@ function EndringsmeldingPage() {
       </div>
 
       {/* Statistikk */}
-      <div style={{ padding:'16px 32px', display:'flex', gap:'12px' }}>
+      <div style={{ padding: isMobEM ? '10px 12px' : '16px 32px', display:'grid', gridTemplateColumns: isMobEM ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', gap: isMobEM ? '6px' : '12px' }}>
         {[
           { label:'Totalt', value: endringer.length, color:'#0f172a' },
           { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b' },
@@ -9117,28 +9427,28 @@ function EndringsmeldingPage() {
           { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669' },
           { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706' },
         ].map((s,i) => (
-          <div key={i} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'12px 16px', flex:1, textAlign:'center' }}>
-            <div style={{ fontSize:'18px', fontWeight:'800', color:s.color }}>{s.value}</div>
-            <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.label}</div>
+          <div key={i} style={{ background:'white', borderRadius: isMobEM ? '10px' : '12px', border:'1px solid #f1f5f9', padding: isMobEM ? '8px' : '12px 16px', textAlign:'center' }}>
+            <div style={{ fontSize: isMobEM ? '14px' : '18px', fontWeight:'800', color:s.color }}>{s.value}</div>
+            <div style={{ fontSize: isMobEM ? '9px' : '11px', color:'#94a3b8' }}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Filtre */}
-      <div style={{ padding:'0 32px 12px', display:'flex', gap:'10px', alignItems:'center' }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk i endringer..." style={{ ...inp, maxWidth:'250px' }} />
-        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...inp, maxWidth:'160px', background:'white' }}>
+      <div style={{ padding: isMobEM ? '0 12px 10px' : '0 32px 12px', display:'flex', gap: isMobEM ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...inp, maxWidth: isMobEM ? '100%' : '250px', flex: isMobEM ? '1 1 100%' : 'none' }} />
+        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...inp, maxWidth: isMobEM ? '100%' : '160px', background:'white', flex: isMobEM ? '1 1 48%' : 'none', fontSize: isMobEM ? '13px' : '14px' }}>
           <option value="all">Alle statuser</option>
           {Object.keys(EM_STATUS).map(s => <option key={s} value={s}>{EM_STATUS[s].emoji} {s}</option>)}
         </select>
-        <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth:'200px', background:'white' }}>
+        <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth: isMobEM ? '100%' : '200px', background:'white', flex: isMobEM ? '1 1 48%' : 'none', fontSize: isMobEM ? '13px' : '14px' }}>
           <option value="all">Alle prosjekter</option>
-          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
         </select>
       </div>
 
       {/* Liste */}
-      <div style={{ padding:'0 32px 32px' }}>
+      <div style={{ padding: isMobEM ? '0 12px 12px' : '0 32px 32px' }}>
         {loading && <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster...</div>}
         {!loading && filtered.length === 0 && <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Ingen endringsmeldinger funnet</div>}
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -9149,38 +9459,37 @@ function EndringsmeldingPage() {
             return (
               <div key={em.id} style={{ background:'white', borderRadius:'14px', border:`1px solid ${st.border}`, overflow:'hidden' }}>
                 {/* Hovedrad */}
-                <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:'12px' }}>
-                  <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>
+                <div style={{ padding: isMobEM ? '10px 12px' : '14px 20px', display:'flex', alignItems:'center', gap: isMobEM ? '8px' : '12px' }}>
+                  {!isMobEM && <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>}
                   <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setViewEm(em)}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
-                      <span style={{ fontWeight:'600', fontSize:'14px', color:'#0f172a' }}>{em.title}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'600', fontSize: isMobEM ? '13px' : '14px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobEM ? 'calc(100vw - 160px)' : 'none' }}>{em.title}</span>
                       <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'600' }}>{em.status}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>
-                      {proj && <span style={{ fontSize:'12px', color:'#059669' }}>🏗️ {proj.name}</span>}
-                      {em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
-                      <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>
-                      {(em.images||[]).length > 0 && <span style={{ fontSize:'12px', color:'#94a3b8' }}>📸 {em.images.length}</span>}
+                    <div style={{ display:'flex', gap: isMobEM ? '4px' : '10px', flexWrap:'wrap' }}>
+                      {!isMobEM && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{em.em_number}</span>}
+                      {proj && <span style={{ fontSize: isMobEM ? '11px' : '12px', color:'#059669' }}>🏗️ {proj.name}</span>}
+                      {!isMobEM && em.reason && <span style={{ fontSize:'12px', color:'#d97706' }}>🏷️ {em.reason}</span>}
+                      {!isMobEM && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(em.created_at).toLocaleDateString('nb-NO')}</span>}
                     </div>
                   </div>
-                  <div style={{ textAlign:'right', flexShrink:0, marginRight:'8px' }}>
+                  {!isMobEM && <div style={{ textAlign:'right', flexShrink:0, marginRight:'8px' }}>
                     <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
                     {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
-                  </div>
+                  </div>}
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
-                    {(em.status === 'Utkast' || em.status === 'Under forhandling') && (
+                    {!isMobEM && (em.status === 'Utkast' || em.status === 'Under forhandling') && (
                       <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde"
                         style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
                     )}
-                    {em.status === 'Sendt' && (
+                    {!isMobEM && em.status === 'Sendt' && (
                       <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
                         style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>
-                    <button onClick={(e) => { e.stopPropagation(); setExpandedEm(isExpanded ? null : em.id) }} title="Vis historikk"
-                      style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'700' }}>{isExpanded ? '▲' : '▼'}</button>
+                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
+                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
+                    <button onClick={(e) => { e.stopPropagation(); isMobEM ? setViewEm(em) : setExpandedEm(isExpanded ? null : em.id) }} title={isMobEM ? "Vis" : "Vis historikk"}
+                      style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize: isMobEM ? '12px' : '14px', color:'#64748b', fontWeight:'700' }}>{isMobEM ? '›' : isExpanded ? '▲' : '▼'}</button>
                   </div>
                 </div>
                 {/* Utvidet: Historikk og aktivitetslogg */}
@@ -9266,13 +9575,18 @@ function OrdrePage() {
   const [showNew, setShowNew] = useState(false)
   const [showFromQuote, setShowFromQuote] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const load = async () => {
     try {
       const [o, q, p] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending:false }).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setOrders(o); setQuotes(q); setProjects(p)
     } catch(e) { console.error(e) }
@@ -9289,48 +9603,50 @@ function OrdrePage() {
   const counts = Object.keys(ORDER_STATUS).reduce((acc,s) => { acc[s]=orders.filter(o=>o.status===s).length; return acc }, {})
   const totalFullfort = orders.filter(o=>o.status==='Fullført').reduce((acc,o)=>acc+calcOrder(o.chapters||[],o.global_markup).grandTotal,0)
 
+  const isMobO = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ordrer...</p></div></div>
-  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobO ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📦 Ordre</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>
+            <h1 style={{ fontSize: isMobO ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📦 Ordre</h1>
+            {!isMobO && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Fra akseptert tilbud</button>}
-            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny ordre</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 10px' : '10px 16px', fontSize: isMobO ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobO ? '📋 Tilbud' : '📋 Fra tilbud'}</button>}
+            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 12px' : '11px 20px', fontSize: isMobO ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ordre</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobO ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobO ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr) 1.3fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobO ? 'repeat(3, 1fr)' : 'repeat(5,1fr) 1.3fr', gap: isMobO ? '8px' : '12px' }}>
           {['Utkast','Sendt','Bekreftet','Pågår','Fullført'].map(s => {
             const cfg = ORDER_STATUS[s]
             return (
               <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
-                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'14px', cursor:'pointer', textAlign:'left' }}>
-                <div style={{ fontSize:'20px', marginBottom:'6px' }}>{cfg.emoji}</div>
-                <div style={{ fontSize:'20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
-                <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius: isMobO ? '10px' : '14px', padding: isMobO ? '10px' : '14px', cursor:'pointer', textAlign: isMobO ? 'center' : 'left' }}>
+                <div style={{ fontSize: isMobO ? '16px' : '20px', marginBottom: isMobO ? '4px' : '6px' }}>{cfg.emoji}</div>
+                <div style={{ fontSize: isMobO ? '16px' : '20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+                <div style={{ fontSize: isMobO ? '10px' : '11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
               </button>
             )
           })}
-          <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'14px', color:'white' }}>
+          {!isMobO && <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', borderRadius:'14px', padding:'14px', color:'white' }}>
             <div style={{ fontSize:'20px', marginBottom:'6px' }}>💰</div>
             <div style={{ fontSize:'16px', fontWeight:'800' }}>{fmtO(totalFullfort)}</div>
             <div style={{ fontSize:'11px', opacity:0.85, fontWeight:'500', marginTop:'2px' }}>Fullført totalt</div>
-          </div>
+          </div>}
         </div>
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk ordre, kunde, nummer..." style={{ ...oInp, maxWidth:'260px', flex:1 }} />
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobO ? '10px' : '14px 18px', display:'flex', gap: isMobO ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...oInp, maxWidth: isMobO ? '100%' : '260px', flex: isMobO ? '1 1 100%' : '1' }} />
           {(search||filterStatus!=='alle') && <button onClick={()=>{setSearch('');setFilterStatus('alle')}} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} ordrer</span>
         </div>
@@ -9350,27 +9666,27 @@ function OrdrePage() {
               const { grandTotal } = calcOrder(o.chapters||[], o.global_markup)
               return (
                 <div key={o.id} onClick={()=>setSelected(o)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobO ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobO ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobO ? 'flex-start' : 'center', gap: isMobO ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                  {!isMobO && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{o.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobO ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobO ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobO ? 'calc(100vw - 120px)' : 'none' }}>{o.title}</span>
+                      {!isMobO && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>}
                       <OrderStatusBadge status={o.status} />
                       {o.quote_id && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #ddd6fe' }}>Fra tilbud</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {o.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {o.customer_name}</span>}
-                      {proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {o.delivery_date && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 Levering {o.delivery_date}</span>}
+                    <div style={{ display:'flex', gap: isMobO ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {o.customer_name && <span style={{ fontSize: isMobO ? '11px' : '12px', color:'#64748b' }}>👤 {o.customer_name}</span>}
+                      {!isMobO && proj && <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobO && o.delivery_date && <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {o.delivery_date}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtO(grandTotal)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobO ? '13px' : '15px', color:'#0f172a' }}>{fmtO(grandTotal)}</div>
+                    {!isMobO && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobO && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -9424,18 +9740,20 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     alert('Gå til Faktura-modulen og velg "Fra ordre" for å opprette faktura.')
   }
 
+  const isMobOD = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print { .no-print{display:none!important} }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ordrer</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{o.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobOD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ordrer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobOD ? '8px' : '16px', flexWrap: isMobOD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobOD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobOD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobOD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobOD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{o.title}</h1>
+                {!isMobOD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>}
                 <OrderStatusBadge status={o.status} />
               </div>
               <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -9444,22 +9762,22 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send bekreftelse</button>}
-            {o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Opprett faktura</button>}
-            <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄 Endringsmelding</button>
-            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobOD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '📧 Send' : '📧 Send bekreftelse'}</button>}
+            {!isMobOD && o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Faktura</button>}
+            {!isMobOD && <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄</button>}
+            {!isMobOD && <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobOD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobOD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobOD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobOD ? '1fr' : '2fr 1fr', gap: isMobOD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Header info */}
           <div style={oCard}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobOD ? '1fr' : '1fr 1fr', gap: isMobOD ? '12px' : '16px' }}>
               <div>
                 <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>Kunde</div>
                 {[['Navn',o.customer_name],['Adresse',o.customer_address],['Org.nr',o.customer_orgnr],['E-post',o.customer_email]].filter(r=>r[1]).map(([k,v])=>(
@@ -9481,13 +9799,33 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
             const { sum, total } = calcOrderChapter(ch)
             return (
               <div key={ci} style={oCard}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobOD ? '10px' : '14px', gap:'8px' }}>
+                  <h3 style={{ margin:0, fontSize: isMobOD ? '13px' : '15px', fontWeight:'700', color:'#0f172a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{String(ci+1).padStart(2,'0')}. {ch.title}</h3>
                   <div style={{ textAlign:'right' }}>
                     {ch.markup>0 && <div style={{ fontSize:'11px', color:'#94a3b8' }}>Påslag {ch.markup}%</div>}
                     <div style={{ fontWeight:'700', color:'#059669', fontSize:'14px' }}>{fmtO(total)}</div>
                   </div>
                 </div>
+                {isMobOD ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {(ch.posts||[]).map((p,pi) => {
+                      const ls=(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <div key={pi} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                            <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{p.description||'—'}</span>
+                            <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmtO(ls)}</span>
+                          </div>
+                          <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#64748b' }}>
+                            <span>{p.qty} {p.unit}</span>
+                            {p.unitPriceWork>0 && <span>Arb: {fmtO(p.unitPriceWork)}</span>}
+                            {p.unitPriceMaterial>0 && <span>Mat: {fmtO(p.unitPriceMaterial)}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                   <thead><tr style={{ background:'#f8fafc' }}>
                     {['Beskrivelse','Mengde','Enhet','Arbeid/enh','Material/enh','Sum'].map(h=><th key={h} style={{ padding:'8px 10px', textAlign:['Arbeid/enh','Material/enh','Sum'].includes(h)?'right':'left', color:'#64748b', fontWeight:'600', fontSize:'11px', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
@@ -9506,13 +9844,14 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
                     })}
                   </tbody>
                 </table>
+                )}
               </div>
             )
           })}
 
           {/* Totals */}
           <div style={{ ...oCard, background:'#f8fafc' }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'320px', marginLeft:'auto' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth: isMobOD ? '100%' : '320px', marginLeft: isMobOD ? '0' : 'auto' }}>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}><span>Ordresum</span><span style={{ fontWeight:'600' }}>{fmtO(chapterTotals)}</span></div>
               {changes.filter(c=>c.status==='Godkjent').length>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#d97706' }}><span>Endringsmeldinger</span><span style={{ fontWeight:'600' }}>+{fmtO(changesTotal)}</span></div>}
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'17px', fontWeight:'800', color:'#0f172a', borderTop:'2px solid #e2e8f0', paddingTop:'10px' }}><span>Total eks. mva</span><span style={{ color:'#059669' }}>{fmtO(grandTotal+changesTotal)}</span></div>
@@ -9632,32 +9971,33 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { grandTotal } = calcOrder(chapters, form.global_markup)
+  const isMobOE = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobOE ? 'stretch' : 'center', justifyContent:'center', padding: isMobOE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📦 {isEdit?'Rediger':'Ny'} ordre</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobOE ? '0' : '20px', width:'100%', maxWidth: isMobOE ? '100%' : '900px', maxHeight: isMobOE ? '100vh' : '94vh', height: isMobOE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobOE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobOE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobOE ? '8px' : '16px', flex:1, minWidth:0 }}>
+            <h2 style={{ margin:0, fontSize: isMobOE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>📦 {isEdit?'Rediger':'Ny'} ordre</h2>
             <div style={{ display:'flex', gap:'4px' }}>
-              {[['1','Informasjon'],['2','Linjer & Poster']].map(([n,l])=>(
-                <button key={n} onClick={()=>setStep(+n)} style={{ padding:'6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize:'13px', cursor:'pointer' }}>{n}. {l}</button>
+              {[['1', isMobOE ? 'Info' : 'Informasjon'],['2', isMobOE ? 'Poster' : 'Linjer & Poster']].map(([n,l])=>(
+                <button key={n} onClick={()=>setStep(+n)} style={{ padding: isMobOE ? '4px 10px' : '6px 14px', borderRadius:'8px', border:'none', background:step===+n?'#059669':'#f1f5f9', color:step===+n?'white':'#64748b', fontWeight:step===+n?'700':'500', fontSize: isMobOE ? '11px' : '13px', cursor:'pointer' }}>{n}. {l}</button>
               ))}
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtO(grandTotal)}</strong></span>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobOE ? '6px' : '10px', flexShrink:0 }}>
+            {!isMobOE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Total: <strong style={{ color:'#059669' }}>{fmtO(grandTotal)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'24px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobOE ? '14px' : '24px', WebkitOverflowScrolling:'touch' }}>
           {step===1 && (
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
               <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={oInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
@@ -9676,15 +10016,15 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                 const { sum, total } = calcOrderChapter(ch)
                 return (
                   <div key={ch.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-                    <div style={{ background:'#f8fafc', padding:'12px 18px', display:'flex', alignItems:'center', gap:'12px', borderBottom:'1px solid #f1f5f9' }}>
-                      <span style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
-                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="Påslag %" style={{ ...oInp, width:'100px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize:'14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
-                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 10px', cursor:'pointer' }}>🗑️</button>}
+                    <div style={{ background:'#f8fafc', padding: isMobOE ? '10px 12px' : '12px 18px', display:'flex', alignItems:'center', gap: isMobOE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobOE ? 'wrap' : 'nowrap' }}>
+                      <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
+                      <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700', minWidth: isMobOE ? '120px' : 'auto', fontSize: isMobOE ? '13px' : '14px' }} />
+                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" style={{ ...oInp, width: isMobOE ? '60px' : '100px', fontSize: isMobOE ? '12px' : '14px' }} title="Påslag %" />
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobOE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
+                      {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
-                    <div style={{ padding:'14px 18px' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <div style={{ padding: isMobOE ? '10px' : '14px 18px', overflowX: isMobOE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobOE ? '600px' : 'auto' }}>
                         <thead><tr>{['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
                         <tbody>
                           {ch.posts.map(p => {
@@ -9717,12 +10057,12 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
             </div>
           )}
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>← Tilbake</button>}</div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            {step===1&&<button onClick={()=>setStep(2)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: Linjer →</button>}
-            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett ordre'}</button>}
+        <div style={{ padding: isMobOE ? '12px 14px' : '16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0, gap:'8px' }}>
+          <div>{step===2&&<button onClick={()=>setStep(1)} style={{ padding: isMobOE ? '8px 12px' : '10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOE ? '12px' : '14px' }}>← Tilbake</button>}</div>
+          {isMobOE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmtO(grandTotal)}</span>}
+          <div style={{ display:'flex', gap: isMobOE ? '6px' : '10px' }}>
+            {step===1&&<button onClick={()=>setStep(2)} style={{ padding: isMobOE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{isMobOE ? 'Neste →' : 'Neste: Linjer →'}</button>}
+            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding: isMobOE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
           </div>
         </div>
       </div>
@@ -9758,14 +10098,14 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center', justifyContent:'center', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Opprett ordre fra tilbud</h2>
+      <div style={{ position:'relative', background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px', width:'100%', maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '500px', maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh', height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto', boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>📋 Ordre fra tilbud</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '24px', display:'flex', flexDirection:'column', gap:'16px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch' }}>
           <p style={{ margin:0, fontSize:'14px', color:'#64748b' }}>Velg et akseptert tilbud. Alle kapitler og poster kopieres automatisk til ordren.</p>
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {quotes.map(q => {
@@ -9784,8 +10124,7 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
             })}
           </div>
           <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett ordre'}</button>
+            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 'auto' }}>{saving?'Oppretter...':'Opprett ordre'}</button>
           </div>
         </div>
       </div>
@@ -9924,7 +10263,7 @@ const INV_STATUS = {
 const MVA_RATES = [{ label:'25% (standard)', rate:0.25 },{ label:'15% (næringsmidler)', rate:0.15 },{ label:'12% (transport/kino)', rate:0.12 },{ label:'0% (fritatt)', rate:0 }]
 
 const iInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const iCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const iCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function InvStatusBadge({ status }) {
   const cfg = INV_STATUS[status]||INV_STATUS['Utkast']
@@ -9968,6 +10307,11 @@ function FakturaPage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(null) // null|'manual'|'order'|'quote'|'partial'|'changes'|'kalkulation'
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [calculations, setCalculations] = useState([])
 
   const load = async () => {
@@ -9976,7 +10320,7 @@ function FakturaPage() {
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('calculations').select('id, title, kalk_number, kalkyler, faktorer, total_ex_mva, customer_name, project_id').eq('is_template', false).order('created_at',{ascending:false}).then(r=>r.data||[]),
       ])
       setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p); setCalculations(kalks)
@@ -10000,9 +10344,6 @@ function FakturaPage() {
   const totalPurret = invoices.filter(i=>i.status==='Purret').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
   const overdueCount = invoices.filter(i=>isOverdue(i)).length
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
-  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
-
   // ── MVA-rapport state ──
   const [showMvaReport, setShowMvaReport] = useState(false)
   const [mvaPeriod, setMvaPeriod] = useState(() => {
@@ -10014,18 +10355,23 @@ function FakturaPage() {
     return { from: start.toISOString().split('T')[0], to: end.toISOString().split('T')[0], label: `${q+1}. termin ${now.getFullYear()}` }
   })
 
+  const isMobF = typeof window !== 'undefined' && window.innerWidth < 768
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
+  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobF ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧾 Faktura</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>
+            <h1 style={{ fontSize: isMobF ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧾 Faktura</h1>
+            {!isMobF && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>}
           </div>
-          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📊 MVA-rapport</button>
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0 }}>
+            <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background: showMvaReport ? '#7c3aed' : 'white', border: showMvaReport ? '1px solid #7c3aed' : '1px solid #e2e8f0', borderRadius:'10px', padding: isMobF ? '9px 10px' : '11px 18px', fontSize: isMobF ? '11px' : '14px', fontWeight:'600', cursor:'pointer', color: showMvaReport ? 'white' : '#374151', whiteSpace:'nowrap' }}>{showMvaReport ? (isMobF ? '📊 Lukk MVA' : '📊 Lukk MVA-rapport') : (isMobF ? '📊 MVA' : '📊 MVA-rapport')}</button>
             <div style={{ position:'relative' }}>
-              <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny faktura ▾</button>
+              <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobF ? '9px 12px' : '11px 20px', fontSize: isMobF ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobF ? '+ Faktura ▾' : '+ Ny faktura ▾'}</button>
             {showNew==='menu' && (
               <>
                 <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowNew(null)} />
@@ -10053,28 +10399,28 @@ function FakturaPage() {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobF ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobF ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr) 1fr 1fr', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobF ? 'repeat(2, 1fr)' : 'repeat(3,1fr) 1fr 1fr', gap: isMobF ? '8px' : '12px' }}>
           {[
             { label:'Utestående', value:fmtI(totalSendt+totalPurret), sub:`${counts['Sendt']||0} sendt, ${counts['Purret']||0} purret`, bg:'#eff6ff', color:'#2563eb', emoji:'📊' },
             { label:'Betalt', value:fmtI(totalBetalt), sub:`${counts['Betalt']||0} fakturaer`, bg:'#f0fdf4', color:'#16a34a', emoji:'✅' },
             { label:'Forfalt', value:overdueCount > 0 ? `${overdueCount} faktura${overdueCount>1?'er':''}` : 'Ingen', sub:overdueCount>0?'Krever oppfølging':'Alle à jour', bg:overdueCount>0?'#fef2f2':'#f8fafc', color:overdueCount>0?'#dc2626':'#64748b', emoji:overdueCount>0?'🚨':'👍' },
           ].map(s=>(
-            <div key={s.label} style={{ background:s.bg, borderRadius:'14px', padding:'16px 20px', border:`1px solid ${s.bg}` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}><span style={{ fontSize:'18px' }}>{s.emoji}</span><span style={{ fontSize:'12px', fontWeight:'700', color:s.color, textTransform:'uppercase' }}>{s.label}</span></div>
-              <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>{s.sub}</div>
+            <div key={s.label} style={{ background:s.bg, borderRadius: isMobF ? '10px' : '14px', padding: isMobF ? '10px' : '16px 20px', border:`1px solid ${s.bg}` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom: isMobF ? '4px' : '6px' }}><span style={{ fontSize: isMobF ? '14px' : '18px' }}>{s.emoji}</span><span style={{ fontSize: isMobF ? '10px' : '12px', fontWeight:'700', color:s.color, textTransform:'uppercase' }}>{s.label}</span></div>
+              <div style={{ fontSize: isMobF ? '14px' : '18px', fontWeight:'800', color:'#0f172a' }}>{s.value}</div>
+              {!isMobF && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>{s.sub}</div>}
             </div>
           ))}
           {['Utkast','Betalt'].map(s=>{
             const cfg=INV_STATUS[s]
             return (
               <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
-                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-                <div style={{ fontSize:'20px', marginBottom:'6px' }}>{cfg.emoji}</div>
-                <div style={{ fontSize:'20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
-                <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+                style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius: isMobF ? '10px' : '14px', padding: isMobF ? '10px' : '16px', cursor:'pointer', textAlign: isMobF ? 'center' : 'left' }}>
+                <div style={{ fontSize: isMobF ? '16px' : '20px', marginBottom: isMobF ? '4px' : '6px' }}>{cfg.emoji}</div>
+                <div style={{ fontSize: isMobF ? '16px' : '20px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+                <div style={{ fontSize: isMobF ? '10px' : '11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
               </button>
             )
           })}
@@ -10164,12 +10510,12 @@ function FakturaPage() {
           return (
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e9d5ff', padding:'20px', boxShadow:'0 2px 8px rgba(124,58,237,0.08)' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-                <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>\uD83D\uDCCA MVA-rapport</h3>
+                <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📊 MVA-rapport</h3>
                 <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                   <select value={mvaPeriod.from} onChange={e => { const p = perioder.find(pp => pp.from === e.target.value); if (p) setMvaPeriod(p) }} style={{ ...iInp, maxWidth:'280px', fontSize:'13px' }}>
                     {perioder.map(p => <option key={p.from} value={p.from}>{p.label}</option>)}
                   </select>
-                  <button onClick={() => setShowMvaReport(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8' }}>\u00D7</button>
+                  <button onClick={() => setShowMvaReport(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8' }}>×</button>
                 </div>
               </div>
               {periodInvoices.length === 0 ? (
@@ -10179,7 +10525,7 @@ function FakturaPage() {
                   {[
                     { label:'Fakturaer', value: String(regularInv.length), color:'#0f172a', bg:'#f8fafc' },
                     { label:'Omsetning (netto)', value: fmtI(totalNet), color:'#2563eb', bg:'#eff6ff' },
-                    { label:'Utg\u00E5ende MVA', value: fmtI(totalMva), color:'#dc2626', bg:'#fef2f2' },
+                    { label:'Utgående MVA', value: fmtI(totalMva), color:'#dc2626', bg:'#fef2f2' },
                     { label:'Brutto', value: fmtI(totalGross), color:'#059669', bg:'#f0fdf4' },
                   ].map(s => (
                     <div key={s.label} style={{ background:s.bg, borderRadius:'10px', padding:'12px', textAlign:'center' }}>
@@ -10202,14 +10548,14 @@ function FakturaPage() {
                         <div style={{ color:'#94a3b8' }}>{data.count}</div>
                       </div>
                     ))}
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'10px 14px', borderTop:'2px solid #e2e8f0', fontSize:'13px', fontWeight:'700' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding: isMobF ? '8px 10px' : '10px 14px', borderTop:'2px solid #e2e8f0', fontSize: isMobF ? '12px' : '13px', fontWeight:'700' }}>
                       <div>Totalt</div><div>{fmtI(totalNet)}</div><div style={{ color:'#dc2626' }}>{fmtI(totalMva)}</div><div style={{ color:'#94a3b8' }}>{periodInvoices.reduce((s,i) => s + (i.lines||[]).length, 0)}</div>
                     </div>
                   </div>
                 </div>
                 {creditNotes.length > 0 && (
                   <div style={{ marginBottom:'16px' }}>
-                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px' }}>\u21A9\uFE0F Kreditnotaer i perioden ({creditNotes.length})</div>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px' }}>↩️ Kreditnotaer i perioden ({creditNotes.length})</div>
                     {creditNotes.map(cn => { const { net: cnNet } = calcLines(cn.lines); return (
                       <div key={cn.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:'#f5f3ff', borderRadius:'6px', fontSize:'12px', marginBottom:'4px' }}>
                         <span style={{ color:'#374151' }}>{cn.invoice_number} \u2014 {cn.title}</span>
@@ -10222,11 +10568,11 @@ function FakturaPage() {
                   <summary style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', userSelect:'none' }}>Fakturaer i perioden ({regularInv.length})</summary>
                   <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginTop:'6px' }}>
                     {regularInv.map(pi => { const { net: piNet, mva: piMva } = calcLines(pi.lines); return (
-                      <div key={pi.id} style={{ display:'grid', gridTemplateColumns:'auto 1fr 1fr 1fr auto', gap:'10px', padding:'6px 10px', background:'#fafafa', borderRadius:'6px', fontSize:'12px', alignItems:'center' }}>
-                        <span style={{ color:'#94a3b8', fontFamily:'monospace', fontSize:'11px' }}>{pi.invoice_number}</span>
-                        <span style={{ color:'#0f172a', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pi.title}</span>
-                        <span style={{ color:'#374151' }}>{fmtI(piNet)}</span>
-                        <span style={{ color:'#dc2626' }}>{fmtI(piMva)}</span>
+                      <div key={pi.id} style={{ display:'flex', alignItems:'center', gap: isMobF ? '6px' : '10px', padding:'6px 10px', background:'#fafafa', borderRadius:'6px', fontSize: isMobF ? '11px' : '12px', flexWrap: isMobF ? 'wrap' : 'nowrap' }}>
+                        {!isMobF && <span style={{ color:'#94a3b8', fontFamily:'monospace', fontSize:'11px', flexShrink:0 }}>{pi.invoice_number}</span>}
+                        <span style={{ color:'#0f172a', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{pi.title}</span>
+                        <span style={{ color:'#374151', flexShrink:0 }}>{fmtI(piNet)}</span>
+                        {!isMobF && <span style={{ color:'#dc2626', flexShrink:0 }}>{fmtI(piMva)}</span>}
                         <InvStatusBadge status={pi.status} />
                       </div>
                     )})}
@@ -10239,9 +10585,9 @@ function FakturaPage() {
 
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk faktura, kunde, nummer..." style={{ ...iInp, maxWidth:'260px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...iInp, maxWidth:'160px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobF ? '10px' : '14px 18px', display:'flex', gap: isMobF ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...iInp, maxWidth: isMobF ? '100%' : '260px', flex: isMobF ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...iInp, maxWidth: isMobF ? '100%' : '160px', flex: isMobF ? '1 1 100%' : 'none', fontSize: isMobF ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(INV_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
           </select>
@@ -10265,28 +10611,27 @@ function FakturaPage() {
               const proj = projects.find(p=>p.id===inv.project_id)
               return (
                 <div key={inv.id} onClick={()=>setSelected(inv)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${overdue?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobF ? '12px' : '14px', border:`1px solid ${overdue?'#fecaca':'#f1f5f9'}`, padding: isMobF ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobF ? 'flex-start' : 'center', gap: isMobF ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>
+                  {!isMobF && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{inv.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobF ? '6px' : '8px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobF ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobF ? 'calc(100vw - 130px)' : 'none' }}>{inv.title}</span>
+                      {!isMobF && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>}
                       <InvStatusBadge status={inv.status} />
                       {overdue && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>FORFALT</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {inv.customer_name&&<span style={{ fontSize:'12px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
-                      {proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {inv.due_date&&<span style={{ fontSize:'12px', color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 Forfall {inv.due_date}</span>}
-                      {inv.paid_at&&<span style={{ fontSize:'12px', color:'#16a34a' }}>✓ Betalt {new Date(inv.paid_at).toLocaleDateString('nb-NO')}</span>}
+                    <div style={{ display:'flex', gap: isMobF ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {inv.customer_name&&<span style={{ fontSize: isMobF ? '11px' : '12px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
+                      {!isMobF && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobF && inv.due_date&&<span style={{ fontSize:'12px', color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 {inv.due_date}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtI(net)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>+mva {fmtI(gross)}</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobF ? '13px' : '15px', color:'#0f172a' }}>{fmtI(net)}</div>
+                    {!isMobF && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>+mva {fmtI(gross)}</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobF && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -10306,6 +10651,7 @@ function FakturaPage() {
 
 function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const confirm = useConfirm()
+  const isMobFD = typeof window !== 'undefined' && window.innerWidth < 768
   const [inv, setInv] = useState(init)
   const [editing, setEditing] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -10434,17 +10780,17 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   },{})
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       <style>{`@media print{.no-print{display:none!important} body{background:white} .print-area{padding:40px!important}}`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til fakturaer</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'bold', color:'#0f172a' }}>{inv.title}</h1>
-                <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>
+      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobFD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til fakturaer</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobFD ? '8px' : '16px', flexWrap: isMobFD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobFD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobFD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:overdue?'#fef2f2':cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', flexShrink:0 }}>{overdue?'🚨':cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobFD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'4px' }}>
+                <h1 style={{ margin:0, fontSize: isMobFD ? '16px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{inv.title}</h1>
+                {!isMobFD && <span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>}
                 <InvStatusBadge status={inv.status} />
                 {inv.is_credit_note&&<span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px', border:'1px solid #e9d5ff' }}>↩️ Kreditnota</span>}
                 {inv.credit_for_invoice_number&&<span style={{ fontSize:'12px', color:'#7c3aed' }}>Krediterer: {inv.credit_for_invoice_number}</span>}
@@ -10457,18 +10803,18 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding:'9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send faktura</button>}
-            {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding:'9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⚠️ Send purring</button>}
-            {inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kreditnota</button>}
-            <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️ Skriv ut</button>
-            {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobFD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
+            {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '📧 Send' : '📧 Send faktura'}</button>}
+            {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '⚠️ Purr' : '⚠️ Send purring'}</button>}
+            {!isMobFD && inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kredit</button>}
+            {!isMobFD && <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
+            {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobFD ? '12px' : '13px' }}>✏️</button>}
+            <button onClick={handleDelete} style={{ padding: isMobFD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobFD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobFD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobFD ? '1fr' : '2fr 1fr', gap: isMobFD ? '12px' : '20px' }}>
         <div className="print-area" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
           {/* Faktura header */}
           <div style={iCard}>
@@ -10483,7 +10829,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 {inv.our_orgnr&&<div style={{ fontSize:'13px', color:'#64748b' }}>Org.nr: {inv.our_orgnr}</div>}
               </div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'20px', marginBottom:'16px' }}>
               <div>
                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'8px' }}>Fakturert til</div>
                 {[inv.customer_name,inv.customer_address,inv.customer_orgnr?`Org.nr: ${inv.customer_orgnr}`:null,inv.customer_email].filter(Boolean).map((v,i)=><div key={i} style={{ fontSize:'14px', color:'#0f172a', marginBottom:'2px' }}>{v}</div>)}
@@ -10499,6 +10845,27 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
 
           {/* Lines */}
           <div style={iCard}>
+            {isMobFD ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {(inv.lines||[]).map((l,i)=>{
+                  const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
+                  const lineMva=lineNet*(parseFloat(l.mvaRate)||0)
+                  return (
+                    <div key={i} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                        <span style={{ fontWeight:'600', fontSize:'12px', color:'#0f172a' }}>{l.description||'—'}</span>
+                        <span style={{ fontWeight:'700', fontSize:'12px', color:'#059669', whiteSpace:'nowrap', marginLeft:'8px' }}>{fmtI(lineNet+lineMva)}</span>
+                      </div>
+                      <div style={{ display:'flex', gap:'8px', fontSize:'11px', color:'#64748b', flexWrap:'wrap' }}>
+                        <span>{l.qty} {l.unit} × {fmtI(l.unitPrice)}</span>
+                        <span>MVA {Math.round((parseFloat(l.mvaRate)||0)*100)}%</span>
+                        <span>Netto: {fmtI(lineNet)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
               <thead><tr style={{ background:'#f8fafc' }}>
                 {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA%','Netto','MVA','Brutto'].map(h=>(
@@ -10522,11 +10889,12 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 })}
               </tbody>
             </table>
+            )}
           </div>
 
           {/* Totals */}
           <div style={{ ...iCard, background:'#f8fafc' }}>
-            <div style={{ maxWidth:'320px', marginLeft:'auto', display:'flex', flexDirection:'column', gap:'6px' }}>
+            <div style={{ maxWidth: isMobFD ? '100%' : '320px', marginLeft: isMobFD ? '0' : 'auto', display:'flex', flexDirection:'column', gap:'6px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' }}><span>Netto</span><span style={{ fontWeight:'600' }}>{fmtI(net)}</span></div>
               {Object.entries(mvaGroups).map(([rate,base])=>(
                 <div key={rate} style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', color:'#64748b' }}>
@@ -10599,7 +10967,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
               {/* Type kreditering */}
               <div>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kreditering</label>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                   <button onClick={() => { setKreditMode('full'); setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100}))) }}
                     style={{ padding:'12px', borderRadius:'12px', border:`2px solid ${kreditMode==='full'?'#7c3aed':'#e2e8f0'}`, background:kreditMode==='full'?'#f5f3ff':'white', cursor:'pointer', textAlign:'center' }}>
                     <div style={{ fontWeight:'700', fontSize:'13px', color:kreditMode==='full'?'#7c3aed':'#475569' }}>Full kreditering</div>
@@ -10720,22 +11088,23 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   const lbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
   const { net, mva, gross } = calcLines(lines)
 
+  const isMobFE = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobFE ? 'stretch' : 'center', justifyContent:'center', padding: isMobFE ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'960px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
-            <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobFE ? '0' : '20px', width:'100%', maxWidth: isMobFE ? '100%' : '960px', maxHeight: isMobFE ? '100vh' : '94vh', height: isMobFE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobFE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobFE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
+          <h2 style={{ margin:0, fontSize: isMobFE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: isMobFE ? '7px 12px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobFE ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett faktura'}</button>
+            {!isMobFE && <span style={{ fontSize:'13px', color:'#94a3b8' }}>Å betale: <strong style={{ color:'#059669', fontSize:'15px' }}>{fmtI(gross)}</strong></span>}
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding: isMobFE ? '14px' : '24px', display:'flex', flexDirection:'column', gap: isMobFE ? '14px' : '20px', WebkitOverflowScrolling:'touch' }}>
           {/* Info */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Faktura betongarbeider Blokk B" style={iInp} /></div>
             <div>{lbl('Fakturanummer')}<input value={form.invoice_number} onChange={e=>set('invoice_number',e.target.value)} style={iInp} /></div>
             <div>{lbl('Fakturadato')}<input type="date" value={form.invoice_date} onChange={e=>set('invoice_date',e.target.value)} style={iInp} /></div>
@@ -10743,9 +11112,9 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
             <div>{lbl('Forfallsdato')}<input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={iInp} /></div>
             <div>{lbl('KID-nummer')}<input value={form.kid} onChange={e=>set('kid',e.target.value)} placeholder="KID / betalingsreferanse" style={iInp} /></div>
             <div>{lbl('Bankkonto')}<input value={form.bank_account} onChange={e=>set('bank_account',e.target.value)} placeholder="1234.56.78901" style={iInp} /></div>
-            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'20px' }}>
             <div>
               <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>👤 Fakturert til (kunde)</div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -10771,9 +11140,10 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
               <button onClick={addLine} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til linje</button>
             </div>
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <div style={{ overflowX: isMobFE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobFE ? '600px' : 'auto' }}>
                 <thead><tr style={{ background:'#f8fafc' }}>
-                  {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA','Netto',''].map((h,i)=><th key={i} style={{ padding:'9px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
+                  {['Beskrivelse','Mengde','Enhet','Enhetspris','MVA','Netto',''].map((h,i)=><th key={i} style={{ padding: isMobFE ? '6px 4px' : '9px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize: isMobFE ? '9px' : '11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {lines.map(l => {
@@ -10794,11 +11164,12 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
                   })}
                 </tbody>
               </table>
-              <div style={{ padding:'12px 16px', background:'#f8fafc', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'20px' }}>
+              </div>
+              <div style={{ padding: isMobFE ? '10px 12px' : '12px 16px', background:'#f8fafc', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent: isMobFE ? 'space-between' : 'flex-end', gap: isMobFE ? '8px' : '20px' }}>
                 {[['Netto',fmtI(net)],['MVA',fmtI(mva)],['Å betale',fmtI(gross)]].map(([k,v],i)=>(
-                  <div key={k} style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
-                    <div style={{ fontSize:i===2?'16px':'14px', fontWeight:i===2?'800':'600', color:i===2?'#059669':'#0f172a' }}>{v}</div>
+                  <div key={k} style={{ textAlign: isMobFE ? 'center' : 'right' }}>
+                    <div style={{ fontSize: isMobFE ? '9px' : '11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+                    <div style={{ fontSize: isMobFE ? (i===2?'14px':'12px') : (i===2?'16px':'14px'), fontWeight:i===2?'800':'600', color:i===2?'#059669':'#0f172a' }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -11320,7 +11691,7 @@ const DEPARTMENTS = ['Ledelse','Prosjekt','Anlegg','Betong','Elektro','Rør','T�
 const CERT_TYPES = ['HMS-kort','Kranførerbevis','Truck-sertifikat','Stillaskurs','Fallsikring','Sveisesertifikat','Elektrosertifikat','Førstehjelp','Maskinførerbevis','Annet']
 
 const eInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
-const eCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const eCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function EmpStatusBadge({ status }) {
   const cfg = EMP_STATUS[status]||EMP_STATUS['Aktiv']
@@ -11355,13 +11726,18 @@ function AnsattePage() {
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [selected, setSelected] = useState(null)
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [visning, setVisning] = useState('liste')
 
   const load = async () => {
     try {
       const [e, p] = await Promise.all([
         supabase.from('employees').select('*, employee_certifications(*)').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setEmployees(e); setProjects(p)
     } catch(e) { console.error(e) }
@@ -11403,33 +11779,35 @@ function AnsattePage() {
   const counts = Object.keys(EMP_STATUS).reduce((acc,s)=>{ acc[s]=employees.filter(e=>e.status===s).length; return acc },{})
   const expiringCerts = employees.flatMap(e=>(e.employee_certifications||[]).filter(c=>{ const d=certDaysLeft(c.expiry_date); return d!==null&&d<=30 }))
 
+  const isMobE = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ansatte...</p></div></div>
-  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobE ? '16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>
+            <h1 style={{ fontSize: isMobE ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
+            {!isMobE && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>}
           </div>
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Importer CSV</button>
-            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny ansatt</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobE && <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Import</button>}
+            <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobE ? '9px 12px' : '11px 20px', fontSize: isMobE ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ansatt</button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobE ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobE ? '12px' : '20px', overflowX:'hidden' }}>
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(EMP_STATUS).map(([s,cfg])=>(
             <button key={s} onClick={()=>setFilterStatus(filterStatus===s?'alle':s)}
-              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'22px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
-              <div style={{ fontSize:'11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              style={{ background:filterStatus===s?cfg.bg:'white', border:`1px solid ${filterStatus===s?cfg.border:'#f1f5f9'}`, borderRadius: isMobE ? '10px' : '14px', padding: isMobE ? '10px' : '16px', cursor:'pointer', textAlign: isMobE ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobE ? '16px' : '22px', marginBottom: isMobE ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMobE ? '16px' : '22px', fontWeight:'800', color:filterStatus===s?cfg.color:'#0f172a' }}>{counts[s]||0}</div>
+              <div style={{ fontSize: isMobE ? '10px' : '11px', color:filterStatus===s?cfg.color:'#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
             </button>
           ))}
         </div>
@@ -11452,9 +11830,9 @@ function AnsattePage() {
         )}
 
         {/* Filters */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk navn, stilling, telefon..." style={{ ...eInp, maxWidth:'240px', flex:1 }} />
-          <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ ...eInp, maxWidth:'180px' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobE ? '10px' : '14px 18px', display:'flex', gap: isMobE ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...eInp, maxWidth: isMobE ? '100%' : '240px', flex: isMobE ? '1 1 100%' : '1' }} />
+          <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ ...eInp, maxWidth: isMobE ? '100%' : '180px', flex: isMobE ? '1 1 48%' : 'none', fontSize: isMobE ? '13px' : '14px' }}>
             <option value="alle">Alle avdelinger</option>
             {DEPARTMENTS.map(d=><option key={d} value={d}>{d}</option>)}
           </select>
@@ -11483,27 +11861,26 @@ function AnsattePage() {
               const cfg = EMP_STATUS[emp.status]
               return (
                 <div key={emp.id} onClick={()=>setSelected(emp)}
-                  style={{ background:'white', borderRadius:'14px', border:`1px solid ${expiring.length>0?'#fde68a':'#f1f5f9'}`, padding:'14px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobE ? '12px' : '14px', border:`1px solid ${expiring.length>0?'#fde68a':'#f1f5f9'}`, padding: isMobE ? '12px' : '14px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap: isMobE ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
+                  <div style={{ width: isMobE ? '36px' : '44px', height: isMobE ? '36px' : '44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobE ? '14px' : '18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
                     {emp.first_name?.[0]}{emp.last_name?.[0]}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{emp.first_name} {emp.last_name}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'3px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobE ? '13px' : '15px' }}>{emp.first_name} {emp.last_name}</span>
                       <EmpStatusBadge status={emp.status} />
                       {expiring.length>0 && <span style={{ background:'#fffbeb', color:'#d97706', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>⚠️ {expiring.length} sertifikat</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {emp.position && <span style={{ fontSize:'12px', color:'#64748b' }}>💼 {emp.position}</span>}
-                      {emp.department && <span style={{ fontSize:'12px', color:'#64748b' }}>🏢 {emp.department}</span>}
-                      {emp.phone && <span style={{ fontSize:'12px', color:'#64748b' }}>📞 {emp.phone}</span>}
-                      {emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
-                      {emp.employee_number && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>#{emp.employee_number}</span>}
+                    <div style={{ display:'flex', gap: isMobE ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {emp.position && <span style={{ fontSize: isMobE ? '11px' : '12px', color:'#64748b' }}>💼 {emp.position}</span>}
+                      {!isMobE && emp.department && <span style={{ fontSize:'12px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                      {emp.phone && <span style={{ fontSize: isMobE ? '11px' : '12px', color:'#64748b' }}>📞 {emp.phone}</span>}
+                      {!isMobE && emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
                     </div>
                   </div>
-                  {emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobE && emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
+                  {!isMobE && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -11604,45 +11981,47 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
     { id:'salary', label:'Lønn', emoji:'💰' },
   ]
 
+  const isMobED = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ansatte</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'16px' }}>
-            <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
-                <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>{emp.first_name} {emp.last_name}</h1>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobED ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til ansatte</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobED ? '8px' : '16px', flexWrap: isMobED ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobED ? '10px' : '16px', flex:1, minWidth:0 }}>
+            {!isMobED && <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobED ? '6px' : '10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize: isMobED ? '16px' : '22px', fontWeight:'bold', color:'#0f172a' }}>{emp.first_name} {emp.last_name}</h1>
                 {emp.employee_number&&<span style={{ fontSize:'13px', color:'#94a3b8', fontFamily:'monospace' }}>#{emp.employee_number}</span>}
                 <EmpStatusBadge status={emp.status} />
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                {emp.position&&<span style={{ fontSize:'13px', color:'#64748b' }}>💼 {emp.position}</span>}
-                {emp.department&&<span style={{ fontSize:'13px', color:'#64748b' }}>🏢 {emp.department}</span>}
-                {emp.contract_type&&<span style={{ fontSize:'13px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
-                {emp.phone&&<span style={{ fontSize:'13px', color:'#64748b' }}>📞 {emp.phone}</span>}
+              <div style={{ display:'flex', gap: isMobED ? '6px' : '12px', flexWrap:'wrap' }}>
+                {emp.position&&<span style={{ fontSize: isMobED ? '11px' : '13px', color:'#64748b' }}>💼 {emp.position}</span>}
+                {!isMobED && emp.department&&<span style={{ fontSize:'13px', color:'#64748b' }}>🏢 {emp.department}</span>}
+                {!isMobED && emp.contract_type&&<span style={{ fontSize:'13px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
+                {emp.phone&&<span style={{ fontSize: isMobED ? '11px' : '13px', color:'#64748b' }}>📞 {emp.phone}</span>}
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>✏️ Rediger</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobED ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobED ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobED ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobED ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div style={{ display:'flex', gap:'4px', marginTop:'20px' }}>
+        <div style={{ display:'flex', gap:'4px', marginTop: isMobED ? '14px' : '20px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>setActiveTab(t.id)}
-              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:activeTab===t.id?'#059669':'#f8fafc', color:activeTab===t.id?'white':'#64748b', fontWeight:activeTab===t.id?'700':'500', fontSize:'13px', cursor:'pointer' }}>
-              {t.emoji} {t.label}
+              style={{ padding: isMobED ? '7px 10px' : '8px 16px', borderRadius:'10px', border:'none', background:activeTab===t.id?'#059669':'#f8fafc', color:activeTab===t.id?'white':'#64748b', fontWeight:activeTab===t.id?'700':'500', fontSize: isMobED ? '11px' : '13px', cursor:'pointer', whiteSpace:'nowrap' }}>
+              {t.emoji} {isMobED ? t.label.replace('Informasjon','Info').replace('Kompetanser','Komp.').replace('Sertifikater','Sert.').replace('Prosjekter','Prosj.') : t.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobED ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobED ? '1fr' : '2fr 1fr', gap: isMobED ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
           {/* INFO TAB */}
@@ -11650,7 +12029,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
             <>
               <div style={eCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👤 Personopplysninger</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                   {[['Fullt navn',`${emp.first_name} ${emp.last_name}`],['Stilling',emp.position],['Avdeling',emp.department],['Kontraktstype',emp.contract_type],['E-post',emp.email],['Telefon',emp.phone],['Adresse',emp.address],['Fødselsdato',emp.birth_date],['Ansattdato',emp.hired_date],['Sluttdato',emp.end_date]].filter(r=>r[1]).map(([k,v])=>(
                     <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                       <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -11662,7 +12041,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
               {(emp.emergency_contact_name||emp.emergency_contact_phone) && (
                 <div style={{ ...eCard, background:'#fff7ed', border:'1px solid #fed7aa' }}>
                   <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#ea580c' }}>🚨 Nødkontakt</h3>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px' }}>
                     {[['Navn',emp.emergency_contact_name],['Telefon',emp.emergency_contact_phone],['Relasjon',emp.emergency_contact_relation]].filter(r=>r[1]).map(([k,v])=>(
                       <div key={k}><div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{k}</div><div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{v}</div></div>
                     ))}
@@ -11749,7 +12128,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
           {activeTab==='salary' && (
             <div style={eCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>💰 Lønn og satser (intern)</h3>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 {emp.hourly_rate && (
                   <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'16px', border:'1px solid #bbf7d0', textAlign:'center' }}>
                     <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Timesats</div>
@@ -11843,14 +12222,13 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>👷 {isEdit?'Rediger':'Ny'} ansatt</h2>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>👷 {isEdit?'Rediger ansatt':'Ny ansatt'}</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Registrer ansatt'}</button>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ overflowY:'auto', flex:1, padding:'24px', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           {sec('👤 Personopplysninger')}
           <div>{lbl('Fornavn *')}<input value={form.first_name} onChange={e=>set('first_name',e.target.value)} placeholder="Fornavn" style={eInp} /></div>
           <div>{lbl('Etternavn *')}<input value={form.last_name} onChange={e=>set('last_name',e.target.value)} placeholder="Etternavn" style={eInp} /></div>
@@ -11908,7 +12286,7 @@ function LeggTilSertifikatModal({ employeeId, onClose, onSaved }) {
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📜 Legg til sertifikat</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+        <div style={{ padding:'24px', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sertifikattype *</label>
             <select value={form.name} onChange={e=>set('name',e.target.value)} style={eInp}>
@@ -11965,7 +12343,7 @@ function LeggTilProsjektModal({ employeeId, projects, existingIds, onClose, onSa
             </select>
           </div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Rolle på prosjektet</label><input value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} placeholder="F.eks. Anleggsleder, Fagarbeider" style={eInp} /></div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
             <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Fra dato</label><input type="date" value={form.from_date} onChange={e=>setForm(f=>({...f,from_date:e.target.value}))} style={eInp} /></div>
             <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Til dato</label><input type="date" value={form.to_date} onChange={e=>setForm(f=>({...f,to_date:e.target.value}))} style={eInp} /></div>
           </div>
@@ -12129,7 +12507,7 @@ function SkillsTab({ employeeId, skills, onRefresh }) {
 
       {adding && (
         <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'16px', display:'flex', flexDirection:'column', gap:'10px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
             <div>
               <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Kompetanse</label>
               <select value={newSkill} onChange={e=>setNewSkill(e.target.value)} style={{ width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'white' }}>
@@ -12245,7 +12623,7 @@ function TimelistePage() {
     try {
       const [emp, proj, ts] = await Promise.all([
         supabase.from('employees').select('id,first_name,last_name,hourly_rate').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}).then(r=>r.data||[])
       ])
       setEmployees(emp); setProjects(proj); setTimesheets(ts)
@@ -12263,30 +12641,32 @@ function TimelistePage() {
 
   const pendingApproval = timesheets.filter(t=>t.status==='Innlevert')
 
+  const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster timelister...</p></div></div>
 
   if (editingSheet) return <TimesheetEditor sheet={editingSheet} projects={projects} employees={employees} user={user} onBack={()=>{setEditingSheet(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobTL ? '14px' : '20px 24px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobTL ? '8px' : '12px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>
+            <h1 style={{ fontSize: isMobTL ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
+            {!isMobTL && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>}
           </div>
           {pendingApproval.length>0 && (
-            <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'8px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
-              ⏳ {pendingApproval.length} timeliste{pendingApproval.length>1?'r':''} venter godkjenning
+            <div style={{ background:'#fffbeb', borderRadius:'10px', padding: isMobTL ? '6px 10px' : '8px 14px', border:'1px solid #fde68a', fontSize: isMobTL ? '11px' : '13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
+              ⏳ {pendingApproval.length} venter
             </div>
           )}
         </div>
         {/* View tabs */}
-        <div style={{ display:'flex', gap:'6px', marginTop:'16px', flexWrap:'wrap' }}>
-          {[['mine','📋 Mine timelister'],['oversikt','📊 Oversikt'],['godkjenn','✅ Godkjenning']].map(([v,l])=>(
+        <div style={{ display:'flex', gap:'6px', marginTop: isMobTL ? '12px' : '16px', flexWrap:'wrap' }}>
+          {[['mine', isMobTL ? '📋 Mine' : '📋 Mine timelister'],['oversikt','📊 Oversikt'],['godkjenn','✅ Godkjenn']].map(([v,l])=>(
             <button key={v} onClick={()=>setView(v)}
-              style={{ padding:'8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize:'13px', cursor:'pointer', position:'relative' }}>
+              style={{ padding: isMobTL ? '7px 12px' : '8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', position:'relative' }}>
               {l}
               {v==='godkjenn'&&pendingApproval.length>0&&<span style={{ position:'absolute', top:'-4px', right:'-4px', background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'10px', fontWeight:'800', minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px' }}>{pendingApproval.length}</span>}
             </button>
@@ -12300,11 +12680,11 @@ function TimelistePage() {
         {view==='mine' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
             {/* Employee selector + week nav */}
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center', flexWrap:'wrap' }}>
-              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tsInp, maxWidth:'200px', flex:1 }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px' : '16px 20px', display:'flex', gap: isMobTL ? '8px' : '12px', alignItems:'center', flexWrap:'wrap' }}>
+              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tsInp, maxWidth: isMobTL ? '100%' : '200px', flex: isMobTL ? '1 1 100%' : '1', fontSize: isMobTL ? '13px' : '14px' }}>
                 {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginLeft:'auto' }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobTL ? '8px' : '10px', marginLeft: isMobTL ? '0' : 'auto', width: isMobTL ? '100%' : 'auto', justifyContent: isMobTL ? 'center' : 'flex-end' }}>
                 <button onClick={()=>{ let w=selectedWeek-1,y=selectedYear; if(w<1){w=52;y--}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
                 <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', whiteSpace:'nowrap' }}>Uke {selectedWeek}, {selectedYear}</span>
                 <button onClick={()=>{ let w=selectedWeek+1,y=selectedYear; if(w>52){w=1;y++}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
@@ -12329,13 +12709,13 @@ function TimelistePage() {
         {/* ── OVERSIKT ── */}
         {view==='oversikt' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px' : '16px 20px', display:'flex', gap: isMobTL ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
               <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                {[['dag','Dag'],['uke','Uke'],['maned','Måned']].map(([v,l])=>(
-                  <button key={v} onClick={()=>setStatsView(v)} style={{ padding:'8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                {[['dag','Dag'],['uke','Uke'],['maned','Mnd']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setStatsView(v)} style={{ padding: isMobTL ? '7px 12px' : '8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
                 ))}
               </div>
-              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tsInp, maxWidth:'200px' }}>
+              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tsInp, maxWidth: isMobTL ? '100%' : '200px', flex: isMobTL ? '1 1 100%' : 'none', fontSize: isMobTL ? '13px' : '14px' }}>
                 <option value="">Alle ansatte</option>
                 {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
@@ -12737,7 +13117,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   {/* Type: Arbeid eller Frav\u00E6r */}
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Type registrering</label>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px' }}>
                       <button onClick={() => updateEntry(date, 'absence_type', '')}
                         style={{ padding:'8px', borderRadius:'8px', border: `2px solid ${!entry?.absence_type ? '#059669' : '#e2e8f0'}`, background: !entry?.absence_type ? '#f0fdf4' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: !entry?.absence_type ? '#059669' : '#64748b' }}>
                         \u23F1\uFE0F Arbeid
@@ -12753,7 +13133,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     <>
                       <div>
                         <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Frav\u00E6rstype</label>
-                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px' }}>
                           {ABSENCE_TYPES.filter(a => a.id).map(a => (
                             <button key={a.id} onClick={() => {
                               updateEntry(date, 'absence_type', a.id)
@@ -12785,12 +13165,12 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     </div>
                   )}
 {/* Project + Activity */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
                       <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
                         <option value="">Velg...</option>
-                        {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                        {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
                       </select>
                     </div>
                     <div>
@@ -12816,7 +13196,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   {/* Hours breakdown */}
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Timer (juster manuelt)</label>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px' }}>
                       {[['normal_hours','Normal','#16a34a'],['overtime_50','OT 50%','#d97706'],['overtime_100','OT 100%','#dc2626']].map(([f,l,col])=>(
                         <div key={f}>
                           <div style={{ fontSize:'11px', color:col, fontWeight:'700', marginBottom:'4px', textAlign:'center' }}>{l}</div>
@@ -12829,7 +13209,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   </div>
 
                   {/* Travel + diet */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'8px' }}>
                     {[['travel_km','🚗 Km','0'],['diet','🍽️ Diett kr','0'],['expenses','💳 Utlegg kr','0']].map(([f,l,ph])=>(
                       <div key={f}>
                         <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>{l}</label>
@@ -13095,7 +13475,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 
       {/* Per periode */}
       {reportType === 'oversikt' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 20px' }}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🏗️ Timer per prosjekt</h3>
             {byProject.length===0?<p style={{ color:'#94a3b8',fontSize:'13px',margin:0 }}>Ingen data</p>:byProject.map(p=>(
@@ -13126,7 +13506,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
       )}
 
       {/* Eksport-knapper */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+      <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
         <button onClick={exportCSV} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
           📥 Eksporter timelister (CSV)
         </button>
@@ -13337,6 +13717,7 @@ function RessursPage() {
   const [showBookingModal, setShowBookingModal] = useState(null)
   const [dragging, setDragging] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [resizing, setResizing] = useState(null) // { planId, direction: 'left'|'right', startX, origDate, resourceId }
   const [filterProject, setFilterProject] = useState('alle')
   const [filterEmployee, setFilterEmployee] = useState('alle')
   const [showMilestones, setShowMilestones] = useState(false)
@@ -13348,9 +13729,43 @@ function RessursPage() {
   const [allSkills, setAllSkills] = useState([])
   const [fullscreen, setFullscreen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showDoubleBookings, setShowDoubleBookings] = useState(false)
+  const [conflictHighlight, setConflictHighlight] = useState(null) // { resourceId, date }
+  
+  // Auto-clear conflict highlight after 4 seconds
+  React.useEffect(() => {
+    if (!conflictHighlight) return
+    const t = setTimeout(() => setConflictHighlight(null), 4000)
+    return () => clearTimeout(t)
+  }, [conflictHighlight])
+
+  const scrollToConflict = (resourceId, date) => {
+    // Navigate to the right week/period
+    if (viewMode === 'maned') {
+      setCurrentDate(startOfMonth(date))
+    } else if (viewMode === '14') {
+      // Find start of 14-day period containing this date
+      const d = new Date(date)
+      d.setDate(d.getDate() - 7)
+      setCurrentDate(startOfWeek(d.toISOString().split('T')[0]))
+    } else {
+      setCurrentDate(startOfWeek(date))
+    }
+    // Set highlight
+    setConflictHighlight({ resourceId, date })
+    setShowDoubleBookings(false)
+    // Scroll to the element after render
+    setTimeout(() => {
+      const el = document.getElementById(`cell-${resourceId}-${date}`)
+      if (el) {
+        el.scrollIntoView({ behavior:'smooth', block:'center', inline:'center' })
+      }
+    }, 150)
+  }
   const [settings, setSettings] = useState({
     showWeekends: true,
     showHolidays: true,
+    skipWeekends: true,
     workdayStart: '07:00',
     workdayEnd: '15:30',
   })
@@ -13360,7 +13775,7 @@ function RessursPage() {
       const [emp, mac, proj, pl, ms, sk] = await Promise.all([
         supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
         supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('resource_plans').select('*').then(r=>r.data||[]),
         supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date').then(r=>r.data||[]),
         supabase.from('employee_skills').select('*').then(r=>r.data||[])
@@ -13438,7 +13853,17 @@ function RessursPage() {
   const handleDragStart = (plan, e) => {
     setDragging(plan)
     setDragCopy(e?.altKey||e?.ctrlKey||false)
-    if (e?.dataTransfer) { e.dataTransfer.effectAllowed = e?.altKey||e?.ctrlKey ? 'copy' : 'move' }
+    if (e?.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copyMove'
+      // Create custom drag image
+      const ghost = document.createElement('div')
+      const proj = projects.find(p=>p.id===plan.project_id)
+      ghost.textContent = (proj?.name||'Booking') + ' — ' + plan.hours + 't'
+      ghost.style.cssText = 'position:fixed;top:-100px;left:-100px;background:#0f172a;color:white;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;font-family:system-ui,sans-serif;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.3);pointer-events:none;z-index:9999'
+      document.body.appendChild(ghost)
+      e.dataTransfer.setDragImage(ghost, 0, 0)
+      setTimeout(()=>document.body.removeChild(ghost), 0)
+    }
   }
 
   const handleDrop = async (resourceId, date) => {
@@ -13457,6 +13882,107 @@ function RessursPage() {
       load()
     } catch(e) { alert('Feil: '+e.message) }
     setDragging(null); setDragOver(null); setDragCopy(false)
+  }
+
+
+  // ── Resize handlers (drag edges to extend/shrink bookings) ──
+  const resizingRef = React.useRef(null)
+
+  const handleResizeStart = (plan, direction, e) => {
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    let moved = false
+    const info = { planId: plan.id, direction, startX, origDate: plan.date, resourceId: plan.resource_id, plan, cellsMoved: 0 }
+    resizingRef.current = info
+
+    const colW = viewMode==='maned' ? 68 : viewMode==='14' ? 60 : 90
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      if (!moved) { moved = true; setResizing(info) }
+      const cellsMoved = Math.round(dx / colW)
+      resizingRef.current = { ...resizingRef.current, cellsMoved }
+      setResizing(prev => prev ? { ...prev, cellsMoved } : null)
+    }
+
+    const onUp = async () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      const r = resizingRef.current
+      resizingRef.current = null
+      setResizing(null)
+      if (!moved || !r || !r.cellsMoved || r.cellsMoved === 0) return
+
+      try {
+        const origDate = new Date(r.origDate + 'T12:00:00')
+        const absMoved = Math.abs(r.cellsMoved)
+
+        if (r.direction === 'right' && r.cellsMoved > 0) {
+          for (let i = 1; i <= absMoved; i++) {
+            const d = new Date(origDate); d.setDate(d.getDate() + i)
+            if (settings.skipWeekends && (d.getDay() === 0 || d.getDay() === 6)) { continue }
+            const { id, created_at, updated_at, ...rest } = r.plan
+            await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
+          }
+        } else if (r.direction === 'left' && r.cellsMoved < 0) {
+          for (let i = 1; i <= absMoved; i++) {
+            const d = new Date(origDate); d.setDate(d.getDate() - i)
+            if (settings.skipWeekends && (d.getDay() === 0 || d.getDay() === 6)) { continue }
+            const { id, created_at, updated_at, ...rest } = r.plan
+            await supabase.from('resource_plans').insert({ ...rest, date: d.toISOString().split('T')[0] })
+          }
+        }
+        load()
+      } catch(err) { console.error('Resize error:', err) }
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+
+  // ── Merge consecutive single-day plans into visual bars ──
+  const getResourceBars = (resourceId) => {
+    const resPlans = filteredPlans.filter(p => p.resource_id === resourceId).sort((a,b) => a.date.localeCompare(b.date))
+    const bars = []
+    const visited = new Set()
+    
+    for (const plan of resPlans) {
+      if (visited.has(plan.id)) continue
+      // Find consecutive days with same project
+      let endDate = plan.date
+      const barPlans = [plan]
+      visited.add(plan.id)
+      
+      let check = new Date(plan.date + 'T12:00:00')
+      while (true) {
+        check.setDate(check.getDate() + 1)
+        // Skip weekends
+        while (check.getDay() === 0 || check.getDay() === 6) check.setDate(check.getDate() + 1)
+        const checkStr = check.toISOString().split('T')[0]
+        const nextPlan = resPlans.find(p => !visited.has(p.id) && p.date === checkStr && p.project_id === plan.project_id)
+        if (nextPlan) {
+          visited.add(nextPlan.id)
+          barPlans.push(nextPlan)
+          endDate = checkStr
+        } else break
+      }
+      
+      bars.push({
+        id: plan.id,
+        projectId: plan.project_id,
+        startDate: plan.date,
+        endDate: endDate,
+        plans: barPlans,
+        hours: barPlans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0),
+        notes: plan.notes,
+        resourceId,
+      })
+    }
+    return bars
   }
 
   const getWeekCapacity = (resourceId) => {
@@ -13485,9 +14011,9 @@ function RessursPage() {
   const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:fullscreen?'flex':'block', flexDirection:fullscreen?'column':'initial', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'auto', overflow:'hidden' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:fullscreen?0:'initial' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
@@ -13495,9 +14021,9 @@ function RessursPage() {
           </div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
             {doubleBookCount>0&&(
-              <div style={{ background:'#fef2f2',borderRadius:'10px',padding:'8px 14px',border:'1px solid #fecaca',fontSize:'13px',color:'#dc2626',fontWeight:'700' }}>
+              <button onClick={()=>setShowDoubleBookings(true)} style={{ background:'#fef2f2',borderRadius:'10px',padding:'8px 14px',border:'1px solid #fecaca',fontSize:'13px',color:'#dc2626',fontWeight:'700',cursor:'pointer' }}>
                 ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
-              </div>
+              </button>
             )}
             <button onClick={()=>setShowLedigMannskap(true)}
               style={{ padding:'9px 14px', background:'#eff6ff', color:'#2563eb', border:'2px solid #bfdbfe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
@@ -13553,7 +14079,7 @@ function RessursPage() {
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
             style={{ padding:'8px 12px',border:`2px solid ${filterProject!=='alle'?'#059669':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterProject!=='alle'?'700':'400',color:filterProject!=='alle'?'#059669':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
             <option value="alle">🏗️ Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
 
           {/* Employee filter (ansatte only) */}
@@ -13583,23 +14109,25 @@ function RessursPage() {
                 title="Innstillinger">⚙️</button>
               {showSettings&&(
                 <>
-                  <div style={{ position:'fixed',inset:0,zIndex:49 }} onClick={()=>setShowSettings(false)} />
-                  <div style={{ position:'absolute',top:'110%',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'16px',boxShadow:'0 12px 40px rgba(0,0,0,0.15)',zIndex:50,width:'300px',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
-                    <div style={{ padding:'14px 18px',background:'#f8fafc',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:'8px' }}>
-                      <span style={{ fontSize:'16px' }}>⚙️</span>
-                      <span style={{ fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
+                  <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} onClick={()=>setShowSettings(false)} />
+                  <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',zIndex:101,width:'min(420px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',fontFamily:'system-ui,sans-serif' }}>
+                    <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                      <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                        <span style={{ fontSize:'18px' }}>⚙️</span>
+                        <span style={{ fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
+                      </div>
+                      <button onClick={()=>setShowSettings(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
                     </div>
-                    <div style={{ padding:'14px 18px',display:'flex',flexDirection:'column',gap:'2px' }}>
+                    <div style={{ overflowY:'auto',flex:1,padding:'18px 22px',display:'flex',flexDirection:'column',gap:'2px',WebkitOverflowScrolling:'touch' }}>
                       {/* Section: Visning */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px',marginTop:'4px' }}>Visning</div>
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px' }}>Visning</div>
                       {[
                         ['showWeekends','🗓️','Vis lørdag og søndag','Helger vises i planleggingsrutenettet'],
-                        ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i planleggingsrutenettet'],
+                        ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i rutenettet'],
+                        ['skipWeekends','🚫','Hopp over helger ved dra','Helger blir ikke booket når du drar en booking over en helg'],
                       ].map(([k,emoji,label,desc])=>(
                         <div key={k} onClick={()=>setSettings(s=>({...s,[k]:!s[k]}))}
-                          style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}
-                          onMouseEnter={e=>{if(!settings[k])e.currentTarget.style.background='#f8fafc'}}
-                          onMouseLeave={e=>{if(!settings[k])e.currentTarget.style.background='white'}}>
+                          style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}>
                           <span style={{ fontSize:'18px',flexShrink:0 }}>{emoji}</span>
                           <div style={{ flex:1 }}>
                             <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{label}</div>
@@ -13612,46 +14140,43 @@ function RessursPage() {
                       ))}
 
                       {/* Section: Arbeidstid */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'12px',marginBottom:'8px' }}>Standard arbeidstid</div>
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Standard arbeidstid</div>
                       <div style={{ background:'#f8fafc',borderRadius:'12px',padding:'14px',border:'1px solid #f1f5f9' }}>
                         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
                           <div>
-                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Arbeidsdagen starter</label>
+                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Starter</label>
                             <input type="time" value={settings.workdayStart} onChange={e=>setSettings(s=>({...s,workdayStart:e.target.value}))}
                               style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
                           </div>
                           <div>
-                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Arbeidsdagen slutter</label>
+                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Slutter</label>
                             <input type="time" value={settings.workdayEnd} onChange={e=>setSettings(s=>({...s,workdayEnd:e.target.value}))}
                               style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
                           </div>
                         </div>
                         <div style={{ marginTop:'10px',background:'#eff6ff',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bfdbfe' }}>
                           <div style={{ fontSize:'12px',color:'#2563eb',fontWeight:'600' }}>
-                            ⏰ Standardtid: {settings.workdayStart} – {settings.workdayEnd}
-                          </div>
-                          <div style={{ fontSize:'11px',color:'#64748b',marginTop:'2px' }}>
-                            Brukes automatisk ved ny booking
+                            ⏰ {settings.workdayStart} – {settings.workdayEnd} ({(() => { const [sh,sm]=settings.workdayStart.split(':').map(Number); const [eh,em]=settings.workdayEnd.split(':').map(Number); return (((eh*60+em)-(sh*60+sm))/60).toFixed(1) })()}t/dag)
                           </div>
                         </div>
                       </div>
 
                       {/* Section: Hurtigtilgang */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'12px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
+                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
                       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px' }}>
                         {[['07:00','15:30','Normaltid'],['07:00','16:00','Lang dag'],['08:00','16:00','Kontortid'],['06:00','14:00','Tidligvakt']].map(([start,end,label])=>(
                           <button key={label} onClick={()=>setSettings(s=>({...s,workdayStart:start,workdayEnd:end}))}
-                            style={{ padding:'8px',borderRadius:'8px',border:`1px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#e2e8f0'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
-                            {label}<br/><span style={{ fontWeight:'400',opacity:0.8 }}>{start}–{end}</span>
+                            style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#f1f5f9'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
+                            {label}<br/><span style={{ fontWeight:'400',opacity:0.7,fontSize:'11px' }}>{start} – {end}</span>
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div style={{ padding:'12px 18px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px' }}>
-                      <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,workdayStart:'07:00',workdayEnd:'15:30'})}
-                        style={{ flex:1,padding:'9px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
+                    <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px',flexShrink:0 }}>
+                      <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,skipWeekends:true,workdayStart:'07:00',workdayEnd:'15:30'})}
+                        style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
                       <button onClick={()=>setShowSettings(false)}
-                        style={{ flex:2,padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lagre innstillinger</button>
+                        style={{ flex:2,padding:'10px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lukk</button>
                     </div>
                   </div>
                 </>
@@ -13687,7 +14212,7 @@ function RessursPage() {
 
       {/* Milestone panel */}
       {showMilestones && (
-        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'16px 24px' }}>
+        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'16px 24px', flexShrink:0, maxHeight:'200px', overflowY:'auto' }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px', flexWrap:'wrap', gap:'10px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
               <span style={{ fontSize:'16px', fontWeight:'800', color:'#7c3aed' }}>🏁 Milepæler</span>
@@ -13731,7 +14256,7 @@ function RessursPage() {
 
       {/* Month view scroll hint */}
       {viewMode==='maned'&&(
-        <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center' }}>
+        <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 }}>
           <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'600' }}>
             📅 Månedsvisning — {visibleDates.length} dager · Skroll horisontalt for å se hele måneden
           </span>
@@ -13742,7 +14267,7 @@ function RessursPage() {
       )}
 
       {/* Legend */}
-      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center' }}>
+      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center', flexShrink:0 }}>
         <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
         {(filterProject!=='alle' ? projects.filter(p=>p.id===filterProject) : projects).slice(0,8).map(p=>(
           <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'5px', cursor:'pointer' }} onClick={()=>setFilterProject(p.id===filterProject?'alle':p.id)}>
@@ -13754,8 +14279,8 @@ function RessursPage() {
       </div>
 
       {/* Grid */}
-      <div id="ressurs-grid-scroll" style={{ overflowX:'auto', overflowY:fullscreen?'auto':'visible', flex:fullscreen?1:'initial' }}>
-        <div style={{ minWidth:`${240+visibleDates.length*(viewMode==='maned'?68:viewMode==='14'?60:90)}px` }}>
+      <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:'auto', flex:1 }}>
+        <div style={{ minWidth: viewMode==='maned' ? `${240+visibleDates.length*68}px` : '100%' }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
             <div style={{ width:'240px', flexShrink:0, padding:'12px 20px', fontWeight:'700', fontSize:'13px', color:'#64748b', borderRight:'1px solid #f1f5f9' }}>
@@ -13764,10 +14289,9 @@ function RessursPage() {
             {visibleDates.map(date=>{
               const d=new Date(date+'T12:00:00')
               const weekend=isWeekend(date); const tod=isToday(date)
-              const colW=viewMode==='maned'?68:viewMode==='14'?60:90
               const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
               return (
-                <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
+                <div key={date} style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),padding:'6px 4px',textAlign:'center',background:tod?'#f0fdf4':weekend?'#fafafa':'white',borderRight:'1px solid #f1f5f9',borderBottom:tod?'3px solid #059669':'none',position:'relative' }}>
                   <div style={{ fontSize:'10px',color:tod?'#059669':weekend?'#cbd5e1':'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{DAY_SHORT[d.getDay()===0?6:d.getDay()-1]}</div>
                   <div style={{ fontSize:viewMode==='maned'?'12px':'13px',fontWeight:tod?'800':'600',color:tod?'#059669':weekend?'#cbd5e1':'#0f172a' }}>{d.getDate()}</div>
                   {msOnDate.length>0&&(
@@ -13793,7 +14317,7 @@ function RessursPage() {
                 const colW=viewMode==='maned'?68:viewMode==='14'?60:90
                 const msOnDate=(settings.showHolidays?milestones:[]).filter(m=>m.start_date===date)
                 return (
-                  <div key={date} style={{ width:`${colW}px`,flexShrink:0,padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
+                  <div key={date} style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),padding:'3px',borderRight:'1px solid #ddd6fe',cursor:'pointer' }}
                     onClick={()=>setShowNewMilestone(date)}>
                     {msOnDate.map(ms=>(
                       <div key={ms.id} title={ms.title}
@@ -13808,87 +14332,205 @@ function RessursPage() {
             </div>
           )}
 
-          {/* Resource rows */}
+          {/* Resource rows — bar-based layout */}
           {resources.map(res=>{
             const cap=getWeekCapacity(res.id)
             const name=res.first_name?`${res.first_name} ${res.last_name}`:res.name
+            const bars=getResourceBars(res.id)
+            const colW=viewMode==='maned'?68:viewMode==='14'?60:90
             return (
-              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9' }} onMouseLeave={()=>setDragOver(null)}>
-                <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background:'white',display:'flex',alignItems:'center',gap:'10px' }}>
+              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9', minHeight:'56px', transition:'background 0.3s', background: conflictHighlight?.resourceId===res.id ? '#fef2f2' : 'transparent' }} onMouseLeave={()=>setDragOver(null)}>
+                <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background: conflictHighlight?.resourceId===res.id ? '#fef2f2' : 'white',display:'flex',alignItems:'center',gap:'10px',transition:'background 0.3s' }}>
+                  <div style={{ width:'32px',height:'32px',borderRadius:'50%',background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'700',color:'#4338ca',flexShrink:0 }}>{(res.first_name?.[0]||res.name?.[0]||'?').toUpperCase()}</div>
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
-                    <div style={{ fontSize:'11px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
+                    <div style={{ fontSize:'10px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
                   </div>
                   <div style={{ flexShrink:0,width:'40px' }}>
                     <div style={{ fontSize:'10px',color:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',fontWeight:'700',textAlign:'center',marginBottom:'2px' }}>{cap.pct}%</div>
-                    <div style={{ height:'4px',borderRadius:'2px',background:'#f1f5f9',overflow:'hidden' }}>
-                      <div style={{ height:'100%',borderRadius:'2px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%` }}/>
+                    <div style={{ height:'4px',borderRadius:'999px',background:'#f1f5f9',overflow:'hidden' }}>
+                      <div style={{ height:'100%',borderRadius:'999px',background:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',width:`${Math.min(cap.pct,100)}%`,transition:'width 0.3s' }}/>
                     </div>
                   </div>
                 </div>
-                {visibleDates.map(date=>{
-                  const cellPlans=getPlansForCell(res.id,date)
-                  const totalH=getTotalHours(res.id,date)
-                  const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
-                  const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
-                  const colW=viewMode==='maned'?68:viewMode==='14'?60:90
-                  return (
-                    <div key={date}
-                      style={{ width:`${colW}px`,flexShrink:0,minHeight:viewMode==='maned'?'64px':'52px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#eff6ff':'#f0fdf4':dblBook?'#fef2f2':tod?'#f9fffe':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:'pointer',padding:'3px',position:'relative',transition:'background 0.1s',outline:isDragTarget?`2px solid ${dragCopy?'#2563eb':'#059669'}`:'none' }}
-                      onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
-                      onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
-                      onDrop={()=>handleDrop(res.id,date)}>
-                      {dblBook&&<div style={{ position:'absolute',top:1,right:2,fontSize:'10px',color:'#dc2626',fontWeight:'800' }}>!</div>}
-                      {isDragTarget&&dragCopy&&<div style={{ position:'absolute',top:1,left:2,fontSize:'10px',color:'#2563eb',fontWeight:'800',background:'#eff6ff',borderRadius:'3px',padding:'0 3px' }}>+</div>}
-                      {cellPlans.map(plan=>{
-                        const proj=projects.find(p=>p.id===plan.project_id)
-                        const col=getProjectColor(plan.project_id,projects)
-                        return (
-                          <div key={plan.id} draggable onDragStart={e=>{e.stopPropagation();handleDragStart(plan,e)}}
-                            onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans,editPlan:plan})}}
-                            style={{ background:col,borderRadius:'5px',padding:viewMode==='maned'?'2px 4px':'3px 6px',marginBottom:'2px',cursor:'grab',userSelect:'none',overflow:'hidden',transition:'opacity 0.1s',opacity:dragging?.id===plan.id?0.5:1 }}>
-                            {viewMode==='maned'?(
-                              <div style={{ background:col,borderRadius:'3px',padding:'2px 4px',marginBottom:'1px',overflow:'hidden' }}>
-                                <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name?.slice(0,8)||'—'}</div>
-                              </div>
-                            ):(
-                              <>
-                                <div style={{ fontSize:'10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{proj?.name||'—'}</div>
-                                {viewMode==='uke'&&<div style={{ fontSize:'10px',color:'rgba(255,255,255,0.85)' }}>{plan.hours}t</div>}
-                              </>
-                            )}
+                {/* Date cells with bar overlays */}
+                <div style={{ position:'relative', display:'flex', flex:1 }}>
+                  {/* Background cells for click + drop targets */}
+                  {visibleDates.map(date=>{
+                    const totalH=getTotalHours(res.id,date)
+                    const dblBook=totalH>8; const weekend=isWeekend(date); const tod=isToday(date)
+                    const isDragTarget=dragOver?.resourceId===res.id&&dragOver?.date===date
+                    const cellPlans=getPlansForCell(res.id,date)
+                    return (
+                      <div key={date} id={`cell-${res.id}-${date}`}
+                        style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),minHeight:'56px',borderRight:'1px solid #f1f5f9',background:isDragTarget?dragCopy?'#dbeafe':'#dcfce7':(conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date)?'#fef2f2':dblBook?'#fef2f2':tod?'rgba(5,150,105,0.04)':(settings.showHolidays&&ALL_HOLIDAYS.some(h=>h.date===date))?'#fef9ec':weekend?'#fafafa':'white',cursor:dragging?'copy':'pointer',transition:'background 0.15s',outline:isDragTarget?`3px solid ${dragCopy?'#2563eb':'#059669'}`:(conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date)?'3px solid #dc2626':'none',outlineOffset:isDragTarget?'-3px':'0',position:'relative',animation:conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date?'conflictPulse 1.5s ease-in-out infinite':'none',zIndex:isDragTarget?5:'auto' }}
+                        onClick={()=>{ if(!weekend) setShowBookingModal({resourceId:res.id,resourceName:name,date,existingPlans:cellPlans}) }}
+                        onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect=e.altKey||e.ctrlKey?'copy':'move';setDragOver({resourceId:res.id,date});setDragCopy(e.altKey||e.ctrlKey)}}
+                        onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOver(null)}}
+                        onDrop={e=>{e.preventDefault();handleDrop(res.id,date)}}>
+                        {dblBook&&!isDragTarget&&<div style={{ position:'absolute',top:2,right:3,fontSize:'9px',color:'#dc2626',fontWeight:'800',zIndex:5 }}>!</div>}
+                        {isDragTarget&&<div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',zIndex:4,pointerEvents:'none' }}><div style={{ background:dragCopy?'#2563eb':'#059669',color:'white',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'700',boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>{dragCopy?'+ Kopi':'→ Hit'}</div></div>}
+                        {conflictHighlight?.resourceId===res.id&&conflictHighlight?.date===date&&(
+                          <div style={{ position:'absolute',top:'-4px',left:'50%',transform:'translate(-50%,-100%)',background:'#1e293b',color:'white',borderRadius:'10px',padding:'8px 12px',fontSize:'11px',fontWeight:'600',zIndex:10,whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(0,0,0,0.3)',pointerEvents:'none' }}>
+                            ⚠️ {totalH}t booket — overskrider 8t
+                            <div style={{ position:'absolute',bottom:'-5px',left:'50%',transform:'translateX(-50%)',width:0,height:0,borderLeft:'6px solid transparent',borderRight:'6px solid transparent',borderTop:'6px solid #1e293b' }}/>
                           </div>
-                        )
-                      })}
-                      {cellPlans.length===0&&!weekend&&(
-                        <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.15 }}>
-                          <span style={{ fontSize:'16px',color:'#059669' }}>+</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {/* Bar overlays */}
+                  {bars.filter(bar=>visibleDates.includes(bar.startDate)||visibleDates.includes(bar.endDate)||visibleDates.some(d=>d>=bar.startDate&&d<=bar.endDate)).map(bar=>{
+                    const proj=projects.find(p=>p.id===bar.projectId)
+                    const col=getProjectColor(bar.projectId,projects)
+                    const startIdx=visibleDates.indexOf(bar.startDate)
+                    const endIdx=visibleDates.indexOf(bar.endDate)
+                    const effStart=Math.max(startIdx,0)
+                    const effEnd=endIdx>=0?endIdx:visibleDates.length-1
+                    const span=effEnd-effStart+1
+                    // For month view use fixed px, for uke/14 use percentage of container
+                    const totalCols=visibleDates.length
+                    const leftPct=(effStart/totalCols*100)
+                    const widthPct=(span/totalCols*100)
+                    const useFixed=viewMode==='maned'
+                    const left=useFixed ? effStart*colW+3 : 0
+                    const width=useFixed ? span*colW-6 : 0
+                    const isMultiDay=bar.startDate!==bar.endDate
+                    const firstPlan=bar.plans[0]
+                    const cellPlans=getPlansForCell(bar.resourceId,bar.startDate)
+                    return (
+                      <div key={bar.id}
+                        draggable onDragStart={e=>{e.stopPropagation();handleDragStart(firstPlan,e)}} onDragEnd={()=>{setDragging(null);setDragOver(null);setDragCopy(false)}}
+                        onClick={e=>{e.stopPropagation();setShowBookingModal({resourceId:res.id,resourceName:name,date:bar.startDate,existingPlans:cellPlans,editPlan:firstPlan})}}
+                        style={{ position:'absolute',top:'6px',bottom:'6px',...(viewMode==='maned'?{left:`${left}px`,width:`${width}px`}:{left:`calc(${leftPct}% + 3px)`,width:`calc(${widthPct}% - 6px)`}),background:dragging?.id===firstPlan.id?`${col}88`:`linear-gradient(135deg,${col},${col}dd)`,borderRadius:'8px',cursor:dragging?'grabbing':'grab',userSelect:'none',display:'flex',alignItems:'center',padding:'0 10px',gap:'6px',zIndex:dragging&&dragging.id!==firstPlan.id?1:3,boxShadow:dragging?.id===firstPlan.id?'none':'0 1px 4px rgba(0,0,0,0.15)',transition:'box-shadow 0.15s,opacity 0.15s,transform 0.15s',opacity:dragging?.id===firstPlan.id?0.35:1,transform:dragging?.id===firstPlan.id?'scale(0.95)':'scale(1)',overflow:'hidden' }}
+                        onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.25)'}
+                        onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.15)'}>
+                        {/* Left resize handle */}
+                        <div draggable={false} onMouseDown={e=>{e.stopPropagation();e.preventDefault();handleResizeStart(firstPlan,'left',e)}} onDragStart={e=>e.preventDefault()} style={{ position:'absolute',left:0,top:0,bottom:0,width:'10px',cursor:'ew-resize',borderRadius:'8px 0 0 8px',zIndex:6,touchAction:'none' }}
+                          onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.5)';e.currentTarget.parentElement.setAttribute('draggable','false')}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.parentElement.setAttribute('draggable','true')}} />
+                        {/* Right resize handle */}
+                        <div draggable={false} onMouseDown={e=>{e.stopPropagation();e.preventDefault();handleResizeStart(bar.plans[bar.plans.length-1],'right',e)}} onDragStart={e=>e.preventDefault()} style={{ position:'absolute',right:0,top:0,bottom:0,width:'10px',cursor:'ew-resize',borderRadius:'0 8px 8px 0',zIndex:6,touchAction:'none' }}
+                          onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.5)';e.currentTarget.parentElement.setAttribute('draggable','false')}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.parentElement.setAttribute('draggable','true')}} />
+                        {/* Content */}
+                        <div style={{ flex:1,overflow:'hidden',minWidth:0 }}>
+                          <div style={{ fontSize: width > 120 ? '12px' : '10px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3 }}>{proj?.name||'—'}</div>
+                          {width > 80 && <div style={{ fontSize:'10px',color:'rgba(255,255,255,0.8)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{bar.hours}t{isMultiDay?` · ${bar.plans.length}d`:''}{bar.notes?' · '+bar.notes:''}</div>}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* Drag tip */}
-      {dragging&&(
-        <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(15,23,42,0.95)',color:'white',borderRadius:'14px',padding:'12px 22px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.35)',display:'flex',alignItems:'center',gap:'14px',backdropFilter:'blur(8px)' }}>
-          <span style={{ fontSize:'22px' }}>{dragCopy?'📋':'↕️'}</span>
+      {/* Resize tip */}
+      {resizing && (
+        <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(37,99,235,0.95)',color:'white',borderRadius:'14px',padding:'12px 22px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.35)',display:'flex',alignItems:'center',gap:'10px' }}>
+          <span style={{ fontSize:'18px' }}>↔️</span>
           <div>
-            <div style={{ fontWeight:'800',fontSize:'14px' }}>{dragCopy?'Kopierer booking':'Flytter booking'}</div>
-            <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.55)',marginTop:'2px' }}>
-              {dragCopy?'Slipp på ny celle for å kopiere':'Hold Alt eller Ctrl mens du drar for å kopiere'}
-            </div>
-          </div>
-          <div style={{ background:'rgba(255,255,255,0.1)',borderRadius:'8px',padding:'4px 10px',fontSize:'11px',color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap' }}>
-            {dragCopy?'📋 Kopi':'↕️ Flytt'}
+            <div style={{ fontWeight:'800' }}>Drar {resizing.direction==='right'?'slutt':'start'}dato</div>
+            <div style={{ fontSize:'11px',opacity:0.7 }}>{resizing.cellsMoved>0?'+':''}{resizing.cellsMoved||0} dager · Slipp for å bekrefte</div>
           </div>
         </div>
       )}
+
+      {/* Drag tip */}
+      {dragging&&(()=>{
+        const dragProj=projects.find(p=>p.id===dragging.project_id)
+        const dragRes=employees.find(e=>e.id===dragging.resource_id)||machines.find(m=>m.id===dragging.resource_id)
+        const dragResName=dragRes?.first_name?`${dragRes.first_name} ${dragRes.last_name}`:dragRes?.name||''
+        return (
+          <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:dragCopy?'rgba(37,99,235,0.95)':'rgba(15,23,42,0.95)',color:'white',borderRadius:'16px',padding:'14px 24px',fontSize:'13px',fontWeight:'600',zIndex:300,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',display:'flex',alignItems:'center',gap:'16px',backdropFilter:'blur(8px)',maxWidth:'90vw' }}>
+            <div style={{ width:'40px',height:'40px',borderRadius:'10px',background:getProjectColor(dragging.project_id,projects),display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0 }}>{dragCopy?'📋':'↕️'}</div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontWeight:'800',fontSize:'14px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{dragCopy?'Kopierer':'Flytter'}: {dragProj?.name||'Booking'}</div>
+              <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.6)',marginTop:'2px' }}>
+                {dragResName} · {dragging.date} · {dragging.hours}t
+              </div>
+            </div>
+            <div style={{ display:'flex',flexDirection:'column',gap:'4px',flexShrink:0 }}>
+              <div style={{ background:dragCopy?'rgba(255,255,255,0.2)':'rgba(5,150,105,0.8)',borderRadius:'6px',padding:'3px 10px',fontSize:'11px',textAlign:'center',fontWeight:'700' }}>{dragCopy?'Kopierer':'Flytt'}</div>
+              <div style={{ fontSize:'9px',opacity:0.5,textAlign:'center' }}>{dragCopy?'Slipp for å kopiere':'Alt = Kopier'}</div>
+            </div>
+          </div>
+        )
+      })()}
+
+
+      {/* Dobbeltbooking modal */}
+      {showDoubleBookings && (() => {
+        const dbList = []
+        const seen = {}
+        plans.forEach(p => {
+          const k = `${p.resource_id}_${p.date}`
+          if (!seen[k]) seen[k] = { resourceId:p.resource_id, date:p.date, plans:[], totalH:0 }
+          seen[k].plans.push(p)
+          seen[k].totalH += parseFloat(p.hours)||0
+        })
+        Object.values(seen).filter(x=>x.totalH>8).forEach(x=>dbList.push(x))
+        dbList.sort((a,b)=>a.date.localeCompare(b.date))
+        return (
+          <>
+            <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} onClick={()=>setShowDoubleBookings(false)} />
+            <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(560px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',zIndex:201,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+              <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                <div>
+                  <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#dc2626' }}>⚠️ Dobbeltbookinger ({dbList.length})</h2>
+                  <p style={{ margin:'4px 0 0',fontSize:'13px',color:'#64748b' }}>Ressurser booket over 8 timer på samme dag</p>
+                </div>
+                <button onClick={()=>setShowDoubleBookings(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+              </div>
+              <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
+                {dbList.length===0?<p style={{ color:'#94a3b8',textAlign:'center',padding:'24px' }}>Ingen dobbeltbookinger</p>:
+                  dbList.map((db,i)=>{
+                    const res = employees.find(e=>e.id===db.resourceId) || machines.find(m=>m.id===db.resourceId)
+                    const resName = res?.first_name ? `${res.first_name} ${res.last_name}` : res?.name || 'Ukjent'
+                    const dateStr = new Date(db.date+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'short',day:'numeric',month:'short'})
+                    return (
+                      <div key={i} style={{ background:'#fef2f2',borderRadius:'12px',border:'1px solid #fecaca',padding:'14px 16px',marginBottom:'10px',cursor:'pointer',transition:'box-shadow 0.15s' }}
+                        onClick={()=>scrollToConflict(db.resourceId,db.date)}
+                        onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(220,38,38,0.2)'}
+                        onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px' }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                            <div style={{ width:'28px',height:'28px',borderRadius:'50%',background:'#dc2626',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'700' }}>{(resName[0]||'?').toUpperCase()}</div>
+                            <div>
+                              <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{resName}</div>
+                              <div style={{ fontSize:'11px',color:'#dc2626' }}>📅 {dateStr}</div>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex',alignItems:'center',gap:'6px' }}>
+                            <div style={{ background:'#dc2626',color:'white',borderRadius:'8px',padding:'4px 10px',fontSize:'13px',fontWeight:'800' }}>{db.totalH}t / 8t</div>
+                            <div style={{ background:'white',color:'#dc2626',borderRadius:'8px',padding:'4px 10px',fontSize:'11px',fontWeight:'700',border:'1px solid #fecaca' }}>👁️ Vis</div>
+                          </div>
+                        </div>
+                        <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
+                          {db.plans.map(p=>{
+                            const proj=projects.find(x=>x.id===p.project_id)
+                            const col=getProjectColor(p.project_id,projects)
+                            return (
+                              <div key={p.id} style={{ display:'flex',alignItems:'center',gap:'8px',background:'white',borderRadius:'8px',padding:'8px 10px',border:'1px solid #fecaca' }}>
+                                <div style={{ width:'10px',height:'10px',borderRadius:'3px',background:col,flexShrink:0 }} />
+                                <span style={{ flex:1,fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{proj?.name||'Ukjent'}</span>
+                                <span style={{ fontSize:'13px',fontWeight:'700',color:'#dc2626' }}>{p.hours}t</span>
+                                <button onClick={()=>{setShowDoubleBookings(false);setShowBookingModal({resourceId:db.resourceId,resourceName:resName,date:db.date,existingPlans:db.plans,editPlan:p})}}
+                                  style={{ background:'white',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 8px',fontSize:'11px',cursor:'pointer',color:'#64748b',fontWeight:'600' }}>Rediger</button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })
+                }
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       {showBookingModal&&(
         <BookingModal
@@ -14000,7 +14642,7 @@ function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt</label>
             <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
               <option value="">Ingen / Generell</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -14193,7 +14835,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
             <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
               <option value="">Velg prosjekt...</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
             {projectId&&<div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/><span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span></div>}
           </div>
@@ -14201,7 +14843,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Timer denne dagen</label>
             <div style={{ background:'#f8fafc',borderRadius:'8px',padding:'7px 12px',fontSize:'12px',color:'#64748b',marginBottom:'8px',border:'1px solid #f1f5f9' }}>
-              ⏰ Standard arbeidstid: {defaultStart} – {defaultEnd}
+              ⏰ Standard arbeidstid: {defaultStartTime} – {defaultEndTime}
             </div>
             <div style={{ display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap' }}>
               {[4,6,7.5,8,10].map(h=>(
@@ -14443,7 +15085,7 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
           {step===1&&(<>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
               <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white' }}>
-                <option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                <option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
               </select>
             </div>
             <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
@@ -14638,7 +15280,7 @@ function KalenderPage() {
       const [ev, emp, proj, att, sh] = await Promise.all([
         supabase.from('calendar_events').select('*').order('start_date').then(r=>r.data||[]),
         supabase.from('employees').select('id,first_name,last_name').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('calendar_attendees').select('*').then(r=>r.data||[]),
         supabase.from('calendar_sharing').select('*').then(r=>r.data||[])
       ])
@@ -14687,43 +15329,45 @@ function KalenderPage() {
     return `${MONTH_NAMES_NO[curDate.getMonth()]} ${curDate.getFullYear()}`
   }
 
+  const isMobCal = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster kalender...</p></div></div>
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', height:'100vh' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', height:'100vh', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'14px' }}>
-          <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📆 Kalender</h1>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={()=>setShowSharingModal(true)} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#475569', fontWeight:'500' }}>👥 Del kalender</button>
-            <button onClick={()=>setShowNew(today)} style={{ padding:'9px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny hendelse</button>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobCal ? '12px' : '16px 24px', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobCal ? '8px' : '12px', marginBottom: isMobCal ? '10px' : '14px' }}>
+          <h1 style={{ fontSize: isMobCal ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📆 Kalender</h1>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            {!isMobCal && <button onClick={()=>setShowSharingModal(true)} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#475569', fontWeight:'500' }}>👥 Del</button>}
+            <button onClick={()=>setShowNew(today)} style={{ padding: isMobCal ? '8px 12px' : '9px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobCal ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap' }}>+ Hendelse</button>
           </div>
         </div>
 
-        <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap: isMobCal ? '6px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
           {/* Cal view toggle */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['mine','👤 Min'],['bedrift','🏢 Bedrift']].map(([v,l])=>(
               <button key={v} onClick={()=>setCalView(v)}
-                style={{ padding:'7px 14px', border:'none', background:calView===v?'#059669':'white', color:calView===v?'white':'#64748b', fontWeight:calView===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding: isMobCal ? '6px 10px' : '7px 14px', border:'none', background:calView===v?'#059669':'white', color:calView===v?'white':'#64748b', fontWeight:calView===v?'700':'500', fontSize: isMobCal ? '11px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
           {/* View mode */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['dag','Dag'],['uke','Uke'],['maned','Måned']].map(([v,l])=>(
+            {[['dag','Dag'],['uke','Uke'],['maned', isMobCal ? 'Mnd' : 'Måned']].map(([v,l])=>(
               <button key={v} onClick={()=>setViewMode(v)}
-                style={{ padding:'7px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize:'13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding: isMobCal ? '6px 10px' : '7px 14px', border:'none', background:viewMode===v?'#0f172a':'white', color:viewMode===v?'white':'#64748b', fontWeight:viewMode===v?'700':'500', fontSize: isMobCal ? '11px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
           {/* Nav */}
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto' }}>
-            <button onClick={()=>navigate(-1)} style={{ width:'32px',height:'32px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
-            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px', minWidth:'180px', textAlign:'center' }}>{headerLabel()}</span>
-            <button onClick={()=>navigate(1)} style={{ width:'32px',height:'32px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
-            <button onClick={()=>setCurrentDate(today)} style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobCal ? '6px' : '8px', marginLeft: isMobCal ? '0' : 'auto', width: isMobCal ? '100%' : 'auto', justifyContent: isMobCal ? 'center' : 'flex-end' }}>
+            <button onClick={()=>navigate(-1)} style={{ width: isMobCal ? '28px' : '32px', height: isMobCal ? '28px' : '32px', borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobCal ? '13px' : '14px', minWidth: isMobCal ? '100px' : '180px', textAlign:'center', flex: isMobCal ? 1 : 'none' }}>{headerLabel()}</span>
+            <button onClick={()=>navigate(1)} style={{ width: isMobCal ? '28px' : '32px', height: isMobCal ? '28px' : '32px', borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
+            <button onClick={()=>setCurrentDate(today)} style={{ padding: isMobCal ? '5px 10px' : '6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize: isMobCal ? '11px' : '12px',color:'#64748b' }}>I dag</button>
           </div>
         </div>
 
@@ -14811,11 +15455,11 @@ function CalMonthView({ year, month, events, attendees, projects, employees, cal
   const days = getMonthDays(year, month)
 
   return (
-    <div style={{ padding:'16px 24px' }}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius:'14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
+    <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '4px' : '16px 24px', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1px', background:'#e2e8f0', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '14px', overflow:'hidden', border:'1px solid #e2e8f0' }}>
         {/* Day headers */}
         {DAY_SHORT_NO.map(d=>(
-          <div key={d} style={{ background:'#f8fafc', padding:'10px', textAlign:'center', fontSize:'12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{d}</div>
+          <div key={d} style={{ background:'#f8fafc', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '6px 2px' : '10px', textAlign:'center', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>{d}</div>
         ))}
         {/* Day cells */}
         {days.map(({date,currentMonth})=>{
@@ -14836,21 +15480,21 @@ function CalMonthView({ year, month, events, attendees, projects, employees, cal
 
           return (
             <div key={date} onClick={()=>currentMonth&&onDayClick(date)}
-              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight:'100px', padding:'6px', cursor:currentMonth?'pointer':'default', position:'relative' }}
+              style={{ background:!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white', minHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '48px' : '100px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '2px' : '6px', cursor:currentMonth?'pointer':'default', position:'relative', overflow:'hidden' }}
               onMouseEnter={e=>{if(currentMonth)e.currentTarget.style.background=today_?'#ecfdf5':'#f8fafc'}}
               onMouseLeave={e=>{e.currentTarget.style.background=!currentMonth?'#fafafa':holiday?'#fef9ec':weekend?'#fafafe':'white'}}>
               {/* Date number */}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                <span style={{ width:'24px',height:'24px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:today_?'800':'500',background:today_?'#059669':'transparent',color:today_?'white':!currentMonth?'#cbd5e1':weekend?'#94a3b8':'#0f172a' }}>
+                <span style={{ width: typeof window !== 'undefined' && window.innerWidth < 768 ? '20px' : '24px', height: typeof window !== 'undefined' && window.innerWidth < 768 ? '20px' : '24px', borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '13px',fontWeight:today_?'800':'500',background:today_?'#059669':'transparent',color:today_?'white':!currentMonth?'#cbd5e1':weekend?'#94a3b8':'#0f172a' }}>
                   {new Date(date+'T12:00:00').getDate()}
                 </span>
-                {holiday&&<span style={{ fontSize:'9px',color:'#d97706',fontWeight:'700',textAlign:'right',maxWidth:'60px',lineHeight:1.2 }}>{holiday.title}</span>}
+                {!(typeof window !== 'undefined' && window.innerWidth < 768) && holiday&&<span style={{ fontSize:'9px',color:'#d97706',fontWeight:'700',textAlign:'right',maxWidth:'60px',lineHeight:1.2 }}>{holiday.title}</span>}
               </div>
               {/* Events */}
-              {dayEvs.slice(0,maxShow).map(ev=>(
-                <EventChip key={ev.id} event={ev} projects={projects} compact={false} onClick={onEventClick} />
+              {dayEvs.slice(0, typeof window !== 'undefined' && window.innerWidth < 768 ? 2 : maxShow).map(ev=>(
+                <EventChip key={ev.id} event={ev} projects={projects} compact={typeof window !== 'undefined' && window.innerWidth < 768} onClick={onEventClick} />
               ))}
-              {dayEvs.length>maxShow&&<div style={{ fontSize:'10px',color:'#94a3b8',fontWeight:'600' }}>+{dayEvs.length-maxShow} til</div>}
+              {dayEvs.length>(typeof window !== 'undefined' && window.innerWidth < 768 ? 2 : maxShow)&&<div style={{ fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '10px',color:'#94a3b8',fontWeight:'600' }}>+{dayEvs.length-(typeof window !== 'undefined' && window.innerWidth < 768 ? 2 : maxShow)}</div>}
             </div>
           )
         })}
@@ -14867,8 +15511,8 @@ function CalWeekView({ currentDate, events, attendees, projects, employees, calV
     // Bedrift view: rows=employees, cols=days
     const visEmp = employees.filter(e=>visibleEmployees.includes(e.id))
     return (
-      <div style={{ padding:'0 24px 24px' }}>
-        <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
+      <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0 8px 12px' : '0 24px 24px' }}>
+        <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:'white', borderRadius:'14px', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
             <thead>
               <tr>
@@ -15028,18 +15672,17 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
   const lbl = t => <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>{t}</label>
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'580px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>{isEdit?'Rediger':'Ny'} hendelse</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett hendelse'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '580px',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '92vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>{isEdit?'Rediger hendelse':'Ny hendelse'}</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 14px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+        <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'14px',WebkitOverflowScrolling:'touch' }}>
 
           {/* Type selector */}
           <div>
@@ -15056,7 +15699,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
 
           <div>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Beskriv hendelsen" style={cInp} /></div>
 
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+          <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'12px' }}>
             <div>{lbl('Fra dato')}<input type="date" value={form.start_date} onChange={e=>set('start_date',e.target.value)} style={cInp} /></div>
             <div>{lbl('Til dato (valgfritt)')}<input type="date" value={form.end_date} onChange={e=>set('end_date',e.target.value)} style={cInp} /></div>
           </div>
@@ -15067,7 +15710,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
               Heldagshendelse
             </label>
             {!form.all_day&&(
-              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+              <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr',gap:'12px' }}>
                 <div>{lbl('Fra kl.')}<input type="time" value={form.start_time} onChange={e=>set('start_time',e.target.value)} style={cInp} /></div>
                 <div>{lbl('Til kl.')}<input type="time" value={form.end_time} onChange={e=>set('end_time',e.target.value)} style={cInp} /></div>
               </div>
@@ -15075,7 +15718,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
           </div>
 
           <div>{lbl('Sted / Lokasjon')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Møterom A, Byggeplass..." style={cInp} /></div>
-          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div>{lbl('Beskrivelse')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...cInp,resize:'none' }} placeholder="Valgfri beskrivelse..." /></div>
 
           {/* Visibility */}
@@ -15235,8 +15878,7 @@ function SharingModal({ user, employees, sharing, onClose, onSaved }) {
           )}
 
           <div style={{ display:'flex',justifyContent:'flex-end',gap:'12px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700', width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 'auto' }}>
               {saving?'Lagrer...':'Lagre delingsinnstillinger'}
             </button>
           </div>
@@ -15286,7 +15928,7 @@ function InterChatPage() {
       const [ch, emp, proj, mem] = await Promise.all([
         supabase.from('chat_channels').select('*, chat_messages(id,content,created_at,sender_id)').order('updated_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('employees').select('id,first_name,last_name').eq('status','Aktiv').order('first_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('chat_members').select('*').then(r=>r.data||[])
       ])
       setChannels(ch); setEmployees(emp); setProjects(proj); setMembers(mem)
@@ -15389,12 +16031,14 @@ function InterChatPage() {
     )
   }
 
+  const isMobChat = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster Intern Chat...</p></div></div>
 
   return (
     <div style={{ display:'flex',height:'calc(100vh - 64px)',fontFamily:'system-ui,sans-serif',overflow:'hidden',background:'#f8fafc' }}>
-      {/* LEFT SIDEBAR */}
-      <div style={{ width:'280px',flexShrink:0,background:'white',borderRight:'1px solid #f1f5f9',display:'flex',flexDirection:'column',height:'100%' }}>
+      {/* LEFT SIDEBAR - hidden on mobile when channel selected */}
+      {(!isMobChat || !selectedChannel) && <div style={{ width: isMobChat ? '100%' : '280px',flexShrink:0,background:'white',borderRight: isMobChat ? 'none' : '1px solid #f1f5f9',display:'flex',flexDirection:'column',height:'100%' }}>
         {/* Header */}
         <div style={{ padding:'16px 16px 12px',borderBottom:'1px solid #f1f5f9' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px' }}>
@@ -15440,14 +16084,14 @@ function InterChatPage() {
             <div style={{ position:'absolute',bottom:0,right:0,width:'10px',height:'10px',borderRadius:'50%',background:'#22c55e',border:'2px solid white' }}/>
           </div>
           <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{displayName}</div>
+            <div style={{ fontSize:'12px',fontWeight:'600',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.email?.split('@')[0] || 'Bruker'}</div>
             <div style={{ fontSize:'10px',color:'#22c55e',fontWeight:'600' }}>● Online</div>
           </div>
         </div>
-      </div>
+      </div>}
 
-      {/* MAIN AREA */}
-      {selectedChannel ? (
+      {/* MAIN AREA - on mobile show back button */}
+      {(!isMobChat || selectedChannel) && selectedChannel ? (
         <ChatWindow
           channel={selectedChannel}
           user={user}
@@ -15455,8 +16099,9 @@ function InterChatPage() {
           members={members.filter(m=>m.channel_id===selectedChannel.id)}
           projects={projects}
           onRefresh={load}
+          onBack={isMobChat ? ()=>setSelectedChannel(null) : null}
         />
-      ) : (
+      ) : !isMobChat ? (
         <div style={{ flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc' }}>
           <div style={{ textAlign:'center' }}>
             <div style={{ width:'80px',height:'80px',borderRadius:'24px',background:'#f0fdf4',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'36px',margin:'0 auto 20px',border:'1px solid #bbf7d0' }}>💬</div>
@@ -15466,7 +16111,7 @@ function InterChatPage() {
               style={{ padding:'11px 22px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>+ Ny kanal</button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {showNewChannel&&(
         <NewChannelModal
@@ -15480,7 +16125,7 @@ function InterChatPage() {
   )
 }
 
-function ChatWindow({ channel, user, employees, members, projects, onRefresh }) {
+function ChatWindow({ channel, user, employees, members, projects, onRefresh, onBack }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
@@ -15591,6 +16236,7 @@ function ChatWindow({ channel, user, employees, members, projects, onRefresh }) 
       {/* Header */}
       <div style={{ padding:'14px 20px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
         <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
+          {onBack && <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'18px',padding:'4px',display:'flex',alignItems:'center' }}>←</button>}
           <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:chatColor(channel.name)+'18',border:`1px solid ${chatColor(channel.name)}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',fontWeight:'700',color:chatColor(channel.name) }}>
             {channel.type==='direct'?'👤':'#'}
           </div>
@@ -15789,17 +16435,16 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>💬 Ny kanal</h2>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>💬 Ny kanal</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving||!form.name.trim()} style={{ padding:'8px 20px', background:saving||!form.name.trim()?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Oppretter...':'Opprett kanal'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)',gap:'8px' }}>
               {[['group','👥','Gruppe'],['project','🏗️','Prosjekt'],['direct','👤','Direkte']].map(([v,e,l])=>(
                 <button key={v} onClick={()=>set('type',v)}
                   style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${form.type===v?'#059669':'#e2e8f0'}`,background:form.type===v?'#f0fdf4':'white',cursor:'pointer',textAlign:'center' }}>
@@ -15821,7 +16466,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Knytt til prosjekt</label>
             <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
               <option value="">Ingen (generell kanal)</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
           </div>
           <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>
@@ -15943,7 +16588,7 @@ function KunderPage() {
     try {
       const [k, p, q, inv] = await Promise.all([
         supabase.from('customers').select('*').order('name').then(r => r.data || []),
-        supabase.from('projects').select('id,name,status,customer_id').order('name').then(r => r.data || []),
+        supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         supabase.from('quotes').select('id,title,status,total_amount,customer_id,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,title,status,total_amount,customer_id,created_at,due_date').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
@@ -15969,6 +16614,8 @@ function KunderPage() {
     } catch(e) { alert('Feil: ' + e.message) }
   }
 
+  const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -15991,30 +16638,32 @@ function KunderPage() {
   )
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <div>
-          <h1 style={{ margin:0, fontSize:'22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
-          <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>{kunder.length} registrerte kunder</p>
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={exportCSV} style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>
-            Eksporter CSV
-          </button>
-          <label style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151', display:'flex', alignItems:'center' }}>
-            Importer CSV
-            <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
-          </label>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobK ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', marginBottom: isMobK ? '10px' : '0' }}>
+          <div>
+            <h1 style={{ margin:0, fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{kunder.length} kunder</p>
+          </div>
           <button onClick={() => setShowNew(true)}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '8px 12px' : '10px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
             + Ny kunde
           </button>
         </div>
+        {!isMobK && (
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={exportCSV} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151' }}>Eksporter CSV</button>
+            <label style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'flex', alignItems:'center' }}>
+              Importer CSV
+              <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
+            </label>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
-      <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding:'12px 32px', display:'flex', gap:'24px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding: isMobK ? '10px 14px' : '12px 32px', display:'flex', gap: isMobK ? '6px' : '24px', flexWrap:'wrap' }}>
         {Object.entries(KUNDE_TYPE).map(([key, cfg]) => {
           const count = kunder.filter(k => k.type === key).length
           return (
@@ -16032,8 +16681,8 @@ function KunderPage() {
       </div>
 
       {/* Search */}
-      <div style={{ padding:'16px 32px', background:'white', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'10px', alignItems:'center' }}>
-        <div style={{ position:'relative', flex:1, maxWidth:'360px' }}>
+      <div style={{ padding: isMobK ? '10px 14px' : '16px 32px', background:'white', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+        <div style={{ position:'relative', flex:1, minWidth: isMobK ? '100%' : 'auto', maxWidth: isMobK ? '100%' : '360px' }}>
           <span style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8', fontSize:'14px' }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk på navn, e-post, telefon, orgnr..."
             style={{ ...kundeInp, paddingLeft:'34px' }} />
@@ -16048,7 +16697,7 @@ function KunderPage() {
       </div>
 
       {/* Customer list */}
-      <div style={{ padding:'20px 32px' }}>
+      <div style={{ padding: isMobK ? '12px' : '20px 32px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
             <div style={{ fontSize:'48px', marginBottom:'12px' }}>🏢</div>
@@ -16063,25 +16712,25 @@ function KunderPage() {
               const antallProsjekter = prosjekter.filter(p => p.customer_id === kunde.id).length
               return (
                 <div key={kunde.id}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', gap:'16px', cursor:'pointer', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobK ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobK ? '12px' : '16px 20px', display:'flex', alignItems: isMobK ? 'flex-start' : 'center', gap: isMobK ? '10px' : '16px', cursor:'pointer', transition:'box-shadow 0.15s' }}
                   onClick={() => setSelected(kunde)}
                   onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                   {/* Avatar */}
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>
+                  {!isMobK && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>
                     {type.emoji}
-                  </div>
+                  </div>}
                   {/* Info */}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{kunde.name}</span>
-                      <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px' }}>{type.emoji} {type.label}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap: isMobK ? '6px' : '10px', marginBottom:'4px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700', fontSize: isMobK ? '13px' : '15px', color:'#0f172a' }}>{kunde.name}</span>
+                      <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'10px', fontWeight:'700', padding:'2px 6px' }}>{type.label}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'16px', fontSize:'13px', color:'#64748b', flexWrap:'wrap' }}>
-                      {kunde.orgnr && <span>Org: {kunde.orgnr}</span>}
+                    <div style={{ display:'flex', gap: isMobK ? '6px' : '16px', fontSize: isMobK ? '11px' : '13px', color:'#64748b', flexWrap:'wrap' }}>
+                      {!isMobK && kunde.orgnr && <span>Org: {kunde.orgnr}</span>}
                       {kunde.email && <span>✉️ {kunde.email}</span>}
                       {kunde.phone && <span>📞 {kunde.phone}</span>}
-                      {kunde.city && <span>📍 {kunde.city}</span>}
+                      {!isMobK && kunde.city && <span>📍 {kunde.city}</span>}
                     </div>
                   </div>
                   {/* Prosjekter */}
@@ -16093,12 +16742,12 @@ function KunderPage() {
                   )}
                   {/* Actions */}
                   <div style={{ display:'flex', gap:'6px', flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setSelected(kunde)}
+                    {!isMobK && <button onClick={() => setSelected(kunde)}
                       style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
                       Åpne
-                    </button>
+                    </button>}
                     <button onClick={() => handleDelete(kunde)}
-                      style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'14px' }}>
+                      style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding: isMobK ? '6px 8px' : '7px 10px', cursor:'pointer', fontSize: isMobK ? '12px' : '14px' }}>
                       🗑️
                     </button>
                   </div>
@@ -16265,19 +16914,21 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
     { id: 'notater', label: `📝 Notater (${notater.length})` },
   ]
 
-  const card = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+  const isMobKD = typeof window !== 'undefined' && window.innerWidth < 768
+
+  const card = { background:'white', borderRadius: isMobKD ? '12px' : '16px', border:'1px solid #f1f5f9', padding: isMobKD ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobKD ? '8px' : '12px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobKD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
+                <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
@@ -16287,23 +16938,23 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
             </div>
           </div>
           <button onClick={() => setEditing(true)}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 20px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>
-            ✏️ Rediger
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
+            ✏️{!isMobKD && ' Rediger'}
           </button>
         </div>
 
         {/* Tabs */}
-        <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft:'-32px', marginRight:'-32px', paddingLeft:'32px' }}>
+        <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              style={{ padding:'10px 18px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight: activeTab === t.id ? '700' : '400', background:'transparent', color: activeTab === t.id ? '#059669' : '#64748b', borderBottom: activeTab === t.id ? '2px solid #059669' : '2px solid transparent', fontFamily:'system-ui,sans-serif' }}>
+              style={{ padding: isMobKD ? '8px 10px' : '10px 18px', border:'none', cursor:'pointer', fontSize: isMobKD ? '11px' : '13px', whiteSpace:'nowrap', fontWeight: activeTab === t.id ? '700' : '400', background:'transparent', color: activeTab === t.id ? '#059669' : '#64748b', borderBottom: activeTab === t.id ? '2px solid #059669' : '2px solid transparent', fontFamily:'system-ui,sans-serif' }}>
               {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'1fr 340px', gap:'20px' }}>
+      <div style={{ padding: isMobKD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobKD ? '1fr' : '1fr 340px', gap: isMobKD ? '12px' : '20px' }}>
         {/* Venstre kolonne */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
@@ -16311,7 +16962,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
           {activeTab === 'oversikt' && (
             <>
               {/* Nøkkeltall */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobKD ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap:'10px' }}>
                 {[
                   { label: 'Totalt fakturert', value: Math.round(totalFakturert).toLocaleString('nb-NO') + ' kr', color: '#059669', bg: '#ecfdf5' },
                   { label: 'Utestående', value: Math.round(utestaende).toLocaleString('nb-NO') + ' kr', color: utestaende > 0 ? '#d97706' : '#059669', bg: utestaende > 0 ? '#fffbeb' : '#ecfdf5' },
@@ -16328,7 +16979,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               {/* Kontaktinfo */}
               <div style={card}>
                 <h3 style={{ margin:'0 0 16px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Kontaktinformasjon</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                   {[
                     ['E-post', kunde.email, `mailto:${kunde.email}`],
                     ['Telefon', kunde.phone, `tel:${kunde.phone}`],
@@ -16678,7 +17329,6 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏢 {isEdit ? 'Rediger kunde' : 'Ny kunde'}</h2>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett kunde'}</button>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
           </div>
@@ -16687,7 +17337,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
           {/* Kundetype */}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kunde</label>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'8px' }}>
               {Object.entries(KUNDE_TYPE).map(([key, cfg]) => (
                 <button key={key} type="button" onClick={() => set('type', key)}
                   style={{ padding:'9px 8px', borderRadius:'10px', border:`2px solid ${form.type === key ? cfg.color : '#e2e8f0'}`,
@@ -16698,7 +17348,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
               ))}
             </div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>
               {lbl('Navn *')}<input value={form.name} onChange={e => checkDuplicate('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={{ ...kundeInp, borderColor: dupWarning && form.name ? '#f87171' : '#e2e8f0' }} />
               {dupWarning && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#dc2626' }}>{dupWarning}</p>}
@@ -16821,7 +17471,7 @@ function CRMPage() {
         supabase.from('crm_customers').select('*').order('updated_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('crm_contacts').select('*').then(r=>r.data||[]),
         supabase.from('crm_activities').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,status').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('quotes').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
       ])
@@ -16875,7 +17525,7 @@ function CRMPage() {
   }
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
-  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -16893,7 +17543,7 @@ function CRMPage() {
         </div>
 
         {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'10px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(5,1fr)' : 'repeat(5,1fr)', gap:'10px' }}>
           {[
             { label:'Totalt', value:stats.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
             { label:'Leads', value:stats.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
@@ -16995,7 +17645,7 @@ function CRMPage() {
 
         {/* PIPELINE VIEW */}
         {view==='pipeline' && (
-          <div style={{ overflowX:'auto', flex:fullscreen?1:'initial', overflow:fullscreen?'auto':'initial' }}>
+          <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(5,280px)', gap:'14px', minWidth:'max-content' }}>
               {['lead','kontaktet','tilbud_sendt','vunnet','tapt'].map(status=>{
                 const cfg=CRM_STATUS[status]
@@ -17053,6 +17703,7 @@ function CRMPage() {
 }
 
 function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
+  const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
   const [c, setC] = useState(init)
   const [cts, setCts] = useState(contacts)
@@ -17178,7 +17829,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobBD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobBD ? '1fr' : '2fr 1fr', gap: isMobBD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
 
           {/* OVERSIKT */}
@@ -17186,7 +17837,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
             <>
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                   {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal&&c.city?`${c.postal} ${c.city}`:c.city||c.postal],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null]].filter(r=>r[1]).map(([k,v])=>(
                     <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                       <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
@@ -17572,6 +18223,16 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
 
 // ─── BEFARING MODULE ──────────────────────────────────────────────────────────
 
+const BEFARING_TYPES = [
+  { id:'hms', label:'HMS', emoji:'🦺' },
+  { id:'kvalitet', label:'Kvalitet', emoji:'✅' },
+  { id:'sluttkontroll', label:'Sluttkontroll', emoji:'🔍' },
+  { id:'overtakelse', label:'Overtakelse', emoji:'🤝' },
+  { id:'garanti', label:'Garantibefaring', emoji:'🛡️' },
+  { id:'tilbud', label:'Tilbudsbefaring', emoji:'📋' },
+  { id:'annet', label:'Annet', emoji:'📝' },
+]
+
 const INS_STATUS = {
   planlagt:     { label:'Planlagt',     emoji:'📅', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
   gjennomfort:  { label:'Gjennomført',  emoji:'✅', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
@@ -17579,7 +18240,7 @@ const INS_STATUS = {
 }
 
 const bInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
-const bCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const bCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 function BefaringPage() {
   const { user } = useAuth()
@@ -17596,7 +18257,7 @@ function BefaringPage() {
     try {
       const [ins, proj] = await Promise.all([
         supabase.from('inspections').select('*, inspection_items(*), inspection_followups(*), inspection_files(*)').order('date',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setInspections(ins); setProjects(proj)
     } catch(e) { console.error(e) }
@@ -17613,45 +18274,47 @@ function BefaringPage() {
 
   const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
 
+  const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
-  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobB ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobB ? '12px' : '16px', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>
+            <h1 style={{ fontSize: isMobB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
+            {!isMobB && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>}
           </div>
-          <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny befaring</button>
+          <button onClick={()=>setShowNew(true)} style={{ padding: isMobB ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobB ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>{isMobB ? '+ Befaring' : '+ Ny befaring'}</button>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
           {[
             { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
             { label:'Planlagt', value:inspections.filter(i=>i.status==='planlagt').length, emoji:'📅', bg:'#eff6ff', color:'#2563eb' },
             { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
             { label:'Åpne oppfølg.', value:openFollowups, emoji:'⏰', bg:openFollowups>0?'#fffbeb':'#f8fafc', color:openFollowups>0?'#d97706':'#64748b' },
           ].map(s=>(
-            <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px 16px' }}>
-              <div style={{ fontSize:'18px', marginBottom:'4px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'20px', fontWeight:'800', color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
+            <div key={s.label} style={{ background:s.bg, borderRadius: isMobB ? '10px' : '12px', padding: isMobB ? '10px' : '14px 16px' }}>
+              <div style={{ fontSize: isMobB ? '14px' : '18px', marginBottom: isMobB ? '2px' : '4px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobB ? '16px' : '20px', fontWeight:'800', color:s.color }}>{s.value}</div>
+              <div style={{ fontSize: isMobB ? '9px' : '11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk befaring, sted..." style={{ ...bInp, maxWidth:'220px', flex:1 }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth:'160px' }}>
+      <div style={{ padding: isMobB ? '12px' : '20px 32px', display:'flex', flexDirection:'column', gap: isMobB ? '12px' : '16px', overflowX:'hidden' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobB ? '10px' : '14px 18px', display:'flex', gap: isMobB ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...bInp, maxWidth: isMobB ? '100%' : '220px', flex: isMobB ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '160px', flex: isMobB ? '1 1 48%' : 'none' }}>
             <option value="alle">Alle statuser</option>
             {Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth:'180px' }}>
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '180px', flex: isMobB ? '1 1 48%' : 'none' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
@@ -17674,24 +18337,24 @@ function BefaringPage() {
               const avvik=items.filter(i=>i.status==='avvik').length
               return (
                 <div key={ins.id} onClick={()=>setSelected(ins)}
-                  style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  style={{ background:'white', borderRadius: isMobB ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobB ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobB ? 'flex-start' : 'center', gap: isMobB ? '10px' : '16px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>
+                  {!isMobB && <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{ins.title}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobB ? '13px' : '15px' }}>{ins.title}</span>
                       <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
                       {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
                       {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {ins.date}</span>
-                      {ins.location&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {ins.location}</span>}
-                      {proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} punkter</span>}
+                    <div style={{ display:'flex', gap: isMobB ? '6px' : '12px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📅 {ins.date}</span>
+                      {ins.location&&<span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📍 {ins.location}</span>}
+                      {!isMobB && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobB && items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} punkter</span>}
                     </div>
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobB && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -17726,12 +18389,16 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
     ])
     setItems(it); setFollowups(fu); setFiles(fi)
   }
+  useEffect(()=>{ loadDetails() },[])
   const refresh = async () => { const {data}=await supabase.from('inspections').select('*').eq('id',ins.id).single(); if(data) setIns(data) }
 
   const addItem = async () => {
     if (!newItem.trim()) return
-    await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:newItem.trim(), sort_order:items.length })
-    setNewItem(''); loadDetails()
+    try {
+      const { error } = await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:newItem.trim(), sort_order:items.length })
+      if (error) throw error
+      setNewItem(''); loadDetails()
+    } catch(e) { alert('Feil ved lagring: '+e.message) }
   }
 
   const toggleItemStatus = async (item) => {
@@ -17786,6 +18453,84 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const openF=followups.filter(f=>!f.completed).length
   const today=new Date().toISOString().split('T')[0]
   const [showConvert, setShowConvert] = useState(false)
+  const [showImportCL, setShowImportCL] = useState(false)
+  const [checklists, setChecklists] = useState([])
+  const [showSend, setShowSend] = useState(false)
+  const [sendItems, setSendItems] = useState([])
+  const [sendForm, setSendForm] = useState({ email:'', name:'', message:'' })
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const cameraRef = React.useRef(null)
+
+  const loadChecklists = async () => {
+    try {
+      const [templates, lists] = await Promise.all([
+        supabase.from('checklist_templates').select('id,name,sections').order('name').then(r=>r.data||[]),
+        supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false}).then(r=>r.data||[])
+      ])
+      setChecklists([
+        ...templates.map(t=>({ id:t.id, title:'📁 '+t.name, sections:t.sections, isMal:true })),
+        ...lists.map(l=>({ id:l.id, title:l.title, sections:l.sections, isMal:false }))
+      ])
+    } catch(e) { console.error('Feil ved lasting av sjekklister:', e); setChecklists([]) }
+  }
+
+  const importFromChecklist = async (cl) => {
+    const allItems = (cl.sections||[]).flatMap(s=>(s.items||[]).map(i=>i.text||i.description||''))
+    if (!allItems.length) return alert('Sjekklisten har ingen punkter')
+    for (let i=0; i<allItems.length; i++) {
+      if (allItems[i].trim()) {
+        await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:allItems[i].trim(), sort_order:items.length+i })
+      }
+    }
+    setShowImportCL(false)
+    loadDetails()
+  }
+
+  const uploadCamera = async (e) => {
+    const file=e.target.files?.[0]; if(!file) return
+    setSaving(true)
+    try {
+      const path='befaring/'+ins.id+'/'+Date.now()+'_'+file.name
+      const {error}=await supabase.storage.from('plattform-files').upload(path,file)
+      if(error) throw error
+      const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
+      await supabase.from('inspection_files').insert({ inspection_id:ins.id, name:file.name, file_url:publicUrl, file_type:file.type })
+      loadDetails()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSaving(false); e.target.value='' }
+  }
+
+  const sendToRecipient = async () => {
+    if (!sendForm.email.trim()) return alert('E-post er påkrevd')
+    if (sendItems.length===0) return alert('Velg minst ett punkt å sende')
+    setSendingEmail(true)
+    try {
+      const selectedItemsList = items.filter(i=>sendItems.includes(i.id))
+      const selectedFiles = files.filter(f=>f.file_type?.startsWith('image/'))
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:700px;margin:0 auto;padding:20px">' +
+        '<div style="background:#059669;color:white;padding:16px 24px;border-radius:12px 12px 0 0"><h1 style="margin:0;font-size:20px">Befaringsrapport</h1><p style="margin:6px 0 0;opacity:0.9;font-size:14px">'+ins.title+'</p></div>' +
+        '<div style="background:#f8fafc;padding:20px 24px;border:1px solid #e2e8f0;border-top:none">' +
+        '<p style="color:#64748b;font-size:13px;margin:0 0 4px">📅 '+ins.date+(ins.location?' · 📍 '+ins.location:'')+(proj?' · 🏗️ '+proj.name:'')+'</p>' +
+        (sendForm.message?'<div style="background:white;padding:12px;border-radius:8px;border:1px solid #e2e8f0;margin:12px 0;font-size:14px;color:#374151">'+sendForm.message+'</div>':'') +
+        '<h3 style="margin:16px 0 10px;font-size:15px;color:#0f172a">Punkter ('+selectedItemsList.length+')</h3>' +
+        selectedItemsList.map(item=>{
+          const st = item.status==='avvik'?{c:'#dc2626',bg:'#fef2f2',l:'Avvik'}:item.status==='ok'?{c:'#16a34a',bg:'#f0fdf4',l:'OK'}:{c:'#94a3b8',bg:'#f8fafc',l:'N/A'}
+          return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:'+st.bg+';border-radius:8px;margin-bottom:6px;border:1px solid '+st.c+'30"><span style="background:'+st.c+';color:white;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">'+st.l+'</span><span style="font-size:14px;color:#0f172a">'+item.description+'</span></div>'
+        }).join('') +
+        (selectedFiles.length>0?'<h3 style="margin:16px 0 10px;font-size:15px;color:#0f172a">Bilder</h3>'+selectedFiles.slice(0,6).map(f=>'<img src="'+f.file_url+'" style="width:200px;height:150px;object-fit:cover;border-radius:8px;margin:4px" />').join(''):'') +
+        '<hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">' +
+        '<p style="color:#94a3b8;font-size:12px">Sendt fra En Plattform KS-system</p></div></div>'
+      
+      const fnRes = await fetch(import.meta.env.VITE_SUPABASE_URL+'/functions/v1/send-quote',{
+        method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY},
+        body:JSON.stringify({to:sendForm.email,subject:'Befaring: '+ins.title+(sendForm.name?' – Til: '+sendForm.name:''),html})
+      })
+      if(!fnRes.ok) throw new Error('Sending feilet')
+      alert('Sendt til '+sendForm.email+'!')
+      setShowSend(false); setSendItems([]); setSendForm({email:'',name:'',message:''})
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSendingEmail(false) }
+  }
 
   // ── PDF-rapport ──
   const exportPDF = async () => {
@@ -17864,47 +18609,50 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
     na:    { label:'N/A',   color:'#94a3b8', bg:'#f8fafc', next:'ok' },
   }
 
+  const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til befaringer</button>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', gap:'14px' }}>
-            <div style={{ width:'52px',height:'52px',borderRadius:'14px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',flexShrink:0 }}>{cfg.emoji}</div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'6px' }}>
-                <h1 style={{ margin:0, fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
-                <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
-                {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik} avvik</span>}
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobBD ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake</button>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobBD ? '8px' : '16px', flexWrap: isMobBD ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap: isMobBD ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobBD && <div style={{ width:'52px',height:'52px',borderRadius:'14px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',flexShrink:0 }}>{cfg.emoji}</div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobBD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'6px' }}>
+                <h1 style={{ margin:0, fontSize: isMobBD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
+                <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
+                {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700',padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik}</span>}
               </div>
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                <span style={{ fontSize:'13px', color:'#64748b' }}>📅 {ins.date}</span>
-                {ins.location&&<span style={{ fontSize:'13px', color:'#64748b' }}>📍 {ins.location}</span>}
-                {proj&&<span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+              <div style={{ display:'flex', gap: isMobBD ? '6px' : '12px', flexWrap:'wrap' }}>
+                <span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📅 {ins.date}</span>
+                {ins.location&&<span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📍 {ins.location}</span>}
+                {!isMobBD && proj&&<span style={{ fontSize:'13px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-            <button onClick={exportPDF} style={{ padding:'9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>📄 PDF-rapport</button>
-            <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>
-            <button onClick={()=>setEditing(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding:'9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px' }}>🗑️</button>
+          <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap', width: isMobBD ? '100%' : 'auto' }}>
+            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📄 PDF' : '📄 PDF-rapport'}</button>
+            <button onClick={()=>{setSendItems(items.map(i=>i.id));setShowSend(true)}} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📧 Send' : '📧 Send rapport'}</button>
+            {!isMobBD && <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>}
+            <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobBD ? '7px 10px' : '9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize: isMobBD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
-        <div style={{ display:'flex', gap:'4px', marginTop:'16px', flexWrap:'wrap' }}>
-          {[['sjekkliste',`☑️ Sjekkliste (${items.length})`],['oppfolging',`⏰ Oppfølging (${openF})`],['filer',`📎 Filer (${files.length})`],['info','ℹ️ Info']].map(([id,l])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ padding:'8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+        <div style={{ display:'flex', gap:'4px', marginTop: isMobBD ? '12px' : '16px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          {[['sjekkliste', isMobBD ? `☑️ Sjekk (${items.length})` : `☑️ Sjekkliste (${items.length})`],['oppfolging', isMobBD ? `⏰ Oppf. (${openF})` : `⏰ Oppfølging (${openF})`],['filer',`📎 Filer (${files.length})`],['info','ℹ️ Info']].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobBD ? '7px 10px' : '8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize: isMobBD ? '11px' : '13px',cursor:'pointer',whiteSpace:'nowrap' }}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px' }}>
+      <div style={{ padding: isMobBD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobBD ? '1fr' : '2fr 1fr', gap: isMobBD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
 
           {tab==='sjekkliste'&&(
             <div style={bCard}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>☑️ Sjekkpunkter</h3>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobBD ? '10px' : '14px', flexWrap:'wrap', gap:'8px' }}>
+                <h3 style={{ margin:0, fontSize: isMobBD ? '13px' : '14px', fontWeight:'700', color:'#0f172a' }}>☑️ Sjekkpunkter</h3>
                 {items.length>0&&(
                   <div style={{ display:'flex', gap:'8px', fontSize:'12px' }}>
                     <span style={{ background:'#f0fdf4',color:'#16a34a',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>✅ {ok} OK</span>
@@ -17916,24 +18664,25 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 {items.map(item=>{
                   const st=ITEM_STATUS[item.status]
                   return (
-                    <div key={item.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9' }}>
-                      <button onClick={()=>toggleItemStatus(item)} style={{ padding:'4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth:'52px' }}>{st.label}</button>
+                    <div key={item.id} style={{ display:'flex', alignItems: isMobBD ? 'flex-start' : 'center', gap: isMobBD ? '8px' : '10px', padding: isMobBD ? '8px 10px' : '10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9', flexWrap: isMobBD ? 'wrap' : 'nowrap' }}>
+                      <button onClick={()=>toggleItemStatus(item)} style={{ padding: isMobBD ? '3px 10px' : '4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth: isMobBD ? '42px' : '52px' }}>{st.label}</button>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
+                        <span style={{ fontSize: isMobBD ? '12px' : '13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
                         {item.location_ref && <div style={{ fontSize:'11px', color:'#2563eb', marginTop:'2px' }}>📍 {item.location_ref}</div>}
                       </div>
                       <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
                         {item.status==='avvik'&&<button onClick={()=>convertToDeviation(item)} title="Opprett avvik" style={{ background:'#fef2f2',color:'#dc2626',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer',fontWeight:'600' }}>⚠️</button>}
-                        <button onClick={async ()=>{const ref=prompt('Plassering / romreferanse:',item.location_ref||'');if(ref!==null){await supabase.from('inspection_items').update({location_ref:ref||null}).eq('id',item.id);loadDetails()}}} title="Koble til rom/tegning" style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer' }}>📍</button>
+                        {!isMobBD && <button onClick={async ()=>{const ref=prompt('Plassering / romreferanse:',item.location_ref||'');if(ref!==null){await supabase.from('inspection_items').update({location_ref:ref||null}).eq('id',item.id);loadDetails()}}} title="Koble til rom/tegning" style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer' }}>📍</button>}
                         <button onClick={()=>deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
                       </div>
                     </div>
                   )
                 })}
               </div>
-              <div style={{ display:'flex', gap:'8px' }}>
-                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex:1 }} />
-                <button onClick={addItem} style={{ padding:'9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700',whiteSpace:'nowrap' }}>+ Legg til</button>
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex: isMobBD ? '1 1 100%' : '1 1 200px' }} />
+                <button onClick={addItem} style={{ padding: isMobBD ? '9px 12px' : '9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700',whiteSpace:'nowrap',flex: isMobBD ? 1 : 'none' }}>+ Legg til</button>
+                <button onClick={()=>{loadChecklists();setShowImportCL(true)}} style={{ padding: isMobBD ? '9px 12px' : '9px 14px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '12px',fontWeight:'600',whiteSpace:'nowrap',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📋 Importer' : '📋 Importer sjekkliste'}</button>
               </div>
             </div>
           )}
@@ -17945,7 +18694,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 {followups.map(fu=>{
                   const overdue=fu.due_date&&fu.due_date<today&&!fu.completed
                   return (
-                    <div key={fu.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'12px 14px', background:fu.completed?'#f8fafc':overdue?'#fef2f2':'#fffbeb', borderRadius:'10px', border:`1px solid ${fu.completed?'#f1f5f9':overdue?'#fecaca':'#fde68a'}` }}>
+                    <div key={fu.id} style={{ display:'flex', alignItems: isMobBD ? 'flex-start' : 'center', gap: isMobBD ? '8px' : '10px', padding: isMobBD ? '10px' : '12px 14px', background:fu.completed?'#f8fafc':overdue?'#fef2f2':'#fffbeb', borderRadius:'10px', border:`1px solid ${fu.completed?'#f1f5f9':overdue?'#fecaca':'#fde68a'}` }}>
                       <input type="checkbox" checked={fu.completed} onChange={()=>toggleFollowup(fu)} style={{ width:'16px',height:'16px',accentColor:'#059669',cursor:'pointer',flexShrink:0 }} />
                       <div style={{ flex:1 }}>
                         <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', textDecoration:fu.completed?'line-through':'none' }}>{fu.description}</div>
@@ -17962,11 +18711,11 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'10px' }}>
                 <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>+ Nytt oppfølgingspunkt</div>
                 <input value={newFollowup.description} onChange={e=>setNewFollowup(f=>({...f,description:e.target.value}))} placeholder="Beskrivelse av oppfølging..." style={bInp} />
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                   <input value={newFollowup.responsible} onChange={e=>setNewFollowup(f=>({...f,responsible:e.target.value}))} placeholder="Ansvarlig person" style={bInp} />
                   <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
                 </div>
-                <button onClick={addFollowup} style={{ padding:'9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>Legg til oppfølging</button>
+                <button onClick={addFollowup} style={{ padding: isMobBD ? '10px' : '9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700' }}>{isMobBD ? '+ Oppfølging' : 'Legg til oppfølging'}</button>
               </div>
             </div>
           )}
@@ -17975,11 +18724,15 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             <div style={bCard}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Bilder og dokumenter</h3>
-                <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding:'7px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
+                <div style={{ display:'flex',gap:'6px' }}>
+                  <button onClick={()=>cameraRef.current?.click()} style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'8px',padding: isMobBD ? '7px 10px' : '7px 14px',fontSize: isMobBD ? '12px' : '13px',fontWeight:'600',cursor:'pointer' }}>📷 {isMobBD ? 'Bilde' : 'Ta bilde'}</button>
+                  <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding: isMobBD ? '7px 10px' : '7px 14px',fontSize: isMobBD ? '12px' : '13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
+                </div>
+                <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={uploadCamera} />
                 <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadFile} accept="image/*,.pdf,.doc,.docx" multiple />
               </div>
               {files.length===0 ? <p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen filer lastet opp</p> : (
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: isMobBD ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(140px,1fr))', gap: isMobBD ? '8px' : '10px' }}>
                   {files.map(f=>{
                     const isImg=f.file_type?.startsWith('image/')
                     return (
@@ -18000,8 +18753,8 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           {tab==='info'&&(
             <div style={bCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Befaringsinfo</h3>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-                {[['Tittel',ins.title],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
+                {[['Tittel',ins.title],['Type',(BEFARING_TYPES.find(t=>t.id===ins.inspection_type)||{}).label||ins.inspection_type],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
                   <div key={k} style={{ background:'#f8fafc',borderRadius:'8px',padding:'9px 12px' }}>
                     <div style={{ fontSize:'11px',color:'#94a3b8',textTransform:'uppercase',fontWeight:'600' }}>{k}</div>
                     <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a',marginTop:'2px' }}>{v}</div>
@@ -18027,20 +18780,114 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           <div style={bCard}>
             <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Oppsummering</h3>
             {[['Sjekkpunkter',items.length],['OK',ok],['Avvik',avvik],['N/A',items.filter(i=>i.status==='na').length],['Oppfølginger',followups.length],['Åpne',openF],['Filer',files.length]].map(([k,v],i)=>(
-              <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize:'13px' }}>
+              <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize: isMobBD ? '12px' : '13px' }}>
                 <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700',color:'#0f172a' }}>{v}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
-      {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {/* Import sjekkliste modal */}
+      {showImportCL && (
+        <>
+          <div onClick={()=>setShowImportCL(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '80vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+              <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📋 Importer sjekkliste</h2>
+              <button onClick={()=>setShowImportCL(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'8px' }}>
+              {checklists.length===0?<p style={{ color:'#94a3b8',fontSize:'14px',textAlign:'center',padding:'24px' }}>Ingen maler eller sjekklister funnet. Opprett maler i Sjekkliste-modulen.</p>:(
+                <>
+                  {checklists.filter(c=>c.isMal).length>0 && (
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#7c3aed',textTransform:'uppercase',marginBottom:'2px',marginTop:'4px' }}>📁 Maler</div>
+                  )}
+                  {checklists.filter(c=>c.isMal).map(cl=>{
+                    const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
+                    return (
+                      <button key={'t-'+cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #e9d5ff',background:'#faf5ff',cursor:'pointer',width:'100%',textAlign:'left' }}
+                        onMouseEnter={e=>e.currentTarget.style.background='#f3e8ff'} onMouseLeave={e=>e.currentTarget.style.background='#faf5ff'}>
+                        <div>
+                          <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
+                          <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
+                        </div>
+                        <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
+                      </button>
+                    )
+                  })}
+                  {checklists.filter(c=>!c.isMal).length>0 && (
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#059669',textTransform:'uppercase',marginBottom:'2px',marginTop:'8px' }}>📋 Eksisterende sjekklister</div>
+                  )}
+                  {checklists.filter(c=>!c.isMal).map(cl=>{
+                    const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
+                    return (
+                      <button key={'c-'+cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #f1f5f9',background:'white',cursor:'pointer',width:'100%',textAlign:'left' }}
+                        onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                        <div>
+                          <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
+                          <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
+                        </div>
+                        <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
+                      </button>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Send rapport modal */}
+      {showSend && (
+        <>
+          <div onClick={()=>setShowSend(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(560px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '90vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+              <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📧 Send befaringsrapport</h2>
+              <button onClick={()=>setShowSend(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
+              <div style={{ background:'#eff6ff',borderRadius:'10px',padding:'12px',border:'1px solid #bfdbfe',fontSize:'13px',color:'#1e40af' }}>
+                Send utvalgte punkter med bilder til en kollega, UE eller andre. Mottaker trenger ikke tilgang til systemet.
+              </div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mottakers e-post *</label><input value={sendForm.email} onChange={e=>setSendForm(f=>({...f,email:e.target.value}))} placeholder="epost@firma.no" style={bInp} type="email" /></div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mottakers navn</label><input value={sendForm.name} onChange={e=>setSendForm(f=>({...f,name:e.target.value}))} placeholder="F.eks. Kontaktperson UE" style={bInp} /></div>
+              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Melding (valgfritt)</label><textarea value={sendForm.message} onChange={e=>setSendForm(f=>({...f,message:e.target.value}))} rows={2} placeholder="F.eks. Vennligst utbedr følgende punkter innen fredag..." style={{ ...bInp,resize:'none' }} /></div>
+              
+              <div>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px' }}>
+                  <label style={{ fontSize:'13px',fontWeight:'600',color:'#374151' }}>Velg punkter å sende ({sendItems.length}/{items.length})</label>
+                  <button onClick={()=>setSendItems(sendItems.length===items.length?[]:items.map(i=>i.id))} style={{ background:'none',border:'none',fontSize:'12px',color:'#2563eb',cursor:'pointer',fontWeight:'600' }}>{sendItems.length===items.length?'Fjern alle':'Velg alle'}</button>
+                </div>
+                <div style={{ display:'flex',flexDirection:'column',gap:'4px',maxHeight:'200px',overflowY:'auto' }}>
+                  {items.map(item=>{
+                    const sel=sendItems.includes(item.id)
+                    const st=item.status==='avvik'?'#dc2626':item.status==='ok'?'#16a34a':'#94a3b8'
+                    return (
+                      <label key={item.id} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'8px 10px',borderRadius:'8px',cursor:'pointer',background:sel?'#f0fdf4':'#f8fafc',border:sel?'1px solid #bbf7d0':'1px solid #f1f5f9' }}>
+                        <input type="checkbox" checked={sel} onChange={()=>setSendItems(s=>sel?s.filter(x=>x!==item.id):[...s,item.id])} style={{ accentColor:'#059669',width:'16px',height:'16px' }} />
+                        <span style={{ width:'6px',height:'6px',borderRadius:'50%',background:st,flexShrink:0 }} />
+                        <span style={{ fontSize:'13px',color:'#0f172a',flex:1 }}>{item.description}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <button onClick={sendToRecipient} disabled={sendingEmail} style={{ padding:'12px',background:sendingEmail?'#94a3b8':'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:sendingEmail?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700',marginTop:'4px' }}>{sendingEmail?'Sender...':'📧 Send rapport'}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+            {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
 
       {/* Konverter-modal */}
       {showConvert && (
         <>
           <div onClick={()=>setShowConvert(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(500px,calc(100vw - 32px))',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '85vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', overflow:'auto' }}>
             <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9' }}>
               <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>🔄 Konverter befaringspunkter</h2>
             </div>
@@ -18077,7 +18924,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
 function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit=!!initial
-  const [form, setForm] = useState({ title:initial?.title||'', date:initial?.date||new Date().toISOString().split('T')[0], location:initial?.location||'', project_id:initial?.project_id||'', status:initial?.status||'planlagt', notes:initial?.notes||'', participants:initial?.participants||[] })
+  const [form, setForm] = useState({ title:initial?.title||'', date:initial?.date||new Date().toISOString().split('T')[0], location:initial?.location||'', project_id:initial?.project_id||'', status:initial?.status||'planlagt', notes:initial?.notes||'', participants:initial?.participants||[], inspection_type:initial?.inspection_type||'kvalitet' })
   const [participantInput, setParticipantInput] = useState('')
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -18097,22 +18944,23 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔍 {isEdit?'Rediger':'Ny'} befaring</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-            <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett befaring'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
+      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '560px',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>{isEdit?'🔍 Rediger befaring':'🔍 Ny befaring'}</h2>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 14px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
-          {[['Tittel *','title','text','F.eks. Befaringsrapport tak'],['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
+        <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. HMS-befaring uke 12" style={bInp} /></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Befaringstype</label><select value={form.inspection_type} onChange={e=>set('inspection_type',e.target.value)} style={bInp}>{BEFARING_TYPES.map(t=><option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}</select></div>
+          {[['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
           ))}
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
@@ -18167,8 +19015,8 @@ function BildedokPage() {
     try {
       const [ph, proj, emp] = await Promise.all([
         supabase.from('photos').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[]),
-        supabase.from('employees').select('id,name').order('name').then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
+        supabase.from('employees').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
       ])
       setPhotos(ph); setProjects(proj); setEmployees(emp)
     } catch(e) { console.error(e) }
@@ -18208,6 +19056,8 @@ function BildedokPage() {
     finally { setUploading(false) }
   }
 
+  const isMobBild = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster bilder...</p></div></div>
 
   const faseGroups = BYGGEFASER.map(fase => ({ ...fase, photos: filtered.filter(p=>p.fase===fase.id) }))
@@ -18218,29 +19068,29 @@ function BildedokPage() {
     byDate[d].push(p)
   })
 
-  const selStyle = { padding:'8px 32px 8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',appearance:'none',cursor:'pointer',fontWeight:'500',color:'#0f172a' }
+  const selStyle = { padding: isMobBild ? '7px 28px 7px 10px' : '8px 32px 8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize: isMobBild ? '12px' : '13px',outline:'none',background:'white',appearance:'none',cursor:'pointer',fontWeight:'500',color:'#0f172a', flex: isMobBild ? '1 1 45%' : 'none' }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobBild ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobBild ? '10px' : '16px', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a', margin:0 }}>Bildedokumentasjon</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>{filtered.length} bilder totalt</p>
+            <h1 style={{ fontSize: isMobBild ? '18px' : '22px', fontWeight:'800', color:'#0f172a', margin:0 }}>{isMobBild ? '📷 Bildedok' : 'Bildedokumentasjon'}</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize: isMobBild ? '12px' : '14px', marginBottom:0 }}>{filtered.length} bilder</p>
           </div>
-          <button onClick={()=>setShowUploadModal(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700', display:'flex', alignItems:'center', gap:'8px' }}>
-            + Last opp bilder
+          <button onClick={()=>setShowUploadModal(true)} style={{ padding: isMobBild ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobBild ? '12px' : '14px', fontWeight:'700', display:'flex', alignItems:'center', gap:'6px', whiteSpace:'nowrap', flexShrink:0 }}>
+            {isMobBild ? '📷 Last opp' : '+ Last opp bilder'}
           </button>
         </div>
-        <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', borderRadius:'10px', padding:'4px', width:'fit-content', marginBottom:'16px' }}>
-          {[{id:'mappe',label:'Mappestruktur',icon:'⊞'},{id:'tidslinje',label:'Tidslinje',icon:'◷'}].map(t=>(
-            <button key={t.id} onClick={()=>setView(t.id)} style={{ padding:'7px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600', background:view===t.id?'white':'transparent', color:view===t.id?'#0f172a':'#64748b', boxShadow:view===t.id?'0 1px 3px rgba(0,0,0,0.1)':'none', display:'flex', alignItems:'center', gap:'6px' }}>
+        <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', borderRadius:'10px', padding:'4px', width:'fit-content', marginBottom: isMobBild ? '10px' : '16px' }}>
+          {[{id:'mappe',label: isMobBild ? 'Mapper' : 'Mappestruktur',icon:'⊞'},{id:'tidslinje',label:'Tidslinje',icon:'◷'}].map(t=>(
+            <button key={t.id} onClick={()=>setView(t.id)} style={{ padding: isMobBild ? '6px 12px' : '7px 16px', borderRadius:'8px', border:'none', cursor:'pointer', fontSize: isMobBild ? '12px' : '13px', fontWeight:'600', background:view===t.id?'white':'transparent', color:view===t.id?'#0f172a':'#64748b', boxShadow:view===t.id?'0 1px 3px rgba(0,0,0,0.1)':'none', display:'flex', alignItems:'center', gap:'6px' }}>
               {t.icon} {t.label}
             </button>
           ))}
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterFase} onChange={e=>setFilterFase(e.target.value)} style={selStyle}><option value="alle">Alle faser</option>{BYGGEFASER.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterRom} onChange={e=>setFilterRom(e.target.value)} style={selStyle}><option value="alle">Alle rom</option>{allRooms.map(r=><option key={r} value={r}>{r}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterAnsatt} onChange={e=>setFilterAnsatt(e.target.value)} style={selStyle}><option value="alle">Alle ansatte</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
@@ -18249,35 +19099,35 @@ function BildedokPage() {
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px' }}>
+      <div style={{ padding: isMobBild ? '12px' : '24px 32px' }}>
         {view==='mappe' ? (
           <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
             {faseGroups.map(fase => {
               const expanded = expandedFaser.has(fase.id)
               const toggle = () => setExpandedFaser(prev=>{ const n=new Set(prev); n.has(fase.id)?n.delete(fase.id):n.add(fase.id); return n })
               return (
-              <div key={fase.id} style={{ background:'white', borderRadius:'16px', border:'1px solid #e2e8f0', overflow:'hidden' }}>
-                <div onClick={toggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 20px', cursor:'pointer', userSelect:'none', transition:'background 0.1s' }}
+              <div key={fase.id} style={{ background:'white', borderRadius: isMobBild ? '12px' : '16px', border:'1px solid #e2e8f0', overflow:'hidden' }}>
+                <div onClick={toggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding: isMobBild ? '10px 12px' : '14px 20px', cursor:'pointer', userSelect:'none', transition:'background 0.1s' }}
                   onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-                    <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:fase.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{fase.emoji||'📁'}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap: isMobBild ? '8px' : '12px' }}>
+                    {!isMobBild && <div style={{ width:'38px',height:'38px',borderRadius:'10px',background:fase.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{fase.emoji||'📁'}</div>}
                     <div>
-                      <span style={{ fontWeight:'700', fontSize:'15px', color:'#0f172a' }}>{fase.label}</span>
-                      <div style={{ fontSize:'12px',color:'#94a3b8',marginTop:'1px' }}>{fase.photos.length} bilder</div>
+                      <span style={{ fontWeight:'700', fontSize: isMobBild ? '13px' : '15px', color:'#0f172a' }}>{isMobBild ? (fase.emoji+' ') : ''}{fase.label}</span>
+                      <div style={{ fontSize: isMobBild ? '11px' : '12px',color:'#94a3b8',marginTop:'1px' }}>{fase.photos.length} bilder</div>
                     </div>
-                    <span style={{ background:fase.bg, color:fase.color, border:`1px solid ${fase.color}30`, borderRadius:'999px', padding:'2px 10px', fontSize:'12px', fontWeight:'700' }}>{fase.photos.length}</span>
+                    <span style={{ background:fase.bg, color:fase.color, border:`1px solid ${fase.color}30`, borderRadius:'999px', padding:'2px 10px', fontSize: isMobBild ? '11px' : '12px', fontWeight:'700' }}>{fase.photos.length}</span>
                   </div>
-                  <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
-                    {fase.photos.slice(0,4).map((p,i)=>(
+                  <div style={{ display:'flex',alignItems:'center',gap: isMobBild ? '4px' : '8px' }}>
+                    {!isMobBild && fase.photos.slice(0,4).map((p,i)=>(
                       <img key={p.id} src={p.file_url} alt="" style={{ width:'30px',height:'30px',borderRadius:'6px',objectFit:'cover',border:'2px solid white',marginLeft:i>0?'-8px':0 }} />
                     ))}
-                    <button onClick={e=>{e.stopPropagation();setUploadFase(fase.id);setShowUploadModal(true)}} style={{ padding:'5px 12px', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', marginLeft:'4px' }}>+ Legg til</button>
-                    <span style={{ color:'#94a3b8',fontSize:'18px',transform:expanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block',marginLeft:'4px' }}>▾</span>
+                    {!isMobBild && <button onClick={e=>{e.stopPropagation();setUploadFase(fase.id);setShowUploadModal(true)}} style={{ padding:'5px 12px', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', marginLeft:'4px' }}>+ Legg til</button>}
+                    <span style={{ color:'#94a3b8',fontSize:'18px',transform:expanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block' }}>▾</span>
                   </div>
                 </div>
                 {expanded && (fase.photos.length > 0 ? (
-                  <div style={{ padding:'4px 20px 20px', borderTop:'1px solid #f1f5f9' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:'10px', marginTop:'12px' }}>
+                  <div style={{ padding: isMobBild ? '4px 10px 12px' : '4px 20px 20px', borderTop:'1px solid #f1f5f9' }}>
+                    <div style={{ display:'grid', gridTemplateColumns: isMobBild ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(160px,1fr))', gap: isMobBild ? '8px' : '10px', marginTop:'12px' }}>
                       {fase.photos.map(photo => (
                         <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
                       ))}
@@ -18308,7 +19158,7 @@ function BildedokPage() {
                   <span style={{ color:'#94a3b8', fontSize:'13px' }}>{datePhotos.length} bilder</span>
                   <div style={{ flex:1, height:'1px', background:'#f1f5f9' }} />
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns: isMobBild ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(160px,1fr))', gap: isMobBild ? '8px' : '10px' }}>
                   {datePhotos.map(photo => {
                     const fase = BYGGEFASER.find(f=>f.id===photo.fase)
                     return <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
@@ -18343,8 +19193,8 @@ function BildedokThumbnail({ photo, fase, projects, onClick, onDelete }) {
   return (
     <div style={{ borderRadius:'12px', overflow:'hidden', background:'white', border:'1px solid #f1f5f9', position:'relative', cursor:'pointer' }}
       onClick={onClick}
-      onMouseEnter={e=>{ e.currentTarget.querySelector('.pa').style.opacity='1'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)' }}
-      onMouseLeave={e=>{ e.currentTarget.querySelector('.pa').style.opacity='0'; e.currentTarget.style.boxShadow='none' }}>
+      onMouseEnter={e=>{ const pa=e.currentTarget.querySelector('.pa'); if(pa) pa.style.opacity='1'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)' }}
+      onMouseLeave={e=>{ const pa=e.currentTarget.querySelector('.pa'); if(pa) pa.style.opacity='0'; e.currentTarget.style.boxShadow='none' }}>
       <img src={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'140px', objectFit:'cover', display:'block' }} />
       {photo.upload_method==='manuell'&&<div style={{ position:'absolute',top:'7px',left:'7px',background:'rgba(0,0,0,0.55)',color:'white',borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'600' }}>Manuell opplasting</div>}
       {fase&&<div style={{ position:'absolute',bottom:'7px',left:'7px',background:fase.bg,color:fase.color,borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'700' }}>{fase.label}</div>}
@@ -18377,21 +19227,21 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
   }
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px',fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px',fontFamily:'system-ui,sans-serif' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'540px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',overflow:'hidden',maxHeight:'90vh',display:'flex',flexDirection:'column' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📷 Last opp bilder</h2>
+      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '540px',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',overflow:'hidden',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '17px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>📷 Last opp bilder</h2>
           <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px',overflowY:'auto' }}>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'14px',overflowY:'auto',WebkitOverflowScrolling:'touch' }}>
           <div onDrop={e=>{e.preventDefault();handleFiles(e.dataTransfer.files)}} onDragOver={e=>e.preventDefault()} onClick={()=>fileRef.current?.click()}
             style={{ border:'2px dashed #e2e8f0',borderRadius:'14px',padding:'28px',textAlign:'center',cursor:'pointer',background:'#f8fafc' }}
             onMouseEnter={e=>e.currentTarget.style.borderColor='#059669'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
             <div style={{ fontSize:'32px',marginBottom:'8px' }}>📸</div>
             <div style={{ fontWeight:'600',color:'#0f172a',fontSize:'14px',marginBottom:'4px' }}>Dra og slipp bilder her</div>
             <div style={{ color:'#94a3b8',fontSize:'12px' }}>eller klikk for å velge filer</div>
-            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e=>handleFiles(e.target.files)} accept="image/*" multiple />
+            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e=>handleFiles(e.target.files)} accept="image/*" capture="environment" multiple />
           </div>
           {previews.length>0&&(
             <div style={{ display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center' }}>
@@ -18401,20 +19251,19 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
           )}
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Byggefase *</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'6px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(2,1fr)',gap:'6px' }}>
               {BYGGEFASER.map(f=>(
                 <button key={f.id} onClick={()=>setFase(f.id)} style={{ padding:'9px 10px',borderRadius:'10px',border:`2px solid ${fase===f.id?f.color:'#e2e8f0'}`,background:fase===f.id?f.bg:'white',cursor:'pointer',fontSize:'12px',fontWeight:'700',color:fase===f.id?f.color:'#64748b',textAlign:'left' }}>{f.label}</button>
               ))}
             </div>
           </div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
-            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'10px' }}>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Rom / område</label><input value={rom} onChange={e=>setRom(e.target.value)} placeholder="F.eks. Bad 2. etg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notat</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           <div style={{ display:'flex',justifyContent:'flex-end',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={()=>{ if(!files.length) return alert('Velg minst ett bilde'); onUpload(files,fase,projectId,rom,note) }} disabled={uploading||!files.length} style={{ padding:'10px 24px',background:uploading||!files.length?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>{uploading?'Laster opp...':'Last opp'}</button>
+            <button onClick={()=>{ if(!files.length) return alert('Velg minst ett bilde'); onUpload(files,fase,projectId,rom,note) }} disabled={uploading||!files.length} style={{ padding:'10px 24px',background:uploading||!files.length?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700', width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 'auto' }}>{uploading?'Laster opp...':'Last opp'}</button>
           </div>
         </div>
       </div>
@@ -18458,7 +19307,7 @@ function FDVPage() {
       const [comp, docs, proj] = await Promise.all([
         supabase.from('fdv_components').select('*').order('category').then(r=>r.data||[]),
         supabase.from('fdv_documents').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setComponents(comp); setDocuments(docs); setProjects(proj)
     } catch(e) { console.error(e) }
@@ -18537,7 +19386,7 @@ function FDVPage() {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...fInp,maxWidth:'180px' }}>
             <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
           </select>
           {view==='komponenter'&&<select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...fInp,maxWidth:'150px' }}>
             <option value="alle">Alle kategorier</option>
@@ -18680,7 +19529,7 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
           <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
           <div>{lbl('Kategori')}<select value={form.category} onChange={e=>set('category',e.target.value)} style={fInp}><option value="">Velg...</option>{FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
           <div>{lbl('Plassering')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Kjeller / Rom 101" style={fInp} /></div>
-          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div>{lbl('Produsent')}<input value={form.manufacturer} onChange={e=>set('manufacturer',e.target.value)} placeholder="F.eks. Nibe" style={fInp} /></div>
           <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={fInp} /></div>
           <div>{lbl('Serienummer')}<input value={form.serial_number} onChange={e=>set('serial_number',e.target.value)} style={fInp} /></div>
@@ -18739,13 +19588,13 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
           ))}
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Dokumenttype</label>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)',gap:'6px' }}>
               {Object.entries(FDV_DOC_TYPES).map(([k,v])=>(
                 <button key={k} onClick={()=>set('doc_type',k)} style={{ padding:'7px',borderRadius:'8px',border:`2px solid ${form.doc_type===k?'#059669':'#e2e8f0'}`,background:form.doc_type===k?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'700',color:form.doc_type===k?'#059669':'#64748b' }}>{v.emoji} {v.label}</button>
               ))}
             </div>
           </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'  '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Koble til komponent (valgfritt)</label><select value={form.component_id} onChange={e=>set('component_id',e.target.value)} style={fInp}><option value="">Ingen</option>{filteredComponents.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mappe</label><input value={form.folder_path} onChange={e=>set('folder_path',e.target.value)} placeholder="/Ventilasjon" style={fInp} /></div>
           <div>
@@ -18829,18 +19678,19 @@ const MODULE_CATALOG = [
   {
     id: 'grunnpakke',
     name: 'Grunnpakke',
-    desc: 'Dashboard, Prosjekter, Sjekklister, Avvik, HMS & Risiko og Maskiner',
+    desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Kundeoversikt og Varsler',
     emoji: '🔹',
-    pricePerUser: 139,
-    required: false,
-    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner'],
+    pricePerUser: 199,
+    required: true,
+    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'],
   },
   {
     id: 'kalkulator',
     name: 'Kalkulasjon',
-    desc: 'Kostnadskalkulasjon med påslag, fortjeneste og tilbudsgenerering',
+    desc: 'Kostnadskalkulasjon med påslag, fortjeneste og tilbudsgenerering. Fast pris per bedrift.',
     emoji: '🧮',
-    price: 99,
+    price: 1499,
+    perCompany: true,
     navId: 'kalkulator',
     standalone: true, // Can be purchased without grunnpakke
   },
@@ -18883,14 +19733,6 @@ const MODULE_CATALOG = [
     emoji: '🧾',
     price: 49,
     navId: 'faktura',
-  },
-  {
-    id: 'endringsmeldinger',
-    name: 'Endringsmeldinger',
-    desc: 'Håndtering av endringsmeldinger',
-    emoji: '🔄',
-    price: 25,
-    navId: 'ordre',
   },
   {
     id: 'ansatte',
@@ -18967,9 +19809,900 @@ const MODULE_CATALOG = [
 ]
 
 const mbInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
-const mbCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+const mbCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 const mbLbl = t => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
 const mbSec = t => <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'12px', marginTop:'8px' }}>{t}</div>
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUPERADMIN — Platform Owner Control Panel
+// ═══════════════════════════════════════════════════════════════════════
+function SuperAdminPage() {
+  const { user } = useAuth()
+  const [companies, setCompanies] = useState([])
+  const [allUsers, setAllUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('oversikt')
+  const [selectedCompany, setSelectedCompany] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [saSearch, setSaSearch] = useState('')
+  const [saFilter, setSaFilter] = useState('alle')
+  const [editNote, setEditNote] = useState(null) // { companyId, note }
+  const [emailModal, setEmailModal] = useState(null) // { to, companyName, subject, body }
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [paymentModal, setPaymentModal] = useState(null) // { companyId }
+  const [storageInfo, setStorageInfo] = useState(null)
+  const [mrrSnapshots, setMrrSnapshots] = useState([])
+  const [churnAlerts, setChurnAlerts] = useState([])
+  const [savingNote, setSavingNote] = useState(false)
+
+  const saveCompanyNote = async (companyId, note) => {
+    setSavingNote(true)
+    try {
+      await supabase.from('company_settings').update({ admin_notes: note, updated_at: new Date().toISOString() }).eq('id', companyId)
+      setEditNote(null)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSavingNote(false) }
+  }
+
+  const exportCSV = () => {
+    const headers = ['Bedrift','Status','E-post','Telefon','Org.nr','Brukere','Moduler','MRR','Registrert','Trial slutt','Notater']
+    const rows = companies.map(c => {
+      const mods = c.active_modules||[]
+      let mrr = 0
+      if (c.subscription_status==='active') {
+        if (mods.includes('grunnpakke')) mrr += 199*(c.num_users||1)
+        MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{mrr+=m.price||0})
+      }
+      return [c.name||'', c.subscription_status||'', c.email||'', c.phone||'', c.org_number||'', c.num_users||1, mods.join('; '), mrr, c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'', c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'', (c.admin_notes||'').replace(/[\n,]/g,' ')]
+    })
+    const csv = [headers.join(','), ...rows.map(r=>r.map(v=>'"'+v+'"').join(','))].join('\n')
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href=url; a.download=`kunder_${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const load = async () => {
+    try {
+      const [comp, users, notifs] = await Promise.all([
+        supabase.from('company_settings').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('user_profiles').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('notifications').select('*').eq('type','system').order('created_at',{ascending:false}).limit(50).then(r=>r.data||[]),
+      ])
+      setCompanies(comp); setAllUsers(users); setNotifications(notifs)
+
+      // Storage check — estimate file storage usage
+      try {
+        const { data: files } = await supabase.from('project_files').select('file_size')
+        const { data: imgFiles } = await supabase.from('image_docs').select('file_size')
+        const totalFileBytes = (files||[]).reduce((s,f)=>s+(f.file_size||0),0) + (imgFiles||[]).reduce((s,f)=>s+(f.file_size||0),0)
+        // Database size — estimate from row counts
+        const tables = ['projects','checklists','inspections','endringsmeldinger','resource_plans','invoices','orders','quotes','tenders','employees','timesheets','machines','hms_records','notifications','chat_messages','activities']
+        let totalRows = 0
+        for (const t of tables) {
+          try {
+            const { count } = await supabase.from(t).select('id', { count:'exact', head:true })
+            totalRows += count || 0
+          } catch(e) {}
+        }
+        const estDbSizeMB = Math.max(1, totalRows * 0.002) // ~2KB per row estimate
+        setStorageInfo({
+          fileSizeMB: Math.round(totalFileBytes / 1024 / 1024 * 10) / 10,
+          fileSizeGB: Math.round(totalFileBytes / 1024 / 1024 / 1024 * 100) / 100,
+          fileCount: (files||[]).length + (imgFiles||[]).length,
+          dbRows: totalRows,
+          dbSizeMB: Math.round(estDbSizeMB * 10) / 10,
+        })
+      } catch(e) { console.error('Storage check error:', e) }
+
+      // Load MRR snapshots
+      try {
+        const { data: snapshots } = await supabase.from('mrr_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(365)
+        setMrrSnapshots(snapshots||[])
+      } catch(e) { console.error('MRR snapshots error:', e) }
+
+      // Log today's MRR snapshot (once per day)
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const { data: existing } = await supabase.from('mrr_snapshots').select('id').eq('snapshot_date', today).limit(1)
+        if (!existing?.length) {
+          const activeComps = comp.filter(c=>c.subscription_status==='active')
+          let todayMRR = 0
+          activeComps.forEach(c=>{
+            const mods = c.active_modules||[]
+            if (mods.includes('grunnpakke')) todayMRR += 199 * (c.num_users||1)
+            MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ todayMRR += m.price||0 })
+          })
+          await supabase.from('mrr_snapshots').insert({
+            snapshot_date: today,
+            mrr: todayMRR,
+            active_customers: activeComps.length,
+            trial_customers: comp.filter(c=>c.subscription_status==='trial').length,
+            total_users: users.length,
+            churned_customers: comp.filter(c=>c.subscription_status==='cancelled'||c.subscription_status==='expired').length,
+          })
+        }
+      } catch(e) { console.error('MRR snapshot log error:', e) }
+
+      // Churn detection
+      try {
+        const alerts = []
+        // 1. Active customers who haven't logged in for 14+ days
+        const twoWeeksAgo = new Date(Date.now() - 14*24*60*60*1000)
+        users.filter(u=>u.status==='aktiv'&&u.last_seen&&new Date(u.last_seen)<twoWeeksAgo).forEach(u=>{
+          const daysAgo = Math.floor((Date.now()-new Date(u.last_seen))/86400000)
+          alerts.push({ type:'inactive', severity: daysAgo>30?'high':'medium', title:`${u.full_name||u.email} ikke logget inn`, sub:`${daysAgo} dager siden siste innlogging`, email:u.email })
+        })
+        // 2. Trial users who registered but never logged in (no last_seen)
+        users.filter(u=>!u.last_seen&&u.created_at).forEach(u=>{
+          const daysAgo = Math.floor((Date.now()-new Date(u.created_at))/86400000)
+          if (daysAgo >= 2) alerts.push({ type:'never_logged', severity:'medium', title:`${u.full_name||u.email} aldri logget inn`, sub:`Registrert for ${daysAgo} dager siden`, email:u.email })
+        })
+        // 3. Customers with overdue payments
+        comp.filter(c=>c.subscription_status==='active'&&c.next_due_date&&new Date(c.next_due_date)<new Date()).forEach(c=>{
+          const daysOverdue = Math.floor((Date.now()-new Date(c.next_due_date))/86400000)
+          alerts.push({ type:'overdue', severity: daysOverdue>14?'high':'medium', title:`${c.name} — forfalt betaling`, sub:`${daysOverdue} dager over forfall`, companyId:c.id })
+        })
+        // 4. Recently cancelled
+        comp.filter(c=>c.subscription_status==='cancelled').forEach(c=>{
+          alerts.push({ type:'cancelled', severity:'high', title:`${c.name} har kansellert`, sub:'Kontakt for å finne årsak', companyId:c.id })
+        })
+        setChurnAlerts(alerts.sort((a,b)=>a.severity==='high'?-1:b.severity==='high'?1:0))
+      } catch(e) { console.error('Churn detection error:', e) }
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  // Calculations
+  const trialCompanies = companies.filter(c=>c.subscription_status==='trial')
+  const activeCompanies = companies.filter(c=>c.subscription_status==='active')
+  const expiredCompanies = companies.filter(c=>c.subscription_status==='expired'||c.subscription_status==='cancelled')
+  
+  const totalMRR = companies.filter(c=>c.subscription_status==='active').reduce((acc,c)=>{
+    const mods = c.active_modules||[]
+    let cost = 0
+    if (mods.includes('grunnpakke')) cost += 199 * (c.num_users||1)
+    MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{
+      cost += m.price||0
+    })
+    return acc + cost
+  }, 0)
+
+  const potentialMRR = trialCompanies.reduce((acc,c)=>{
+    const mods = c.active_modules||[]
+    let cost = 199 * (c.num_users||1)
+    MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke').forEach(m=>{ cost += m.price||0 })
+    return acc + cost
+  }, 0)
+
+  // Module popularity
+  const modulePop = {}
+  companies.filter(c=>c.subscription_status==='active').forEach(c=>{
+    (c.active_modules||[]).forEach(m=>{ modulePop[m]=(modulePop[m]||0)+1 })
+  })
+
+  const extendTrial = async (companyId, days) => {
+    const comp = companies.find(c=>c.id===companyId)
+    if (!comp) return
+    const newEnd = new Date(comp.trial_ends_at || Date.now())
+    newEnd.setDate(newEnd.getDate() + days)
+    await supabase.from('company_settings').update({ trial_ends_at: newEnd.toISOString(), subscription_status:'trial' }).eq('id', companyId)
+    await addTimelineEvent(companyId, { type:'trial_extend', label: `Trial forlenget med ${days} dager` })
+    load()
+  }
+
+  const setCompanyStatus = setCompanyStatusWithLog
+
+  const isMobSA = typeof window !== 'undefined' && window.innerWidth < 768
+  const saCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobSA ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+  const fmt = v => Math.round(v).toLocaleString('nb-NO')
+
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #7c3aed',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster kontrollpanel...</p></div></div>
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      {/* Header */}
+      <div style={{ background:'linear-gradient(135deg,#1e1b4b,#312e81)', padding: isMobSA ? '14px' : '20px 32px', color:'white' }}>
+        <h1 style={{ fontSize: isMobSA ? '18px' : '22px', fontWeight:'800', margin:0 }}>👑 Kontrollpanel</h1>
+        <p style={{ margin:'4px 0 0', fontSize:'13px', opacity:0.7 }}>Plattformadministrasjon — En Plattform</p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'0 24px', display:'flex', gap:'0', overflowX:'auto' }}>
+        {[['oversikt','📊 Oversikt'],['grafer','📈 Utvikling'],['churn',`⚠️ Churn${churnAlerts.filter(a=>a.severity==='high').length>0?' ('+churnAlerts.filter(a=>a.severity==='high').length+')':''}`],['kunder','🏢 Kunder'],['brukere','👤 Brukere'],['varsler','🔔 Hendelser']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobSA ? '10px 12px' : '12px 18px', border:'none', borderBottom: tab===id ? '3px solid #7c3aed' : '3px solid transparent', background:'transparent', cursor:'pointer', fontSize: isMobSA ? '12px' : '13px', fontWeight: tab===id?'700':'500', color: tab===id?'#7c3aed':'#64748b', whiteSpace:'nowrap' }}>{label}</button>
+        ))}
+      </div>
+
+      <div style={{ padding: isMobSA ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobSA ? '12px' : '20px' }}>
+
+        {/* OVERSIKT TAB */}
+        {tab==='oversikt' && (
+          <>
+            {/* KPI cards */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobSA ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
+              {[
+                { label:'MRR', value:`${fmt(totalMRR)} kr`, sub:'Månedlig inntekt', color:'#059669', bg:'#f0fdf4', border:'#bbf7d0' },
+                { label:'Aktive kunder', value:activeCompanies.length, sub:`${allUsers.filter(u=>u.status==='aktiv').length} brukere totalt`, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+                { label:'I prøveperiode', value:trialCompanies.length, sub:`Potensiell MRR: ${fmt(potentialMRR)} kr`, color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
+                { label:'Utløpt/Kansellert', value:expiredCompanies.length, sub:'Trenger oppfølging', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+              ].map((kpi,i)=>(
+                <div key={i} style={{ background:kpi.bg, borderRadius:'14px', border:`1px solid ${kpi.border}`, padding: isMobSA ? '12px' : '18px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:kpi.color, textTransform:'uppercase', marginBottom:'6px' }}>{kpi.label}</div>
+                  <div style={{ fontSize: isMobSA ? '20px' : '26px', fontWeight:'800', color:'#0f172a' }}>{kpi.value}</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'4px' }}>{kpi.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Lagringsstatus */}
+            {storageInfo && (
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>💾 Lagringsstatus (Supabase)</h3>
+                <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr', gap:'14px' }}>
+                  {/* Fillagring */}
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>📁 Fillagring</span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.fileSizeGB > 0.8 ? '#dc2626' : storageInfo.fileSizeGB > 0.5 ? '#d97706' : '#059669' }}>
+                        {storageInfo.fileSizeMB > 1000 ? `${storageInfo.fileSizeGB} GB` : `${storageInfo.fileSizeMB} MB`}
+                      </span>
+                    </div>
+                    <div style={{ height:'10px', background:'#f1f5f9', borderRadius:'5px', overflow:'hidden', marginBottom:'6px' }}>
+                      <div style={{ height:'100%', borderRadius:'5px', transition:'width 0.5s',
+                        width: `${Math.min(100, storageInfo.fileSizeGB / 1 * 100)}%`,
+                        background: storageInfo.fileSizeGB > 0.8 ? '#dc2626' : storageInfo.fileSizeGB > 0.5 ? '#d97706' : '#059669'
+                      }}/>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8' }}>
+                      <span>{storageInfo.fileCount} filer</span>
+                      <span>1 GB inkludert (Free)</span>
+                    </div>
+                  </div>
+                  {/* Database */}
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>🗃️ Database</span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.dbSizeMB > 400 ? '#dc2626' : storageInfo.dbSizeMB > 250 ? '#d97706' : '#059669' }}>
+                        ~{storageInfo.dbSizeMB} MB
+                      </span>
+                    </div>
+                    <div style={{ height:'10px', background:'#f1f5f9', borderRadius:'5px', overflow:'hidden', marginBottom:'6px' }}>
+                      <div style={{ height:'100%', borderRadius:'5px', transition:'width 0.5s',
+                        width: `${Math.min(100, storageInfo.dbSizeMB / 500 * 100)}%`,
+                        background: storageInfo.dbSizeMB > 400 ? '#dc2626' : storageInfo.dbSizeMB > 250 ? '#d97706' : '#059669'
+                      }}/>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8' }}>
+                      <span>~{storageInfo.dbRows.toLocaleString('nb-NO')} rader</span>
+                      <span>500 MB inkludert (Free)</span>
+                    </div>
+                  </div>
+                </div>
+                {(storageInfo.fileSizeGB > 0.7 || storageInfo.dbSizeMB > 350) && (
+                  <div style={{ marginTop:'12px', padding:'10px 14px', background:'#fffbeb', borderRadius:'10px', border:'1px solid #fde68a', display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'16px' }}>⚠️</span>
+                    <div style={{ fontSize:'12px', color:'#92400e' }}>
+                      <strong>Nærmer seg grensen!</strong> Vurder å oppgradere til Supabase Pro (25 USD/mnd) for 8 GB database + 100 GB fillagring.
+                    </div>
+                  </div>
+                )}
+                {storageInfo.fileSizeGB <= 0.7 && storageInfo.dbSizeMB <= 350 && (
+                  <div style={{ marginTop:'12px', padding:'10px 14px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'16px' }}>✅</span>
+                    <span style={{ fontSize:'12px', color:'#059669', fontWeight:'600' }}>Lagring OK — god kapasitet tilgjengelig</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Populære moduler */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>📦 Modulpopularitet (aktive kunder)</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {Object.entries(modulePop).sort((a,b)=>b[1]-a[1]).map(([modId,count])=>{
+                  const mod = MODULE_CATALOG.find(m=>m.id===modId)
+                  const pct = activeCompanies.length > 0 ? Math.round(count/activeCompanies.length*100) : 0
+                  return (
+                    <div key={modId} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                      <span style={{ fontSize:'16px', width:'24px', textAlign:'center' }}>{mod?.emoji||'📦'}</span>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', width:'140px' }}>{mod?.name||modId}</span>
+                      <div style={{ flex:1, height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
+                        <div style={{ height:'100%', borderRadius:'4px', background:'#7c3aed', width:`${pct}%`, transition:'width 0.3s' }}/>
+                      </div>
+                      <span style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', width:'50px', textAlign:'right' }}>{count} ({pct}%)</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Inntekt per modul */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>💰 Inntekt per modul</h3>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                {(() => {
+                  const modRevenue = {}
+                  companies.filter(c=>c.subscription_status==='active').forEach(c=>{
+                    const mods = c.active_modules||[]
+                    if (mods.includes('grunnpakke')) {
+                      modRevenue['grunnpakke'] = (modRevenue['grunnpakke']||0) + 199 * (c.num_users||1)
+                    }
+                    MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{
+                      modRevenue[m.id] = (modRevenue[m.id]||0) + (m.price||0)
+                    })
+                  })
+                  return Object.entries(modRevenue).sort((a,b)=>b[1]-a[1]).map(([modId,rev])=>{
+                    const mod = MODULE_CATALOG.find(m=>m.id===modId)
+                    return (
+                      <div key={modId} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                          <span style={{ fontSize:'14px' }}>{mod?.emoji||'📦'}</span>
+                          <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{mod?.name||modId}</span>
+                          {mod?.perCompany && <span style={{ fontSize:'9px', color:'#94a3b8', background:'#f1f5f9', padding:'1px 6px', borderRadius:'4px' }}>per bedrift</span>}
+                        </div>
+                        <span style={{ fontSize:'14px', fontWeight:'800', color:'#059669' }}>{fmt(rev)} kr/mnd</span>
+                      </div>
+                    )
+                  })
+                })()}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 12px', borderTop:'2px solid #e2e8f0', marginTop:'4px', fontWeight:'800' }}>
+                  <span style={{ color:'#0f172a' }}>Total MRR</span>
+                  <span style={{ color:'#059669', fontSize:'16px' }}>{fmt(totalMRR)} kr/mnd</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Konvertering + Nøkkeltall */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr', gap:'12px' }}>
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>📈 Konvertering</h3>
+                {(() => {
+                  const totalSignups = companies.length
+                  const converted = activeCompanies.length
+                  const convRate = totalSignups > 0 ? Math.round(converted/totalSignups*100) : 0
+                  const avgUsersPerCompany = activeCompanies.length > 0 ? (activeCompanies.reduce((s,c)=>s+(c.num_users||1),0)/activeCompanies.length).toFixed(1) : '0'
+                  const avgRevenuePerCustomer = activeCompanies.length > 0 ? Math.round(totalMRR/activeCompanies.length) : 0
+                  const totalUsers = allUsers.length
+                  return (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                      {[
+                        ['Konverteringsrate', `${convRate}%`, `${converted} av ${totalSignups} registrerte`],
+                        ['Snitt brukere/kunde', avgUsersPerCompany, 'aktive kunder'],
+                        ['Snitt MRR/kunde', `${fmt(avgRevenuePerCustomer)} kr`, 'per aktiv kunde'],
+                        ['ARR (årlig)', `${fmt(totalMRR*12)} kr`, 'basert på nåværende MRR'],
+                        ['Totalt brukere', totalUsers, `${allUsers.filter(u=>u.status==='aktiv').length} aktive`],
+                      ].map(([label,value,sub],i)=>(
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #f8fafc' }}>
+                          <div>
+                            <div style={{ fontSize:'12px', color:'#64748b' }}>{label}</div>
+                            {sub && <div style={{ fontSize:'10px', color:'#94a3b8' }}>{sub}</div>}
+                          </div>
+                          <span style={{ fontSize:'15px', fontWeight:'800', color:'#0f172a' }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>⚠️ Trenger oppfølging</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {/* Trials som utløper snart */}
+                  {trialCompanies.filter(c=>{
+                    const daysLeft = c.trial_ends_at ? Math.ceil((new Date(c.trial_ends_at)-new Date())/86400000) : null
+                    return daysLeft !== null && daysLeft <= 5
+                  }).map(c=>{
+                    const daysLeft = Math.ceil((new Date(c.trial_ends_at)-new Date())/86400000)
+                    return (
+                      <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background: daysLeft <= 1 ? '#fef2f2' : '#fffbeb', borderRadius:'8px', border:`1px solid ${daysLeft<=1?'#fecaca':'#fde68a'}` }}>
+                        <span style={{ fontSize:'14px' }}>{daysLeft <= 1 ? '🔴' : '🟡'}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                          <div style={{ fontSize:'10px', color: daysLeft<=1?'#dc2626':'#d97706' }}>{daysLeft <= 0 ? 'Utløpt i dag!' : `${daysLeft} dager igjen`}</div>
+                        </div>
+                        <button onClick={()=>{setTab('kunder');setSelectedCompany(c)}} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'10px', cursor:'pointer', color:'#64748b', fontWeight:'600' }}>Vis</button>
+                      </div>
+                    )
+                  })}
+                  {/* Utløpte som ikke har kjøpt */}
+                  {expiredCompanies.slice(0,3).map(c=>(
+                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #f1f5f9' }}>
+                      <span style={{ fontSize:'14px' }}>💤</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>Utløpt — ingen kjøp</div>
+                      </div>
+                      <button onClick={()=>{setTab('kunder');setSelectedCompany(c)}} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'10px', cursor:'pointer', color:'#64748b', fontWeight:'600' }}>Vis</button>
+                    </div>
+                  ))}
+                  {trialCompanies.filter(c=>{ const d=c.trial_ends_at?Math.ceil((new Date(c.trial_ends_at)-new Date())/86400000):null; return d!==null&&d<=5 }).length===0 && expiredCompanies.length===0 && (
+                    <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'12px' }}>Ingen oppfølgingspunkter nå</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Siste registreringer */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>🆕 Siste registreringer</h3>
+              {companies.length === 0 ? <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px' }}>Ingen registreringer ennå</p> :
+              companies.slice(0,8).map(c=>{
+                const daysAgo = Math.floor((Date.now()-new Date(c.created_at||Date.now()))/86400000)
+                const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null
+                const daysLeft = trialEnd ? Math.ceil((trialEnd-new Date())/86400000) : null
+                const mods = c.active_modules||[]
+                let mrr = 0
+                if (c.subscription_status==='active') {
+                  if (mods.includes('grunnpakke')) mrr += 199 * (c.num_users||1)
+                  MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ mrr += m.price||0 })
+                }
+                return (
+                  <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 0', borderBottom:'1px solid #f8fafc', cursor:'pointer' }}
+                    onClick={()=>{setTab('kunder');setSelectedCompany(c)}}>
+                    <div style={{ width:'36px', height:'36px', borderRadius:'50%', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', color:'#4338ca' }}>{(c.name?.[0]||'?').toUpperCase()}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{daysAgo===0?'I dag':daysAgo===1?'I går':`${daysAgo}d siden`} · {c.num_users||1} bruker{(c.num_users||1)>1?'e':''} · {mods.length} moduler</div>
+                    </div>
+                    {c.subscription_status==='active' && <span style={{ fontSize:'12px', fontWeight:'700', color:'#059669' }}>{fmt(mrr)} kr</span>}
+                    <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
+                      background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
+                      color: c.subscription_status==='active'?'#059669':c.subscription_status==='trial'?'#d97706':'#dc2626',
+                      border: `1px solid ${c.subscription_status==='active'?'#bbf7d0':c.subscription_status==='trial'?'#fde68a':'#fecaca'}`
+                    }}>{c.subscription_status==='active'?'Aktiv':c.subscription_status==='trial'?(daysLeft!==null?`${daysLeft}d igjen`:'Prøve'):'Utløpt'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* GRAFER TAB */}
+        {tab==='grafer' && (
+          <>
+            {mrrSnapshots.length < 2 ? (
+              <div style={saCard}>
+                <div style={{ textAlign:'center', padding:'40px 20px' }}>
+                  <div style={{ fontSize:'48px', marginBottom:'12px' }}>📈</div>
+                  <h3 style={{ margin:'0 0 8px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Data samles inn</h3>
+                  <p style={{ margin:0, fontSize:'13px', color:'#94a3b8', lineHeight:1.6 }}>MRR-grafen vil vise data etter noen dager med aktivitet. Systemet tar et øyeblikksbilde av inntekt og kundetall hver dag automatisk.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* MRR graf */}
+                <div style={saCard}>
+                  <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700' }}>💰 MRR-utvikling</h3>
+                  <div style={{ position:'relative', height:'200px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
+                    {(()=>{
+                      const data = mrrSnapshots.slice(-90)
+                      const maxMRR = Math.max(...data.map(d=>d.mrr||0), 1)
+                      const w = 100 / Math.max(data.length-1, 1)
+                      const points = data.map((d,i)=>({ x: i*w, y: 100-((d.mrr||0)/maxMRR*85), mrr: d.mrr, date: d.snapshot_date }))
+                      const pathD = points.map((p,i)=>`${i===0?'M':'L'} ${p.x}% ${p.y}%`).join(' ')
+                      const areaD = pathD + ` L ${points[points.length-1]?.x||0}% 100% L 0% 100% Z`
+                      return (
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width:'100%', height:'100%' }}>
+                          <defs><linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#059669" stopOpacity="0.3"/><stop offset="100%" stopColor="#059669" stopOpacity="0.02"/></linearGradient></defs>
+                          <path d={areaD} fill="url(#mrrGrad)"/>
+                          <path d={pathD} fill="none" stroke="#059669" strokeWidth="0.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          {points.filter((_,i)=>i===0||i===points.length-1).map((p,i)=>(
+                            <circle key={i} cx={`${p.x}%`} cy={`${p.y}%`} r="1" fill="#059669"/>
+                          ))}
+                        </svg>
+                      )
+                    })()}
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', fontSize:'11px', color:'#94a3b8' }}>
+                    <span>{mrrSnapshots[0]?.snapshot_date ? new Date(mrrSnapshots[0].snapshot_date).toLocaleDateString('nb-NO') : ''}</span>
+                    <span style={{ fontWeight:'700', color:'#059669' }}>Nå: {fmt(mrrSnapshots[mrrSnapshots.length-1]?.mrr||0)} kr/mnd</span>
+                    <span>{mrrSnapshots[mrrSnapshots.length-1]?.snapshot_date ? new Date(mrrSnapshots[mrrSnapshots.length-1].snapshot_date).toLocaleDateString('nb-NO') : ''}</span>
+                  </div>
+                </div>
+
+                {/* Kundevekst graf */}
+                <div style={saCard}>
+                  <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700' }}>👥 Kundevekst</h3>
+                  <div style={{ position:'relative', height:'160px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
+                    {(()=>{
+                      const data = mrrSnapshots.slice(-90)
+                      const maxC = Math.max(...data.map(d=>(d.active_customers||0)+(d.trial_customers||0)), 1)
+                      const w = 100 / Math.max(data.length-1, 1)
+                      return (
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width:'100%', height:'100%' }}>
+                          {/* Active line */}
+                          <path d={data.map((d,i)=>`${i===0?'M':'L'} ${i*w}% ${100-((d.active_customers||0)/maxC*80)}%`).join(' ')} fill="none" stroke="#2563eb" strokeWidth="0.5"/>
+                          {/* Trial line */}
+                          <path d={data.map((d,i)=>`${i===0?'M':'L'} ${i*w}% ${100-((d.trial_customers||0)/maxC*80)}%`).join(' ')} fill="none" stroke="#d97706" strokeWidth="0.5" strokeDasharray="1,1"/>
+                          {/* Churned line */}
+                          <path d={data.map((d,i)=>`${i===0?'M':'L'} ${i*w}% ${100-((d.churned_customers||0)/maxC*80)}%`).join(' ')} fill="none" stroke="#dc2626" strokeWidth="0.4" strokeDasharray="0.5,1"/>
+                        </svg>
+                      )
+                    })()}
+                  </div>
+                  <div style={{ display:'flex', gap:'16px', marginTop:'8px', justifyContent:'center' }}>
+                    {[['Aktive','#2563eb','—'],['Trial','#d97706','- -'],['Churned','#dc2626','···']].map(([l,c,dash])=>(
+                      <div key={l} style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', color:'#64748b' }}>
+                        <div style={{ width:'16px', height:'2px', background:c, borderRadius:'1px' }}/>{l}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Datatabell */}
+                <div style={saCard}>
+                  <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700' }}>📋 Historikk (siste 30 dager)</h3>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
+                          {['Dato','MRR','Aktive','Trial','Churned','Brukere'].map(h=>(
+                            <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#64748b', fontSize:'11px' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mrrSnapshots.slice(-30).reverse().map((s,i)=>(
+                          <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                            <td style={{ padding:'6px 10px', color:'#0f172a', fontWeight:'500' }}>{new Date(s.snapshot_date).toLocaleDateString('nb-NO')}</td>
+                            <td style={{ padding:'6px 10px', color:'#059669', fontWeight:'700' }}>{fmt(s.mrr||0)} kr</td>
+                            <td style={{ padding:'6px 10px', color:'#2563eb' }}>{s.active_customers||0}</td>
+                            <td style={{ padding:'6px 10px', color:'#d97706' }}>{s.trial_customers||0}</td>
+                            <td style={{ padding:'6px 10px', color:'#dc2626' }}>{s.churned_customers||0}</td>
+                            <td style={{ padding:'6px 10px', color:'#64748b' }}>{s.total_users||0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* CHURN TAB */}
+        {tab==='churn' && (
+          <>
+            {/* Churn KPIs */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr 1fr' : 'repeat(3,1fr)', gap:'12px' }}>
+              {(()=>{
+                const highAlerts = churnAlerts.filter(a=>a.severity==='high').length
+                const medAlerts = churnAlerts.filter(a=>a.severity==='medium').length
+                const cancelledCount = companies.filter(c=>c.subscription_status==='cancelled').length
+                return [
+                  { label:'Kritiske varsler', value:highAlerts, icon:'🔴', bg:'#fef2f2', border:'#fecaca', color:'#dc2626' },
+                  { label:'Moderate varsler', value:medAlerts, icon:'🟡', bg:'#fffbeb', border:'#fde68a', color:'#d97706' },
+                  { label:'Kansellerte kunder', value:cancelledCount, icon:'💔', bg:'#f8fafc', border:'#e2e8f0', color:'#64748b' },
+                ].map((k,i)=>(
+                  <div key={i} style={{ background:k.bg, borderRadius:'14px', border:`1px solid ${k.border}`, padding:'16px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:k.color, marginBottom:'4px' }}>{k.icon} {k.label}</div>
+                    <div style={{ fontSize:'28px', fontWeight:'800', color:'#0f172a' }}>{k.value}</div>
+                  </div>
+                ))
+              })()}
+            </div>
+
+            {/* Alerts list */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>🚨 Churn-varsler</h3>
+              {churnAlerts.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
+                  <div style={{ fontSize:'36px', marginBottom:'8px' }}>✅</div>
+                  <p style={{ fontSize:'14px', margin:0 }}>Ingen churn-varsler — alle kunder ser bra ut!</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {churnAlerts.map((alert,i)=>(
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px',
+                      background: alert.severity==='high'?'#fef2f2':'#fffbeb',
+                      border: `1px solid ${alert.severity==='high'?'#fecaca':'#fde68a'}` }}>
+                      <span style={{ fontSize:'20px', flexShrink:0 }}>
+                        {alert.type==='inactive'?'😴':alert.type==='never_logged'?'👻':alert.type==='overdue'?'💳':alert.type==='cancelled'?'💔':'⚠️'}
+                      </span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{alert.title}</div>
+                        <div style={{ fontSize:'11px', color: alert.severity==='high'?'#dc2626':'#d97706', marginTop:'2px' }}>{alert.sub}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                        {alert.email && (
+                          <button onClick={()=>setEmailModal({
+                            to: alert.email,
+                            companyName: '',
+                            subject: alert.type==='inactive' ? 'Vi savner deg på En Plattform' : alert.type==='never_logged' ? 'Trenger du hjelp med å komme i gang?' : 'Oppdatering fra En Plattform',
+                            body: alert.type==='inactive'
+                              ? `Hei!\n\nVi la merke til at du ikke har logget inn på En Plattform på en stund. Er det noe vi kan hjelpe med?\n\nVi er her for å sikre at du får mest mulig ut av systemet.\n\nMvh\nEn Plattform`
+                              : alert.type==='never_logged'
+                              ? `Hei!\n\nVi ser at du nylig registrerte deg på En Plattform, men ikke har logget inn ennå. Trenger du hjelp med å komme i gang?\n\nVi tilbyr gjerne en kort gjennomgang av systemet.\n\nMvh\nEn Plattform`
+                              : `Hei!\n\n\n\nMvh\nEn Plattform`
+                          })} style={{ padding:'6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#7c3aed' }}>✉️ Kontakt</button>
+                        )}
+                        {alert.companyId && (
+                          <button onClick={()=>{setTab('kunder');setSelectedCompany(companies.find(c=>c.id===alert.companyId))}}
+                            style={{ padding:'6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>Vis</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Churn-rate over tid */}
+            {mrrSnapshots.length >= 7 && (
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700' }}>📉 Churn-rate utvikling</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {(()=>{
+                    const weeks = []
+                    const snaps = mrrSnapshots.slice(-28)
+                    for (let i=0; i<snaps.length; i+=7) {
+                      const week = snaps.slice(i, i+7)
+                      if (week.length===0) continue
+                      const last = week[week.length-1]
+                      const first = week[0]
+                      const churnRate = first.active_customers > 0 ? Math.round((first.active_customers - (last.active_customers||0)) / first.active_customers * 100) : 0
+                      weeks.push({ date: last.snapshot_date, rate: Math.max(0, churnRate), active: last.active_customers })
+                    }
+                    return weeks.reverse().map((w,i)=>(
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
+                        <span style={{ fontSize:'12px', color:'#64748b', width:'80px' }}>Uke {new Date(w.date).toLocaleDateString('nb-NO',{day:'2-digit',month:'short'})}</span>
+                        <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                          <div style={{ height:'100%', borderRadius:'3px', background: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width:`${Math.min(100,w.rate*10)}%` }}/>
+                        </div>
+                        <span style={{ fontSize:'12px', fontWeight:'700', color: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width:'40px', textAlign:'right' }}>{w.rate}%</span>
+                        <span style={{ fontSize:'11px', color:'#94a3b8', width:'50px', textAlign:'right' }}>{w.active} aktive</span>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* KUNDER TAB */}
+        {tab==='kunder' && (
+          <>
+            {/* Search + filter + export */}
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+              <input value={saSearch} onChange={e=>setSaSearch(e.target.value)} placeholder="🔍 Søk bedrift, e-post, org.nr..." style={{ flex:'1 1 200px', padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', background:'white' }} />
+              <select value={saFilter} onChange={e=>setSaFilter(e.target.value)} style={{ padding:'9px 14px', border:`2px solid ${saFilter!=='alle'?'#7c3aed':'#e2e8f0'}`, borderRadius:'10px', fontSize:'13px', outline:'none', background:'white', color:saFilter!=='alle'?'#7c3aed':'#475569', fontWeight:saFilter!=='alle'?'700':'400', cursor:'pointer' }}>
+                <option value="alle">Alle ({companies.length})</option>
+                <option value="trial">Prøveperiode ({trialCompanies.length})</option>
+                <option value="active">Aktive ({activeCompanies.length})</option>
+                <option value="expired">Utløpt ({expiredCompanies.length})</option>
+              </select>
+              <button onClick={exportCSV} style={{ padding:'9px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', display:'flex', alignItems:'center', gap:'6px' }}>📥 Eksporter CSV</button>
+              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'auto' }}>
+                {companies.filter(c=>{
+                  if (saFilter!=='alle'&&c.subscription_status!==saFilter) return false
+                  if (saSearch&&![c.name,c.email,c.org_number,c.phone].some(v=>v?.toLowerCase().includes(saSearch.toLowerCase()))) return false
+                  return true
+                }).length} treff
+              </span>
+            </div>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              {companies.filter(c=>{
+                if (saFilter!=='alle'&&c.subscription_status!==saFilter) return false
+                if (saSearch&&![c.name,c.email,c.org_number,c.phone].some(v=>v?.toLowerCase().includes(saSearch.toLowerCase()))) return false
+                return true
+              }).map(c=>{
+                const users = allUsers.filter(u=>u.email) // TODO: filter by company when multi-tenant
+                const mods = c.active_modules||[]
+                const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null
+                const daysLeft = trialEnd ? Math.ceil((trialEnd-new Date())/86400000) : null
+                let mrr = 0
+                if (mods.includes('grunnpakke')) mrr += 199 * (c.num_users||1)
+                MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ mrr += m.price||0 })
+                return (
+                  <div key={c.id} style={{ ...saCard, cursor:'pointer' }}
+                    onClick={()=>setSelectedCompany(selectedCompany?.id===c.id?null:c)}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
+                        <div style={{ width:'40px', height:'40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{c.email||''}{c.phone?' · '+c.phone:''} · {c.num_users||1} brukere · {mods.length} moduler</div>
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                        {c.subscription_status==='active' && <span style={{ fontWeight:'800', fontSize:'14px', color:'#059669' }}>{fmt(mrr)} kr/mnd</span>}
+                        <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
+                          background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
+                          color: c.subscription_status==='active'?'#059669':c.subscription_status==='trial'?'#d97706':'#dc2626'
+                        }}>{c.subscription_status==='trial'?`Prøve (${daysLeft||0}d)`:c.subscription_status==='active'?'Aktiv':'Utløpt'}</span>
+                        {c.admin_notes && <span title={c.admin_notes} style={{ fontSize:'14px', cursor:'help' }}>📝</span>}
+                      </div>
+                    </div>
+                    {/* Expanded details */}
+                    {selectedCompany?.id===c.id && (
+                      <div style={{ marginTop:'14px', paddingTop:'14px', borderTop:'1px solid #f1f5f9' }}>
+                        <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr 1fr', gap:'10px', marginBottom:'14px' }}>
+                          {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial start',c.trial_start_date?new Date(c.trial_start_date).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
+                            <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px' }}>
+                              <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{k}</div>
+                              <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px', wordBreak:'break-word' }}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Betalingsstatus */}
+                        {c.subscription_status==='active' && (
+                          <div style={{ marginBottom:'12px' }}>
+                            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>BETALING</div>
+                            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex:'1 1 140px' }}>
+                                <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>SISTE BETALING</div>
+                                <div style={{ fontSize:'13px', fontWeight:'700', color: c.last_payment_date ? '#059669' : '#dc2626', marginTop:'2px' }}>
+                                  {c.last_payment_date ? new Date(c.last_payment_date).toLocaleDateString('nb-NO') : 'Ingen registrert'}
+                                </div>
+                              </div>
+                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex:'1 1 140px' }}>
+                                <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>NESTE FORFALL</div>
+                                <div style={{ fontSize:'13px', fontWeight:'700', color: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#dc2626' : '#0f172a', marginTop:'2px' }}>
+                                  {c.next_due_date ? new Date(c.next_due_date).toLocaleDateString('nb-NO') : '—'}
+                                  {c.next_due_date && new Date(c.next_due_date) < new Date() && <span style={{ color:'#dc2626', fontSize:'10px', fontWeight:'700', marginLeft:'6px' }}>FORFALT</span>}
+                                </div>
+                              </div>
+                              <button onClick={(e)=>{e.stopPropagation();setPaymentModal({companyId:c.id, date: new Date().toISOString().split('T')[0]})}}
+                                style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>💳 Registrer betaling</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tidslinje */}
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>TIDSLINJE</div>
+                          <div style={{ position:'relative', paddingLeft:'20px' }}>
+                            <div style={{ position:'absolute', left:'6px', top:'4px', bottom:'4px', width:'2px', background:'#e2e8f0' }}/>
+                            {[
+                              // Auto-generated events
+                              c.created_at && { ts: c.created_at, icon:'🆕', label:'Registrert', color:'#2563eb' },
+                              c.trial_start_date && { ts: c.trial_start_date, icon:'🎉', label:'Prøveperiode startet', color:'#d97706' },
+                              c.trial_ends_at && c.subscription_status==='trial' && { ts: c.trial_ends_at, icon:'⏰', label:'Prøveperiode utløper', color:'#dc2626', future: new Date(c.trial_ends_at)>new Date() },
+                              c.last_payment_date && { ts: c.last_payment_date, icon:'💳', label:'Betaling registrert', color:'#059669' },
+                              // Manual timeline events
+                              ...(c.timeline||[]).map(e=>({ ts: e.timestamp, icon: e.type==='status'?'🔄':e.type==='trial_extend'?'📅':e.type==='note'?'📝':'📌', label: e.label, color:'#7c3aed' })),
+                            ].filter(Boolean).sort((a,b)=>new Date(b.ts)-new Date(a.ts)).slice(0,10).map((evt,i)=>(
+                              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', marginBottom:'8px', position:'relative' }}>
+                                <div style={{ width:'14px', height:'14px', borderRadius:'50%', background: evt.future ? '#f8fafc' : (evt.color+'15'), border: `2px solid ${evt.color}`, flexShrink:0, zIndex:1, marginTop:'1px' }}/>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ display:'flex', justifyContent:'space-between', gap:'8px' }}>
+                                    <span style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a' }}>{evt.icon} {evt.label}</span>
+                                    <span style={{ fontSize:'10px', color:'#94a3b8', flexShrink:0 }}>{new Date(evt.ts).toLocaleDateString('nb-NO')}{evt.future?' (planlagt)':''}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>AKTIVE MODULER</div>
+                          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                            {mods.map(m=>{
+                              const mod=MODULE_CATALOG.find(x=>x.id===m)
+                              return <span key={m} style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'2px 10px', fontSize:'11px', fontWeight:'600' }}>{mod?.emoji||''} {mod?.name||m}</span>
+                            })}
+                          </div>
+                        </div>
+                        {/* Kontaktinfo — klikkbar */}
+                        {(c.email||c.phone) && (
+                          <div style={{ marginBottom:'12px' }}>
+                            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>KONTAKT</div>
+                            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                              {c.email && <a href={`mailto:${c.email}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#eff6ff', borderRadius:'8px', border:'1px solid #bfdbfe', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#2563eb' }}>✉️ {c.email}</a>}
+                              {c.phone && <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#059669' }}>📞 {c.phone}</a>}
+                              {c.email && <button onClick={(e)=>{e.stopPropagation();setEmailModal({
+                                to: c.email,
+                                companyName: c.name||'',
+                                subject: c.subscription_status==='trial' ? `Din prøveperiode på En Plattform` : `Oppdatering fra En Plattform`,
+                                body: c.subscription_status==='trial'
+                                  ? `Hei ${c.name||''}!\n\nVi ser at du tester En Plattform. Prøveperioden din ${c.trial_ends_at ? 'utløper '+new Date(c.trial_ends_at).toLocaleDateString('nb-NO') : 'er aktiv'}.\n\nHar du spørsmål om systemet? Vi hjelper gjerne!\n\nMvh\nEn Plattform`
+                                  : `Hei ${c.name||''}!\n\n\n\nMvh\nEn Plattform`
+                              })}} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#faf5ff', borderRadius:'8px', border:'1px solid #e9d5ff', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#7c3aed' }}>✍️ Send e-post</button>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Interne notater */}
+                        <div style={{ marginBottom:'12px' }}>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>INTERNE NOTATER</div>
+                          {editNote?.companyId===c.id ? (
+                            <div onClick={e=>e.stopPropagation()}>
+                              <textarea value={editNote.note} onChange={e=>setEditNote({...editNote,note:e.target.value})} rows={3}
+                                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }}
+                                placeholder="Skriv interne notater om denne kunden..." />
+                              <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
+                                <button onClick={()=>saveCompanyNote(c.id,editNote.note)} disabled={savingNote}
+                                  style={{ padding:'6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>{savingNote?'Lagrer...':'Lagre'}</button>
+                                <button onClick={()=>setEditNote(null)}
+                                  style={{ padding:'6px 14px', background:'#f1f5f9', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#64748b' }}>Avbryt</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div onClick={e=>{e.stopPropagation();setEditNote({companyId:c.id,note:c.admin_notes||''})}}
+                              style={{ background:'#fefce8', borderRadius:'8px', padding:'10px 12px', border:'1px solid #fde68a', cursor:'pointer', minHeight:'40px' }}>
+                              {c.admin_notes ? (
+                                <div style={{ fontSize:'12px', color:'#92400e', whiteSpace:'pre-wrap', lineHeight:1.5 }}>{c.admin_notes}</div>
+                              ) : (
+                                <div style={{ fontSize:'12px', color:'#d4a574', fontStyle:'italic' }}>Klikk for å legge til notater...</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Handlingsknapper */}
+                        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                          {c.subscription_status==='trial' && <>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,7)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+7 dager</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+15 dager</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
+                          </>}
+                          {c.subscription_status==='expired' && <>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Ny prøveperiode</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
+                          </>}
+                          {c.subscription_status==='active' && <>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'cancelled')}} style={{ padding:'8px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Kanseller</button>
+                          </>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* BRUKERE TAB */}
+        {tab==='brukere' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>{allUsers.length} brukere totalt</div>
+            {allUsers.map(u=>(
+              <div key={u.id} style={{ ...saCard, padding:'12px 16px', display:'flex', alignItems:'center', gap:'12px' }}>
+                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.full_name||u.email}</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>{u.email} · {u.role} · {u.status}</div>
+                </div>
+                <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0 }}>
+                  {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* HENDELSER TAB */}
+        {tab==='varsler' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>Systemhendelser og varsler</div>
+            {notifications.length===0 ? <p style={{ color:'#94a3b8', textAlign:'center', padding:'40px', fontSize:'14px' }}>Ingen hendelser ennå</p> :
+              notifications.map(n=>(
+                <div key={n.id} style={{ ...saCard, padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+                  <span style={{ fontSize:'18px', flexShrink:0, marginTop:'2px' }}>{n.title?.includes('registrert')?'🆕':n.title?.includes('kjøpt')?'💰':'🔔'}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{n.title}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{n.message}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>{new Date(n.created_at).toLocaleString('nb-NO')}</div>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function MinBedriftPage() {
   const { user } = useAuth()
@@ -19032,9 +20765,29 @@ function MinBedriftPage() {
       : activeModules.filter(m => m !== modId)
     setActiveModules(newModules)
     try {
-      await supabase.from('company_settings')
-        .update({ active_modules: newModules, updated_at: new Date().toISOString() })
-        .eq('id', settings.id)
+      // If first module purchase during trial, upgrade to active
+      const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
+      if (settings.subscription_status === 'trial' && action === 'add') {
+        updates.subscription_status = 'active'
+      }
+      await supabase.from('company_settings').update(updates).eq('id', settings.id)
+      // Notify platform owner about purchase
+      if (action === 'add') {
+        const mod = MODULE_CATALOG.find(m=>m.id===modId)
+        try {
+          const { data: owners } = await supabase.from('user_profiles').select('id').eq('platform_role','platform_owner')
+          if (owners?.length) {
+            for (const owner of owners) {
+              await supabase.from('notifications').insert({
+                user_id: owner.id,
+                title: '💰 Ny modulkjøp',
+                message: `${settings.name} har kjøpt ${mod?.name||modId} (${mod?.perCompany?mod.price+' kr/mnd bedrift':(mod?.price||0)+' kr/mnd'})`,
+                type: 'system',
+              })
+            }
+          }
+        } catch(e) { console.error(e) }
+      }
     } catch(e) { alert('Feil: ' + e.message); setActiveModules(activeModules) }
     setConfirmModule(null)
   }
@@ -19051,12 +20804,14 @@ function MinBedriftPage() {
 
   // Cost calculation
   const grunnpakke = MODULE_CATALOG.find(m => m.id === 'grunnpakke')
-  const grunnpakkeCost = (grunnpakke?.pricePerUser || 139) * numUsers
+  const grunnpakkeCost = (grunnpakke?.pricePerUser || 199) * numUsers
   const tilleggCost = MODULE_CATALOG
     .filter(m => !m.required && activeModules.includes(m.id))
     .reduce((acc, m) => acc + (m.price || 0), 0)
   const totalCost = grunnpakkeCost + tilleggCost
-  const activeAddons = MODULE_CATALOG.filter(m => !m.required && activeModules.includes(m.id))
+  const activeAddons = MODULE_CATALOG.filter(m => !m.required && m.id !== 'grunnpakke' && activeModules.includes(m.id))
+
+  const isMobMB = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
@@ -19068,35 +20823,35 @@ function MinBedriftPage() {
   )
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-            {settings?.logo_url
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobMB ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobMB ? '10px' : '16px', gap:'10px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap: isMobMB ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!isMobMB && (settings?.logo_url
               ? <img src={settings.logo_url} alt="Logo" style={{ width:'52px', height:'52px', borderRadius:'12px', objectFit:'contain', border:'1px solid #f1f5f9', background:'white' }} />
               : <div style={{ width:'52px', height:'52px', borderRadius:'12px', background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px' }}>🏢</div>
-            }
-            <div>
-              <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>{settings?.name || 'Min bedrift'}</h1>
-              <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>{settings?.org_number ? `Org.nr: ${settings.org_number}` : 'Legg til bedriftsinformasjon'}</p>
+            )}
+            <div style={{ minWidth:0 }}>
+              <h1 style={{ fontSize: isMobMB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>{settings?.name || 'Min bedrift'}</h1>
+              {!isMobMB && <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>{settings?.org_number ? `Org.nr: ${settings.org_number}` : 'Legg til bedriftsinformasjon'}</p>}
             </div>
           </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'2px' }}>Månedlig kostnad</div>
-            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
-            <div style={{ fontSize:'11px', color:'#94a3b8' }}>eks. mva · {numUsers} bruker{numUsers>1?'e':''}</div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            {!isMobMB && <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'2px' }}>Månedlig kostnad</div>}
+            <div style={{ fontSize: isMobMB ? '16px' : '22px', fontWeight:'800', color:'#059669' }}>{totalCost.toLocaleString('nb-NO')} kr</div>
+            <div style={{ fontSize: isMobMB ? '10px' : '11px', color:'#94a3b8' }}>{isMobMB ? '/mnd' : 'eks. mva · '+numUsers+' bruker'+(numUsers>1?'e':'')}</div>
           </div>
         </div>
         <div style={{ display:'flex', gap:'4px' }}>
-          {[['info','🏢 Bedriftsinformasjon'],['moduler','📦 Moduler og priser']].map(([id, label]) => (
+          {[['info', isMobMB ? '🏢 Info' : '🏢 Bedriftsinformasjon'],['moduler', isMobMB ? '📦 Moduler' : '📦 Moduler og priser']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
-              style={{ padding:'8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize:'13px', cursor:'pointer' }}>{label}</button>
+              style={{ padding: isMobMB ? '7px 12px' : '8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize: isMobMB ? '12px' : '13px', cursor:'pointer' }}>{label}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px', maxWidth:'900px' }}>
+      <div style={{ padding: isMobMB ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobMB ? '12px' : '20px', maxWidth:'900px' }}>
 
         {/* TAB: BEDRIFTSINFORMASJON */}
         {tab === 'info' && (
@@ -19104,10 +20859,10 @@ function MinBedriftPage() {
             {/* Logo */}
             <div style={mbCard}>
               {mbSec('Firmalogo')}
-              <div style={{ display:'flex', alignItems:'center', gap:'20px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobMB ? '12px' : '20px', flexWrap: isMobMB ? 'wrap' : 'nowrap' }}>
                 {settings?.logo_url
-                  ? <img src={settings.logo_url} alt="Logo" style={{ width:'80px', height:'80px', objectFit:'contain', borderRadius:'12px', border:'1px solid #f1f5f9' }} />
-                  : <div style={{ width:'80px', height:'80px', borderRadius:'12px', background:'#f8fafc', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px' }}>🏢</div>
+                  ? <img src={settings.logo_url} alt="Logo" style={{ width: isMobMB ? '60px' : '80px', height: isMobMB ? '60px' : '80px', objectFit:'contain', borderRadius:'12px', border:'1px solid #f1f5f9' }} />
+                  : <div style={{ width: isMobMB ? '60px' : '80px', height: isMobMB ? '60px' : '80px', borderRadius:'12px', background:'#f8fafc', border:'2px dashed #e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobMB ? '22px' : '28px' }}>🏢</div>
                 }
                 <div>
                   <div style={{ fontSize:'13px', color:'#475569', marginBottom:'10px' }}>Logoen brukes på tilbud, fakturaer og e-poster til kunder.</div>
@@ -19115,7 +20870,7 @@ function MinBedriftPage() {
                     style={{ padding:'8px 16px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
                     {logoUploading ? 'Laster opp...' : '📸 Last opp logo'}
                   </button>
-                  <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadLogo} accept="image/*" />
+                  <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadLogo} accept="image/*" capture="environment" />
                   {settings?.logo_url && <button onClick={() => set('logo_url', null)} style={{ marginLeft:'8px', padding:'8px 14px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'13px' }}>Fjern</button>}
                 </div>
               </div>
@@ -19124,7 +20879,7 @@ function MinBedriftPage() {
             {/* Firmainfo */}
             <div style={mbCard}>
               {mbSec('Firmainfo')}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 <div style={{ gridColumn:'1/-1' }}>{mbLbl('Firmanavn *')}<input value={settings?.name||''} onChange={e=>set('name',e.target.value)} placeholder="Bedriftens offisielle navn" style={mbInp} /></div>
                 <div>{mbLbl('Org.nr')}<input value={settings?.org_number||''} onChange={e=>set('org_number',e.target.value)} placeholder="123 456 789" style={mbInp} /></div>
                 <div>{mbLbl('MVA-nummer')}<input value={settings?.vat_number||''} onChange={e=>set('vat_number',e.target.value)} placeholder="NO 123 456 789 MVA" style={mbInp} /></div>
@@ -19140,7 +20895,7 @@ function MinBedriftPage() {
             {/* Økonomi */}
             <div style={mbCard}>
               {mbSec('Økonomiinnstillinger')}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 <div>{mbLbl('Bankkontonummer')}<input value={settings?.bank_account||''} onChange={e=>set('bank_account',e.target.value)} placeholder="xxxx.xx.xxxxx" style={mbInp} /></div>
                 <div>{mbLbl('Standard betalingsbetingelser')}<input value={settings?.default_payment_terms||''} onChange={e=>set('default_payment_terms',e.target.value)} placeholder="30 dager netto" style={mbInp} /></div>
                 <div>{mbLbl('Standard MVA-sats (%)')}<input type="number" value={settings?.default_vat_rate||25} onChange={e=>set('default_vat_rate',e.target.value)} placeholder="25" style={mbInp} /></div>
@@ -19160,7 +20915,7 @@ function MinBedriftPage() {
             {/* Nøkkelpersoner */}
             <div style={mbCard}>
               {mbSec('Nøkkelpersoner')}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
                 <div>{mbLbl('Daglig leder')}<input value={settings?.contact_ceo||''} onChange={e=>set('contact_ceo',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
                 <div>{mbLbl('HMS-ansvarlig')}<input value={settings?.contact_hms||''} onChange={e=>set('contact_hms',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
                 <div>{mbLbl('Regnskapsfører')}<input value={settings?.contact_accountant||''} onChange={e=>set('contact_accountant',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
@@ -19169,8 +20924,8 @@ function MinBedriftPage() {
 
             <div style={{ display:'flex', justifyContent:'flex-end' }}>
               <button onClick={handleSaveInfo} disabled={saving}
-                style={{ padding:'12px 28px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', cursor:saving?'not-allowed':'pointer', fontSize:'15px', fontWeight:'700' }}>
-                {saving ? 'Lagrer...' : '✅ Lagre bedriftsinformasjon'}
+                style={{ padding: isMobMB ? '12px' : '12px 28px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', cursor:saving?'not-allowed':'pointer', fontSize: isMobMB ? '14px' : '15px', fontWeight:'700', width: isMobMB ? '100%' : 'auto' }}>
+                {saving ? 'Lagrer...' : isMobMB ? '✅ Lagre' : '✅ Lagre bedriftsinformasjon'}
               </button>
             </div>
           </>
@@ -19181,22 +20936,22 @@ function MinBedriftPage() {
           <>
             {/* Brukere */}
             <div style={{ ...mbCard, background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'20px' }}>
+              <div style={{ display:'flex', alignItems: isMobMB ? 'flex-start' : 'center', justifyContent:'space-between', gap: isMobMB ? '12px' : '20px', flexDirection: isMobMB ? 'column' : 'row' }}>
                 <div>
                   <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'4px' }}>
                     <span style={{ fontSize:'18px' }}>🔹</span>
                     <h3 style={{ margin:0, fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Grunnpakke</h3>
                     <span style={{ background:'#059669', color:'white', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>Alltid inkludert</span>
                   </div>
-                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#475569' }}>Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko og Maskiner</p>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#475569' }}>Alle grunnleggende moduler for prosjektstyring og kvalitetssikring</p>
                   <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                    {['Dashboard','Prosjekter','Sjekklister','Avvik','HMS & Risiko','Maskiner'].map(m => (
+                    {['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'].map(m => (
                       <span key={m} style={{ background:'white', color:'#059669', border:'1px solid #bbf7d0', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px' }}>✓ {m}</span>
                     ))}
                   </div>
                 </div>
                 <div style={{ textAlign:'right', flexShrink:0 }}>
-                  <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>139 kr/bruker/mnd</div>
+                  <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>199 kr/bruker/mnd eks. mva</div>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', justifyContent:'flex-end' }}>
                     <label style={{ fontSize:'13px', color:'#475569', fontWeight:'600' }}>Antall brukere:</label>
                     <input type="number" value={numUsers} min="1" max="100"
@@ -19209,20 +20964,20 @@ function MinBedriftPage() {
             </div>
 
             {/* Tilleggsmoduler header */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px' }}>
+            <div style={{ display:'flex', alignItems: isMobMB ? 'flex-start' : 'center', justifyContent:'space-between', marginTop:'8px', flexDirection: isMobMB ? 'column' : 'row', gap: isMobMB ? '8px' : '0' }}>
               <div>
-                <h2 style={{ margin:'0 0 2px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Tilleggsmoduler</h2>
-                <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Legg til moduler etter behov. Alle priser per måned, eks. mva. Aktiveres og deaktiveres umiddelbart.</p>
+                <h2 style={{ margin:'0 0 2px', fontSize: isMobMB ? '15px' : '16px', fontWeight:'700', color:'#0f172a' }}>Tilleggsmoduler</h2>
+                {!isMobMB && <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Legg til moduler etter behov. Alle priser per måned, eks. mva.</p>}
               </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:'12px', color:'#64748b' }}>Total månedlig kostnad</div>
-                <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
+              <div style={{ textAlign: isMobMB ? 'left' : 'right' }}>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>Total</div>
+                <div style={{ fontSize: isMobMB ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{totalCost.toLocaleString('nb-NO')} kr/mnd</div>
               </div>
             </div>
 
             {/* Module grid */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
-              {MODULE_CATALOG.filter(m => !m.required).map(mod => {
+            <div style={{ display:'grid', gridTemplateColumns: isMobMB ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+              {MODULE_CATALOG.filter(m => !m.required && m.id !== 'grunnpakke').map(mod => {
                 const isActive = activeModules.includes(mod.id)
                 return (
                   <div key={mod.id}
@@ -19238,7 +20993,8 @@ function MinBedriftPage() {
                       </div>
                     </div>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'4px' }}>
-                      <div style={{ fontSize:'16px', fontWeight:'800', color:isActive?'#059669':'#0f172a' }}>{mod.price} kr/mnd</div>
+                      <div style={{ fontSize:'16px', fontWeight:'800', color:isActive?'#059669':'#0f172a' }}>{mod.price.toLocaleString('nb-NO')} kr/mnd</div>
+                      {mod.perCompany && <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>per bedrift, uavhengig av antall brukere</div>}
                       <button
                         onClick={() => setConfirmModule({ mod, action: isActive ? 'remove' : 'add' })}
                         style={{ padding:'7px 16px', borderRadius:'8px', border:'none', background:isActive?'#fef2f2':'#059669', color:isActive?'#dc2626':'white', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
@@ -19258,7 +21014,7 @@ function MinBedriftPage() {
                   <div key={mod.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
                     <span style={{ fontSize:'16px' }}>{mod.emoji}</span>
                     <span style={{ flex:1, fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{mod.name}</span>
-                    <span style={{ fontSize:'13px', color:'#64748b' }}>{mod.price} kr/mnd</span>
+                    <span style={{ fontSize:'13px', color:'#64748b' }}>{mod.price.toLocaleString('nb-NO')} kr/mnd{mod.perCompany?' (bedrift)':''}</span>
                     <button onClick={() => setConfirmModule({ mod, action:'remove' })}
                       style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer', fontWeight:'600' }}>Avslutt</button>
                   </div>
@@ -19382,6 +21138,11 @@ function BrukeradminPage() {
   const [companyModules, setCompanyModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState(null)
+  React.useEffect(() => {
+    if (selectedUser && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelectedUser(null))
+    }
+  }, [selectedUser])
   const [showInvite, setShowInvite] = useState(false)
   const [search, setSearch] = useState('')
   const [filterRole, setFilterRole] = useState('alle')
@@ -19428,6 +21189,8 @@ function BrukeradminPage() {
 
   const activeCount = users.filter(u=>u.status==='aktiv').length
 
+  const isMobBA = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -19447,22 +21210,22 @@ function BrukeradminPage() {
   )
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding:'20px 32px' }}>
-        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
+      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding: isMobBA ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom: isMobBA ? '10px' : '16px', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px',fontWeight:'bold',color:'#0f172a',margin:0 }}>👤 Brukere og tilgang</h1>
-            <p style={{ color:'#64748b',marginTop:'4px',fontSize:'14px',marginBottom:0 }}>Administrer brukere, roller og modultilgang</p>
+            <h1 style={{ fontSize: isMobBA ? '18px' : '22px',fontWeight:'bold',color:'#0f172a',margin:0 }}>{isMobBA ? '👤 Brukere' : '👤 Brukere og tilgang'}</h1>
+            {!isMobBA && <p style={{ color:'#64748b',marginTop:'4px',fontSize:'14px',marginBottom:0 }}>Administrer brukere, roller og modultilgang</p>}
           </div>
           <button onClick={()=>setShowInvite(true)}
-            style={{ padding:'10px 20px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>
-            + Inviter bruker
+            style={{ padding: isMobBA ? '9px 12px' : '10px 20px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBA ? '12px' : '14px',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0 }}>
+            {isMobBA ? '+ Inviter' : '+ Inviter bruker'}
           </button>
         </div>
 
         {/* Stats */}
-        <div style={{ display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px' }}>
+        <div style={{ display:'grid',gridTemplateColumns: isMobBA ? 'repeat(3,1fr)' : 'repeat(5,1fr)',gap: isMobBA ? '8px' : '10px' }}>
           {[
             { label:'Totalt', value:users.length, emoji:'👥', bg:'#f8fafc', color:'#0f172a' },
             { label:'Aktive', value:activeCount, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
@@ -19470,20 +21233,20 @@ function BrukeradminPage() {
             { label:'Admin', value:users.filter(u=>u.role==='admin'||u.role==='superadmin').length, emoji:'🔑', bg:'#f5f3ff', color:'#7c3aed' },
             { label:'Inaktive', value:users.filter(u=>u.status==='inaktiv').length, emoji:'🔒', bg:'#fef2f2', color:'#dc2626' },
           ].map(s=>(
-            <div key={s.label} style={{ background:s.bg,borderRadius:'12px',padding:'12px 14px' }}>
-              <div style={{ fontSize:'18px',marginBottom:'4px' }}>{s.emoji}</div>
-              <div style={{ fontSize:'20px',fontWeight:'800',color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:'11px',color:'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{s.label}</div>
+            <div key={s.label} style={{ background:s.bg,borderRadius: isMobBA ? '10px' : '12px',padding: isMobBA ? '8px 10px' : '12px 14px' }}>
+              <div style={{ fontSize: isMobBA ? '14px' : '18px',marginBottom: isMobBA ? '2px' : '4px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobBA ? '16px' : '20px',fontWeight:'800',color:s.color }}>{s.value}</div>
+              <div style={{ fontSize: isMobBA ? '9px' : '11px',color:'#94a3b8',fontWeight:'600',textTransform:'uppercase' }}>{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'20px 32px',display:'flex',flexDirection:'column',gap:'16px' }}>
+      <div style={{ padding: isMobBA ? '12px' : '20px 32px',display:'flex',flexDirection:'column',gap: isMobBA ? '12px' : '16px' }}>
         {/* Filters */}
-        <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'14px 18px',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk bruker..." style={{ ...baInp,maxWidth:'220px',flex:1 }} />
-          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ ...baInp,maxWidth:'160px' }}>
+        <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding: isMobBA ? '10px' : '14px 18px',display:'flex',gap: isMobBA ? '8px' : '10px',flexWrap:'wrap',alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...baInp,maxWidth: isMobBA ? '100%' : '220px',flex: isMobBA ? '1 1 100%' : '1' }} />
+          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ ...baInp,maxWidth: isMobBA ? '100%' : '160px',flex: isMobBA ? '1 1 100%' : 'none' }}>
             <option value="alle">Alle roller</option>
             {Object.entries(USER_ROLES).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
@@ -19526,28 +21289,28 @@ function BrukeradminPage() {
               const modCount=(u.module_access||[]).length
               return (
                 <div key={u.id} onClick={()=>setSelectedUser(u)}
-                  style={{ background:'white',borderRadius:'14px',border:`1px solid ${u.status==='inaktiv'?'#fecaca':'#f1f5f9'}`,padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',gap:'16px',transition:'box-shadow 0.15s',opacity:u.status==='inaktiv'?0.7:1 }}
+                  style={{ background:'white',borderRadius: isMobBA ? '12px' : '14px',border:`1px solid ${u.status==='inaktiv'?'#fecaca':'#f1f5f9'}`,padding: isMobBA ? '12px' : '16px 20px',cursor:'pointer',display:'flex',alignItems: isMobBA ? 'flex-start' : 'center',gap: isMobBA ? '10px' : '16px',transition:'box-shadow 0.15s',opacity:u.status==='inaktiv'?0.7:1 }}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
                   {/* Avatar */}
-                  <div style={{ width:'44px',height:'44px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0 }}>
+                  <div style={{ width: isMobBA ? '36px' : '44px',height: isMobBA ? '36px' : '44px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize: isMobBA ? '14px' : '18px',flexShrink:0 }}>
                     {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover' }} /> : (u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}
                   </div>
                   <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap' }}>
-                      <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'15px' }}>{u.full_name||u.email}</span>
+                    <div style={{ display:'flex',alignItems:'center',gap:'6px',marginBottom:'4px',flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700',color:'#0f172a',fontSize: isMobBA ? '13px' : '15px' }}>{u.full_name||u.email}</span>
                       {isCurrentUser&&<span style={{ background:'#f0fdf4',color:'#059669',fontSize:'11px',fontWeight:'700',padding:'1px 8px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Deg</span>}
                       <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                       {u.status==='inaktiv'&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>🔒 Inaktiv</span>}
                     </div>
-                    <div style={{ display:'flex',gap:'12px',flexWrap:'wrap',fontSize:'12px',color:'#64748b' }}>
-                      {u.full_name&&<span>✉️ {u.email}</span>}
-                      {u.phone&&<span>📞 {u.phone}</span>}
+                    <div style={{ display:'flex',gap: isMobBA ? '6px' : '12px',flexWrap:'wrap',fontSize: isMobBA ? '11px' : '12px',color:'#64748b' }}>
+                      {!isMobBA && u.full_name&&<span>✉️ {u.email}</span>}
+                      {!isMobBA && u.phone&&<span>📞 {u.phone}</span>}
                       <span>🔩 {modCount} moduler</span>
-                      {u.last_seen&&<span>🕐 Sist aktiv {new Date(u.last_seen).toLocaleDateString('nb-NO')}</span>}
+                      {!isMobBA && u.last_seen&&<span>🕐 {new Date(u.last_seen).toLocaleDateString('nb-NO')}</span>}
                     </div>
                   </div>
-                  <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>
+                  {!isMobBA && <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>}
                 </div>
               )
             })}
@@ -19607,18 +21370,18 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
   const userModules = u.module_access||[]
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding:'20px 32px' }}>
-        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake til brukere</button>
-        <div style={{ display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'16px' }}>
-          <div style={{ display:'flex',alignItems:'flex-start',gap:'14px' }}>
-            <div style={{ width:'56px',height:'56px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:'800',color:cfg.color,flexShrink:0 }}>
+      <div style={{ background:'white',borderBottom:'1px solid #e2e8f0',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 32px' }}>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake</button>
+        <div style={{ display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '16px', flexWrap: typeof window !== 'undefined' && window.innerWidth < 768 ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex',alignItems:'flex-start',gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '10px' : '14px', flex:1, minWidth:0 }}>
+            {!(typeof window !== 'undefined' && window.innerWidth < 768) && <div style={{ width:'56px',height:'56px',borderRadius:'50%',background:cfg.bg,border:`2px solid ${cfg.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:'800',color:cfg.color,flexShrink:0 }}>
               {(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}
-            </div>
-            <div>
-              <div style={{ display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap',marginBottom:'6px' }}>
-                <h1 style={{ margin:0,fontSize:'20px',fontWeight:'800',color:'#0f172a' }}>{u.full_name||u.email}</h1>
+            </div>}
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap',marginBottom:'6px' }}>
+                <h1 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '20px',fontWeight:'800',color:'#0f172a' }}>{u.full_name||u.email}</h1>
                 {isCurrentUser&&<span style={{ background:'#f0fdf4',color:'#059669',fontSize:'11px',fontWeight:'700',padding:'2px 8px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Deg</span>}
                 <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                 {u.status==='inaktiv'&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'3px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700' }}>🔒 Inaktiv</span>}
@@ -19636,21 +21399,21 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
             </div>
           )}
         </div>
-        <div style={{ display:'flex',gap:'4px',marginTop:'16px' }}>
-          {[['profil','👤 Profil'],['rolle','🔑 Rolle'],['moduler','🔩 Modultilgang']].map(([id,l])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ padding:'8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+        <div style={{ display:'flex',gap:'4px',marginTop: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          {[['profil','👤 Profil'],['rolle','🔑 Rolle'],['moduler', typeof window !== 'undefined' && window.innerWidth < 768 ? '🔩 Moduler' : '🔩 Modultilgang']].map(([id,l])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 12px' : '8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '13px',cursor:'pointer',whiteSpace:'nowrap' }}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px',display:'grid',gridTemplateColumns:'2fr 1fr',gap:'20px' }}>
+      <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '24px 32px',display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '2fr 1fr',gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px' }}>
         <div style={{ display:'flex',flexDirection:'column',gap:'16px' }}>
 
           {/* PROFIL TAB */}
           {tab==='profil'&&(
             <div style={{ background:'white',borderRadius:'16px',border:'1px solid #f1f5f9',padding:'20px 24px' }}>
               <h3 style={{ margin:'0 0 16px',fontSize:'14px',fontWeight:'700',color:'#0f172a' }}>👤 Profilinformasjon</h3>
-              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+              <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'12px' }}>
                 <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Fullt navn</label>
                   <input defaultValue={u.full_name||''} onBlur={e=>save({full_name:e.target.value})} style={baInp} placeholder="For- og etternavn" /></div>
                 <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Telefon</label>
@@ -20270,6 +22033,11 @@ function KalkulasjonPage({ onNavigate }) {
   const [showEditor, setShowEditor] = useState(false)
   const [editKalk, setEditKalk] = useState(null)
   const [viewKalk, setViewKalk] = useState(null)
+  React.useEffect(() => {
+    if (viewKalk && window.__enterDetailView) {
+      window.__enterDetailView(() => setViewKalk(null))
+    }
+  }, [viewKalk])
   const [showFaktorerPage, setShowFaktorerPage] = useState(false)
   const [showBibliotekPage, setShowBibliotekPage] = useState(false)
   const [showPrisbokPage, setShowPrisbokPage] = useState(false)
@@ -20346,6 +22114,8 @@ function KalkulasjonPage({ onNavigate }) {
     'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   }
 
+  const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ textAlign:'center' }}>
@@ -20410,7 +22180,7 @@ function KalkulasjonPage({ onNavigate }) {
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#3b82f6', marginBottom:'6px', letterSpacing:'0.05em' }}>KALKULASJON A</div>
               <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{kA.title}</div>
               <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'12px' }}>{kA.kalk_number}{kA.customer_name ? ` · ${kA.customer_name}` : ''}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                 <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
                   <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(totA.totMedFortjeneste)}</div>
                   <div style={{ fontSize:'10px', color:'#94a3b8' }}>totalsum</div>
@@ -20451,7 +22221,7 @@ function KalkulasjonPage({ onNavigate }) {
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', marginBottom:'6px', letterSpacing:'0.05em' }}>KALKULASJON B</div>
               <div style={{ fontSize:'16px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{kB.title}</div>
               <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'12px' }}>{kB.kalk_number}{kB.customer_name ? ` · ${kB.customer_name}` : ''}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
                 <div style={{ background:'white', borderRadius:'8px', padding:'10px', textAlign:'center' }}>
                   <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{fmt(totB.totMedFortjeneste)}</div>
                   <div style={{ fontSize:'10px', color:'#94a3b8' }}>totalsum</div>
@@ -20608,57 +22378,57 @@ function KalkulasjonPage({ onNavigate }) {
   }
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobK ? '14px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 Kalkulasjon</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Prosjektkalkulasjon med fagkalkyler, bygningsdeler og fortjenesteberegning</p>
+            <h1 style={{ fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 Kalkulasjon</h1>
+            {!isMobK && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Prosjektkalkulasjon med fagkalkyler, bygningsdeler og fortjenesteberegning</p>}
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => setShowPrisbokPage(true)}
-              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
+          <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
+            {!isMobK && <button onClick={() => setShowPrisbokPage(true)}
+              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
               💰 Prisbok
-            </button>
-            <button onClick={() => setShowBibliotekPage(true)}
-              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
+            </button>}
+            {!isMobK && <button onClick={() => setShowBibliotekPage(true)}
+              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
               📚 Bibliotek
-            </button>
-            <button onClick={() => setShowFaktorerPage(true)}
-              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
+            </button>}
+            {!isMobK && <button onClick={() => setShowFaktorerPage(true)}
+              style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>
               ⚙️ Faktorer
-            </button>
-            {templates.length > 0 && (
+            </button>}
+            {!isMobK && templates.length > 0 && (
               <button onClick={() => setShowTemplatePicker(true)}
-                style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#2563eb' }}>
-                🗂️ Ny fra mal ({templates.length})
+                style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'11px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#2563eb' }}>
+                🗂️ Mal ({templates.length})
               </button>
             )}
             <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
-              style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
-              + Nytt kalkulasjonsprosjekt
+              style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '9px 12px' : '11px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
+              {isMobK ? '+ Ny kalkyle' : '+ Nytt kalkulasjonsprosjekt'}
             </button>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'24px 32px', display:'flex', flexDirection:'column', gap:'20px' }}>
+      <div style={{ padding: isMobK ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobK ? '12px' : '20px' }}>
         {/* Status cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
           {Object.entries(KALK_STATUS_CFG).map(([s, cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
-              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius:'14px', padding:'16px', cursor:'pointer', textAlign:'left' }}>
-              <div style={{ fontSize:'20px', marginBottom:'8px' }}>{cfg.emoji}</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{statusCounts[s]||0}</div>
-              <div style={{ fontSize:'11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
+              style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius: isMobK ? '10px' : '14px', padding: isMobK ? '10px' : '16px', cursor:'pointer', textAlign: isMobK ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobK ? '16px' : '20px', marginBottom: isMobK ? '4px' : '8px' }}>{cfg.emoji}</div>
+              <div style={{ fontSize: isMobK ? '16px' : '22px', fontWeight:'800', color: filterStatus===s ? cfg.color : '#0f172a' }}>{statusCounts[s]||0}</div>
+              <div style={{ fontSize: isMobK ? '10px' : '11px', color: filterStatus===s ? cfg.color : '#94a3b8', fontWeight:'500', marginTop:'2px' }}>{s}</div>
             </button>
           ))}
         </div>
 
         {/* Search */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk kalkulasjon, kunde, nummer..." style={{ ...qInp, maxWidth:'300px', flex:1 }} />
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobK ? '10px' : '14px 18px', display:'flex', gap: isMobK ? '8px' : '10px', alignItems:'center', flexWrap:'wrap' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...qInp, maxWidth: isMobK ? '100%' : '300px', flex: isMobK ? '1 1 100%' : '1' }} />
           {(search || filterStatus !== 'alle') && <button onClick={() => { setSearch(''); setFilterStatus('alle') }} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>Nullstill</button>}
           {compareIds.length === 2 && (
             <button onClick={() => setShowCompare(true)}
@@ -20690,33 +22460,33 @@ function KalkulasjonPage({ onNavigate }) {
               const alleFaktorer = k.faktorer || {}
               const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
               return (
-                <div key={k.id} style={{ background:'white', borderRadius:'14px', border: compareIds.includes(k.id) ? '2px solid #3b82f6' : '1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'12px', transition:'box-shadow 0.15s' }}
+                <div key={k.id} style={{ background:'white', borderRadius: isMobK ? '12px' : '14px', border: compareIds.includes(k.id) ? '2px solid #3b82f6' : '1px solid #f1f5f9', padding: isMobK ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobK ? 'flex-start' : 'center', gap: isMobK ? '8px' : '12px', transition:'box-shadow 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                  <input type="checkbox" checked={compareIds.includes(k.id)} onChange={e => {
+                  {!isMobK && <input type="checkbox" checked={compareIds.includes(k.id)} onChange={e => {
                     e.stopPropagation()
                     setCompareIds(prev => prev.includes(k.id) ? prev.filter(x => x !== k.id) : prev.length >= 2 ? [prev[1], k.id] : [...prev, k.id])
                   }} onClick={e => e.stopPropagation()}
-                    style={{ width:'16px', height:'16px', accentColor:'#3b82f6', cursor:'pointer', flexShrink:0 }} />
-                  <div onClick={() => setViewKalk(k)} style={{ display:'flex', alignItems:'center', gap:'16px', flex:1, minWidth:0 }}>
-                  <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>
+                    style={{ width:'16px', height:'16px', accentColor:'#3b82f6', cursor:'pointer', flexShrink:0 }} />}
+                  <div onClick={() => setViewKalk(k)} style={{ display:'flex', alignItems: isMobK ? 'flex-start' : 'center', gap: isMobK ? '10px' : '16px', flex:1, minWidth:0 }}>
+                  {!isMobK && <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{cfg.emoji}</div>}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{k.title}</span>
-                      <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'4px' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobK ? '13px' : '15px' }}>{k.title}</span>
+                      {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
                       <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
                     </div>
-                    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                      {k.customer_name && <span style={{ fontSize:'12px', color:'#64748b' }}>👤 {k.customer_name}</span>}
-                      <span style={{ fontSize:'12px', color:'#64748b' }}>📋 {kalkyler.length} kalkyle{kalkyler.length !== 1 ? 'r' : ''}</span>
-                      <span style={{ fontSize:'12px', color:'#64748b' }}>⏱️ {totals.totTimer.toFixed(0)} timer</span>
-                      <span style={{ fontSize:'12px', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626', fontWeight:'600' }}>📊 {totals.fortjenesteProsent.toFixed(1)}% margin</span>
+                    <div style={{ display:'flex', gap: isMobK ? '6px' : '12px', flexWrap:'wrap' }}>
+                      {k.customer_name && <span style={{ fontSize: isMobK ? '11px' : '12px', color:'#64748b' }}>👤 {k.customer_name}</span>}
+                      {!isMobK && <span style={{ fontSize:'12px', color:'#64748b' }}>📋 {kalkyler.length} fag</span>}
+                      {!isMobK && <span style={{ fontSize:'12px', color:'#64748b' }}>⏱️ {totals.totTimer.toFixed(0)}t</span>}
+                      <span style={{ fontSize: isMobK ? '11px' : '12px', color: totals.fortjenesteProsent >= 20 ? '#16a34a' : totals.fortjenesteProsent >= 10 ? '#ca8a04' : '#dc2626', fontWeight:'600' }}>{totals.fortjenesteProsent.toFixed(1)}%</span>
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontWeight:'800', fontSize:'16px', color:'#0f172a' }}>{fmt(totals.totMedFortjeneste)}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>
+                    <div style={{ fontWeight:'800', fontSize: isMobK ? '13px' : '16px', color:'#0f172a' }}>{fmt(totals.totMedFortjeneste)}</div>
+                    {!isMobK && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>eks. mva</div>}
                   </div>
-                  <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                  {!isMobK && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                   </div>{/* end clickable div */}
                 </div>
               )
@@ -22595,7 +24365,7 @@ function KalkFaktorerPage({ onBack }) {
         {/* Forklaring */}
         <div style={{ background:'#eff6ff', borderRadius:'14px', border:'1px solid #bfdbfe', padding:'16px 20px' }}>
           <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'8px' }}>Hvordan faktorene brukes</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'12px', color:'#1e40af', lineHeight:1.5 }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px', fontSize:'12px', color:'#1e40af', lineHeight:1.5 }}>
             <div><strong>Produksjonslønn:</strong> Timelønn for fagarbeider</div>
             <div><strong>Sosiale kostn.:</strong> Arbeidsgiveravg., feriepenger etc.</div>
             <div><strong>Faste kostn.:</strong> Kontor, admin, forsikring etc.</div>
@@ -22773,7 +24543,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
         {/* Body */}
         <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px', maxHeight:'70vh', overflowY:'auto' }}>
           {/* Prosjektinfo */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektnavn *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbygg Strandveien 12" style={qInp} /></div>
             <div>{lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
             <div>{lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={qInp} /></div>
@@ -23549,35 +25319,36 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
     w.document.close()
   }
 
+  const isMobKV = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
-          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
-          <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>
-          <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKV ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '8px' : '12px', marginBottom:'12px', flexWrap:'wrap' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding: isMobKV ? '6px 10px' : '8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
+          {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
+          <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
           {saving && <span style={{ fontSize:'12px', color:'#94a3b8' }}>Lagrer...</span>}
         </div>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems: isMobKV ? 'flex-start' : 'center', justifyContent:'space-between', flexDirection: isMobKV ? 'column' : 'row', gap: isMobKV ? '10px' : '0' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
-            <div style={{ display:'flex', gap:'16px', marginTop:'6px' }}>
-              {k.customer_name && <span style={{ fontSize:'13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
-              {k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
-              {k.notes && <span style={{ fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>📝 {k.notes}</span>}
+            <h1 style={{ fontSize: isMobKV ? '17px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
+            <div style={{ display:'flex', gap: isMobKV ? '8px' : '16px', marginTop:'6px', flexWrap:'wrap' }}>
+              {k.customer_name && <span style={{ fontSize: isMobKV ? '11px' : '13px', color:'#64748b' }}>👤 {k.customer_name}</span>}
+              {!isMobKV && k.customer_address && <span style={{ fontSize:'13px', color:'#64748b' }}>📍 {k.customer_address}</span>}
             </div>
           </div>
-          <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
-            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>✏️ Rediger prosjektinfo</button>
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', width: isMobKV ? '100%' : 'auto' }}>
+            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>
 
             {/* Mer-dropdown for sekundære handlinger */}
             <div style={{ position:'relative' }}>
-              <button onClick={() => setShowMoreMenu(!showMoreMenu)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>⋯ Mer ▾</button>
+              <button onClick={() => setShowMoreMenu(!showMoreMenu)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>⋯ {isMobKV ? '' : 'Mer ▾'}</button>
               {showMoreMenu && (
                 <>
                 <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowMoreMenu(false)} />
-                <div style={{ position:'absolute', top:'100%', left:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'200px' }}>
+                <div style={{ position: isMobKV ? 'fixed' : 'absolute', top: isMobKV ? 'auto' : '100%', bottom: isMobKV ? 0 : 'auto', left: isMobKV ? 0 : 0, right: isMobKV ? 0 : 'auto', background:'white', borderRadius: isMobKV ? '16px 16px 0 0' : '12px', border:'1px solid #e2e8f0', boxShadow:'0 -8px 24px rgba(0,0,0,0.12)', padding: isMobKV ? '12px 16px' : '6px', zIndex:20, marginTop: isMobKV ? 0 : '4px', width: isMobKV ? '100%' : '200px' }}>
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
                   <button onClick={() => { setShowSaveTemplate(true); setTemplateName(k.title); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🗂️ Lagre som mal</button>
                   <button onClick={async () => {
@@ -23608,13 +25379,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             {/* Forhåndsvis PDF dropdown */}
             <div style={{ position:'relative' }}>
               <button onClick={() => setShowPreviewMenu(!showPreviewMenu)}
-                style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-                👁️ Forhåndsvis ▾
+                style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>
+                {isMobKV ? '👁️' : '👁️ Forhåndsvis ▾'}
               </button>
               {showPreviewMenu && (
                 <>
                 <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowPreviewMenu(false)} />
-                <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'6px', zIndex:20, marginTop:'4px', width:'220px' }}>
+                <div style={{ position: isMobKV ? 'fixed' : 'absolute', top: isMobKV ? 'auto' : '100%', bottom: isMobKV ? 0 : 'auto', left: isMobKV ? 0 : 'auto', right: isMobKV ? 0 : 0, background:'white', borderRadius: isMobKV ? '16px 16px 0 0' : '12px', border:'1px solid #e2e8f0', boxShadow:'0 -8px 24px rgba(0,0,0,0.12)', padding: isMobKV ? '12px 16px' : '6px', zIndex:20, marginTop: isMobKV ? 0 : '4px', width: isMobKV ? '100%' : '220px' }}>
                   {[['total','💰 Kun totalsum'],['faggruppe','👷 Per faggruppe'],['bygningsdel','🧱 Per bygningsdel'],['detaljert','📋 Detaljert'],['intern','🔒 Intern kalkyle']].map(([id, label]) => (
                     <button key={id} onClick={() => { openPreview(id); setShowPreviewMenu(false) }}
                       style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a', marginBottom:'2px', fontWeight:'500' }}>
@@ -23627,19 +25398,41 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             </div>
 
             {/* Send til tilbudsmodul */}
-            <button onClick={handleTilbudClick}
+            {!isMobKV && <button onClick={handleTilbudClick}
               style={{ background: hasTilbudModule ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', opacity: hasTilbudModule ? 1 : 0.6 }}>
-              📋 Send til tilbudsmodul
-            </button>
+              📋 Tilbud
+            </button>}
 
-            <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📧 Send til kunde</button>
+            <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '📧 Send' : '📧 Send til kunde'}</button>
           </div>
         </div>
       </div>
 
+      {/* Mobile totaloversikt */}
+      {isMobKV && (
+        <div style={{ background:'linear-gradient(135deg,#059669,#0891b2)', padding:'14px', display:'flex', justifyContent:'space-around', color:'white' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>SELVKOST</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{fmt(totals.totSelvkost)}</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>EKS. MVA</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{fmt(totals.totMedFortjeneste)}</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>MARGIN</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{totals.fortjenesteProsent.toFixed(1)}%</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'10px', opacity:0.8, fontWeight:'600' }}>TIMER</div>
+            <div style={{ fontSize:'15px', fontWeight:'800' }}>{totals.totTimer.toFixed(0)}</div>
+          </div>
+        </div>
+      )}
+
       {/* Mini-sammendrag — alltid synlig, toggle-bar */}
       {showMiniSummary && (
-        <div style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0', padding:'10px 32px', display:'flex', alignItems:'center', gap:'24px', fontSize:'13px' }}>
+        <div style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0', padding: isMobKV ? '8px 14px' : '10px 32px', display:'flex', alignItems:'center', gap: isMobKV ? '12px' : '24px', fontSize: isMobKV ? '11px' : '13px', flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
             <span style={{ color:'#64748b' }}>Eks. mva:</span>
             <span style={{ fontWeight:'800', color:'#0f172a', fontSize:'15px' }}>{fmt(totals.totMedFortjeneste)}</span>
@@ -23673,7 +25466,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
       {/* Nytt UE-tilbud mottatt banner */}
       {nyeUESvar.length > 0 && (
-        <div style={{ background:'#eff6ff', borderBottom:'1px solid #bfdbfe', padding:'12px 32px', display:'flex', alignItems:'center', gap:'12px' }}>
+        <div style={{ background:'#eff6ff', borderBottom:'1px solid #bfdbfe', padding: isMobKV ? '10px 14px' : '12px 32px', display:'flex', alignItems:'center', gap: isMobKV ? '8px' : '12px', flexWrap:'wrap' }}>
           <span style={{ fontSize:'20px' }}>🔔</span>
           <div style={{ flex:1 }}>
             <span style={{ fontWeight:'700', fontSize:'13px', color:'#1e40af' }}>Nytt UE-tilbud mottatt!</span>
@@ -23683,13 +25476,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
         </div>
       )}
 
-      <div style={{ padding:'24px 32px', display:'flex', gap:'20px', flexWrap:'wrap' }}>
+      <div style={{ padding: isMobKV ? '12px' : '24px 32px', display:'flex', gap: isMobKV ? '12px' : '20px', flexWrap:'wrap' }}>
         {/* Main - per kalkyle with interactive bygningsdeler */}
-        <div style={{ flex:2, minWidth:'500px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ flex:2, minWidth: isMobKV ? '100%' : '500px', display:'flex', flexDirection:'column', gap: isMobKV ? '10px' : '16px' }}>
           {/* Faktorer guide for new users */}
           {!hasCustomFaktorer && kalkyler.length > 0 && (
-            <div style={{ background:'#fffbeb', border:'1px solid #fef08a', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'12px' }}>
-              <span style={{ fontSize:'24px', flexShrink:0 }}>💡</span>
+            <div style={{ background:'#fffbeb', border:'1px solid #fef08a', borderRadius: isMobKV ? '10px' : '14px', padding: isMobKV ? '10px 12px' : '14px 18px', display:'flex', alignItems: isMobKV ? 'flex-start' : 'center', gap: isMobKV ? '8px' : '12px', flexWrap: isMobKV ? 'wrap' : 'nowrap' }}>
+              {!isMobKV && <span style={{ fontSize:'24px', flexShrink:0 }}>💡</span>}
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:'700', fontSize:'13px', color:'#92400e', marginBottom:'2px' }}>Sett opp kalkulasjonsfaktorer</div>
                 <div style={{ fontSize:'12px', color:'#a16207' }}>Timepris, sosiale kostnader og fortjenestepåslag bruker standardverdier. Tilpass til din bedrift for korrekte kalkyler.</div>
@@ -24254,7 +26047,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
         </div>
 
         {/* Sidebar — collapsible */}
-        <div style={{ display:'flex', flexDirection:'column', gap:'16px', transition:'width 0.2s', ...(sidebarOpen ? { flex:1, minWidth:'280px' } : { width:'40px', minWidth:'40px', flexShrink:0 }) }}>
+        {!isMobKV && <div style={{ display:'flex', flexDirection:'column', gap:'16px', transition:'width 0.2s', ...(sidebarOpen ? { flex:1, minWidth:'280px' } : { width:'40px', minWidth:'40px', flexShrink:0 }) }}>
           {/* Toggle button */}
           <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#64748b', alignSelf: sidebarOpen ? 'flex-end' : 'center' }}>
             {sidebarOpen ? '▶ Skjul' : '◀'}
@@ -24337,7 +26130,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                           }} title="Tilbakestill til bedriftsstandard" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#94a3b8', padding:'2px' }}>↺</button>
                         </div>
                       </div>
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px' }}>
+                      <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'4px' }}>
                         {[
                           { key: 'produksjonslonn', label: 'Lønn', unit: 'kr/t' },
                           { key: 'sosiale_prosent', label: 'Sosiale', unit: '%' },
@@ -24484,7 +26277,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           <button onClick={handleDelete} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🗑️ Slett kalkulasjon</button>
           </>}
-        </div>
+        </div>}
       </div>
 
       {/* Import fra annen kalkyle modal */}
@@ -24749,7 +26542,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         {isComparing && diff && (
                           <div style={{ marginTop:'12px', background:'white', borderRadius:'10px', padding:'14px', border:'1px solid #e2e8f0' }}>
                             <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', marginBottom:'10px' }}>Endringer fra v{v.version_number} til nåværende:</div>
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
                               <div style={{ background: diff.sumDiff > 0 ? '#fef2f2' : diff.sumDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
                                 <div style={{ fontSize:'14px', fontWeight:'800', color: diff.sumDiff > 0 ? '#dc2626' : diff.sumDiff < 0 ? '#059669' : '#64748b' }}>
                                   {diff.sumDiff > 0 ? '+' : ''}{fmt(diff.sumDiff)}
@@ -25484,7 +27277,7 @@ function EMViewPage() {
 }
 
 function AppContent() {
-  const { user, loading, supabase, displayName } = useAuth()
+  const { user, loading, supabase, displayName, isPlatformOwner } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
@@ -25502,14 +27295,34 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
+  const [trialInfo, setTrialInfo] = React.useState(null) // { daysLeft, isExpired, status }
+  const [showTrialExpired, setShowTrialExpired] = React.useState(false)
+
   React.useEffect(() => {
     if (!user) return
-    supabase.from('company_settings').select('active_modules').limit(1).single()
-      .then(({ data }) => setActiveModules(data?.active_modules || ['grunnpakke']))
+    supabase.from('company_settings').select('*').limit(1).single()
+      .then(({ data, error }) => {
+        if (error || !data) { setActiveModules(['grunnpakke']); return }
+        
+        const status = data.subscription_status || 'active'
+        const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
+        const now = new Date()
+        const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / (1000*60*60*24)) : null
+        const isExpired = status === 'trial' && trialEnd && now > trialEnd
+        
+        setTrialInfo({ daysLeft, isExpired, status, trialEnd })
+        
+        if (isExpired) {
+          setActiveModules([])
+          setShowTrialExpired(true)
+        } else {
+          setActiveModules(data.active_modules || ['grunnpakke'])
+        }
+      })
       .catch(() => setActiveModules(['grunnpakke']))
   }, [user])
 
@@ -25522,13 +27335,14 @@ function AppContent() {
     ansatte: 'ansatte', timelister: 'timelister', ressursplan: 'ressursplan',
     kalender: 'kalender', chat: 'chat',
     befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
-    minbedrift: null, brukeradmin: null, // admin always accessible
+    minbedrift: null, brukeradmin: null, superadmin: null, // admin always accessible
   }
 
   const isModuleActive = (navId) => {
     if (!activeModules) return true // still loading, show as active
     const requiredModule = navToModule[navId]
-    if (!requiredModule) return true // always accessible
+    if (!requiredModule) return true // always accessible (dashboard, minbedrift, brukeradmin, varsler)
+    if (trialInfo?.status === 'trial' && !trialInfo?.isExpired) return true // trial active = all modules
     return activeModules.includes(requiredModule)
   }
 
@@ -25540,13 +27354,38 @@ function AppContent() {
   }
 
   const [page, setPage] = React.useState(getPageFromHash)
+  const [subPage, setSubPage] = React.useState(null) // tracks detail views within modules
+  const detailCleanupRef = React.useRef(null) // callback to close current detail view
+
+  // When entering a detail view, call this to register back-navigation
+  // Make available globally for child components
+  window.__enterDetailView = null
+  const enterDetailView = (cleanupFn) => {
+    detailCleanupRef.current = cleanupFn
+    window.history.pushState({ page, detail: true }, '', '#' + page)
+  }
+  window.__enterDetailView = enterDetailView
 
   const navigate = (p) => {
-    if (p === page) { setMobileMenuOpen(false); return }
+    if (p === page && !subPage) { setMobileMenuOpen(false); return }
     window.history.pushState({ page: p }, '', '#' + p)
     setPage(p)
     setProjectId(null)
+    setSubPage(null)
     setMobileMenuOpen(false)
+    window.scrollTo(0, 0)
+  }
+
+  // Push a sub-page state (detail view within a module)
+  const pushSubPage = (parentPage, detail) => {
+    window.history.pushState({ page: parentPage, sub: detail }, '', '#' + parentPage)
+    setSubPage(detail)
+  }
+
+  // Go back from sub-page to parent
+  const popSubPage = () => {
+    setSubPage(null)
+    // Don't use history.back() — just clear sub state, browser back will handle the rest
   }
 
   // Check if current page is a locked module
@@ -25560,10 +27399,24 @@ function AppContent() {
 
   React.useEffect(() => {
     const onPop = (e) => {
-      const p = e.state?.page || getPageFromHash()
+      const state = e.state || {}
+      // If we're going back from a detail view, just close it
+      if (detailCleanupRef.current && !state.detail) {
+        const cleanup = detailCleanupRef.current
+        detailCleanupRef.current = null
+        cleanup()
+        return
+      }
+      const p = state.page || getPageFromHash()
       setPage(p)
-      if (e.state?.projectId) setProjectId(e.state.projectId)
+      if (state.projectId) setProjectId(state.projectId)
       else setProjectId(null)
+      if (state.checklistId) setChecklistId(state.checklistId)
+      else setChecklistId(null)
+      if (state.sub) setSubPage(state.sub)
+      else setSubPage(null)
+      detailCleanupRef.current = null
+      setMobileMenuOpen(false)
     }
     window.addEventListener('popstate', onPop)
     window.history.replaceState({ page: getPageFromHash() }, '', window.location.hash || '#dashboard')
@@ -25608,14 +27461,14 @@ function AppContent() {
             {/* Logo */}
             <div style={{ height:'60px', display:'flex', alignItems:'center', padding:'0 16px', borderBottom:'1px solid #f1f5f9', justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                <img src="/icon-192.png" alt="Logo" style={{ width:'28px', height:'28px', borderRadius:'6px' }} />
+                <img src={EP_LOGO} alt="Logo" style={{ width:'28px', height:'28px', borderRadius:'6px' }} />
                 <span style={{ fontWeight:'800', color:'#059669', fontSize:'16px' }}>En Plattform</span>
               </div>
               <button onClick={() => setMobileMenuOpen(false)} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px' }}>×</button>
             </div>
             {/* Nav */}
             <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
-              {navGroups.map((group, gi) => (
+              {[...navGroups, ...(isPlatformOwner ? [platformOwnerNav] : [])].map((group, gi) => (
                 <div key={gi} style={{ marginBottom:'4px' }}>
                   <div style={{ padding:'10px 12px 4px', fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.08em' }}>{group.title}</div>
                   {group.items.map(item => {
@@ -25654,9 +27507,9 @@ function AppContent() {
           <button onClick={() => navigate('dashboard')} title="Gå til dashboard"
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
             {collapsed
-              ? <img src="/icon-192.png" alt="En Plattform" style={{ height: '36px', width: '36px', objectFit: 'contain', borderRadius: '8px' }} />
+              ? <img src={EP_LOGO} alt="En Plattform" style={{ height: '36px', width: '36px', objectFit: 'contain', borderRadius: '8px' }} />
               : <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <img src="/icon-192.png" alt="En Plattform" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '6px' }} />
+                  <img src={EP_LOGO} alt="En Plattform" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '6px' }} />
                   <span style={{ fontSize: '15px', fontWeight: '800', color: '#059669' }}>En Plattform</span>
                 </div>
             }
@@ -25672,7 +27525,7 @@ function AppContent() {
           {collapsed ? '›' : '‹'}
         </button>
         <nav style={{ flex: 1, overflowY: 'auto', padding: '8px', marginTop: '46px' }}>
-          {navGroups.map((group, gi) => (
+          {[...navGroups, ...(isPlatformOwner ? [platformOwnerNav] : [])].map((group, gi) => (
             <div key={gi} style={{ marginBottom: '4px' }}>
               {!collapsed && (
                 <div style={{ padding: '10px 12px 4px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.08em', userSelect: 'none' }}>
@@ -25721,7 +27574,7 @@ function AppContent() {
           {isMobile ? (
             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
               <button onClick={() => setMobileMenuOpen(true)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'22px', padding:'4px', color:'#374151', lineHeight:1 }}>☰</button>
-              <img src="/icon-192.png" alt="Logo" style={{ width:'24px', height:'24px', borderRadius:'5px' }} />
+              <img src={EP_LOGO} alt="Logo" style={{ width:'24px', height:'24px', borderRadius:'5px' }} />
               <span style={{ fontWeight:'800', color:'#059669', fontSize:'15px' }}>En Plattform</span>
             </div>
           ) : <div />}
@@ -25745,6 +27598,59 @@ function AppContent() {
             )}
           </div>
         </div>
+
+        {/* Trial banner */}
+        {trialInfo?.status === 'trial' && !trialInfo.isExpired && (
+          <div style={{ margin:'0', padding:'10px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap',
+            background: trialInfo.daysLeft <= 3 ? 'linear-gradient(135deg,#fef2f2,#fff7ed)' : 'linear-gradient(135deg,#f0fdf4,#eff6ff)',
+            borderBottom: trialInfo.daysLeft <= 3 ? '1px solid #fecaca' : '1px solid #bbf7d0' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <span style={{ fontSize:'16px' }}>{trialInfo.daysLeft <= 3 ? '⚠️' : '🎉'}</span>
+              <span style={{ fontSize:'13px', fontWeight:'600', color: trialInfo.daysLeft <= 3 ? '#dc2626' : '#059669' }}>
+                {trialInfo.daysLeft <= 0 ? 'Prøveperioden utløper i dag!' : trialInfo.daysLeft === 1 ? '1 dag igjen av prøveperioden' : `${trialInfo.daysLeft} dager igjen av prøveperioden`}
+              </span>
+            </div>
+            <button onClick={()=>navigate('minbedrift')} style={{ padding:'6px 14px', background: trialInfo.daysLeft <= 3 ? '#dc2626' : '#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
+              {trialInfo.daysLeft <= 3 ? '🔓 Kjøp nå' : '📦 Se moduler'}
+            </button>
+          </div>
+        )}
+
+        {/* Trial expired lockout */}
+        {showTrialExpired && (
+          <>
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+              <div style={{ background:'white', borderRadius:'24px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', fontFamily:'system-ui,sans-serif' }}>
+                <div style={{ width:'80px', height:'80px', borderRadius:'50%', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', fontSize:'36px' }}>🔒</div>
+                <h2 style={{ margin:'0 0 8px', fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>Prøveperioden er utløpt</h2>
+                <p style={{ margin:'0 0 24px', fontSize:'14px', color:'#64748b', lineHeight:1.6 }}>
+                  Din 15-dagers gratis prøveperiode er dessverre over. For å fortsette å bruke En Plattform, velg en plan som passer din bedrift.
+                </p>
+                <div style={{ background:'#f8fafc', borderRadius:'16px', padding:'20px', marginBottom:'24px', textAlign:'left' }}>
+                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'12px' }}>Velg din plan:</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0' }}>
+                      <span style={{ fontSize:'18px' }}>🔹</span>
+                      <div style={{ flex:1 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#059669' }}>Grunnpakke</div><div style={{ fontSize:'11px', color:'#64748b' }}>9 moduler · 199 kr/bruker/mnd</div></div>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#eff6ff', borderRadius:'10px', border:'1px solid #bfdbfe' }}>
+                      <span style={{ fontSize:'18px' }}>🧮</span>
+                      <div style={{ flex:1 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#2563eb' }}>Kun Kalkulasjon</div><div style={{ fontSize:'11px', color:'#64748b' }}>Kalkulasjonsmodul · 1 499 kr/mnd per bedrift</div></div>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={()=>{setShowTrialExpired(false);navigate('minbedrift')}}
+                  style={{ width:'100%', padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor:'pointer', marginBottom:'10px' }}>
+                  📦 Velg plan og fortsett
+                </button>
+                <button onClick={async()=>{await supabase.auth.signOut()}}
+                  style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', color:'#64748b', cursor:'pointer' }}>
+                  Logg ut
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Kontormodul-tips på mobil */}
         {showDesktopTip && (
@@ -25789,10 +27695,11 @@ function AppContent() {
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'brukeradmin' && <BrukeradminPage />}
+        {page === 'superadmin' && isPlatformOwner && <SuperAdminPage />}
         {page === 'varsler' && <VarslerPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'varsler' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'varsler' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
         </>)}
