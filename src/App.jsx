@@ -22156,6 +22156,7 @@ function beregnBygningsdel(bd, faktorer) {
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
   const fortjenesteInnkjop = parseFloat(faktorer.fortjeneste_innkjop_prosent) || 0
+  const fortjenesteLonn = parseFloat(faktorer.fortjeneste_lonn_prosent) || 0
 
   ;(bd.arbeidsarter || []).forEach(a => {
     const r = beregnArbeidskostnad(a, faktorer)
@@ -22173,9 +22174,37 @@ function beregnBygningsdel(bd, faktorer) {
     totalUE += kost * (1 + fortjenesteInnkjop / 100) * mengde
   })
 
-  const selvkost = totalArbeid + totalMaterial
-  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE
-  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste }
+  // ── Flatetillegg: ekstra kr per enhet (rigg, renhold, avfall etc.) ──
+  let totalFlatetillegg = 0
+  ;(bd.flatetillegg || []).forEach(ft => {
+    const kost = parseFloat(ft.kostnad) || 0
+    totalFlatetillegg += kost * mengde
+  })
+  const flatetilleggMedFortjeneste = totalFlatetillegg * (1 + fortjenesteInnkjop / 100)
+
+  // ── Åpningstillegg: faste kostnader per åpning (dører, vinduer etc.) ──
+  let totalApningstillegg = 0
+  ;(bd.apningstillegg || []).forEach(at => {
+    const antall = parseFloat(at.antall) || 0
+    const arbeidTimer = parseFloat(at.arbeid_timer) || 0
+    const materialKost = parseFloat(at.material_kostnad) || 0
+    // Arbeidskostnad for åpningstillegg
+    const lonn = parseFloat(faktorer.produksjonslonn) || 0
+    const sosiale = parseFloat(faktorer.sosiale_prosent) || 0
+    const faste = parseFloat(faktorer.faste_prosent) || 0
+    const timekostnad = lonn * (1 + sosiale / 100 + faste / 100)
+    const arbeidKost = arbeidTimer * timekostnad * antall
+    const arbeidMedFortjeneste = arbeidKost * (1 + fortjenesteLonn / 100)
+    const matJustering = parseFloat(faktorer.mat_justering_prosent) || 0
+    const matMedJustering = materialKost * (1 + matJustering / 100) * antall
+    const matMedFortjeneste = matMedJustering * (1 + fortjenesteInnkjop / 100)
+    totalApningstillegg += arbeidMedFortjeneste + matMedFortjeneste
+    totalTimer += arbeidTimer * antall
+  })
+
+  const selvkost = totalArbeid + totalMaterial + totalFlatetillegg
+  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE + flatetilleggMedFortjeneste + totalApningstillegg
+  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
@@ -24059,6 +24088,7 @@ function PrisbokPage({ onBack }) {
   const [colMapping, setColMapping] = useState({ varenummer: '', varenavn: '', enhet: '', pris: '', kategori: '' })
   const [is5001, setIs5001] = useState(false)
   const [importProgress, setImportProgress] = useState('')
+  const [importTestFilter, setImportTestFilter] = useState('')
   const [toast, setToast] = useState(null) // { type: 'success'|'error', message }
   const fileRef = React.useRef(null)
 
@@ -24267,32 +24297,85 @@ function PrisbokPage({ onBack }) {
     e.target.value = ''
   }
 
-  const doImport = async (items, navn) => {
+  const doImport = async (items, navn, existingPrislisteId = null) => {
     setImporting(true)
     try {
-      // Create prisliste entry
-      const { data: pl, error: plErr } = await supabase.from('prislister').insert({
-        user_id: user?.id, navn, leverandor: navn, antall_varer: items.length, aktiv: prislister.length === 0
-      }).select().single()
-      if (plErr) throw plErr
-      // Insert items in batches
-      let inserted = 0
-      for (let i = 0; i < items.length; i += 500) {
-        const batch = items.slice(i, i + 500).map(item => ({ ...item, prisliste_id: pl.id, prisliste_navn: navn }))
-        setImportProgress(`Importerer ${Math.min(i + 500, items.length)} av ${items.length}...`)
-        const { error } = await supabase.from('prisbok').insert(batch)
-        if (error) throw error
-        inserted += batch.length
+      let plId
+      if (existingPrislisteId) {
+        // ── RE-IMPORT: oppdater eksisterende prisliste ──
+        plId = existingPrislisteId
+        await supabase.from('prislister').update({ navn, antall_varer: items.length, updated_at: new Date().toISOString() }).eq('id', plId)
+        
+        // Hent eksisterende varenumre med manuell pakn_str for å bevare dem
+        const { data: existingItems } = await supabase.from('prisbok').select('varenummer, pakn_str, pakn_enhet, pakn_manuell, enhet').eq('prisliste_id', plId)
+        const manualMap = {}
+        ;(existingItems || []).forEach(e => { if (e.pakn_manuell && e.pakn_str) manualMap[e.varenummer] = e })
+        
+        // Slett eksisterende og re-insert (med manuelle korrigeringer bevart)
+        setImportProgress('Fjerner gamle priser...')
+        await supabase.from('prisbok').delete().eq('prisliste_id', plId)
+        
+        let inserted = 0
+        for (let i = 0; i < items.length; i += 500) {
+          const batch = items.slice(i, i + 500).map(item => {
+            const manual = manualMap[item.varenummer]
+            if (manual) {
+              // Bevare manuell pakn_str: reberegn pris med ny original_pris / gammel pakn_str
+              const origPris = item.original_pris || item.pris_per_enhet
+              return {
+                ...item, prisliste_id: plId, prisliste_navn: navn,
+                pakn_str: manual.pakn_str,
+                pakn_enhet: manual.pakn_enhet,
+                pakn_manuell: true,
+                enhet: manual.enhet,
+                pris_per_enhet: origPris / manual.pakn_str
+              }
+            }
+            return { ...item, prisliste_id: plId, prisliste_navn: navn }
+          })
+          setImportProgress(`Oppdaterer ${Math.min(i + 500, items.length)} av ${items.length}...`)
+          const { error } = await supabase.from('prisbok').insert(batch)
+          if (error) throw error
+          inserted += batch.length
+        }
+        setImportStep(null)
+        setImportProgress('')
+        await loadData()
+        const manuellCount = Object.keys(manualMap).length
+        setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer oppdatert i "${navn}"${manuellCount > 0 ? `. ${manuellCount} manuelle pakningskorrigeringer bevart.` : ''}` })
+      } else {
+        // ── NY IMPORT ──
+        const { data: pl, error: plErr } = await supabase.from('prislister').insert({
+          user_id: user?.id, navn, leverandor: navn, antall_varer: items.length, aktiv: prislister.length === 0
+        }).select().single()
+        if (plErr) throw plErr
+        plId = pl.id
+        let inserted = 0
+        for (let i = 0; i < items.length; i += 500) {
+          const batch = items.slice(i, i + 500).map(item => ({ ...item, prisliste_id: plId, prisliste_navn: navn }))
+          setImportProgress(`Importerer ${Math.min(i + 500, items.length)} av ${items.length}...`)
+          const { error } = await supabase.from('prisbok').insert(batch)
+          if (error) throw error
+          inserted += batch.length
+        }
+        setImportStep(null)
+        setImportProgress('')
+        await loadData()
+        setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
       }
-      setImportStep(null)
-      setImportProgress('')
-      await loadData()
-      setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
     } catch(e) { setToast({ type: 'error', message: 'Feil ved import: ' + e.message }) }
     finally { setImporting(false); setImportProgress('') }
   }
 
-  const handleImport5001 = () => {
+  // Detect if we should update an existing prisliste
+  const findExistingPrisliste = () => {
+    if (!prislister.length) return null
+    // If there's an active prisliste, offer to update it
+    const aktiv = prislister.find(p => p.aktiv)
+    return aktiv || prislister[0]
+  }
+
+  const handleImport5001 = (updateExisting = false) => {
     const items = rawRows.map(r => ({
       varenummer: r.nobb, varenavn: r.varenavn, enhet: r.enhet,
       pris_per_enhet: r.nettoPrisKr > 0 ? r.nettoPrisKr : r.prisKr,
@@ -24302,7 +24385,8 @@ function PrisbokPage({ onBack }) {
       pakn_str: r.paknStr || null,
       pakn_enhet: r.paknEnhet || null,
     })).filter(i => i.varenavn && i.pris_per_enhet > 0)
-    doImport(items, importNavn || 'Optimera 5001')
+    const existingPl = updateExisting ? findExistingPrisliste() : null
+    doImport(items, importNavn || 'Optimera 5001', existingPl?.id || null)
   }
 
   const handleImportCSV = () => {
@@ -24458,10 +24542,52 @@ function PrisbokPage({ onBack }) {
               )}
             </div>
             {importProgress && <div style={{ fontSize:'13px', color:'#2563eb', marginBottom:'8px' }}>{importProgress}</div>}
-            <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+
+            {/* Filter/test panel */}
+            <div style={{ marginBottom:'16px' }}>
+              <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px' }}>
+                <input value={importTestFilter || ''} onChange={e => setImportTestFilter(e.target.value)} placeholder="🔍 Test: filtrer varer (f.eks. 'flislim', 'membran', 'vindsperre')..." style={{ ...qInp, flex:1, maxWidth:'400px' }} />
+                <span style={{ fontSize:'11px', color:'#94a3b8' }}>
+                  {importTestFilter?.trim().length >= 2 ? `${rawRows.filter(r => r.prisKr > 0 && (r.varenavn || '').toUpperCase().includes(importTestFilter.trim().toUpperCase())).length} treff` : ''}
+                </span>
+              </div>
+              {importTestFilter?.trim().length >= 2 && (
+                <div style={{ overflowX:'auto', maxHeight:'200px', overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:'8px' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
+                    <thead><tr style={{ background:'#fefce8', position:'sticky', top:0 }}>
+                      {['NOBB','Varenavn','Orig.enh','Orig.pris','Pakn.str','Ny enh','Enhetspris'].map((h,i) => (
+                        <th key={i} style={{ padding:'4px 6px', textAlign: i>=3 ? 'right' : 'left', fontWeight:'600', color:'#92400e', borderBottom:'1px solid #fde68a' }}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {rawRows.filter(r => r.prisKr > 0 && (r.varenavn || '').toUpperCase().includes(importTestFilter.trim().toUpperCase())).slice(0, 30).map((r, i) => (
+                        <tr key={i} style={{ borderBottom:'1px solid #f8fafc', background: r.paknStr ? '#f0fdf4' : r.originalEnhet !== r.enhet ? '#fef2f2' : 'white' }}>
+                          <td style={{ padding:'3px 6px', fontFamily:'monospace', color:'#64748b' }}>{r.nobb}</td>
+                          <td style={{ padding:'3px 6px', color:'#0f172a', maxWidth:'280px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
+                          <td style={{ padding:'3px 6px', color:'#94a3b8' }}>{r.originalEnhet}</td>
+                          <td style={{ padding:'3px 6px', textAlign:'right', color:'#94a3b8' }}>{r.originalPris?.toFixed(2)}</td>
+                          <td style={{ padding:'3px 6px', textAlign:'right', color: r.paknStr ? '#059669' : '#dc2626', fontWeight:'600' }}>
+                            {r.paknStr ? `${r.paknStr} ${r.paknEnhet}` : <span title="Ikke konvertert — kan korrigeres manuelt etter import">⚠️ —</span>}
+                          </td>
+                          <td style={{ padding:'3px 6px', color: r.paknStr ? '#059669' : '#64748b', fontWeight: r.paknStr ? '600' : '400' }}>{r.enhet}</td>
+                          <td style={{ padding:'3px 6px', textAlign:'right', fontWeight:'600', color:'#059669' }}>{r.prisKr.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
               <button onClick={() => setImportStep(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Avbryt</button>
-              <button onClick={handleImport5001} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
-                {importing ? importProgress || 'Importerer...' : `Importer ${rawRows.filter(r => r.prisKr > 0).length.toLocaleString('nb-NO')} varer`}
+              {findExistingPrisliste() && (
+                <button onClick={() => handleImport5001(true)} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+                  {importing ? importProgress || 'Oppdaterer...' : `🔄 Oppdater "${findExistingPrisliste()?.navn}"`}
+                </button>
+              )}
+              <button onClick={() => handleImport5001(false)} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+                {importing ? importProgress || 'Importerer...' : `+ Ny prisliste (${rawRows.filter(r => r.prisKr > 0).length.toLocaleString('nb-NO')} varer)`}
               </button>
             </div>
           </div>
@@ -25029,6 +25155,28 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   }
   const removeUE = (kalId, bdId, uId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : kl))
+  }
+
+  // Flatetillegg CRUD
+  const updateFlatetillegg = (kalId, bdId, ftId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).map(ft => ft.id === ftId ? { ...ft, [field]: value } : ft) } : b) } : kl))
+  }
+  const addFlatetillegg = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: [...(b.flatetillegg||[]), { id: Date.now(), beskrivelse: '', kostnad: 0 }] } : b) } : kl))
+  }
+  const removeFlatetillegg = (kalId, bdId, ftId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).filter(ft => ft.id !== ftId) } : b) } : kl))
+  }
+
+  // Åpningstillegg CRUD
+  const updateApningstillegg = (kalId, bdId, atId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).map(at => at.id === atId ? { ...at, [field]: value } : at) } : b) } : kl))
+  }
+  const addApningstillegg = (kalId, bdId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: [...(b.apningstillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, arbeid_timer: 0, material_kostnad: 0 }] } : b) } : kl))
+  }
+  const removeApningstillegg = (kalId, bdId, atId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).filter(at => at.id !== atId) } : b) } : kl))
   }
 
   // Send tilbudsforespørsel til UE
@@ -25830,6 +25978,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bi+1}</span>
                               <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bd.name || 'Uten navn'}</span>
                               {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
+                              {!isExpanded && (bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>📐 {(bd.flatetillegg||[]).length}</span>}
+                              {!isExpanded && (bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#fef2f2', color:'#dc2626', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>🚪 {(bd.apningstillegg||[]).length}</span>}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
@@ -25869,6 +26019,23 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 </div>
                               </div>
                               <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'12px', marginTop:'-8px', paddingLeft:'12px' }}>Postene nedenfor viser verdier per {bd.enhet || 'enhet'}. Totalen beregnes automatisk: per enhet × {bd.mengde ?? 1} {bd.enhet || ''}</div>
+
+                              {/* Quick-add tillegg bar */}
+                              {(bd.flatetillegg||[]).length === 0 && (bd.apningstillegg||[]).length === 0 && (
+                                <div style={{ display:'flex', gap:'6px', marginBottom:'12px', padding:'8px 12px', background:'#fefce8', borderRadius:'8px', alignItems:'center', flexWrap:'wrap' }}>
+                                  <span style={{ fontSize:'11px', color:'#92400e', fontWeight:'600' }}>Tillegg:</span>
+                                  <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'1px solid #e9d5ff', borderRadius:'6px', padding:'3px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📐 + Flatetillegg</button>
+                                  <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', padding:'3px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>🚪 + Åpningstillegg</button>
+                                  <span style={{ fontSize:'10px', color:'#94a3b8', fontStyle:'italic' }}>Rigg, renhold, dører, vinduer etc.</span>
+                                </div>
+                              )}
+                              {((bd.flatetillegg||[]).length > 0 || (bd.apningstillegg||[]).length > 0) && (
+                                <div style={{ display:'flex', gap:'6px', marginBottom:'12px', padding:'6px 12px', background:'#f0fdf4', borderRadius:'8px', alignItems:'center', flexWrap:'wrap' }}>
+                                  {(bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'11px', color:'#059669', fontWeight:'600' }}>📐 {(bd.flatetillegg||[]).length} flatetillegg ({fmt(bdT.flatetilleggMedFortjeneste || 0)})</span>}
+                                  {(bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'11px', color:'#059669', fontWeight:'600' }}>🚪 {(bd.apningstillegg||[]).length} åpningstillegg ({fmt(bdT.totalApningstillegg || 0)})</span>}
+                                  <span style={{ fontSize:'10px', color:'#94a3b8' }}>— se nederst</span>
+                                </div>
+                              )}
                               {/* Arbeidsarter - editable */}
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
@@ -26009,6 +26176,76 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   )
                                 })}
                                 <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
+                              </div>
+
+                              {/* Flatetillegg - ekstra kostnad per enhet */}
+                              <div style={{ marginTop:'12px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', fontStyle:'italic' }}>(kr per {bd.enhet || 'enhet'} × {bd.mengde ?? 1})</span></div>
+                                {(bd.flatetillegg||[]).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
+                                    <thead><tr>
+                                      {['Beskrivelse', `Kr/${bd.enhet || 'enh'}`, 'Totalt', ''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {(bd.flatetillegg||[]).map(ft => {
+                                        const bdM = safeMengde(bd.mengde, 1)
+                                        const ftKost = parseFloat(ft.kostnad) || 0
+                                        return (
+                                          <tr key={ft.id}>
+                                            <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Rigg, renhold, avfall" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={ft.kostnad||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'kostnad', e.target.value)} placeholder="0" style={{ ...qInp, width:'80px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(ftKost * bdM)}</td>
+                                            <td style={{ padding:'3px 2px' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                                <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'2px' }}>+ Flatetillegg</button>
+                              </div>
+
+                              {/* Åpningstillegg - fast kostnad per åpning */}
+                              <div style={{ marginTop:'12px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>🚪 ÅPNINGSTILLEGG <span style={{ fontWeight:'400', fontStyle:'italic' }}>(dører, vinduer, gjennomføringer)</span></div>
+                                {(bd.apningstillegg||[]).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
+                                    <thead><tr>
+                                      {['Type åpning', 'Antall', 'Timer/stk', 'Material/stk', 'Totalt', ''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {(bd.apningstillegg||[]).map(at => {
+                                        const antall = parseFloat(at.antall) || 0
+                                        const arbeidTimer = parseFloat(at.arbeid_timer) || 0
+                                        const materialKost = parseFloat(at.material_kostnad) || 0
+                                        const lonn = parseFloat(fakt.produksjonslonn) || 0
+                                        const sos = parseFloat(fakt.sosiale_prosent) || 0
+                                        const fast = parseFloat(fakt.faste_prosent) || 0
+                                        const timekost = lonn * (1 + sos / 100 + fast / 100)
+                                        const fortjLonn = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
+                                        const fortjInn = parseFloat(fakt.fortjeneste_innkjop_prosent) || 0
+                                        const matJust = parseFloat(fakt.mat_justering_prosent) || 0
+                                        const arbeidTot = arbeidTimer * timekost * antall * (1 + fortjLonn / 100)
+                                        const matTot = materialKost * (1 + matJust / 100) * antall * (1 + fortjInn / 100)
+                                        return (
+                                          <tr key={at.id}>
+                                            <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Dør standard, Vindu" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'50px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.arbeid_timer||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'arbeid_timer', e.target.value)} placeholder="0" style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.material_kostnad||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'material_kostnad', e.target.value)} placeholder="0" style={{ ...qInp, width:'75px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(arbeidTot + matTot)}</td>
+                                            <td style={{ padding:'3px 2px' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                                <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'2px' }}>+ Åpningstillegg</button>
                               </div>
                             </div>
                           )}
