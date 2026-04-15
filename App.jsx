@@ -17436,13 +17436,14 @@ function CRMPage() {
 
   const load = async () => {
     try {
+      const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
       const [c, ct, act, proj, q, inv] = await Promise.all([
-        supabase.from('crm_customers').select('*').order('updated_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('crm_contacts').select('*').then(r=>r.data||[]),
-        supabase.from('crm_activities').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
-        supabase.from('quotes').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
+        safeQuery('crm_customers',{order:'updated_at'}),
+        supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
+        safeQuery('crm_activities'),
+        supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
+        safeQuery('quotes'),
+        safeQuery('invoices'),
       ])
       setCustomers(c); setContacts(ct); setActivities(act)
       setProjects(proj); setQuotes(q); setInvoices(inv)
@@ -17508,7 +17509,7 @@ function CRMPage() {
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={exportCSV} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>📥 Eksporter CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde / lead</button>
-              {quotes.length > 0 && <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Importer fra tilbud</button>}
+              {quotes.length > 0 && <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Fra tilbud</button>}
           </div>
         </div>
 
