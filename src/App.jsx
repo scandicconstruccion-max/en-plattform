@@ -24108,48 +24108,113 @@ function PrisbokPage({ onBack }) {
       let prisKr = prisOre / 100
       if (!varenavn || varenavn === '') continue
 
-      // Smart konvertering: rull/pakke-pris → pris per m²
-      // Gjelder når enhet er RUL, STK eller PAK og produktet har areal-dimensjoner
-      if ((enhet === 'RUL' || enhet === 'STK' || enhet === 'PAK') && prisKr > 0) {
-        let areal = 0
+      const fullText = (varenavn + ' ' + tillegg).toUpperCase()
+      const originalEnhet = enhet
+      const originalPris = prisKr
+      let paknStr = null
+      let paknEnhet = null
 
-        // 1. Sjekk tilleggsinfo for "XX M2" (f.eks. "39 M2", "100M2")
-        const m2Match = tillegg.match(/(\d+[,.]?\d*)\s*M2/i)
-        if (m2Match) {
-          areal = parseFloat(m2Match[1].replace(',', '.'))
-        }
+      // ── Smart pakningskonvertering ──────────────────────────────────
+      // Konverterer fra pakke/rull/sekk/spann-pris til bruksenhetpris
+      if ((enhet === 'RUL' || enhet === 'STK' || enhet === 'PAK' || enhet === 'SEK' || enhet === 'SPAN' || enhet === 'BNT' || enhet === 'SAK') && prisKr > 0) {
 
-        // 2. Parsér bredde×lengde fra varenavn (f.eks. "1,30X50M", "2600X15M", "0,20X2600X15M")
-        if (areal === 0) {
-          const fullText = varenavn + ' ' + tillegg
-          // Match patterns like "1,30X50M" or "1,5X50M" or "2X15M"
-          const dimMatch = fullText.match(/(\d+[,.]?\d*)\s*[xX]\s*(\d+[,.]?\d*)\s*M(?:\b|$)/i)
-          if (dimMatch) {
-            let d1 = parseFloat(dimMatch[1].replace(',', '.'))
-            let d2 = parseFloat(dimMatch[2].replace(',', '.'))
-            // If d1 is in mm (>100), convert to m
-            if (d1 > 100) d1 = d1 / 1000
-            if (d2 > 100) d2 = d2 / 1000
-            areal = d1 * d2
+        // 1. KG-produkter: flislim, mørtel, sparkel, sement, maling, beis etc.
+        //    Match "15KG", "20 KG", "25KG" i varenavn/tillegg
+        const kgMatch = fullText.match(/(\d+[,.]?\d*)\s*KG/)
+        if (kgMatch) {
+          const kg = parseFloat(kgMatch[1].replace(',', '.'))
+          if (kg > 0) {
+            paknStr = kg
+            paknEnhet = 'kg'
+            prisKr = originalPris / kg
+            enhet = 'KG'
           }
         }
 
-        // 3. Konverter til m²-pris hvis vi fant areal > 1 m²
-        if (areal > 1) {
-          prisKr = prisKr / areal
-          enhet = 'M2'
+        // 2. LITER-produkter: maling, primer, grunning, lakk, beis
+        if (!paknStr) {
+          const litMatch = fullText.match(/(\d+[,.]?\d*)\s*(?:LTR|LIT|L)(?:\b|$)/)
+          if (litMatch) {
+            const lit = parseFloat(litMatch[1].replace(',', '.'))
+            if (lit > 0) {
+              paknStr = lit
+              paknEnhet = 'l'
+              prisKr = originalPris / lit
+              enhet = 'LTR'
+            }
+          }
+        }
+
+        // 3. M²-produkter: isolasjon, membran, undertak, dampsperre, vindsperre
+        //    Match "XX M2" i tillegg eller dimensjoner som gir areal
+        if (!paknStr) {
+          const m2Match = fullText.match(/(\d+[,.]?\d*)\s*M2/)
+          if (m2Match) {
+            const m2 = parseFloat(m2Match[1].replace(',', '.'))
+            if (m2 > 1) {
+              paknStr = m2
+              paknEnhet = 'm2'
+              prisKr = originalPris / m2
+              enhet = 'M2'
+            }
+          }
+        }
+
+        // 4. Areal fra dimensjoner: "1,30X50M" (bredde × lengde i m)
+        if (!paknStr) {
+          const dimMatch = fullText.match(/(\d+[,.]?\d*)\s*[xX]\s*(\d+[,.]?\d*)\s*M(?:\b|$)/)
+          if (dimMatch) {
+            let d1 = parseFloat(dimMatch[1].replace(',', '.'))
+            let d2 = parseFloat(dimMatch[2].replace(',', '.'))
+            if (d1 > 100) d1 = d1 / 1000
+            if (d2 > 100) d2 = d2 / 1000
+            const areal = d1 * d2
+            if (areal > 1) {
+              paknStr = Math.round(areal * 100) / 100
+              paknEnhet = 'm2'
+              prisKr = originalPris / areal
+              enhet = 'M2'
+            }
+          }
+        }
+
+        // 5. LM-produkter fra lengde: "50M", "25M" (uten X foran = lengde, ikke dimensjon)
+        if (!paknStr) {
+          const lmMatch = fullText.match(/(?:^|\s)(\d+[,.]?\d*)\s*M(?:\b|$)/)
+          if (lmMatch) {
+            const lm = parseFloat(lmMatch[1].replace(',', '.'))
+            if (lm > 1 && lm < 500) {
+              paknStr = lm
+              paknEnhet = 'lm'
+              prisKr = originalPris / lm
+              enhet = 'LM'
+            }
+          }
+        }
+
+        // 6. STK-pakker: "10 STK", "100STK" — antall i pakke
+        if (!paknStr) {
+          const stkMatch = fullText.match(/(\d+)\s*STK/)
+          if (stkMatch && (enhet === 'PAK' || enhet === 'BNT')) {
+            const stk = parseInt(stkMatch[1])
+            if (stk > 1) {
+              paknStr = stk
+              paknEnhet = 'stk'
+              prisKr = originalPris / stk
+              enhet = 'STK'
+            }
+          }
         }
       }
-
-      // Også konverter LM-produkter der pris er per pakke (sjekk for lengde i navn)
-      // F.eks. stenderverk "48X148X4800" — enhet LM er allerede korrekt per lm
 
       const bruttoPrisKr = bruttoPrisOre / 100
       const origNetto = nettoPrisOre / 100
       rows.push({
         nobb, kategoriNavn, varenavn: varenavn + (tillegg ? ' ' + tillegg : ''),
-        enhet: enhet || 'STK', prisKr, bruttoPrisKr: enhet === 'M2' && bruttoPrisKr > prisKr * 10 ? prisKr * (bruttoPrisKr / origNetto) : bruttoPrisKr,
-        nettoPrisKr: prisKr, rabatt: rabattProm / 100
+        enhet: enhet || 'STK', prisKr,
+        bruttoPrisKr: paknStr && bruttoPrisKr > prisKr * 5 ? prisKr * (bruttoPrisKr / (origNetto || prisKr)) : bruttoPrisKr,
+        nettoPrisKr: prisKr, rabatt: rabattProm / 100,
+        originalEnhet, originalPris, paknStr, paknEnhet
       })
     }
     return rows
@@ -24232,6 +24297,10 @@ function PrisbokPage({ onBack }) {
       varenummer: r.nobb, varenavn: r.varenavn, enhet: r.enhet,
       pris_per_enhet: r.nettoPrisKr > 0 ? r.nettoPrisKr : r.prisKr,
       kategori: r.kategoriNavn, kilde: '5001', user_id: user?.id,
+      original_enhet: r.originalEnhet || null,
+      original_pris: r.originalPris || null,
+      pakn_str: r.paknStr || null,
+      pakn_enhet: r.paknEnhet || null,
     })).filter(i => i.varenavn && i.pris_per_enhet > 0)
     doImport(items, importNavn || 'Optimera 5001')
   }
@@ -24354,27 +24423,39 @@ function PrisbokPage({ onBack }) {
               <input value={importNavn} onChange={e => setImportNavn(e.target.value)} placeholder="F.eks. Optimera desember 2024" style={{ ...qInp, maxWidth:'350px' }} />
             </div>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>Forhåndsvisning</div>
+            <div style={{ background:'#eff6ff', borderRadius:'8px', padding:'8px 12px', marginBottom:'10px', fontSize:'12px', color:'#1e40af' }}>
+              💡 Varer med pakke/sekk/rull-pris konverteres automatisk til bruksenhetpris (per kg, m², lm). Du kan korrigere pakningsstørrelser manuelt i prislisten etterpå.
+            </div>
             <div style={{ overflowX:'auto', marginBottom:'16px' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                 <thead><tr style={{ background:'#f8fafc' }}>
-                  {['NOBB','Varenavn','Kategori','Enhet','Nettopris','Bruttopris','Rabatt'].map((h,i) => (
+                  {['NOBB','Varenavn','Kategori','Orig.enh','Orig.pris','Pakn.str','Ny enhet','Enhetspris','Rabatt'].map((h,i) => (
                     <th key={i} style={{ padding:'6px 8px', textAlign: i>=4 ? 'right' : 'left', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
-                  {rawRows.filter(r => r.prisKr > 0).slice(0, 8).map((r, i) => (
-                    <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                  {rawRows.filter(r => r.prisKr > 0).slice(0, 12).map((r, i) => (
+                    <tr key={i} style={{ borderBottom:'1px solid #f8fafc', background: r.paknStr ? '#f0fdf4' : 'transparent' }}>
                       <td style={{ padding:'5px 8px', fontFamily:'monospace', color:'#64748b' }}>{r.nobb}</td>
-                      <td style={{ padding:'5px 8px', color:'#0f172a', maxWidth:'300px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
+                      <td style={{ padding:'5px 8px', color:'#0f172a', maxWidth:'250px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
                       <td style={{ padding:'5px 8px', color:'#64748b', fontSize:'11px' }}>{r.kategoriNavn}</td>
-                      <td style={{ padding:'5px 8px', color:'#64748b' }}>{r.enhet}</td>
-                      <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:'600', color:'#059669' }}>{r.nettoPrisKr > 0 ? r.nettoPrisKr.toFixed(2) : '—'}</td>
-                      <td style={{ padding:'5px 8px', textAlign:'right', color:'#94a3b8' }}>{r.bruttoPrisKr.toFixed(2)}</td>
+                      <td style={{ padding:'5px 8px', color:'#94a3b8' }}>{r.originalEnhet || r.enhet}</td>
+                      <td style={{ padding:'5px 8px', textAlign:'right', color:'#94a3b8' }}>{r.originalPris ? r.originalPris.toFixed(2) : '—'}</td>
+                      <td style={{ padding:'5px 8px', textAlign:'right', color: r.paknStr ? '#059669' : '#94a3b8', fontWeight: r.paknStr ? '600' : '400' }}>
+                        {r.paknStr ? `${r.paknStr} ${r.paknEnhet}` : '—'}
+                      </td>
+                      <td style={{ padding:'5px 8px', color: r.paknStr ? '#059669' : '#64748b', fontWeight: r.paknStr ? '600' : '400' }}>{r.enhet}</td>
+                      <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:'600', color:'#059669' }}>{r.prisKr.toFixed(2)}</td>
                       <td style={{ padding:'5px 8px', textAlign:'right', color:'#ca8a04' }}>{r.rabatt > 0 ? r.rabatt.toFixed(0) + '%' : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {rawRows.filter(r => r.paknStr).length > 0 && (
+                <div style={{ fontSize:'11px', color:'#059669', marginTop:'6px' }}>
+                  ✅ {rawRows.filter(r => r.paknStr).length.toLocaleString('nb-NO')} av {rawRows.length.toLocaleString('nb-NO')} varer konvertert fra pakke/sekk/rull til bruksenhetpris
+                </div>
+              )}
             </div>
             {importProgress && <div style={{ fontSize:'13px', color:'#2563eb', marginBottom:'8px' }}>{importProgress}</div>}
             <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end' }}>
@@ -24444,8 +24525,8 @@ function PrisbokPage({ onBack }) {
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
               <thead><tr style={{ background:'#f8fafc' }}>
-                {['NOBB','Varenavn','Kategori','Enhet','Nettopris'].map((h,i) => (
-                  <th key={i} style={{ padding:'10px 14px', textAlign: i===4 ? 'right' : 'left', fontSize:'12px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                {['NOBB','Varenavn','Kategori','Enhet','Enhetspris','Pakn.','Orig.pris',''].map((h,i) => (
+                  <th key={i} style={{ padding:'10px 14px', textAlign: i>=4 ? 'right' : 'left', fontSize:'12px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -24456,6 +24537,25 @@ function PrisbokPage({ onBack }) {
                     <td style={{ padding:'8px 14px', fontSize:'12px', color:'#64748b' }}>{p.kategori}</td>
                     <td style={{ padding:'8px 14px', fontSize:'12px', color:'#64748b' }}>{p.enhet}</td>
                     <td style={{ padding:'8px 14px', fontSize:'13px', color:'#059669', fontWeight:'600', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</td>
+                    <td style={{ padding:'8px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'right' }}>
+                      {p.pakn_str ? <span title={`${p.original_enhet} → ${p.pakn_str} ${p.pakn_enhet}`} style={{ background:'#f0fdf4', padding:'2px 6px', borderRadius:'4px', color:'#059669', fontWeight:'600' }}>{p.pakn_str} {p.pakn_enhet}/{p.original_enhet || '?'}</span> : '—'}
+                    </td>
+                    <td style={{ padding:'8px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'right' }}>
+                      {p.original_pris && p.original_pris !== p.pris_per_enhet ? `${Math.round(p.original_pris)} kr/${p.original_enhet || '?'}` : '—'}
+                    </td>
+                    <td style={{ padding:'4px 8px' }}>
+                      <button onClick={async () => {
+                        const nyPakn = prompt(`Pakningsstørrelse for ${p.varenavn}\n\nOppgi antall bruksenheter per ${p.original_enhet || 'pakke'} (f.eks. 15 for 15kg sekk, 50 for 50m² rull):`, p.pakn_str || '')
+                        if (nyPakn === null) return
+                        const val = parseFloat(nyPakn.replace(',', '.'))
+                        if (!val || val <= 0) return
+                        const nyEnhet = prompt('Bruksenhet (f.eks. kg, m2, lm, stk):', p.pakn_enhet || p.enhet || '')
+                        if (!nyEnhet) return
+                        const nyPris = (p.original_pris || p.pris_per_enhet) / val
+                        await supabase.from('prisbok').update({ pakn_str: val, pakn_enhet: nyEnhet, pakn_manuell: true, pris_per_enhet: nyPris, enhet: nyEnhet.toUpperCase() }).eq('id', p.id)
+                        searchPrisbok()
+                      }} title="Korriger pakningsstørrelse" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', cursor:'pointer', fontSize:'11px', color:'#64748b' }}>✏️</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -25806,7 +25906,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 {(bd.materialer||[]).length > 0 && (
                                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead><tr>
-                                      {['NOBB','Varenavn','Mengde','Enhet','Pris/enh','Per enh.','Totalt',''].map((h,i) => (
+                                      {['NOBB','Varenavn','Mengde','Enhet','Pris/enh','Kostnad','M/påslag','Totalt',''].map((h,i) => (
                                         <th key={i} style={{ padding:'3px 4px', textAlign:i>=2?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
                                       ))}
                                     </tr></thead>
@@ -25839,6 +25939,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                             <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{fmt(r.medFortjeneste)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengde)}</td>
                                             <td style={{ padding:'3px 2px' }}><button onClick={()=>removeMaterial(kalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
                                           </tr>
@@ -26936,10 +27037,16 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'55px', flexShrink:0 }}>{p.varenummer}</span>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:'12px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
-                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{p.kategori}</div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>
+                          {p.kategori}
+                          {p.pakn_str ? <span style={{ marginLeft:'6px', color:'#059669', fontWeight:'600' }}>({p.pakn_str} {p.pakn_enhet}/{p.original_enhet || 'pk'})</span> : ''}
+                        </div>
                       </div>
                       <span style={{ fontSize:'11px', color:'#64748b', flexShrink:0, width:'28px', textAlign:'center' }}>{p.enhet}</span>
-                      <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
+                      <div style={{ flexShrink:0, width:'90px', textAlign:'right' }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669' }}>{fmt(p.pris_per_enhet)}</div>
+                        {p.original_pris && p.original_pris !== p.pris_per_enhet ? <div style={{ fontSize:'9px', color:'#94a3b8' }}>{Math.round(p.original_pris)} kr/{p.original_enhet || 'pk'}</div> : null}
+                      </div>
                     </button>
                   ))}
                   {res.length >= 40 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 40 treff — skriv mer spesifikt</div>}
