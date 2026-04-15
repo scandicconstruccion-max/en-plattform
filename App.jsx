@@ -2546,7 +2546,6 @@ function SjekklistePage({ onNavigateDetail }) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [view, setView] = useState('lister') // 'lister' or 'maler'
   const [showNew, setShowNew] = useState(false)
-  const [showImportQuotes, setShowImportQuotes] = useState(false)
   const [showNewTemplate, setShowNewTemplate] = useState(false)
   const [editTemplate, setEditTemplate] = useState(null)
   const [newForm, setNewForm] = useState({ project_id: '', template_id: '', title: '' })
@@ -17433,6 +17432,7 @@ function CRMPage() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [showNew, setShowNew] = useState(false)
+  const [showImportQuotes, setShowImportQuotes] = useState(false)
 
   const load = async () => {
     try {
