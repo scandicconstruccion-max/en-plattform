@@ -19832,6 +19832,8 @@ function SuperAdminPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [paymentModal, setPaymentModal] = useState(null) // { companyId }
   const [storageInfo, setStorageInfo] = useState(null)
+  const [mrrSnapshots, setMrrSnapshots] = useState([])
+  const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
 
   const saveCompanyNote = async (companyId, note) => {
@@ -19894,6 +19896,61 @@ function SuperAdminPage() {
           dbSizeMB: Math.round(estDbSizeMB * 10) / 10,
         })
       } catch(e) { console.error('Storage check error:', e) }
+
+      // Load MRR snapshots
+      try {
+        const { data: snapshots } = await supabase.from('mrr_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(365)
+        setMrrSnapshots(snapshots||[])
+      } catch(e) { console.error('MRR snapshots error:', e) }
+
+      // Log today's MRR snapshot (once per day)
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const { data: existing } = await supabase.from('mrr_snapshots').select('id').eq('snapshot_date', today).limit(1)
+        if (!existing?.length) {
+          const activeComps = comp.filter(c=>c.subscription_status==='active')
+          let todayMRR = 0
+          activeComps.forEach(c=>{
+            const mods = c.active_modules||[]
+            if (mods.includes('grunnpakke')) todayMRR += 199 * (c.num_users||1)
+            MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ todayMRR += m.price||0 })
+          })
+          await supabase.from('mrr_snapshots').insert({
+            snapshot_date: today,
+            mrr: todayMRR,
+            active_customers: activeComps.length,
+            trial_customers: comp.filter(c=>c.subscription_status==='trial').length,
+            total_users: users.length,
+            churned_customers: comp.filter(c=>c.subscription_status==='cancelled'||c.subscription_status==='expired').length,
+          })
+        }
+      } catch(e) { console.error('MRR snapshot log error:', e) }
+
+      // Churn detection
+      try {
+        const alerts = []
+        // 1. Active customers who haven't logged in for 14+ days
+        const twoWeeksAgo = new Date(Date.now() - 14*24*60*60*1000)
+        users.filter(u=>u.status==='aktiv'&&u.last_seen&&new Date(u.last_seen)<twoWeeksAgo).forEach(u=>{
+          const daysAgo = Math.floor((Date.now()-new Date(u.last_seen))/86400000)
+          alerts.push({ type:'inactive', severity: daysAgo>30?'high':'medium', title:`${u.full_name||u.email} ikke logget inn`, sub:`${daysAgo} dager siden siste innlogging`, email:u.email })
+        })
+        // 2. Trial users who registered but never logged in (no last_seen)
+        users.filter(u=>!u.last_seen&&u.created_at).forEach(u=>{
+          const daysAgo = Math.floor((Date.now()-new Date(u.created_at))/86400000)
+          if (daysAgo >= 2) alerts.push({ type:'never_logged', severity:'medium', title:`${u.full_name||u.email} aldri logget inn`, sub:`Registrert for ${daysAgo} dager siden`, email:u.email })
+        })
+        // 3. Customers with overdue payments
+        comp.filter(c=>c.subscription_status==='active'&&c.next_due_date&&new Date(c.next_due_date)<new Date()).forEach(c=>{
+          const daysOverdue = Math.floor((Date.now()-new Date(c.next_due_date))/86400000)
+          alerts.push({ type:'overdue', severity: daysOverdue>14?'high':'medium', title:`${c.name} — forfalt betaling`, sub:`${daysOverdue} dager over forfall`, companyId:c.id })
+        })
+        // 4. Recently cancelled
+        comp.filter(c=>c.subscription_status==='cancelled').forEach(c=>{
+          alerts.push({ type:'cancelled', severity:'high', title:`${c.name} har kansellert`, sub:'Kontakt for å finne årsak', companyId:c.id })
+        })
+        setChurnAlerts(alerts.sort((a,b)=>a.severity==='high'?-1:b.severity==='high'?1:0))
+      } catch(e) { console.error('Churn detection error:', e) }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -19955,7 +20012,7 @@ function SuperAdminPage() {
 
       {/* Tabs */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'0 24px', display:'flex', gap:'0', overflowX:'auto' }}>
-        {[['oversikt','📊 Oversikt'],['kunder','🏢 Kunder'],['brukere','👤 Brukere'],['varsler','🔔 Hendelser']].map(([id,label])=>(
+        {[['oversikt','📊 Oversikt'],['grafer','📈 Utvikling'],['churn',`⚠️ Churn${churnAlerts.filter(a=>a.severity==='high').length>0?' ('+churnAlerts.filter(a=>a.severity==='high').length+')':''}`],['kunder','🏢 Kunder'],['brukere','👤 Brukere'],['varsler','🔔 Hendelser']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobSA ? '10px 12px' : '12px 18px', border:'none', borderBottom: tab===id ? '3px solid #7c3aed' : '3px solid transparent', background:'transparent', cursor:'pointer', fontSize: isMobSA ? '12px' : '13px', fontWeight: tab===id?'700':'500', color: tab===id?'#7c3aed':'#64748b', whiteSpace:'nowrap' }}>{label}</button>
         ))}
       </div>
@@ -20202,6 +20259,210 @@ function SuperAdminPage() {
                 )
               })}
             </div>
+          </>
+        )}
+
+        {/* GRAFER TAB */}
+        {tab==='grafer' && (
+          <>
+            {mrrSnapshots.length < 2 ? (
+              <div style={saCard}>
+                <div style={{ textAlign:'center', padding:'40px 20px' }}>
+                  <div style={{ fontSize:'48px', marginBottom:'12px' }}>📈</div>
+                  <h3 style={{ margin:'0 0 8px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Data samles inn</h3>
+                  <p style={{ margin:0, fontSize:'13px', color:'#94a3b8', lineHeight:1.6 }}>MRR-grafen vil vise data etter noen dager med aktivitet. Systemet tar et øyeblikksbilde av inntekt og kundetall hver dag automatisk.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* MRR graf */}
+                <div style={saCard}>
+                  <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700' }}>💰 MRR-utvikling</h3>
+                  <div style={{ position:'relative', height:'200px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
+                    {(()=>{
+                      const data = mrrSnapshots.slice(-90)
+                      const maxMRR = Math.max(...data.map(d=>d.mrr||0), 1)
+                      const w = 100 / Math.max(data.length-1, 1)
+                      const points = data.map((d,i)=>({ x: i*w, y: 100-((d.mrr||0)/maxMRR*85), mrr: d.mrr, date: d.snapshot_date }))
+                      const pathD = points.map((p,i)=>`${i===0?'M':'L'} ${p.x}% ${p.y}%`).join(' ')
+                      const areaD = pathD + ` L ${points[points.length-1]?.x||0}% 100% L 0% 100% Z`
+                      return (
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width:'100%', height:'100%' }}>
+                          <defs><linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#059669" stopOpacity="0.3"/><stop offset="100%" stopColor="#059669" stopOpacity="0.02"/></linearGradient></defs>
+                          <path d={areaD} fill="url(#mrrGrad)"/>
+                          <path d={pathD} fill="none" stroke="#059669" strokeWidth="0.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          {points.filter((_,i)=>i===0||i===points.length-1).map((p,i)=>(
+                            <circle key={i} cx={`${p.x}%`} cy={`${p.y}%`} r="1" fill="#059669"/>
+                          ))}
+                        </svg>
+                      )
+                    })()}
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', fontSize:'11px', color:'#94a3b8' }}>
+                    <span>{mrrSnapshots[0]?.snapshot_date ? new Date(mrrSnapshots[0].snapshot_date).toLocaleDateString('nb-NO') : ''}</span>
+                    <span style={{ fontWeight:'700', color:'#059669' }}>Nå: {fmt(mrrSnapshots[mrrSnapshots.length-1]?.mrr||0)} kr/mnd</span>
+                    <span>{mrrSnapshots[mrrSnapshots.length-1]?.snapshot_date ? new Date(mrrSnapshots[mrrSnapshots.length-1].snapshot_date).toLocaleDateString('nb-NO') : ''}</span>
+                  </div>
+                </div>
+
+                {/* Kundevekst graf */}
+                <div style={saCard}>
+                  <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700' }}>👥 Kundevekst</h3>
+                  <div style={{ position:'relative', height:'160px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
+                    {(()=>{
+                      const data = mrrSnapshots.slice(-90)
+                      const maxC = Math.max(...data.map(d=>(d.active_customers||0)+(d.trial_customers||0)), 1)
+                      const w = 100 / Math.max(data.length-1, 1)
+                      return (
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width:'100%', height:'100%' }}>
+                          {/* Active line */}
+                          <path d={data.map((d,i)=>`${i===0?'M':'L'} ${i*w}% ${100-((d.active_customers||0)/maxC*80)}%`).join(' ')} fill="none" stroke="#2563eb" strokeWidth="0.5"/>
+                          {/* Trial line */}
+                          <path d={data.map((d,i)=>`${i===0?'M':'L'} ${i*w}% ${100-((d.trial_customers||0)/maxC*80)}%`).join(' ')} fill="none" stroke="#d97706" strokeWidth="0.5" strokeDasharray="1,1"/>
+                          {/* Churned line */}
+                          <path d={data.map((d,i)=>`${i===0?'M':'L'} ${i*w}% ${100-((d.churned_customers||0)/maxC*80)}%`).join(' ')} fill="none" stroke="#dc2626" strokeWidth="0.4" strokeDasharray="0.5,1"/>
+                        </svg>
+                      )
+                    })()}
+                  </div>
+                  <div style={{ display:'flex', gap:'16px', marginTop:'8px', justifyContent:'center' }}>
+                    {[['Aktive','#2563eb','—'],['Trial','#d97706','- -'],['Churned','#dc2626','···']].map(([l,c,dash])=>(
+                      <div key={l} style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', color:'#64748b' }}>
+                        <div style={{ width:'16px', height:'2px', background:c, borderRadius:'1px' }}/>{l}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Datatabell */}
+                <div style={saCard}>
+                  <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700' }}>📋 Historikk (siste 30 dager)</h3>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
+                          {['Dato','MRR','Aktive','Trial','Churned','Brukere'].map(h=>(
+                            <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#64748b', fontSize:'11px' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mrrSnapshots.slice(-30).reverse().map((s,i)=>(
+                          <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                            <td style={{ padding:'6px 10px', color:'#0f172a', fontWeight:'500' }}>{new Date(s.snapshot_date).toLocaleDateString('nb-NO')}</td>
+                            <td style={{ padding:'6px 10px', color:'#059669', fontWeight:'700' }}>{fmt(s.mrr||0)} kr</td>
+                            <td style={{ padding:'6px 10px', color:'#2563eb' }}>{s.active_customers||0}</td>
+                            <td style={{ padding:'6px 10px', color:'#d97706' }}>{s.trial_customers||0}</td>
+                            <td style={{ padding:'6px 10px', color:'#dc2626' }}>{s.churned_customers||0}</td>
+                            <td style={{ padding:'6px 10px', color:'#64748b' }}>{s.total_users||0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* CHURN TAB */}
+        {tab==='churn' && (
+          <>
+            {/* Churn KPIs */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr 1fr' : 'repeat(3,1fr)', gap:'12px' }}>
+              {(()=>{
+                const highAlerts = churnAlerts.filter(a=>a.severity==='high').length
+                const medAlerts = churnAlerts.filter(a=>a.severity==='medium').length
+                const cancelledCount = companies.filter(c=>c.subscription_status==='cancelled').length
+                return [
+                  { label:'Kritiske varsler', value:highAlerts, icon:'🔴', bg:'#fef2f2', border:'#fecaca', color:'#dc2626' },
+                  { label:'Moderate varsler', value:medAlerts, icon:'🟡', bg:'#fffbeb', border:'#fde68a', color:'#d97706' },
+                  { label:'Kansellerte kunder', value:cancelledCount, icon:'💔', bg:'#f8fafc', border:'#e2e8f0', color:'#64748b' },
+                ].map((k,i)=>(
+                  <div key={i} style={{ background:k.bg, borderRadius:'14px', border:`1px solid ${k.border}`, padding:'16px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:k.color, marginBottom:'4px' }}>{k.icon} {k.label}</div>
+                    <div style={{ fontSize:'28px', fontWeight:'800', color:'#0f172a' }}>{k.value}</div>
+                  </div>
+                ))
+              })()}
+            </div>
+
+            {/* Alerts list */}
+            <div style={saCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>🚨 Churn-varsler</h3>
+              {churnAlerts.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
+                  <div style={{ fontSize:'36px', marginBottom:'8px' }}>✅</div>
+                  <p style={{ fontSize:'14px', margin:0 }}>Ingen churn-varsler — alle kunder ser bra ut!</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {churnAlerts.map((alert,i)=>(
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px',
+                      background: alert.severity==='high'?'#fef2f2':'#fffbeb',
+                      border: `1px solid ${alert.severity==='high'?'#fecaca':'#fde68a'}` }}>
+                      <span style={{ fontSize:'20px', flexShrink:0 }}>
+                        {alert.type==='inactive'?'😴':alert.type==='never_logged'?'👻':alert.type==='overdue'?'💳':alert.type==='cancelled'?'💔':'⚠️'}
+                      </span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{alert.title}</div>
+                        <div style={{ fontSize:'11px', color: alert.severity==='high'?'#dc2626':'#d97706', marginTop:'2px' }}>{alert.sub}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                        {alert.email && (
+                          <button onClick={()=>setEmailModal({
+                            to: alert.email,
+                            companyName: '',
+                            subject: alert.type==='inactive' ? 'Vi savner deg på En Plattform' : alert.type==='never_logged' ? 'Trenger du hjelp med å komme i gang?' : 'Oppdatering fra En Plattform',
+                            body: alert.type==='inactive'
+                              ? `Hei!\n\nVi la merke til at du ikke har logget inn på En Plattform på en stund. Er det noe vi kan hjelpe med?\n\nVi er her for å sikre at du får mest mulig ut av systemet.\n\nMvh\nEn Plattform`
+                              : alert.type==='never_logged'
+                              ? `Hei!\n\nVi ser at du nylig registrerte deg på En Plattform, men ikke har logget inn ennå. Trenger du hjelp med å komme i gang?\n\nVi tilbyr gjerne en kort gjennomgang av systemet.\n\nMvh\nEn Plattform`
+                              : `Hei!\n\n\n\nMvh\nEn Plattform`
+                          })} style={{ padding:'6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#7c3aed' }}>✉️ Kontakt</button>
+                        )}
+                        {alert.companyId && (
+                          <button onClick={()=>{setTab('kunder');setSelectedCompany(companies.find(c=>c.id===alert.companyId))}}
+                            style={{ padding:'6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>Vis</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Churn-rate over tid */}
+            {mrrSnapshots.length >= 7 && (
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700' }}>📉 Churn-rate utvikling</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {(()=>{
+                    const weeks = []
+                    const snaps = mrrSnapshots.slice(-28)
+                    for (let i=0; i<snaps.length; i+=7) {
+                      const week = snaps.slice(i, i+7)
+                      if (week.length===0) continue
+                      const last = week[week.length-1]
+                      const first = week[0]
+                      const churnRate = first.active_customers > 0 ? Math.round((first.active_customers - (last.active_customers||0)) / first.active_customers * 100) : 0
+                      weeks.push({ date: last.snapshot_date, rate: Math.max(0, churnRate), active: last.active_customers })
+                    }
+                    return weeks.reverse().map((w,i)=>(
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
+                        <span style={{ fontSize:'12px', color:'#64748b', width:'80px' }}>Uke {new Date(w.date).toLocaleDateString('nb-NO',{day:'2-digit',month:'short'})}</span>
+                        <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                          <div style={{ height:'100%', borderRadius:'3px', background: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width:`${Math.min(100,w.rate*10)}%` }}/>
+                        </div>
+                        <span style={{ fontSize:'12px', fontWeight:'700', color: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width:'40px', textAlign:'right' }}>{w.rate}%</span>
+                        <span style={{ fontSize:'11px', color:'#94a3b8', width:'50px', textAlign:'right' }}>{w.active} aktive</span>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
+            )}
           </>
         )}
 
