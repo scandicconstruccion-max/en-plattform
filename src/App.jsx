@@ -4598,7 +4598,7 @@ function HmsPage() {
   const counts = Object.keys(HMS_TYPES).reduce((acc, t) => { acc[t] = records.filter(r => r.type === t).length; return acc }, {})
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui, sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster HMS & Risiko...</p></div></div>
-  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); loadData() }} />
+  if (selected) return <HmsDetaljer record={selected} projects={projects} user={user} onBack={() => { setSelected(null); loadData() }} />
 
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -5609,7 +5609,7 @@ function MaskinPage() {
     </div>
   )
 
-  if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
+  if (selected) return <MaskinDetaljer maskin={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -6501,7 +6501,7 @@ function TilbudPage() {
 
   const isMobT = typeof window !== 'undefined' && window.innerWidth < 768
 
-  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
+  if (selected) return <TilbudDetaljer quote={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -7972,7 +7972,7 @@ function AnbudsPage() {
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster anbud...</p></div></div>
 
-  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { detailCleanupRef.current=null; setSelected(null); load() }} />
+  if (selected) return <AnbudDetaljer tender={selected} projects={projects} user={user} onBack={() => { setSelected(null); load() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -9574,7 +9574,7 @@ function OrdrePage() {
   const isMobO = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ordrer...</p></div></div>
-  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
+  if (selected) return <OrdreDetaljer order={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -10326,7 +10326,7 @@ function FakturaPage() {
   const isMobF = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster fakturaer...</p></div></div>
-  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
+  if (selected) return <FakturaDetaljer invoice={selected} projects={projects} orders={orders} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -11750,7 +11750,7 @@ function AnsattePage() {
   const isMobE = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster ansatte...</p></div></div>
-  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
+  if (selected) return <AnsattDetaljer employee={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -17495,7 +17495,7 @@ function CRMPage() {
   }
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
-  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
+  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -18373,7 +18373,7 @@ function BefaringPage() {
   const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
-  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{detailCleanupRef.current=null;setSelected(null);load()}} />
+  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
