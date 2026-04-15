@@ -22148,8 +22148,10 @@ function beregnMaterialkostnad(material, faktorer) {
   return { kostnad, medJustering, medFortjeneste }
 }
 
+function safeMengde(v, fallback = 1) { const n = parseFloat(v); return isNaN(n) ? fallback : n }
+
 function beregnBygningsdel(bd, faktorer) {
-  const mengde = parseFloat(bd.mengde) || 1
+  const mengde = safeMengde(bd.mengde, 1)
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
@@ -23710,7 +23712,7 @@ function getBibliotekByFag() {
 
 // Convert a bibliotek-bygningsdel to the runtime format used in kalkyler
 function bibliotekTilBygningsdel(bd, mengde) {
-  const m = parseFloat(mengde) || 1
+  const m = safeMengde(mengde, 1)
   return {
     id: Date.now() + Math.random() * 1000,
     name: bd.name,
@@ -25252,9 +25254,10 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
       const posts = (kalk.bygningsdeler || []).map(bd => {
         const bdT = beregnBygningsdel(bd, fakt)
-        return { id: bd.id, description: bd.name || 'Bygningsdel', qty: parseFloat(bd.mengde) || 1, unit: bd.enhet || 'stk',
-          unitPriceWork: bdT.totalTimer > 0 ? Math.round(bdT.totalArbeidMedFortjeneste / (parseFloat(bd.mengde) || 1)) : 0,
-          unitPriceMaterial: Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / (parseFloat(bd.mengde) || 1)) }
+        const bdMengde = safeMengde(bd.mengde, 1)
+        return { id: bd.id, description: bd.name || 'Bygningsdel', qty: bdMengde, unit: bd.enhet || 'stk',
+          unitPriceWork: bdT.totalTimer > 0 && bdMengde > 0 ? Math.round(bdT.totalArbeidMedFortjeneste / bdMengde) : 0,
+          unitPriceMaterial: bdMengde > 0 ? Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / bdMengde) : 0 }
       })
       return { id: kalk.id, title: `${fag.emoji} ${kalk.name}`, description: '', markup: 0, posts }
     })
@@ -25288,7 +25291,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
       const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
       const fortjInnkjop = parseFloat(fakt.fortjeneste_innkjop_prosent) || 0
       ;(kl.bygningsdeler || []).forEach(bd => {
-        const mengde = parseFloat(bd.mengde) || 1
+        const mengde = safeMengde(bd.mengde, 1)
         const bdt = beregnBygningsdel(bd, fakt)
         // Bygningsdel header row
         lines.push({
@@ -25381,7 +25384,7 @@ td{border-bottom:1px solid #f1f5f9} .total td{border-top:3px solid #0f172a;font-
         if (visning === 'bygningsdel' || visning === 'detaljert') {
           ;(kl.bygningsdeler || []).forEach(bd => {
             const bdt = beregnBygningsdel(bd, fakt)
-            const mengde = parseFloat(bd.mengde) || 1
+            const mengde = safeMengde(bd.mengde, 1)
             tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name || 'Bygningsdel'}</td><td style="padding:6px 10px;text-align:right;font-size:13px">${mengde}</td><td style="padding:6px 10px;font-size:13px;color:#64748b">${fmtEnhetPreview(bd.enhet)}</td><td style="padding:6px 14px;text-align:right;font-size:13px;font-weight:600">${Math.round(bdt.totalMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
             if (visning === 'detaljert') {
               ;(bd.arbeidsarter || []).forEach(a => {
@@ -25436,7 +25439,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         rows += `<tr class="fag-hdr"><td colspan="6">${fag.emoji} ${kl.name}</td><td class="r b">${fmt(kt.totSelvkost)}</td><td class="r b">${fmt(kt.totMedFortjeneste)}</td></tr>`
         ;(kl.bygningsdeler || []).forEach(bd => {
           const bdt = beregnBygningsdel(bd, fakt)
-          const mengde = parseFloat(bd.mengde) || 1
+          const mengde = safeMengde(bd.mengde, 1)
           rows += `<tr class="bd-hdr"><td colspan="4">${bd.name} × ${mengde} ${bd.enhet||'stk'}</td><td colspan="2">${bdt.totalTimer.toFixed(1)}t</td><td class="r">${fmt(bdt.totalSelvkost)}</td><td class="r">${fmt(bdt.totalMedFortjeneste)}</td></tr>`
           ;(bd.arbeidsarter||[]).forEach(a => {
             const r = beregnArbeidskostnad(a, fakt)
@@ -25774,7 +25777,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   <tbody>
                                     {(bd.arbeidsarter||[]).map(a => {
                                       const r = beregnArbeidskostnad(a, fakt)
-                                      const bdMengdeA = parseFloat(bd.mengde) || 1
+                                      const bdMengdeA = safeMengde(bd.mengde, 1)
                                       return (
                                         <tr key={a.id}>
                                           <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
@@ -25806,7 +25809,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     <tbody>
                                       {(bd.materialer||[]).map(m => {
                                         const r = beregnMaterialkostnad(m, fakt)
-                                        const bdMengde = parseFloat(bd.mengde) || 1
+                                        const bdMengde = safeMengde(bd.mengde, 1)
                                         return (
                                           <tr key={m.id}>
                                             <td style={{ padding:'3px 2px' }}>
@@ -27056,7 +27059,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       const kt = beregnKalkyle(kl, fakt)
       const bdLines = (visning === 'bygningsdel' || visning === 'detaljert') ? (kl.bygningsdeler || []).map(bd => {
         const bdt = beregnBygningsdel(bd, fakt)
-        const mengde = parseFloat(bd.mengde) || 1
+        const mengde = safeMengde(bd.mengde, 1)
         const detailLines = visning === 'detaljert' ? [
           ...(bd.arbeidsarter || []).map(a => {
             const r = beregnArbeidskostnad(a, fakt)
