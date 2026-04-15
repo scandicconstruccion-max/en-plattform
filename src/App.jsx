@@ -17702,23 +17702,30 @@ function CRMPage() {
         const newCustomers = importable.filter(c=>!c.alreadyInCRM)
         const existing = importable.filter(c=>c.alreadyInCRM)
 
-        const handleImport = async (customers) => {
-          for (const c of customers) {
-            const latestQuote = c.quotes.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
-            const proj = projects.find(p=>p.id===latestQuote?.project_id)
-            await supabase.from('crm_customers').insert({
-              name: c.name,
-              email: c.email||null,
-              phone: null,
-              address: c.address||null,
-              orgnr: c.orgnr||null,
-              type: 'bedrift',
-              status: latestQuote?.status==='Godkjent' ? 'vunnet' : latestQuote?.status==='Sendt' ? 'tilbud_sendt' : 'kontaktet',
-              estimated_value: Math.round(c.totalValue)||null,
-              notes: `Importert fra tilbudsmodul. ${c.quotes.length} tilbud${proj?' · Prosjekt: '+proj.name:''}`,
-              created_by: user?.id,
-            })
+        const handleImport = async (customersToImport) => {
+          let imported = 0
+          let errors = []
+          for (const c of customersToImport) {
+            try {
+              const latestQuote = c.quotes.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
+              const proj = projects.find(p=>p.id===latestQuote?.project_id)
+              const { error } = await supabase.from('crm_customers').insert({
+                name: c.name,
+                email: c.email||null,
+                phone: null,
+                address: c.address||null,
+                orgnr: c.orgnr||null,
+                type: 'bedrift',
+                status: latestQuote?.status==='Godkjent' ? 'vunnet' : latestQuote?.status==='Sendt' ? 'tilbud_sendt' : 'kontaktet',
+                estimated_value: Math.round(c.totalValue)||null,
+                notes: `Importert fra tilbudsmodul. ${c.quotes.length} tilbud${proj?' · Prosjekt: '+proj.name:''}`,
+                created_by: user?.id,
+              })
+              if (error) { errors.push(`${c.name}: ${error.message}`); console.error('Import error:', error) }
+              else imported++
+            } catch(e) { errors.push(`${c.name}: ${e.message}`) }
           }
+          if (errors.length > 0) alert(`Importert ${imported} av ${customersToImport.length}.\n\nFeil:\n${errors.join('\n')}`)
           setShowImportQuotes(false)
           load()
         }
