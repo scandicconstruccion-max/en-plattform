@@ -19825,16 +19825,14 @@ function SuperAdminPage() {
     const comp = companies.find(c=>c.id===companyId)
     const timeline = comp?.timeline || []
     timeline.push({ ...event, timestamp: new Date().toISOString() })
-    await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId)
+    try { await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId) } catch(e) {}
   }
 
-  const setCompanyStatusWithLog = async (companyId, status) => {
+  const setCompanyStatus = async (companyId, status) => {
     await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
-    await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status })
+    try { await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status }) } catch(e) {}
     load()
   }
-
-  const setCompanyStatus = setCompanyStatusWithLog
 
   const saveCompanyNote = async (companyId, note) => {
     setSavingNote(true)
