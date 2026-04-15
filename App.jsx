@@ -19876,10 +19876,10 @@ function SuperAdminPage() {
       // Storage check — estimate file storage usage
       try {
         const { data: files } = await supabase.from('project_files').select('file_size')
-        const { data: imgFiles } = await supabase.from('image_docs').select('file_size')
+        let imgFiles = []; try { const r = await supabase.from('image_docs').select('file_size'); imgFiles = r.data||[] } catch(e){}
         const totalFileBytes = (files||[]).reduce((s,f)=>s+(f.file_size||0),0) + (imgFiles||[]).reduce((s,f)=>s+(f.file_size||0),0)
         // Database size — estimate from row counts
-        const tables = ['projects','checklists','inspections','endringsmeldinger','resource_plans','invoices','orders','quotes','tenders','employees','timesheets','machines','hms_records','notifications','chat_messages','activities']
+        const tables = ['projects','checklists','inspections','endringsmeldinger','resource_plans','invoices','orders','quotes','tenders','employees','timesheets','machines','notifications']
         let totalRows = 0
         for (const t of tables) {
           try {
@@ -19897,34 +19897,25 @@ function SuperAdminPage() {
         })
       } catch(e) { console.error('Storage check error:', e) }
 
-      // Load MRR snapshots
+      // Load MRR snapshots (table may not exist yet)
       try {
-        const { data: snapshots } = await supabase.from('mrr_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(365)
-        setMrrSnapshots(snapshots||[])
-      } catch(e) { console.error('MRR snapshots error:', e) }
-
-      // Log today's MRR snapshot (once per day)
-      try {
-        const today = new Date().toISOString().split('T')[0]
-        const { data: existing } = await supabase.from('mrr_snapshots').select('id').eq('snapshot_date', today).limit(1)
-        if (!existing?.length) {
-          const activeComps = comp.filter(c=>c.subscription_status==='active')
-          let todayMRR = 0
-          activeComps.forEach(c=>{
-            const mods = c.active_modules||[]
-            if (mods.includes('grunnpakke')) todayMRR += 199 * (c.num_users||1)
-            MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ todayMRR += m.price||0 })
-          })
-          await supabase.from('mrr_snapshots').insert({
-            snapshot_date: today,
-            mrr: todayMRR,
-            active_customers: activeComps.length,
-            trial_customers: comp.filter(c=>c.subscription_status==='trial').length,
-            total_users: users.length,
-            churned_customers: comp.filter(c=>c.subscription_status==='cancelled'||c.subscription_status==='expired').length,
-          })
+        const { data: snapshots, error: snapErr } = await supabase.from('mrr_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(365)
+        if (!snapErr) {
+          setMrrSnapshots(snapshots||[])
+          // Log today's snapshot
+          const today = new Date().toISOString().split('T')[0]
+          if (!(snapshots||[]).some(s=>s.snapshot_date===today)) {
+            const activeComps = comp.filter(c=>c.subscription_status==='active')
+            let todayMRR = 0
+            activeComps.forEach(c=>{
+              const mods = c.active_modules||[]
+              if (mods.includes('grunnpakke')) todayMRR += 199 * (c.num_users||1)
+              MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ todayMRR += m.price||0 })
+            })
+            try { await supabase.from('mrr_snapshots').insert({ snapshot_date:today, mrr:todayMRR, active_customers:activeComps.length, trial_customers:comp.filter(c=>c.subscription_status==='trial').length, total_users:users.length, churned_customers:comp.filter(c=>c.subscription_status==='cancelled'||c.subscription_status==='expired').length }) } catch(e){}
+          }
         }
-      } catch(e) { console.error('MRR snapshot log error:', e) }
+      } catch(e) { /* table may not exist yet */ }
 
       // Churn detection
       try {
