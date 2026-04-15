@@ -24266,17 +24266,21 @@ function PrisbokPage({ onBack }) {
   const searchPrisbok = async () => {
     if (!search.trim()) { setPrisbok([]); return }
     try {
+      // Use optimized RPC function with trigram index
+      const { data, error } = await supabase.rpc('search_prisbok', {
+        p_search_term: search.trim(),
+        p_prisliste_id: aktivPrisliste?.id || null,
+        p_user_id: aktivPrisliste ? null : user?.id,
+        p_category_keywords: null,
+        p_limit: 50
+      })
+      if (!error && data) { setPrisbok(data); return }
+      // Fallback: old ilike method if RPC not available yet
       let query = supabase.from('prisbok').select('*')
       if (aktivPrisliste) query = query.eq('prisliste_id', aktivPrisliste.id)
       else query = query.eq('user_id', user?.id)
-      const { data, error } = await query.or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
-      if (error) {
-        // Fallback without prisliste filter
-        const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
-        setPrisbok(fb || [])
-      } else {
-        setPrisbok(data || [])
-      }
+      const { data: fb } = await query.or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
+      setPrisbok(fb || [])
     } catch(e) { setPrisbok([]) }
   }
   useEffect(() => { if (search.trim().length >= 2) { const t = setTimeout(searchPrisbok, 300); return () => clearTimeout(t) } else { setPrisbok([]) } }, [search, aktivPrisliste])
@@ -26828,41 +26832,54 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             setHasSearched(true)
 
             try {
-              let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
-              if (plId) query = query.eq('prisliste_id', plId)
-              else query = query.eq('user_id', user?.id)
-
-              if (term.length >= 2 && katId) {
-                // Text + category: each word must match AND category keyword
+              // Build category keywords array if a category is selected
+              let catKeywords = null
+              if (katId) {
                 const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                const kw = katObj?.keywords || []
-                const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                query = query.or(catFilters)
-                const words = term.split(/\s+/).filter(w => w.length >= 2)
-                words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
-              } else if (term.length >= 2) {
-                // Text only: split into words, each word must match in varenavn
-                // First check if it looks like a NOBB number (all digits)
-                const words = term.split(/\s+/).filter(w => w.length >= 1)
-                if (words.length === 1 && /^\d+$/.test(words[0])) {
-                  query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
-                } else {
-                  words.filter(w => w.length >= 2).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
-                }
-              } else if (katId) {
-                // Category only - show first keyword results
-                const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                const kw = katObj?.keywords || []
-                const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                query = query.or(catFilters)
+                catKeywords = katObj?.keywords || null
               }
 
-              const { data, error } = await query.order('varenavn').limit(40)
+              // Try fast RPC function first
+              const { data, error } = await supabase.rpc('search_prisbok', {
+                p_search_term: term.length >= 2 ? term : '',
+                p_prisliste_id: plId || null,
+                p_user_id: plId ? null : user?.id,
+                p_category_keywords: catKeywords,
+                p_limit: 40
+              })
 
-              // Only update if this is still the latest search
-              if (searchRef.current !== searchId) return
-              if (!error) setRes(data || [])
-              else setRes([])
+              if (!error && data) {
+                if (searchRef.current === searchId) setRes(data)
+              } else {
+                // Fallback: old ilike method if RPC not available yet
+                let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
+                if (plId) query = query.eq('prisliste_id', plId)
+                else query = query.eq('user_id', user?.id)
+
+                if (term.length >= 2 && katId) {
+                  const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
+                  const kw = katObj?.keywords || []
+                  const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
+                  query = query.or(catFilters)
+                  const words = term.split(/\s+/).filter(w => w.length >= 2)
+                  words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+                } else if (term.length >= 2) {
+                  const words = term.split(/\s+/).filter(w => w.length >= 1)
+                  if (words.length === 1 && /^\d+$/.test(words[0])) {
+                    query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+                  } else {
+                    words.filter(w => w.length >= 2).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+                  }
+                } else if (katId) {
+                  const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
+                  const kw = katObj?.keywords || []
+                  const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
+                  query = query.or(catFilters)
+                }
+
+                const { data: fbData } = await query.order('varenavn').limit(40)
+                if (searchRef.current === searchId) setRes(fbData || [])
+              }
             } catch(e) { if (searchRef.current === searchId) setRes([]) }
             if (searchRef.current === searchId) setSearching(false)
           }
@@ -26870,7 +26887,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // Debounced search
           useEffect(() => {
             if (q.trim().length < 2 && !activeKat) { setRes([]); setHasSearched(false); return }
-            const timer = setTimeout(() => doSearch(q, activeKat), 500)
+            const timer = setTimeout(() => doSearch(q, activeKat), 250)
             return () => clearTimeout(timer)
           }, [q, activeKat])
 
