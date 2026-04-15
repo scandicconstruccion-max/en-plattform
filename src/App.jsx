@@ -1,3 +1,4 @@
+// Build: 2026-04-15T16:32:02.163830
 import React, { useState, useEffect, createContext, useContext } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
@@ -834,39 +835,6 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [showArchived, setShowArchived] = useState(false)
   const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
   const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
-
-  const savePayment = async (companyId, paymentDate) => {
-    try {
-      const comp = companies.find(c=>c.id===companyId)
-      const history = comp?.payment_history || []
-      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
-      // Next due = payment date + 1 month
-      const nextDue = new Date(paymentDate)
-      nextDue.setMonth(nextDue.getMonth()+1)
-      await supabase.from('company_settings').update({
-        last_payment_date: paymentDate,
-        next_due_date: nextDue.toISOString().split('T')[0],
-        payment_history: history,
-        updated_at: new Date().toISOString()
-      }).eq('id', companyId)
-      setPaymentModal(null)
-      load()
-    } catch(e) { alert('Feil: '+e.message) }
-  }
-
-  const addTimelineEvent = async (companyId, event) => {
-    const comp = companies.find(c=>c.id===companyId)
-    const timeline = comp?.timeline || []
-    timeline.push({ ...event, timestamp: new Date().toISOString() })
-    await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId)
-  }
-
-  // Enhanced status change — also logs to timeline
-  const setCompanyStatusWithLog = async (companyId, status) => {
-    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
-    await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status })
-    load()
-  }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
@@ -19836,6 +19804,37 @@ function SuperAdminPage() {
   const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
 
+  const savePayment = async (companyId, paymentDate) => {
+    try {
+      const comp = companies.find(c=>c.id===companyId)
+      const history = comp?.payment_history || []
+      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
+      const nextDue = new Date(paymentDate)
+      nextDue.setMonth(nextDue.getMonth()+1)
+      await supabase.from('company_settings').update({
+        last_payment_date: paymentDate,
+        next_due_date: nextDue.toISOString().split('T')[0],
+        payment_history: history,
+        updated_at: new Date().toISOString()
+      }).eq('id', companyId)
+      setPaymentModal(null)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  const addTimelineEvent = async (companyId, event) => {
+    const comp = companies.find(c=>c.id===companyId)
+    const timeline = comp?.timeline || []
+    timeline.push({ ...event, timestamp: new Date().toISOString() })
+    try { await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId) } catch(e) {}
+  }
+
+  const setCompanyStatus = async (companyId, status) => {
+    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
+    try { await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status }) } catch(e) {}
+    load()
+  }
+
   const saveCompanyNote = async (companyId, note) => {
     setSavingNote(true)
     try {
@@ -19876,10 +19875,10 @@ function SuperAdminPage() {
       // Storage check — estimate file storage usage
       try {
         const { data: files } = await supabase.from('project_files').select('file_size')
-        const { data: imgFiles } = await supabase.from('image_docs').select('file_size')
+        let imgFiles = []; try { const r = await supabase.from('image_docs').select('file_size'); imgFiles = r.data||[] } catch(e){}
         const totalFileBytes = (files||[]).reduce((s,f)=>s+(f.file_size||0),0) + (imgFiles||[]).reduce((s,f)=>s+(f.file_size||0),0)
         // Database size — estimate from row counts
-        const tables = ['projects','checklists','inspections','endringsmeldinger','resource_plans','invoices','orders','quotes','tenders','employees','timesheets','machines','hms_records','notifications','chat_messages','activities']
+        const tables = ['projects','checklists','inspections','endringsmeldinger','resource_plans','invoices','orders','quotes','tenders','employees','timesheets','machines','notifications']
         let totalRows = 0
         for (const t of tables) {
           try {
@@ -19897,34 +19896,25 @@ function SuperAdminPage() {
         })
       } catch(e) { console.error('Storage check error:', e) }
 
-      // Load MRR snapshots
+      // Load MRR snapshots (table may not exist yet)
       try {
-        const { data: snapshots } = await supabase.from('mrr_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(365)
-        setMrrSnapshots(snapshots||[])
-      } catch(e) { console.error('MRR snapshots error:', e) }
-
-      // Log today's MRR snapshot (once per day)
-      try {
-        const today = new Date().toISOString().split('T')[0]
-        const { data: existing } = await supabase.from('mrr_snapshots').select('id').eq('snapshot_date', today).limit(1)
-        if (!existing?.length) {
-          const activeComps = comp.filter(c=>c.subscription_status==='active')
-          let todayMRR = 0
-          activeComps.forEach(c=>{
-            const mods = c.active_modules||[]
-            if (mods.includes('grunnpakke')) todayMRR += 199 * (c.num_users||1)
-            MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ todayMRR += m.price||0 })
-          })
-          await supabase.from('mrr_snapshots').insert({
-            snapshot_date: today,
-            mrr: todayMRR,
-            active_customers: activeComps.length,
-            trial_customers: comp.filter(c=>c.subscription_status==='trial').length,
-            total_users: users.length,
-            churned_customers: comp.filter(c=>c.subscription_status==='cancelled'||c.subscription_status==='expired').length,
-          })
+        const { data: snapshots, error: snapErr } = await supabase.from('mrr_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(365)
+        if (!snapErr) {
+          setMrrSnapshots(snapshots||[])
+          // Log today's snapshot
+          const today = new Date().toISOString().split('T')[0]
+          if (!(snapshots||[]).some(s=>s.snapshot_date===today)) {
+            const activeComps = comp.filter(c=>c.subscription_status==='active')
+            let todayMRR = 0
+            activeComps.forEach(c=>{
+              const mods = c.active_modules||[]
+              if (mods.includes('grunnpakke')) todayMRR += 199 * (c.num_users||1)
+              MODULE_CATALOG.filter(m=>!m.required&&m.id!=='grunnpakke'&&mods.includes(m.id)).forEach(m=>{ todayMRR += m.price||0 })
+            })
+            try { await supabase.from('mrr_snapshots').insert({ snapshot_date:today, mrr:todayMRR, active_customers:activeComps.length, trial_customers:comp.filter(c=>c.subscription_status==='trial').length, total_users:users.length, churned_customers:comp.filter(c=>c.subscription_status==='cancelled'||c.subscription_status==='expired').length }) } catch(e){}
+          }
         }
-      } catch(e) { console.error('MRR snapshot log error:', e) }
+      } catch(e) { /* table may not exist yet */ }
 
       // Churn detection
       try {
@@ -19994,7 +19984,6 @@ function SuperAdminPage() {
     load()
   }
 
-  const setCompanyStatus = setCompanyStatusWithLog
 
   const isMobSA = typeof window !== 'undefined' && window.innerWidth < 768
   const saCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobSA ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
@@ -27695,7 +27684,7 @@ function AppContent() {
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'brukeradmin' && <BrukeradminPage />}
-        {page === 'superadmin' && isPlatformOwner && <SuperAdminPage />}
+        {page === 'superadmin' && (isPlatformOwner ? <SuperAdminPage /> : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>🔒</div><h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>Ingen tilgang</h2><p style={{ color:'#64748b', margin:'0 0 20px' }}>Denne siden er kun tilgjengelig for plattformeier.</p><button onClick={()=>navigate('dashboard')} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>← Til Dashboard</button></div></div>)}
         {page === 'varsler' && <VarslerPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
