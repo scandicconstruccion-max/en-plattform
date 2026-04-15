@@ -1,3 +1,4 @@
+// Build: 2026-04-15T16:32:02.163830
 import React, { useState, useEffect, createContext, useContext } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
@@ -2545,6 +2546,7 @@ function SjekklistePage({ onNavigateDetail }) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [view, setView] = useState('lister') // 'lister' or 'maler'
   const [showNew, setShowNew] = useState(false)
+  const [showImportQuotes, setShowImportQuotes] = useState(false)
   const [showNewTemplate, setShowNewTemplate] = useState(false)
   const [editTemplate, setEditTemplate] = useState(null)
   const [newForm, setNewForm] = useState({ project_id: '', template_id: '', title: '' })
@@ -17506,6 +17508,7 @@ function CRMPage() {
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={exportCSV} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>📥 Eksporter CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde / lead</button>
+              {quotes.length > 0 && <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Importer fra tilbud</button>}
           </div>
         </div>
 
@@ -17665,6 +17668,124 @@ function CRMPage() {
       </div>
 
       {showNew&&<CRMEditorModal user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+
+      {/* Import fra tilbud modal */}
+      {showImportQuotes && (()=>{
+        // Find unique customers from quotes not already in CRM
+        const existingNames = customers.map(c=>c.name?.toLowerCase().trim())
+        const uniqueQuoteCustomers = {}
+        quotes.filter(q=>q.customer_name?.trim()).forEach(q=>{
+          const key = q.customer_name.toLowerCase().trim()
+          if (!uniqueQuoteCustomers[key]) {
+            uniqueQuoteCustomers[key] = {
+              name: q.customer_name.trim(),
+              email: q.customer_email||'',
+              address: q.customer_address||'',
+              orgnr: q.customer_orgnr||'',
+              quotes: [],
+              totalValue: 0,
+              alreadyInCRM: existingNames.includes(key),
+            }
+          }
+          uniqueQuoteCustomers[key].quotes.push(q)
+          uniqueQuoteCustomers[key].totalValue += (q.chapters||[]).reduce((s,ch)=>{
+            const chTotal=(ch.items||[]).reduce((a,it)=>a+(parseFloat(it.quantity)||0)*(parseFloat(it.unit_price)||0),0)
+            return s+chTotal
+          },0)
+          // Pick latest email/address
+          if (q.customer_email) uniqueQuoteCustomers[key].email = q.customer_email
+          if (q.customer_address) uniqueQuoteCustomers[key].address = q.customer_address
+          if (q.customer_orgnr) uniqueQuoteCustomers[key].orgnr = q.customer_orgnr
+        })
+        const importable = Object.values(uniqueQuoteCustomers)
+        const newCustomers = importable.filter(c=>!c.alreadyInCRM)
+        const existing = importable.filter(c=>c.alreadyInCRM)
+
+        const handleImport = async (customers) => {
+          for (const c of customers) {
+            const latestQuote = c.quotes.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
+            const proj = projects.find(p=>p.id===latestQuote?.project_id)
+            await supabase.from('crm_customers').insert({
+              name: c.name,
+              email: c.email||null,
+              phone: null,
+              address: c.address||null,
+              orgnr: c.orgnr||null,
+              type: 'bedrift',
+              status: latestQuote?.status==='Godkjent' ? 'vunnet' : latestQuote?.status==='Sendt' ? 'tilbud_sendt' : 'kontaktet',
+              estimated_value: Math.round(c.totalValue)||null,
+              notes: `Importert fra tilbudsmodul. ${c.quotes.length} tilbud${proj?' · Prosjekt: '+proj.name:''}`,
+              created_by: user?.id,
+            })
+          }
+          setShowImportQuotes(false)
+          load()
+        }
+
+        return (
+          <>
+            <div onClick={()=>setShowImportQuotes(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }}/>
+            <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(600px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+              <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                <div>
+                  <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700' }}>📋 Importer kunder fra tilbud</h2>
+                  <p style={{ margin:'4px 0 0',fontSize:'12px',color:'#94a3b8' }}>Henter kontaktinfo fra sendte tilbud inn i CRM</p>
+                </div>
+                <button onClick={()=>setShowImportQuotes(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+              </div>
+              <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
+                {newCustomers.length > 0 && (
+                  <>
+                    <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px' }}>
+                      <div style={{ fontSize:'13px',fontWeight:'700',color:'#059669' }}>🆕 Nye kunder ({newCustomers.length})</div>
+                      <button onClick={()=>handleImport(newCustomers)} style={{ padding:'7px 16px',background:'#059669',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'700' }}>Importer alle nye</button>
+                    </div>
+                    {newCustomers.map((c,i)=>(
+                      <div key={i} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',background:'#f0fdf4',borderRadius:'10px',border:'1px solid #bbf7d0',marginBottom:'6px' }}>
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a' }}>{c.name}</div>
+                          <div style={{ fontSize:'11px',color:'#64748b',marginTop:'2px' }}>
+                            {c.email&&`✉️ ${c.email} `}{c.orgnr&&`· Org: ${c.orgnr} `}· {c.quotes.length} tilbud · {Math.round(c.totalValue).toLocaleString('nb-NO')} kr
+                          </div>
+                        </div>
+                        <button onClick={()=>handleImport([c])} style={{ padding:'5px 12px',background:'#059669',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'11px',fontWeight:'700',flexShrink:0 }}>+ Importer</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {existing.length > 0 && (
+                  <div style={{ marginTop: newCustomers.length>0?'16px':'0' }}>
+                    <div style={{ fontSize:'13px',fontWeight:'700',color:'#64748b',marginBottom:'8px' }}>✅ Allerede i CRM ({existing.length})</div>
+                    {existing.map((c,i)=>(
+                      <div key={i} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'8px 12px',background:'#f8fafc',borderRadius:'8px',marginBottom:'4px' }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:'500',fontSize:'12px',color:'#64748b' }}>{c.name}</div>
+                          <div style={{ fontSize:'11px',color:'#94a3b8' }}>{c.quotes.length} tilbud · {Math.round(c.totalValue).toLocaleString('nb-NO')} kr</div>
+                        </div>
+                        <span style={{ fontSize:'11px',color:'#059669',fontWeight:'600' }}>✓ Finnes</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {newCustomers.length===0 && existing.length===0 && (
+                  <div style={{ textAlign:'center',padding:'40px',color:'#94a3b8' }}>
+                    <div style={{ fontSize:'36px',marginBottom:'8px' }}>📋</div>
+                    <p style={{ fontSize:'14px' }}>Ingen tilbud med kundenavn funnet</p>
+                  </div>
+                )}
+
+                {newCustomers.length===0 && existing.length>0 && (
+                  <div style={{ marginTop:'16px',padding:'12px',background:'#f0fdf4',borderRadius:'10px',border:'1px solid #bbf7d0',textAlign:'center' }}>
+                    <span style={{ fontSize:'13px',color:'#059669',fontWeight:'600' }}>✅ Alle kunder fra tilbud er allerede i CRM</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }
@@ -27683,7 +27804,7 @@ function AppContent() {
         {page === 'befaring' && <BefaringPage />}
         {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'brukeradmin' && <BrukeradminPage />}
-        {page === 'superadmin' && isPlatformOwner && <SuperAdminPage />}
+        {page === 'superadmin' && (isPlatformOwner ? <SuperAdminPage /> : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>🔒</div><h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>Ingen tilgang</h2><p style={{ color:'#64748b', margin:'0 0 20px' }}>Denne siden er kun tilgjengelig for plattformeier.</p><button onClick={()=>navigate('dashboard')} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>← Til Dashboard</button></div></div>)}
         {page === 'varsler' && <VarslerPage />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
