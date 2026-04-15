@@ -19795,6 +19795,7 @@ function SuperAdminPage() {
   const [saSearch, setSaSearch] = useState('')
   const [saFilter, setSaFilter] = useState('alle')
   const [editNote, setEditNote] = useState(null) // { companyId, note }
+  const [storageInfo, setStorageInfo] = useState(null)
   const [savingNote, setSavingNote] = useState(false)
 
   const saveCompanyNote = async (companyId, note) => {
@@ -19833,6 +19834,30 @@ function SuperAdminPage() {
         supabase.from('notifications').select('*').eq('type','system').order('created_at',{ascending:false}).limit(50).then(r=>r.data||[]),
       ])
       setCompanies(comp); setAllUsers(users); setNotifications(notifs)
+
+      // Storage check — estimate file storage usage
+      try {
+        const { data: files } = await supabase.from('project_files').select('file_size')
+        const { data: imgFiles } = await supabase.from('image_docs').select('file_size')
+        const totalFileBytes = (files||[]).reduce((s,f)=>s+(f.file_size||0),0) + (imgFiles||[]).reduce((s,f)=>s+(f.file_size||0),0)
+        // Database size — estimate from row counts
+        const tables = ['projects','checklists','inspections','endringsmeldinger','resource_plans','invoices','orders','quotes','tenders','employees','timesheets','machines','hms_records','notifications','chat_messages','activities']
+        let totalRows = 0
+        for (const t of tables) {
+          try {
+            const { count } = await supabase.from(t).select('id', { count:'exact', head:true })
+            totalRows += count || 0
+          } catch(e) {}
+        }
+        const estDbSizeMB = Math.max(1, totalRows * 0.002) // ~2KB per row estimate
+        setStorageInfo({
+          fileSizeMB: Math.round(totalFileBytes / 1024 / 1024 * 10) / 10,
+          fileSizeGB: Math.round(totalFileBytes / 1024 / 1024 / 1024 * 100) / 100,
+          fileCount: (files||[]).length + (imgFiles||[]).length,
+          dbRows: totalRows,
+          dbSizeMB: Math.round(estDbSizeMB * 10) / 10,
+        })
+      } catch(e) { console.error('Storage check error:', e) }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -19921,6 +19946,67 @@ function SuperAdminPage() {
                 </div>
               ))}
             </div>
+
+            {/* Lagringsstatus */}
+            {storageInfo && (
+              <div style={saCard}>
+                <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>💾 Lagringsstatus (Supabase)</h3>
+                <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr', gap:'14px' }}>
+                  {/* Fillagring */}
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>📁 Fillagring</span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.fileSizeGB > 0.8 ? '#dc2626' : storageInfo.fileSizeGB > 0.5 ? '#d97706' : '#059669' }}>
+                        {storageInfo.fileSizeMB > 1000 ? `${storageInfo.fileSizeGB} GB` : `${storageInfo.fileSizeMB} MB`}
+                      </span>
+                    </div>
+                    <div style={{ height:'10px', background:'#f1f5f9', borderRadius:'5px', overflow:'hidden', marginBottom:'6px' }}>
+                      <div style={{ height:'100%', borderRadius:'5px', transition:'width 0.5s',
+                        width: `${Math.min(100, storageInfo.fileSizeGB / 1 * 100)}%`,
+                        background: storageInfo.fileSizeGB > 0.8 ? '#dc2626' : storageInfo.fileSizeGB > 0.5 ? '#d97706' : '#059669'
+                      }}/>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8' }}>
+                      <span>{storageInfo.fileCount} filer</span>
+                      <span>1 GB inkludert (Free)</span>
+                    </div>
+                  </div>
+                  {/* Database */}
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>🗃️ Database</span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.dbSizeMB > 400 ? '#dc2626' : storageInfo.dbSizeMB > 250 ? '#d97706' : '#059669' }}>
+                        ~{storageInfo.dbSizeMB} MB
+                      </span>
+                    </div>
+                    <div style={{ height:'10px', background:'#f1f5f9', borderRadius:'5px', overflow:'hidden', marginBottom:'6px' }}>
+                      <div style={{ height:'100%', borderRadius:'5px', transition:'width 0.5s',
+                        width: `${Math.min(100, storageInfo.dbSizeMB / 500 * 100)}%`,
+                        background: storageInfo.dbSizeMB > 400 ? '#dc2626' : storageInfo.dbSizeMB > 250 ? '#d97706' : '#059669'
+                      }}/>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8' }}>
+                      <span>~{storageInfo.dbRows.toLocaleString('nb-NO')} rader</span>
+                      <span>500 MB inkludert (Free)</span>
+                    </div>
+                  </div>
+                </div>
+                {(storageInfo.fileSizeGB > 0.7 || storageInfo.dbSizeMB > 350) && (
+                  <div style={{ marginTop:'12px', padding:'10px 14px', background:'#fffbeb', borderRadius:'10px', border:'1px solid #fde68a', display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'16px' }}>⚠️</span>
+                    <div style={{ fontSize:'12px', color:'#92400e' }}>
+                      <strong>Nærmer seg grensen!</strong> Vurder å oppgradere til Supabase Pro (25 USD/mnd) for 8 GB database + 100 GB fillagring.
+                    </div>
+                  </div>
+                )}
+                {storageInfo.fileSizeGB <= 0.7 && storageInfo.dbSizeMB <= 350 && (
+                  <div style={{ marginTop:'12px', padding:'10px 14px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'16px' }}>✅</span>
+                    <span style={{ fontSize:'12px', color:'#059669', fontWeight:'600' }}>Lagring OK — god kapasitet tilgjengelig</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Populære moduler */}
             <div style={saCard}>
