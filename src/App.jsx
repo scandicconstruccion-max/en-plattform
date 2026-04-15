@@ -22174,7 +22174,7 @@ function beregnBygningsdel(bd, faktorer) {
     totalUE += kost * (1 + fortjenesteInnkjop / 100) * mengde
   })
 
-  // ── Flatetillegg: ekstra kr per enhet (rigg, renhold, avfall etc.) ──
+  // ── Flatetillegg: tillegg for oppmåling/tilpasning ved flere flater ──
   let totalFlatetillegg = 0
   ;(bd.flatetillegg || []).forEach(ft => {
     const kost = parseFloat(ft.kostnad) || 0
@@ -22182,7 +22182,7 @@ function beregnBygningsdel(bd, faktorer) {
   })
   const flatetilleggMedFortjeneste = totalFlatetillegg * (1 + fortjenesteInnkjop / 100)
 
-  // ── Åpningstillegg: faste kostnader per åpning (dører, vinduer etc.) ──
+  // ── Åpningstillegg: tilpasning rundt dører, vinduer, gjennomføringer ──
   let totalApningstillegg = 0
   ;(bd.apningstillegg || []).forEach(at => {
     const antall = parseFloat(at.antall) || 0
@@ -26026,7 +26026,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   <span style={{ fontSize:'11px', color:'#92400e', fontWeight:'600' }}>Tillegg:</span>
                                   <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'1px solid #e9d5ff', borderRadius:'6px', padding:'3px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📐 + Flatetillegg</button>
                                   <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', padding:'3px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>🚪 + Åpningstillegg</button>
-                                  <span style={{ fontSize:'10px', color:'#94a3b8', fontStyle:'italic' }}>Rigg, renhold, dører, vinduer etc.</span>
+                                  <span style={{ fontSize:'10px', color:'#94a3b8', fontStyle:'italic' }}>Flere flater, dører, vinduer etc.</span>
                                 </div>
                               )}
                               {((bd.flatetillegg||[]).length > 0 || (bd.apningstillegg||[]).length > 0) && (
@@ -26118,6 +26118,78 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <button onClick={() => addMaterial(kalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
                               </div>
 
+                              {/* Flatetillegg - tillegg for oppmåling og tilpasning ved flere flater */}
+                              <div style={{ marginBottom:'12px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', fontStyle:'italic' }}>(oppmåling, vinkling og tilpasning — kr per {bd.enhet || 'enhet'} × {bd.mengde ?? 1})</span></div>
+                                {(bd.flatetillegg||[]).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
+                                    <thead><tr>
+                                      {['Beskrivelse', 'Ant. flater', `Kr/${bd.enhet || 'enh'}`, 'Totalt', ''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {(bd.flatetillegg||[]).map(ft => {
+                                        const bdM = safeMengde(bd.mengde, 1)
+                                        const ftKost = parseFloat(ft.kostnad) || 0
+                                        const antFlater = parseFloat(ft.antall_flater) || 1
+                                        return (
+                                          <tr key={ft.id}>
+                                            <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Oppmåling 4 fasader, vinkling hjørner" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" min="1" value={ft.antall_flater||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'antall_flater', e.target.value)} placeholder="1" style={{ ...qInp, width:'55px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={ft.kostnad||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'kostnad', e.target.value)} placeholder="0" style={{ ...qInp, width:'80px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(ftKost * bdM)}</td>
+                                            <td style={{ padding:'3px 2px' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                                <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'2px' }}>+ Flatetillegg</button>
+                              </div>
+
+                              {/* Åpningstillegg - tillegg for arbeid rundt dører, vinduer og gjennomføringer */}
+                              <div style={{ marginBottom:'12px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>🚪 ÅPNINGSTILLEGG <span style={{ fontWeight:'400', fontStyle:'italic' }}>(tilpasning rundt dører, vinduer, gjennomføringer)</span></div>
+                                {(bd.apningstillegg||[]).length > 0 && (
+                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
+                                    <thead><tr>
+                                      {['Type åpning', 'Antall', 'Timer/stk', 'Material/stk', 'Totalt', ''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {(bd.apningstillegg||[]).map(at => {
+                                        const antall = parseFloat(at.antall) || 0
+                                        const arbeidTimer = parseFloat(at.arbeid_timer) || 0
+                                        const materialKost = parseFloat(at.material_kostnad) || 0
+                                        const lonn = parseFloat(fakt.produksjonslonn) || 0
+                                        const sos = parseFloat(fakt.sosiale_prosent) || 0
+                                        const fast = parseFloat(fakt.faste_prosent) || 0
+                                        const timekost = lonn * (1 + sos / 100 + fast / 100)
+                                        const fortjLonn = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
+                                        const fortjInn = parseFloat(fakt.fortjeneste_innkjop_prosent) || 0
+                                        const matJust = parseFloat(fakt.mat_justering_prosent) || 0
+                                        const arbeidTot = arbeidTimer * timekost * antall * (1 + fortjLonn / 100)
+                                        const matTot = materialKost * (1 + matJust / 100) * antall * (1 + fortjInn / 100)
+                                        return (
+                                          <tr key={at.id}>
+                                            <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Dør standard, Vindu, Gjennomf." style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'50px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.arbeid_timer||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'arbeid_timer', e.target.value)} placeholder="0" style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.material_kostnad||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'material_kostnad', e.target.value)} placeholder="0" style={{ ...qInp, width:'75px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(arbeidTot + matTot)}</td>
+                                            <td style={{ padding:'3px 2px' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                                <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'2px' }}>+ Åpningstillegg</button>
+                              </div>
+
                               {/* Underleverandører - editable with send functionality */}
                               <div>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>🤝 UNDERLEVERANDØRER</div>
@@ -26178,75 +26250,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
                               </div>
 
-                              {/* Flatetillegg - ekstra kostnad per enhet */}
-                              <div style={{ marginTop:'12px' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', fontStyle:'italic' }}>(kr per {bd.enhet || 'enhet'} × {bd.mengde ?? 1})</span></div>
-                                {(bd.flatetillegg||[]).length > 0 && (
-                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
-                                    <thead><tr>
-                                      {['Beskrivelse', `Kr/${bd.enhet || 'enh'}`, 'Totalt', ''].map((h,i) => (
-                                        <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                      ))}
-                                    </tr></thead>
-                                    <tbody>
-                                      {(bd.flatetillegg||[]).map(ft => {
-                                        const bdM = safeMengde(bd.mengde, 1)
-                                        const ftKost = parseFloat(ft.kostnad) || 0
-                                        return (
-                                          <tr key={ft.id}>
-                                            <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Rigg, renhold, avfall" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={ft.kostnad||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'kostnad', e.target.value)} placeholder="0" style={{ ...qInp, width:'80px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(ftKost * bdM)}</td>
-                                            <td style={{ padding:'3px 2px' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
-                                          </tr>
-                                        )
-                                      })}
-                                    </tbody>
-                                  </table>
-                                )}
-                                <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'2px' }}>+ Flatetillegg</button>
-                              </div>
-
-                              {/* Åpningstillegg - fast kostnad per åpning */}
-                              <div style={{ marginTop:'12px' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>🚪 ÅPNINGSTILLEGG <span style={{ fontWeight:'400', fontStyle:'italic' }}>(dører, vinduer, gjennomføringer)</span></div>
-                                {(bd.apningstillegg||[]).length > 0 && (
-                                  <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
-                                    <thead><tr>
-                                      {['Type åpning', 'Antall', 'Timer/stk', 'Material/stk', 'Totalt', ''].map((h,i) => (
-                                        <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                      ))}
-                                    </tr></thead>
-                                    <tbody>
-                                      {(bd.apningstillegg||[]).map(at => {
-                                        const antall = parseFloat(at.antall) || 0
-                                        const arbeidTimer = parseFloat(at.arbeid_timer) || 0
-                                        const materialKost = parseFloat(at.material_kostnad) || 0
-                                        const lonn = parseFloat(fakt.produksjonslonn) || 0
-                                        const sos = parseFloat(fakt.sosiale_prosent) || 0
-                                        const fast = parseFloat(fakt.faste_prosent) || 0
-                                        const timekost = lonn * (1 + sos / 100 + fast / 100)
-                                        const fortjLonn = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
-                                        const fortjInn = parseFloat(fakt.fortjeneste_innkjop_prosent) || 0
-                                        const matJust = parseFloat(fakt.mat_justering_prosent) || 0
-                                        const arbeidTot = arbeidTimer * timekost * antall * (1 + fortjLonn / 100)
-                                        const matTot = materialKost * (1 + matJust / 100) * antall * (1 + fortjInn / 100)
-                                        return (
-                                          <tr key={at.id}>
-                                            <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Dør standard, Vindu" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'50px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.arbeid_timer||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'arbeid_timer', e.target.value)} placeholder="0" style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.material_kostnad||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'material_kostnad', e.target.value)} placeholder="0" style={{ ...qInp, width:'75px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(arbeidTot + matTot)}</td>
-                                            <td style={{ padding:'3px 2px' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
-                                          </tr>
-                                        )
-                                      })}
-                                    </tbody>
-                                  </table>
-                                )}
-                                <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'2px' }}>+ Åpningstillegg</button>
-                              </div>
                             </div>
                           )}
                         </div>
