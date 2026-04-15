@@ -835,39 +835,6 @@ function ProsjekterPage({ onNavigateDetail }) {
   const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
   const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
 
-  const savePayment = async (companyId, paymentDate) => {
-    try {
-      const comp = companies.find(c=>c.id===companyId)
-      const history = comp?.payment_history || []
-      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
-      // Next due = payment date + 1 month
-      const nextDue = new Date(paymentDate)
-      nextDue.setMonth(nextDue.getMonth()+1)
-      await supabase.from('company_settings').update({
-        last_payment_date: paymentDate,
-        next_due_date: nextDue.toISOString().split('T')[0],
-        payment_history: history,
-        updated_at: new Date().toISOString()
-      }).eq('id', companyId)
-      setPaymentModal(null)
-      load()
-    } catch(e) { alert('Feil: '+e.message) }
-  }
-
-  const addTimelineEvent = async (companyId, event) => {
-    const comp = companies.find(c=>c.id===companyId)
-    const timeline = comp?.timeline || []
-    timeline.push({ ...event, timestamp: new Date().toISOString() })
-    await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId)
-  }
-
-  // Enhanced status change — also logs to timeline
-  const setCompanyStatusWithLog = async (companyId, status) => {
-    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
-    await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status })
-    load()
-  }
-
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
@@ -19836,6 +19803,39 @@ function SuperAdminPage() {
   const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
 
+  const savePayment = async (companyId, paymentDate) => {
+    try {
+      const comp = companies.find(c=>c.id===companyId)
+      const history = comp?.payment_history || []
+      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
+      const nextDue = new Date(paymentDate)
+      nextDue.setMonth(nextDue.getMonth()+1)
+      await supabase.from('company_settings').update({
+        last_payment_date: paymentDate,
+        next_due_date: nextDue.toISOString().split('T')[0],
+        payment_history: history,
+        updated_at: new Date().toISOString()
+      }).eq('id', companyId)
+      setPaymentModal(null)
+      load()
+    } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  const addTimelineEvent = async (companyId, event) => {
+    const comp = companies.find(c=>c.id===companyId)
+    const timeline = comp?.timeline || []
+    timeline.push({ ...event, timestamp: new Date().toISOString() })
+    await supabase.from('company_settings').update({ timeline, updated_at: new Date().toISOString() }).eq('id', companyId)
+  }
+
+  const setCompanyStatusWithLog = async (companyId, status) => {
+    await supabase.from('company_settings').update({ subscription_status: status }).eq('id', companyId)
+    await addTimelineEvent(companyId, { type:'status', label: status==='active'?'Aktivert':status==='cancelled'?'Kansellert':'Statusendring: '+status })
+    load()
+  }
+
+  const setCompanyStatus = setCompanyStatusWithLog
+
   const saveCompanyNote = async (companyId, note) => {
     setSavingNote(true)
     try {
@@ -19994,7 +19994,6 @@ function SuperAdminPage() {
     load()
   }
 
-  const setCompanyStatus = setCompanyStatusWithLog
 
   const isMobSA = typeof window !== 'undefined' && window.innerWidth < 768
   const saCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobSA ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
