@@ -410,6 +410,26 @@ function Modal({ open, onClose, title, children, size }) {
   )
 }
 
+function InfoTip({ label, info, align }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:'2px' }}>
+      {label}
+      <span onClick={e => { e.stopPropagation(); setOpen(!open) }}
+        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'13px', height:'13px', borderRadius:'50%', background: open ? '#059669' : '#e2e8f0', color: open ? 'white' : '#94a3b8', fontSize:'8px', fontWeight:'800', cursor:'pointer', lineHeight:1, flexShrink:0, userSelect:'none' }}>i</span>
+      {open && (
+        <>
+          <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setOpen(false)} />
+          <div style={{ position:'absolute', top:'100%', [align === 'right' ? 'right' : 'left']:0, marginTop:'4px', background:'#0f172a', color:'white', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', lineHeight:1.5, width:'260px', zIndex:51, boxShadow:'0 8px 24px rgba(0,0,0,0.25)' }}>
+            {info}
+            <div style={{ position:'absolute', top:'-4px', [align === 'right' ? 'right' : 'left']:'10px', width:'8px', height:'8px', background:'#0f172a', transform:'rotate(45deg)' }} />
+          </div>
+        </>
+      )}
+    </span>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <div>
@@ -26057,9 +26077,14 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
                                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                   <thead><tr>
-                                    {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.','Totalt',''].map((h,i) => (
-                                      <th key={i} style={{ padding:'3px 4px', textAlign:i>=1?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                    ))}
+                                    <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Grunntid (t)" info={<span>Normtid for arbeidsoppgaven per enhet ({bd.enhet || 'enhet'}). Angis i timer — f.eks. 0,6 t = 36 minutter. Hentet fra bransjetariffen eller egne erfaringstall.</span>} /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Faktisk tid" info={<span>Grunntid × grunntid-justering ({parseFloat(fakt.grunntid_justering)||1.0}). Justering over 1.0 = vanskeligere/tregere prosjekt. Under 1.0 = enklere/raskere.</span>} /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Timekost" info={<span>Produksjonslønn ({fakt.produksjonslonn} kr/t) × (1 + sosiale {fakt.sosiale_prosent}% + faste {fakt.faste_prosent}%). Din fulle timekostnad inkl. alle avgifter.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span>Faktisk tid × timekostnad. Ren selvkost per {bd.enhet || 'enhet'} — hva det koster deg uten påslag.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Med fortj." info={<span>Kostnad × (1 + fortjeneste lønn {fakt.fortjeneste_lonn_prosent}%). Din pris per {bd.enhet || 'enhet'} inkl. fortjeneste på arbeid.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span>Med fortjeneste × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'}). Total pris for denne arbeidsarten på hele bygningsdelen.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
                                   </tr></thead>
                                   <tbody>
                                     {(bd.arbeidsarter||[]).map(a => {
@@ -26188,9 +26213,15 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 {(bd.materialer||[]).length > 0 && (
                                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead><tr>
-                                      {['NOBB','Varenavn','Mengde','Enhet','Pris/enh','Kostnad','M/påslag','Totalt',''].map((h,i) => (
-                                        <th key={i} style={{ padding:'3px 4px', textAlign:i>=2?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                      ))}
+                                      <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>NOBB</th>
+                                      <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Varenavn</th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Mengde" info={<span>Forbruk av dette materialet per {bd.enhet || 'enhet'} av bygningsdelen. F.eks. 3,5 lm stenderverk per m² vegg.</span>} /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Enhet</th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Pris/enh" info={<span>Innkjøpspris per enhet fra din prisliste. Kan hentes automatisk fra 5001-prisfil via NOBB-nummer.</span>} /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span>Mengde × pris/enh. Ren materialkostnad per {bd.enhet || 'enhet'} — uten påslag.</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="M/påslag" info={<span>Kostnad × (1 + mat.justering {fakt.mat_justering_prosent}%) × (1 + fortjeneste innkjøp {fakt.fortjeneste_innkjop_prosent}%). Pris per {bd.enhet || 'enhet'} med alle påslag.</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span>M/påslag × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'}). Total materialpris for hele bygningsdelen.</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
                                     </tr></thead>
                                     <tbody>
                                       {(bd.materialer||[]).map(m => {
