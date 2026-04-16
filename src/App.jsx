@@ -26075,7 +26075,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               {/* Arbeidsarter - editable */}
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
-                                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+                                  <colgroup>
+                                    <col style={{ width:'auto' }} />
+                                    <col style={{ width:'80px' }} />
+                                    <col style={{ width:'72px' }} />
+                                    <col style={{ width:'68px' }} />
+                                    <col style={{ width:'72px' }} />
+                                    <col style={{ width:'78px' }} />
+                                    <col style={{ width:'82px' }} />
+                                    <col style={{ width:'28px' }} />
+                                  </colgroup>
                                   <thead><tr>
                                     <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
                                     <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Grunntid (t)" info={<span><b>Normtid i timer per {bd.enhet || 'enhet'}.</b><br/><br/>Tiden angis i desimaltimer. For å regne om til minutter: gang med 60.<br/><br/>Eksempler:<br/>• 0,1 t = 6 min<br/>• 0,25 t = 15 min<br/>• 0,5 t = 30 min<br/>• 0,6 t = 36 min<br/>• 0,75 t = 45 min<br/>• 1,0 t = 60 min<br/><br/>Basert på bransjetariffer eller egne erfaringstall.</span>} /></th>
@@ -26092,14 +26102,14 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                       const bdMengdeA = safeMengde(bd.mengde, 1)
                                       return (
                                         <tr key={a.id}>
-                                          <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
-                                          <td style={{ padding:'3px 2px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'65px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                          <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                          <td style={{ padding:'3px 2px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{r.faktiskTid.toFixed(1)} t</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{Math.round(r.timekostnad)}</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.arbeidskostnad)}</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.medFortjeneste)}</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengdeA)}</td>
-                                          <td style={{ padding:'3px 2px' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(kalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>}</td>
+                                          <td style={{ padding:'3px 2px', textAlign:'center' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(kalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>}</td>
                                         </tr>
                                       )
                                     })}
@@ -26237,7 +26247,18 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
                                 {(bd.materialer||[]).length > 0 && (
-                                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                  <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+                                    <colgroup>
+                                      <col style={{ width:'85px' }} />
+                                      <col style={{ width:'auto' }} />
+                                      <col style={{ width:'68px' }} />
+                                      <col style={{ width:'50px' }} />
+                                      <col style={{ width:'78px' }} />
+                                      <col style={{ width:'72px' }} />
+                                      <col style={{ width:'78px' }} />
+                                      <col style={{ width:'82px' }} />
+                                      <col style={{ width:'28px' }} />
+                                    </colgroup>
                                     <thead><tr>
                                       <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>NOBB</th>
                                       <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Varenavn</th>
@@ -26269,14 +26290,14 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                                       updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb } : mt) } : b) } : kl))
                                                     }
                                                   } catch(err) {}
-                                                }} placeholder="NOBB" style={{ ...qInp, width:'58px', fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
+                                                }} placeholder="NOBB" style={{ ...qInp, flex:1, minWidth:0, fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
                                                 <button onClick={() => setShowProduktSok({ kalkId: kalk.id, bdId: bd.id, matId: m.id })} title="Søk i prisliste" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', width:'22px', height:'22px', cursor:'pointer', fontSize:'11px', padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔍</button>
                                               </div>
                                             </td>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'center', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{fmt(r.medFortjeneste)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengde)}</td>
