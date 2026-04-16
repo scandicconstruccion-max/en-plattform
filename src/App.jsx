@@ -26078,12 +26078,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                   <thead><tr>
                                     <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Grunntid (t)" info={<span>Normtid for arbeidsoppgaven per enhet ({bd.enhet || 'enhet'}). Angis i timer — f.eks. 0,6 t = 36 minutter. Hentet fra bransjetariffen eller egne erfaringstall.</span>} /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Faktisk tid" info={<span>Grunntid × grunntid-justering ({parseFloat(fakt.grunntid_justering)||1.0}). Justering over 1.0 = vanskeligere/tregere prosjekt. Under 1.0 = enklere/raskere.</span>} /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Timekost" info={<span>Produksjonslønn ({fakt.produksjonslonn} kr/t) × (1 + sosiale {fakt.sosiale_prosent}% + faste {fakt.faste_prosent}%). Din fulle timekostnad inkl. alle avgifter.</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span>Faktisk tid × timekostnad. Ren selvkost per {bd.enhet || 'enhet'} — hva det koster deg uten påslag.</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Med fortj." info={<span>Kostnad × (1 + fortjeneste lønn {fakt.fortjeneste_lonn_prosent}%). Din pris per {bd.enhet || 'enhet'} inkl. fortjeneste på arbeid.</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span>Med fortjeneste × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'}). Total pris for denne arbeidsarten på hele bygningsdelen.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Grunntid (t)" info={<span><b>Normtid i timer per {bd.enhet || 'enhet'}.</b><br/><br/>Tiden angis i desimaltimer. For å regne om til minutter: gang med 60.<br/><br/>Eksempler:<br/>• 0,1 t = 6 min<br/>• 0,25 t = 15 min<br/>• 0,5 t = 30 min<br/>• 0,6 t = 36 min<br/>• 0,75 t = 45 min<br/>• 1,0 t = 60 min<br/><br/>Basert på bransjetariffer eller egne erfaringstall.</span>} /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Faktisk tid" info={<span><b>Grunntid justert for prosjektets vanskelighetsgrad.</b><br/><br/>Beregning:<br/>Grunntid × grunntid-justering ({parseFloat(fakt.grunntid_justering)||1.0})<br/><br/>Justering = 1.0 betyr normalt tempo.<br/>Over 1.0 = vanskeligere/tregere.<br/>Under 1.0 = enklere/raskere.<br/><br/>Også her i timer — gang med 60 for minutter.</span>} /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Timekost" info={<span><b>Din fulle timekostnad.</b><br/><br/>Beregning:<br/>Produksjonslønn ({fakt.produksjonslonn} kr/t)<br/>× (1 + sosiale {fakt.sosiale_prosent}% + faste {fakt.faste_prosent}%)<br/>= {Math.round((parseFloat(fakt.produksjonslonn)||0) * (1 + (parseFloat(fakt.sosiale_prosent)||0)/100 + (parseFloat(fakt.faste_prosent)||0)/100))} kr/t<br/><br/>Inkluderer lønn, sosiale avgifter og faste kostnader.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span><b>Ren selvkost per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Faktisk tid × timekostnad<br/><br/>Hva arbeidet koster deg — uten fortjeneste.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Med fortj." info={<span><b>Din pris per {bd.enhet || 'enhet'} inkl. fortjeneste.</b><br/><br/>Beregning:<br/>Kostnad × (1 + fortjeneste lønn {fakt.fortjeneste_lonn_prosent}%)<br/><br/>Dette er hva du tar betalt for arbeidet per {bd.enhet || 'enhet'}.</span>} align="right" /></th>
+                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span><b>Total pris for hele bygningsdelen.</b><br/><br/>Beregning:<br/>Med fortjeneste × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'})</span>} align="right" /></th>
                                     <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
                                   </tr></thead>
                                   <tbody>
@@ -26111,11 +26111,22 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 {(bd.flatetillegg||[]).length > 0 && (
                                   <div style={{ marginTop:'10px', borderTop:'1px dashed #e2e8f0', paddingTop:'8px' }}>
                                     <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', marginBottom:'4px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid for hjørner, avslutninger og tilpasning)</span></div>
-                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
+                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
+                                      <colgroup>
+                                        <col style={{ width:'auto' }} />
+                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'80px' }} />
+                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'75px' }} />
+                                        <col style={{ width:'28px' }} />
+                                      </colgroup>
                                       <thead><tr>
-                                        {['Beskrivelse', 'Ant. flater', 'Timer/flate', 'Faktisk tid', 'Totalt', ''].map((h,i) => (
-                                          <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                        ))}
+                                        <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Ant. flater</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/flate</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Totalt</th>
+                                        <th style={{ padding:'3px 4px', borderBottom:'1px solid #f8fafc' }}></th>
                                       </tr></thead>
                                       <tbody>
                                         {(bd.flatetillegg||[]).map(ft => {
@@ -26131,12 +26142,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                           const kostMedFortj = faktiskTid * timekostF * (1 + fortjLonnF / 100)
                                           return (
                                             <tr key={ft.id}>
-                                              <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Fasader, hjørneavslutninger" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" step="1" value={ft.antall||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'antall', e.target.value)} placeholder="1" style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={ft.timer_per_flate||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'timer_per_flate', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Fasader, hjørneavslutninger" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" step="1" value={ft.antall||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'antall', e.target.value)} placeholder="1" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={ft.timer_per_flate||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'timer_per_flate', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{faktiskTid.toFixed(2)} t</td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
-                                              <td style={{ padding:'3px 2px' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
                                             </tr>
                                           )
                                         })}
@@ -26152,11 +26163,26 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'3px 6px', borderRadius:'4px' }}>
                                       Telleregel: 0,5–2,5 m² = 1 stk · 2,5–4,5 m² = 2 stk · 4,5–6,5 m² = 3 stk · &gt;6,5 m² = 4 stk · bærende +1
                                     </div>
-                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px' }}>
+                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
+                                      <colgroup>
+                                        <col style={{ width:'auto' }} />
+                                        <col style={{ width:'58px' }} />
+                                        <col style={{ width:'65px' }} />
+                                        <col style={{ width:'40px' }} />
+                                        <col style={{ width:'78px' }} />
+                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'75px' }} />
+                                        <col style={{ width:'28px' }} />
+                                      </colgroup>
                                       <thead><tr>
-                                        {['Type åpning', 'Antall', 'Areal/stk', 'Bær.', 'Timer/tillegg', 'Faktisk tid', 'Totalt', ''].map((h,i) => (
-                                          <th key={i} style={{ padding:'3px 4px', textAlign: i >= 1 ? 'right' : 'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
-                                        ))}
+                                        <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Type åpning</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Antall</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Areal/stk</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'center', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Bær.</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/tillegg</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Totalt</th>
+                                        <th style={{ padding:'3px 4px', borderBottom:'1px solid #f8fafc' }}></th>
                                       </tr></thead>
                                       <tbody>
                                         {(bd.apningstillegg||[]).map(at => {
@@ -26181,17 +26207,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                           const kostMedFortj = faktiskTid * timekostA * (1 + fortjLonnA / 100)
                                           return (
                                             <tr key={at.id}>
-                                              <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Vindu, Dør, Gjennomf." style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'50px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Gir ${tilleggPerAapning} stk åpningstillegg`} style={{ ...qInp, width:'55px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Vindu, Dør" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Gir ${tilleggPerAapning} stk åpningstillegg`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 2px', textAlign:'center' }}><input type="checkbox" checked={baerende} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'baerende', e.target.checked)} title="+1 ekstra tillegg per åpning" style={{ cursor:'pointer' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.timer_per_tillegg||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'timer_per_tillegg', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.timer_per_tillegg||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'timer_per_tillegg', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>
                                                 <div>{faktiskTid.toFixed(2)} t</div>
                                                 {totaltTillegg > 0 && <div style={{ fontSize:'9px', color:'#94a3b8' }}>{totaltTillegg} stk</div>}
                                               </td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
-                                              <td style={{ padding:'3px 2px' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
                                             </tr>
                                           )
                                         })}
@@ -26215,12 +26241,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     <thead><tr>
                                       <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>NOBB</th>
                                       <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Varenavn</th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Mengde" info={<span>Forbruk av dette materialet per {bd.enhet || 'enhet'} av bygningsdelen. F.eks. 3,5 lm stenderverk per m² vegg.</span>} /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Mengde" info={<span><b>Forbruk per {bd.enhet || 'enhet'} av bygningsdelen.</b><br/><br/>F.eks. 3,5 lm stenderverk per m² vegg, eller 1,05 m² isolasjon per m² vegg (5% kapp/svinn).</span>} /></th>
                                       <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Enhet</th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Pris/enh" info={<span>Innkjøpspris per enhet fra din prisliste. Kan hentes automatisk fra 5001-prisfil via NOBB-nummer.</span>} /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span>Mengde × pris/enh. Ren materialkostnad per {bd.enhet || 'enhet'} — uten påslag.</span>} align="right" /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="M/påslag" info={<span>Kostnad × (1 + mat.justering {fakt.mat_justering_prosent}%) × (1 + fortjeneste innkjøp {fakt.fortjeneste_innkjop_prosent}%). Pris per {bd.enhet || 'enhet'} med alle påslag.</span>} align="right" /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span>M/påslag × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'}). Total materialpris for hele bygningsdelen.</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Pris/enh" info={<span><b>Innkjøpspris per enhet.</b><br/><br/>Hentes automatisk fra din prisliste (5001-fil) via NOBB-nummer, eller tastes inn manuelt.</span>} /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span><b>Ren materialkostnad per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Mengde × pris/enhet<br/><br/>Uten påslag — hva materialet koster deg i innkjøp.</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="M/påslag" info={<span><b>Materialpris med alle påslag per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Kostnad<br/>× (1 + mat.justering {fakt.mat_justering_prosent}%)<br/>× (1 + fortjeneste innkjøp {fakt.fortjeneste_innkjop_prosent}%)<br/><br/>Inkluderer svinn-justering og din fortjeneste på materialer.</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span><b>Total materialpris for hele bygningsdelen.</b><br/><br/>Beregning:<br/>M/påslag × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'})</span>} align="right" /></th>
                                       <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
                                     </tr></thead>
                                     <tbody>
