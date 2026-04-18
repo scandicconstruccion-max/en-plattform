@@ -23069,7 +23069,7 @@ function KalkulasjonPage({ onNavigate }) {
         } catch(e) {}
       }
     }} />}
-    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} />
+    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} onNavigate={onNavigate} />
   </>
 
   if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
@@ -25517,7 +25517,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
 
 // ─── PROSJEKT VISNING (Read-only detaljer) ───────────────────────────────────
 
-function KalkProsjektView({ kalk: init, onBack, onEdit }) {
+function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
   const confirm = useConfirm()
   const { user } = useAuth()
   const [k, setK] = useState(init)
@@ -25690,6 +25690,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [versions, setVersions] = useState([])
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [compareVersion, setCompareVersion] = useState(null)
+  const [showPlanlegg, setShowPlanlegg] = useState(false)
 
   // ── Versjonering — snapshot-basert ──
   const loadVersions = async () => {
@@ -26275,6 +26276,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', width: isMobKV ? '100%' : 'auto' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>
+            <button onClick={() => setShowPlanlegg(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'700' }}>{isMobKV ? '📅' : '📅 Planlegg prosjekt'}</button>
 
             {/* Mer-dropdown for sekundære handlinger */}
             <div style={{ position:'relative' }}>
@@ -27337,6 +27339,571 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
       {/* Send til kunde modal */}
       {showSendModal && <KalkSendModal kalk={k} totals={totals} kalkyler={kalkyler} alleFaktorer={alleFaktorer} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); updateStatus('Tilbud sendt') }} />}
+
+      {/* Planlegg prosjekt modal — send til ressursplan / materialleveringer */}
+      {showPlanlegg && (() => {
+        const PlanleggModal = ({ onClose }) => {
+          const [hasRessursplan, setHasRessursplan] = useState(null)
+          const [loading, setLoading] = useState(true)
+          const [antallMann, setAntallMann] = useState(2)
+          const [timerPerDag, setTimerPerDag] = useState(7.5)
+          const [startDato, setStartDato] = useState(new Date().toISOString().split('T')[0])
+          const [employees, setEmployees] = useState([])
+          const [selectedEmployees, setSelectedEmployees] = useState([])
+          const [projects, setProjects] = useState([])
+          const [selectedProject, setSelectedProject] = useState(k.project_id || '')
+          const [sending, setSending] = useState(false)
+          const [sent, setSent] = useState(null)
+          const [leveringsdager, setLeveringsdager] = useState(2)
+          const [showProjectPicker, setShowProjectPicker] = useState(null)
+          const [tildelingsmodus, setTildelingsmodus] = useState('reserver') // 'ansatte' | 'reserver'
+
+          useEffect(() => {
+            supabase.from('company_settings').select('active_modules').limit(1).single()
+              .then(({ data }) => {
+                const hasIt = (data?.active_modules || []).includes('ressursplan')
+                setHasRessursplan(hasIt)
+                setLoading(false)
+                if (hasIt) {
+                  supabase.from('projects').select('id, name, project_number').order('name').then(({ data: projData }) => setProjects(projData || []))
+                  supabase.from('employees').select('id, first_name, last_name, role, department').order('last_name').then(({ data: empData }) => setEmployees(empData || []))
+                }
+              })
+              .catch(() => { setHasRessursplan(false); setLoading(false) })
+          }, [])
+
+          if (loading) return (
+            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', padding:'40px', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+                <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
+                <p style={{ color:'#94a3b8', fontSize:'14px', margin:0 }}>Sjekker tilgang...</p>
+              </div>
+            </div>
+          )
+
+          // ── UPSELL: Ingen tilgang på ressursplanlegger ──
+          if (!hasRessursplan) return (
+            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+                {/* Header med gradient */}
+                <div style={{ background:'linear-gradient(135deg, #059669, #0891b2)', padding:'32px 28px', textAlign:'center', color:'white' }}>
+                  <div style={{ fontSize:'48px', marginBottom:'12px' }}>📅</div>
+                  <h2 style={{ margin:'0 0 6px', fontSize:'22px', fontWeight:'800' }}>Planlegg prosjektet ditt</h2>
+                  <p style={{ margin:0, fontSize:'14px', opacity:0.9 }}>Fra kalkyle til ferdig prosjektplan på minutter</p>
+                </div>
+
+                <div style={{ padding:'24px 28px' }}>
+                  {/* Eksempel-beregning */}
+                  <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'16px', marginBottom:'20px' }}>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'8px' }}>DIN KALKYLE</div>
+                    <div style={{ display:'flex', justifyContent:'space-around', textAlign:'center' }}>
+                      <div>
+                        <div style={{ fontSize:'24px', fontWeight:'800', color:'#059669' }}>{totals.totTimer.toFixed(0)}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>timer beregnet</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'24px', fontWeight:'800', color:'#2563eb' }}>{kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler||[]).length, 0)}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>bygningsdeler</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'24px', fontWeight:'800', color:'#7c3aed' }}>{kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler||[]).reduce((s, bd) => s + (bd.materialer||[]).filter(m=>m.varenavn).length, 0), 0)}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>materialposter</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hva du får */}
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>Med ressursplanleggeren kan du:</div>
+                  <div style={{ display:'grid', gap:'10px', marginBottom:'24px' }}>
+                    {[
+                      { emoji: '👷', title: 'Bemanningsplanlegger', desc: 'Velg antall mann og se automatisk hvor mange uker prosjektet tar. Juster bemanning og se effekten umiddelbart.' },
+                      { emoji: '📊', title: 'Visuell fremdriftsplan', desc: 'Gantt-lignende oversikt over alle bygningsdeler med tidsberegning, datoer og dekningsbidrag per fase.' },
+                      { emoji: '👥', title: 'Koble ansatte til prosjektet', desc: 'Send timer direkte til ressursplanen og book dine ansatte på riktige uker automatisk.' },
+                      { emoji: '📦', title: 'Leveringsplan for materialer', desc: 'Generer materiallister per fase med foreslått leveringsdato og NOBB-nummer — klar til å sende til leverandør.' },
+                      { emoji: '📅', title: 'Kalender-integrasjon', desc: 'Se prosjektfremdrift i bedriftskalenderen sammen med andre prosjekter og fravær.' },
+                    ].map((item, i) => (
+                      <div key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                        <span style={{ fontSize:'20px', flexShrink:0, marginTop:'2px' }}>{item.emoji}</span>
+                        <div>
+                          <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{item.title}</div>
+                          <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.4 }}>{item.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* CTA knapper */}
+                  <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('minbedrift') }} style={{ width:'100%', padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700', marginBottom:'8px' }}>Aktiver ressursplanleggeren →</button>
+                  <button onClick={onClose} style={{ width:'100%', padding:'10px', border:'none', borderRadius:'10px', background:'transparent', cursor:'pointer', fontSize:'13px', color:'#94a3b8' }}>Ikke nå</button>
+                </div>
+              </div>
+            </div>
+          )
+
+          // ── FULL PLANLEGGER: Har tilgang ──
+
+          const totalTimer = totals.totTimer
+          const dagerTotalt = antallMann > 0 && timerPerDag > 0 ? totalTimer / (antallMann * timerPerDag) : 0
+          const ukerTotalt = dagerTotalt / 5
+
+          const bdPlan = []
+          let akkumulertDager = 0
+          kalkyler.forEach(kalk => {
+            const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
+            const fag = getFaggruppe(kalk.fag)
+            ;(kalk.bygningsdeler || []).forEach(bd => {
+              const r = beregnBygningsdel(bd, fakt)
+              const bdDager = antallMann > 0 && timerPerDag > 0 ? r.totalTimer / (antallMann * timerPerDag) : 0
+              const startDag = akkumulertDager
+              akkumulertDager += bdDager
+              bdPlan.push({
+                name: bd.name || 'Uten navn', fag: fag.name, emoji: fag.emoji,
+                timer: r.totalTimer, dager: bdDager, startDag, sluttDag: akkumulertDager,
+                startUke: Math.floor(startDag / 5) + 1, sluttUke: Math.ceil(akkumulertDager / 5),
+                materialer: (bd.materialer || []).filter(m => m.varenavn).map(m => ({
+                  nobb: m.nobb || '', varenavn: m.varenavn, mengde: parseFloat(m.mengde) || 0,
+                  enhet: m.enhet || 'stk', enhetspris: parseFloat(m.enhetspris) || 0,
+                  totalMengde: (parseFloat(m.mengde) || 0) * (r.materialMengde || safeMengde(bd.mengde, 1))
+                })),
+                dbProsent: r.dbProsent
+              })
+            })
+          })
+
+          const addWorkdays = (fromDate, days) => {
+            const d = new Date(fromDate + 'T12:00:00')
+            // Først: hopp over helg om startdatoen er lørdag/søndag
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+            let added = 0
+            while (added < Math.max(days, 0)) {
+              d.setDate(d.getDate() + 1)
+              if (d.getDay() !== 0 && d.getDay() !== 6) added++
+            }
+            return d
+          }
+
+          // Generer liste med N arbeidsdager fra startdato (ekskl. helger)
+          const getWorkdayList = (fromDate, numDays) => {
+            const dates = []
+            const d = new Date(fromDate + 'T12:00:00')
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+            dates.push(d.toISOString().split('T')[0])
+            for (let i = 1; i < numDays; i++) {
+              d.setDate(d.getDate() + 1)
+              while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+              dates.push(d.toISOString().split('T')[0])
+            }
+            return dates
+          }
+
+          // ── Prosjektvalg popup ──
+          const getProjId = () => k.project_id || selectedProject || null
+
+          const handleAction = (action) => {
+            const projId = getProjId()
+            if (!projId) { setShowProjectPicker(action); return }
+            if (action === 'ressurs') doSendRessursplan(projId)
+            else doGenererLevering(projId)
+          }
+
+          // ── Send til ressursplan (resource_plans) ──
+          const doSendRessursplan = async (projId) => {
+            setSending(true)
+            try {
+              const plans = []
+              const useEmployees = tildelingsmodus === 'ansatte' && selectedEmployees.length > 0
+              const placeholderIds = {} // Gjenbruk UUID per mann-nummer
+
+              for (const bd of bdPlan) {
+                const bdStartD = addWorkdays(startDato, Math.floor(bd.startDag))
+                const bdStartStr = bdStartD.toISOString().split('T')[0]
+                const dager = Math.max(Math.ceil(bd.dager), 1)
+                const workDates = getWorkdayList(bdStartStr, dager)
+
+                if (useEmployees) {
+                  for (const dateStr of workDates) {
+                    for (const empId of selectedEmployees) {
+                      plans.push({
+                        resource_id: empId, resource_type: 'employee', project_id: projId,
+                        date: dateStr, hours: timerPerDag,
+                        notes: `📐 ${bd.name} (fra kalkyle)`,
+                        created_by: user?.id
+                      })
+                    }
+                  }
+                } else {
+                  for (let mannNr = 1; mannNr <= antallMann; mannNr++) {
+                    // Gjenbruk samme placeholder-ID per mann på tvers av bygningsdeler
+                    if (!placeholderIds[mannNr]) placeholderIds[mannNr] = crypto.randomUUID()
+                    for (const dateStr of workDates) {
+                      plans.push({
+                        resource_id: placeholderIds[mannNr],
+                        resource_type: 'employee',
+                        project_id: projId,
+                        date: dateStr, hours: timerPerDag,
+                        notes: `📐 ${bd.name} (fra kalkyle) | Ressurs ${mannNr}`,
+                        created_by: user?.id
+                      })
+                    }
+                  }
+                }
+              }
+
+              // Insert i batches
+              for (let i = 0; i < plans.length; i += 200) {
+                const batch = plans.slice(i, i + 200)
+                const { error } = await supabase.from('resource_plans').insert(batch)
+                if (error) throw error
+              }
+              setSent({ type: 'ressurs', count: plans.length, mode: useEmployees ? 'ansatte' : 'placeholder' })
+            } catch (e) { alert('Feil: ' + e.message) }
+            finally { setSending(false) }
+          }
+
+          // ── Generer leveringsplan (resource_plans med type material) ──
+          const doGenererLevering = async (projId) => {
+            setSending(true)
+            try {
+              const matPlans = []
+              for (const bd of bdPlan) {
+                if (bd.materialer.length === 0) continue
+                const faseStart = addWorkdays(startDato, Math.floor(bd.startDag))
+                const leveringsDato = new Date(faseStart)
+                leveringsDato.setDate(leveringsDato.getDate() - leveringsdager)
+                while (leveringsDato.getDay() === 0 || leveringsDato.getDay() === 6) leveringsDato.setDate(leveringsDato.getDate() - 1)
+
+                const matListe = bd.materialer.map(m =>
+                  `${m.nobb ? m.nobb + ' ' : ''}${m.varenavn}: ${m.totalMengde.toFixed(1)} ${m.enhet}`
+                ).join('\n')
+
+                matPlans.push({
+                  resource_id: crypto.randomUUID(),
+                  resource_type: 'employee',
+                  project_id: projId,
+                  date: leveringsDato.toISOString().split('T')[0],
+                  hours: 0,
+                  notes: `📦 Levering: ${bd.name}\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\n${matListe}`,
+                  created_by: user?.id
+                })
+              }
+
+              if (matPlans.length === 0) { alert('Ingen bygningsdeler med materialer'); setSending(false); return }
+
+              const { error } = await supabase.from('resource_plans').insert(matPlans)
+              if (error) throw error
+              setSent({ type: 'levering', count: matPlans.length })
+            } catch (e) { alert('Feil: ' + e.message) }
+            finally { setSending(false) }
+          }
+
+          // ── Suksessvisning ──
+          if (sent) return (
+            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'32px', textAlign:'center' }}>
+                <div style={{ fontSize:'48px', marginBottom:'16px' }}>{sent.type === 'ressurs' ? '📅' : '📦'}</div>
+                <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>
+                  {sent.type === 'ressurs' ? 'Sendt til ressursplan!' : 'Leveringsplan opprettet!'}
+                </h3>
+                <p style={{ margin:'0 0 8px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
+                  {sent.type === 'ressurs'
+                    ? sent.mode === 'ansatte'
+                      ? `${sent.count} bookinger opprettet for ${selectedEmployees.length} ansatt${selectedEmployees.length > 1 ? 'e' : ''}.`
+                      : `${sent.count} reservasjoner opprettet for ${antallMann} mann.`
+                    : `${sent.count} materialleveranse${sent.count > 1 ? 'r' : ''} lagt til i ressursplanen.`}
+                </p>
+                <p style={{ margin:'0 0 24px', color:'#94a3b8', fontSize:'13px' }}>
+                  {sent.type === 'ressurs'
+                    ? sent.mode === 'ansatte'
+                      ? 'Åpne ressursplanleggeren for å se og justere bookingene.'
+                      : 'Åpne ressursplanleggeren for å se reservasjonene. Du kan tildele navngitte ansatte der.'
+                    : 'Åpne ressursplanleggeren og klikk «📦 Materiell» for å se leveringsplanen.'}
+                </p>
+                <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
+                  <button onClick={onClose} style={{ padding:'10px 24px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Lukk</button>
+                  <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ressursplan') }}
+                    style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+                    → Åpne ressursplan
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+
+          // ── Prosjektvalg popup ──
+          if (showProjectPicker) return (
+            <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={() => setShowProjectPicker(null)} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+                <div style={{ padding:'24px', textAlign:'center' }}>
+                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>⚠️</div>
+                  <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Kalkylen er ikke koblet til et prosjekt</h3>
+                  <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
+                    For å {showProjectPicker === 'ressurs' ? 'sende til ressursplan' : 'generere leveringsplan'} må kalkylen kobles til et prosjekt. Velg et eksisterende prosjekt eller opprett et nytt.
+                  </p>
+                  <div style={{ textAlign:'left', marginBottom:'16px' }}>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Velg eksisterende prosjekt</label>
+                    <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
+                      <option value="">Velg prosjekt...</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display:'flex', gap:'10px' }}>
+                    <button onClick={() => setShowProjectPicker(null)}
+                      style={{ flex:1, padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
+                    {selectedProject ? (
+                      <button onClick={() => { const action = showProjectPicker; setShowProjectPicker(null); if (action === 'ressurs') doSendRessursplan(selectedProject); else doGenererLevering(selectedProject) }}
+                        style={{ flex:2, padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>Bruk valgt prosjekt →</button>
+                    ) : (
+                      <button onClick={() => { setShowProjectPicker(null); onClose(); if (typeof onNavigate === 'function') onNavigate('prosjekter') }}
+                        style={{ flex:2, padding:'12px', background:'#f59e0b', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>+ Opprett nytt prosjekt</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+
+          return (
+            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'800px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+                <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <h3 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📅 Planlegg prosjekt</h3>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                  </div>
+                  <p style={{ margin:'6px 0 0', fontSize:'13px', color:'#64748b' }}>{k.title} — {totalTimer.toFixed(0)} timer totalt</p>
+                </div>
+
+                <div style={{ overflowY:'auto', flex:1, padding:'20px 24px' }}>
+                  {/* Bemanning input */}
+                  <div style={{ display:'flex', gap:'16px', marginBottom:'20px', padding:'16px', background:'#f8fafc', borderRadius:'12px', flexWrap:'wrap' }}>
+                    <div style={{ flex:1, minWidth:'120px' }}>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Antall mann</label>
+                      <input type="number" min="1" max="50" value={antallMann} onChange={e => setAntallMann(parseInt(e.target.value) || 1)} style={{ ...qInp, textAlign:'center', fontWeight:'700', fontSize:'18px', color:'#059669' }} />
+                    </div>
+                    <div style={{ flex:1, minWidth:'120px' }}>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Timer per dag</label>
+                      <input type="number" min="1" max="12" step="0.5" value={timerPerDag} onChange={e => setTimerPerDag(parseFloat(e.target.value) || 7.5)} style={{ ...qInp, textAlign:'center', fontWeight:'700', fontSize:'18px' }} />
+                    </div>
+                    <div style={{ flex:1, minWidth:'140px' }}>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Ønsket oppstart</label>
+                      <input type="date" value={startDato} onChange={e => setStartDato(e.target.value)} style={{ ...qInp, fontWeight:'600' }} />
+                    </div>
+                  </div>
+
+                  {/* Resultat-boks */}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap' }}>
+                    <div style={{ flex:1, background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>TOTAL TID</div>
+                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{totalTimer.toFixed(0)} t</div>
+                    </div>
+                    <div style={{ flex:1, background:'#eff6ff', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>ARBEIDSDAGER</div>
+                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#2563eb' }}>{Math.ceil(dagerTotalt)}</div>
+                    </div>
+                    <div style={{ flex:1, background:'#faf5ff', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>UKER</div>
+                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#7c3aed' }}>{ukerTotalt.toFixed(1)}</div>
+                    </div>
+                    <div style={{ flex:1, background:'#fefce8', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>FERDIG CA.</div>
+                      <div style={{ fontSize:'16px', fontWeight:'800', color:'#ca8a04' }}>{addWorkdays(startDato, Math.ceil(dagerTotalt)).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric' })}</div>
+                    </div>
+                  </div>
+
+                  {/* Fremdriftsplan visuell */}
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>Fremdriftsplan</div>
+                  <div style={{ marginBottom:'20px' }}>
+                    {bdPlan.map((bd, i) => {
+                      const barStart = dagerTotalt > 0 ? (bd.startDag / dagerTotalt) * 100 : 0
+                      const barWidth = dagerTotalt > 0 ? Math.max((bd.dager / dagerTotalt) * 100, 2) : 0
+                      return (
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px', fontSize:'12px' }}>
+                          <div style={{ width:'180px', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            <span>{bd.emoji} </span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bd.name}</span>
+                          </div>
+                          <div style={{ flex:1, height:'22px', background:'#f1f5f9', borderRadius:'6px', position:'relative', overflow:'hidden' }}>
+                            <div style={{ position:'absolute', left: barStart + '%', width: barWidth + '%', height:'100%', background: bd.dbProsent >= 25 ? '#059669' : bd.dbProsent >= 15 ? '#ca8a04' : '#dc2626', borderRadius:'6px', opacity:0.8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                              <span style={{ fontSize:'9px', color:'white', fontWeight:'700', whiteSpace:'nowrap' }}>{bd.timer.toFixed(0)}t</span>
+                            </div>
+                          </div>
+                          <div style={{ width:'110px', flexShrink:0, textAlign:'right', color:'#64748b', fontSize:'11px' }}>uke {bd.startUke}{bd.sluttUke !== bd.startUke ? `–${bd.sluttUke}` : ''}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Detaljert tabell */}
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>Detaljert tidsplan</div>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px', marginBottom:'20px' }}>
+                    <thead><tr style={{ background:'#f8fafc' }}>
+                      <th style={{ padding:'8px', textAlign:'left', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Bygningsdel</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Timer</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Dager</th>
+                      <th style={{ padding:'8px', textAlign:'left', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Periode</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Materialer</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>DB%</th>
+                    </tr></thead>
+                    <tbody>
+                      {bdPlan.map((bd, i) => {
+                        const startD = addWorkdays(startDato, Math.floor(bd.startDag))
+                        const sluttD = addWorkdays(startDato, Math.ceil(bd.sluttDag))
+                        return (
+                          <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                            <td style={{ padding:'6px 8px', fontWeight:'500' }}>{bd.emoji} {bd.name}</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right' }}>{bd.timer.toFixed(1)} t</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right' }}>{Math.ceil(bd.dager)} d</td>
+                            <td style={{ padding:'6px 8px', color:'#64748b' }}>{startD.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })} – {sluttD.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right', color:'#64748b' }}>{bd.materialer.length} poster</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'600', color: bd.dbProsent >= 25 ? '#16a34a' : bd.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{bd.dbProsent.toFixed(1)}%</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer med tildelingsvalg */}
+                <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
+                  {/* Tildelingsmodus */}
+                  <div style={{ marginBottom:'12px' }}>
+                    <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'6px' }}>Tildeling av ansatte</label>
+                    <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
+                      <button onClick={() => setTildelingsmodus('ansatte')}
+                        style={{ flex:1, padding:'10px 14px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center',
+                          border: tildelingsmodus === 'ansatte' ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                          background: tildelingsmodus === 'ansatte' ? '#eff6ff' : 'white',
+                          color: tildelingsmodus === 'ansatte' ? '#2563eb' : '#64748b' }}>
+                        👷 Velg ansatte<br/><span style={{ fontSize:'10px', fontWeight:'400' }}>Jeg vet hvem som skal jobbe</span>
+                      </button>
+                      <button onClick={() => setTildelingsmodus('reserver')}
+                        style={{ flex:1, padding:'10px 14px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center',
+                          border: tildelingsmodus === 'reserver' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                          background: tildelingsmodus === 'reserver' ? '#fefce8' : 'white',
+                          color: tildelingsmodus === 'reserver' ? '#b45309' : '#64748b' }}>
+                        📋 Reserver kapasitet<br/><span style={{ fontSize:'10px', fontWeight:'400' }}>Bestemmes senere ({antallMann} mann reserveres)</span>
+                      </button>
+                    </div>
+
+                    {/* Ansattvelger (kun synlig i ansatte-modus) */}
+                    {tildelingsmodus === 'ansatte' && (() => {
+                      const EmpPicker = () => {
+                        const [empList, setEmpList] = useState([])
+                        const [loadingEmp, setLoadingEmp] = useState(true)
+                        const [isOpen, setIsOpen] = useState(false)
+                        const [errMsg, setErrMsg] = useState('')
+                        useEffect(() => {
+                          supabase.from('employees').select('*').order('first_name')
+                            .then(({ data, error }) => {
+                              if (error) { console.error('EmpPicker error:', error); setErrMsg(error.message) }
+                              setEmpList(data || [])
+                              setLoadingEmp(false)
+                            })
+                            .catch(e => { console.error('EmpPicker catch:', e); setErrMsg(e.message); setLoadingEmp(false) })
+                        }, [])
+
+                        if (loadingEmp) return <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Laster ansatte...</div>
+                        if (errMsg) return <div style={{ padding:'12px', background:'#fef2f2', borderRadius:'8px', fontSize:'12px', color:'#dc2626', marginBottom:'8px' }}>Feil ved lasting av ansatte: {errMsg}</div>
+                        if (empList.length === 0) return (
+                          <div style={{ padding:'12px', background:'#fefce8', borderRadius:'8px', fontSize:'12px', color:'#92400e', textAlign:'center', marginBottom:'8px' }}>
+                            Ingen ansatte funnet i databasen. <span onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ansatte') }} style={{ textDecoration:'underline', cursor:'pointer', fontWeight:'700' }}>Gå til Ansatte-modulen →</span>
+                          </div>
+                        )
+
+                        const selectedNames = empList.filter(e => selectedEmployees.includes(e.id)).map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim())
+
+                        return (
+                          <div style={{ marginBottom:'8px' }}>
+                            {/* Dropdown trigger */}
+                            <div onClick={() => setIsOpen(!isOpen)}
+                              style={{ padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', minHeight:'42px' }}>
+                              <div style={{ flex:1, fontSize:'13px', color: selectedNames.length > 0 ? '#0f172a' : '#94a3b8' }}>
+                                {selectedNames.length > 0 ? selectedNames.join(', ') : 'Klikk for å velge ansatte...'}
+                              </div>
+                              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'8px' }}>{isOpen ? '▲' : '▼'}</span>
+                            </div>
+
+                            {/* Dropdown liste */}
+                            {isOpen && (
+                              <div style={{ border:'1px solid #e2e8f0', borderTop:'none', borderRadius:'0 0 10px 10px', background:'white', maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}>
+                                {/* Velg alle / Fjern alle */}
+                                <div style={{ padding:'6px 12px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', background:'#f8fafc' }}>
+                                  <button onClick={() => setSelectedEmployees(empList.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
+                                  <button onClick={() => setSelectedEmployees([])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#dc2626', fontWeight:'600' }}>Fjern alle</button>
+                                </div>
+                                {empList.map(emp => {
+                                  const empName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Uten navn'
+                                  const isSelected = selectedEmployees.includes(emp.id)
+                                  return (
+                                    <label key={emp.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f8fafc', background: isSelected ? '#f0fdf4' : 'white', transition:'background 0.1s' }}
+                                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background='#f8fafc' }} onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background='white' }}>
+                                      <input type="checkbox" checked={isSelected}
+                                        onChange={() => setSelectedEmployees(prev => isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
+                                        style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669', flexShrink:0 }} />
+                                      <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
+                                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{[emp.role, emp.department].filter(Boolean).join(' · ') || emp.email || ''}</div>
+                                      </div>
+                                      {isSelected && <span style={{ color:'#059669', fontSize:'14px', flexShrink:0 }}>✓</span>}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {selectedEmployees.length > 0 && (
+                              <div style={{ fontSize:'12px', color:'#059669', fontWeight:'700', marginTop:'6px' }}>
+                                ✅ {selectedEmployees.length} ansatt{selectedEmployees.length > 1 ? 'e' : ''} valgt
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      return <EmpPicker />
+                    })()}
+
+                    {tildelingsmodus === 'reserver' && (
+                      <div style={{ padding:'8px 12px', background:'#fefce8', borderRadius:'8px', marginBottom:'8px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+                        💡 Det reserveres kapasitet for <strong>{antallMann} mann</strong> i ressursplanen. Du kan tildele navngitte ansatte senere ved å dra bookingene over til riktige personer.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Levering */}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-end' }}>
+                    <div style={{ width:'180px' }}>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering før oppstart (dager)</label>
+                      <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, textAlign:'center' }} />
+                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px' }}>Materialer leveres {leveringsdager} dager før arbeidet starter</div>
+                    </div>
+                  </div>
+
+                  {/* Knapper */}
+                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
+                    <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
+                    <div style={{ flex:1 }} />
+                    <button onClick={() => handleAction('ressurs')} disabled={sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0)}
+                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px',
+                        background: sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0) ? '#94a3b8' : '#2563eb',
+                        color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
+                      {sending ? '⏳ Sender...' : tildelingsmodus === 'ansatte' ? `📅 Send til ressursplan (${selectedEmployees.length} ansatte)` : `📅 Reserver i ressursplan (${antallMann} mann)`}
+                    </button>
+                    <button onClick={() => handleAction('levering')} disabled={sending}
+                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px', background: sending ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
+                      {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return <PlanleggModal onClose={() => setShowPlanlegg(false)} />
+      })()}
 
       {/* UE forespørsel sendt popup */}
       {showUESuccess && (
