@@ -132,6 +132,7 @@ const navGroups = [
       { id: 'avvik',        label: 'Avvik',         emoji: '⚠️' },
       { id: 'hms',          label: 'HMS & Risiko',  emoji: '🛡️' },
       { id: 'maskiner',     label: 'Maskiner',      emoji: '🚜' },
+      { id: 'ansatte',      label: 'Ansatte',       emoji: '👷' },
       { id: 'kunder',       label: 'Kundeoversikt', emoji: '🏢' },
       { id: 'varsler',      label: 'Varsler',       emoji: '🔔' },
     ]
@@ -150,7 +151,6 @@ const navGroups = [
   {
     title: 'PERSONELL & RESSURSER',
     items: [
-      { id: 'ansatte',     label: 'Ansatte',      emoji: '👷' },
       { id: 'timelister',  label: 'Timelister',   emoji: '⏱️' },
       { id: 'ressursplan', label: 'Ressursplan',  emoji: '📅' },
       { id: 'kalender',    label: 'Kalender',     emoji: '📆' },
@@ -222,7 +222,7 @@ const moduleSections = [
   },
   {
     title: '👷 PERSONELL & RESSURSER',
-    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat'],
+    modules: ['timelister', 'ressursplan', 'kalender', 'chat'],
   },
   {
     title: '📸 DOKUMENTASJON, OVERLEVERING & SALG',
@@ -439,6 +439,61 @@ function Field({ label, children }) {
   )
 }
 
+// ── Gjenbrukbar ansattvelger med dropdown ──
+function EmployeeSelect({ value, onChange, placeholder, style, required, allowClear }) {
+  const [emps, setEmps] = useState([])
+  useEffect(() => {
+    supabase.from('employees').select('id, first_name, last_name, email, role, department').eq('status', 'Aktiv').order('last_name').then(({ data }) => setEmps(data || []))
+  }, [])
+  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', cursor:'pointer', ...style }
+  return (
+    <select value={value || ''} onChange={e => onChange(e.target.value, emps.find(emp => emp.id === e.target.value))} required={required} style={selStyle}>
+      <option value="">{placeholder || 'Velg ansatt...'}</option>
+      {emps.map(emp => {
+        const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email || 'Uten navn'
+        return <option key={emp.id} value={emp.id}>{name}{emp.role ? ` (${emp.role})` : ''}</option>
+      })}
+    </select>
+  )
+}
+
+// ── Ansattvelger som setter navn/epost/telefon fra valgt ansatt ──
+function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style }) {
+  const [emps, setEmps] = useState([])
+  const [showDrop, setShowDrop] = useState(false)
+  useEffect(() => {
+    supabase.from('employees').select('id, first_name, last_name, email, phone, role, department').eq('status', 'Aktiv').order('last_name').then(({ data }) => setEmps(data || []))
+  }, [])
+  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
+  return (
+    <div style={{ position:'relative' }}>
+      <input value={value || ''} onChange={e => { onChange(e.target.value); setShowDrop(true) }} onFocus={() => setShowDrop(true)} placeholder={placeholder || 'Skriv eller velg ansatt...'} style={selStyle} />
+      {showDrop && emps.length > 0 && (
+        <>
+          <div style={{ position:'fixed', inset:0, zIndex:49 }} onClick={() => setShowDrop(false)} />
+          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'180px', overflowY:'auto', marginTop:'2px' }}>
+            {emps.filter(emp => {
+              if (!value) return true
+              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim().toLowerCase()
+              return name.includes(value.toLowerCase())
+            }).map(emp => {
+              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+              return (
+                <div key={emp.id} onClick={() => { onChange(name); if (onSelect) onSelect(emp); setShowDrop(false) }}
+                  style={{ padding:'8px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
+                  onMouseEnter={e => e.target.style.background='#f0fdf4'} onMouseLeave={e => e.target.style.background='white'}>
+                  <div style={{ fontWeight:'600', color:'#0f172a' }}>{name}</div>
+                  {emp.role && <div style={{ fontSize:'11px', color:'#94a3b8' }}>{emp.role}{emp.department ? ` · ${emp.department}` : ''}</div>}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Input2({ value, onChange, type, placeholder, required, readOnly }) {
   return (
     <input type={type || 'text'} value={value || ''} onChange={onChange} placeholder={placeholder} required={required} readOnly={readOnly}
@@ -527,7 +582,7 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
       <div>
         <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>Prosjektleder</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <Field label="Navn"><Input2 value={form.project_manager_name} onChange={e => set('project_manager_name', e.target.value)} placeholder="Fullt navn" /></Field>
+          <Field label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></Field>
           <Field label="Telefon"><Input2 value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></Field>
           <div style={{ gridColumn: '1 / -1' }}><Field label="E-post"><Input2 type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></Field></div>
         </div>
@@ -807,7 +862,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
             </div>
             {sec('Prosjektleder')}
             <div style={g2}>
-              <FLabel label="Navn"><FInput value={form.project_manager_name} onChange={e => set('project_manager_name', e.target.value)} placeholder="Fullt navn" /></FLabel>
+              <FLabel label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></FLabel>
               <FLabel label="Telefon"><FInput value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></FLabel>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="E-post"><FInput type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></FLabel></div>
             </div>
@@ -4476,7 +4531,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Ansvarlig</label>
-              <input value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} style={inp} />
+              <EmployeeNameSelect value={form.assigned_to} onChange={v => set('assigned_to', v)} onSelect={emp => set('assigned_to', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" />
             </div>
           </div>
           <div>
@@ -4861,7 +4916,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><input value={ansvarlig} onChange={e=>setAnsvarlig(e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><EmployeeNameSelect value={ansvarlig} onChange={v=>setAnsvarlig(v)} onSelect={emp => setAnsvarlig(`${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Arbeidsbeskrivelse</label><textarea value={arbeidsBeskrivelse} onChange={e=>setArbeidsBeskrivelse(e.target.value)} rows={3} style={{ ...hmsInp, resize:'none' }} placeholder="Beskriv arbeidet..." /></div>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Verneutstyr (PPE)</label><textarea value={utstyr} onChange={e=>setUtstyr(e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hjelm, sele, refleksvest..." /></div>
         </div>
@@ -5023,7 +5078,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Sted</label><input value={form.sted} onChange={e=>set('sted',e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
-          <div><label style={lbl()}>Rapportert av</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Rapportert av</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansatt" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
           <div><label style={lbl()}>Involverte</label><input value={form.involverte} onChange={e=>set('involverte',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Vitner</label><input value={form.vitner} onChange={e=>set('vitner',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Beskrivelse av hendelsen *</label><textarea value={form.hendelsesBeskrivelse} onChange={e=>set('hendelsesBeskrivelse',e.target.value)} rows={4} required style={{ ...hmsInp, resize:'none' }} placeholder="Hva skjedde?" /></div>
@@ -5110,7 +5165,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
-          <div><label style={lbl()}>Ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Ansvarlig</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Formål</label><textarea value={form.formal} onChange={e=>set('formal',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Formål med analysen..." /></div>
         </div>
         <div style={{ background:'#f5f3ff', borderRadius:'10px', padding:'12px', border:'1px solid #ddd6fe', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
@@ -5386,8 +5441,8 @@ function HandbokModal({ user, initial, onClose, onSaved }) {
         {/* Toppinfo */}
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
           <div><label style={lbl()}>Bedrift</label><input value={form.bedrift} onChange={e=>set('bedrift',e.target.value)} placeholder="Bedriftens navn" style={hmsInp} /></div>
-          <div><label style={lbl()}>HMS-ansvarlig *</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} required placeholder="Navn" style={hmsInp} /></div>
-          <div><label style={lbl()}>Revisjonsansvarlig</label><input value={form.revisjonsansvarlig} onChange={e=>set('revisjonsansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>HMS-ansvarlig *</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+          <div><label style={lbl()}>Revisjonsansvarlig</label><EmployeeNameSelect value={form.revisjonsansvarlig} onChange={v=>set('revisjonsansvarlig',v)} onSelect={emp => set('revisjonsansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
           <div><label style={lbl()}>Versjon</label><input value={form.versjon} onChange={e=>set('versjon',e.target.value)} placeholder="1.0" style={hmsInp} /></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Neste revisjon</label><input type="date" value={form.neste_revisjon} onChange={e=>set('neste_revisjon',e.target.value)} style={hmsInp} /></div>
@@ -18989,7 +19044,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>+ Nytt oppfølgingspunkt</div>
                 <input value={newFollowup.description} onChange={e=>setNewFollowup(f=>({...f,description:e.target.value}))} placeholder="Beskrivelse av oppfølging..." style={bInp} />
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
-                  <input value={newFollowup.responsible} onChange={e=>setNewFollowup(f=>({...f,responsible:e.target.value}))} placeholder="Ansvarlig person" style={bInp} />
+                  <EmployeeNameSelect value={newFollowup.responsible} onChange={v=>setNewFollowup(f=>({...f,responsible:v}))} onSelect={emp => setNewFollowup(f=>({...f,responsible:`${emp.first_name||''} ${emp.last_name||''}`.trim()}))} placeholder="Ansvarlig person" style={{ padding:'8px 10px', fontSize:'13px' }} />
                   <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
                 </div>
                 <button onClick={addFollowup} style={{ padding: isMobBD ? '10px' : '9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700' }}>{isMobBD ? '+ Oppfølging' : 'Legg til oppfølging'}</button>
@@ -19955,11 +20010,11 @@ const MODULE_CATALOG = [
   {
     id: 'grunnpakke',
     name: 'Grunnpakke',
-    desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Kundeoversikt og Varsler',
+    desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Ansatte, Kundeoversikt og Varsler',
     emoji: '🔹',
     pricePerUser: 199,
     required: true,
-    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'],
+    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Ansatte','Kundeoversikt','Varsler'],
   },
   {
     id: 'kalkulator',
@@ -20012,13 +20067,6 @@ const MODULE_CATALOG = [
     navId: 'faktura',
   },
   {
-    id: 'ansatte',
-    name: 'Ansatte',
-    desc: 'Personaladministrasjon og kompetanser',
-    emoji: '👷',
-    price: 19,
-    navId: 'ansatte',
-  },
   {
     id: 'timelister',
     name: 'Timelister',
@@ -21214,8 +21262,8 @@ function MinBedriftPage() {
             <div style={mbCard}>
               {mbSec('Nøkkelpersoner')}
               <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
-                <div>{mbLbl('Daglig leder')}<input value={settings?.contact_ceo||''} onChange={e=>set('contact_ceo',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
-                <div>{mbLbl('HMS-ansvarlig')}<input value={settings?.contact_hms||''} onChange={e=>set('contact_hms',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
+                <div>{mbLbl('Daglig leder')}<EmployeeNameSelect value={settings?.contact_ceo||''} onChange={v=>set('contact_ceo',v)} onSelect={emp => set('contact_ceo', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg daglig leder" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+                <div>{mbLbl('HMS-ansvarlig')}<EmployeeNameSelect value={settings?.contact_hms||''} onChange={v=>set('contact_hms',v)} onSelect={emp => set('contact_hms', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg HMS-ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
                 <div>{mbLbl('Regnskapsfører')}<input value={settings?.contact_accountant||''} onChange={e=>set('contact_accountant',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
               </div>
             </div>
@@ -21411,12 +21459,12 @@ const ALL_MODULES_LIST = [
   { id:'avvik',        label:'Avvik',              emoji:'⚠️' },
   { id:'hms',          label:'HMS & Risiko',       emoji:'🛡️' },
   { id:'maskiner',     label:'Maskiner',           emoji:'🚜' },
+  { id:'ansatte',      label:'Ansatte',            emoji:'👷' },
   { id:'tilbud',       label:'Tilbud',             emoji:'📋' },
   { id:'kalkulator',   label:'Kalkulasjon',        emoji:'🧮' },
   { id:'anbudsmodul',  label:'Anbudsmodul',        emoji:'⚖️' },
   { id:'ordre',        label:'Ordre',              emoji:'📝' },
   { id:'faktura',      label:'Faktura',            emoji:'🧾' },
-  { id:'ansatte',      label:'Ansatte',            emoji:'👷' },
   { id:'timelister',   label:'Timelister',         emoji:'⏱️' },
   { id:'ressursplan',  label:'Ressursplanlegger',  emoji:'📅' },
   { id:'kalender',     label:'Kalender',           emoji:'📆' },
@@ -28662,7 +28710,7 @@ function AppContent() {
     prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke', sjekklister: 'grunnpakke',
     avvik: 'grunnpakke', hms: 'grunnpakke', maskiner: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
     kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
-    ansatte: 'ansatte', timelister: 'timelister', ressursplan: 'ressursplan',
+    ansatte: 'grunnpakke', timelister: 'timelister', ressursplan: 'ressursplan',
     kalender: 'kalender', chat: 'chat',
     befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
     minbedrift: null, brukeradmin: null, superadmin: null, // admin always accessible
