@@ -27269,20 +27269,28 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               const events = []
               for (const bd of bdPlan) {
                 const startD = addWorkdays(startDato, Math.floor(bd.startDag))
-                const sluttD = addWorkdays(startDato, Math.ceil(bd.sluttDag))
-                events.push({
-                  title: `📐 ${bd.name}`,
-                  start_date: startD.toISOString().split('T')[0],
-                  end_date: sluttD.toISOString().split('T')[0],
-                  type: 'milestone',
-                  project_id: projId,
-                  color: '#2563eb',
-                  description: `Arbeid: ${bd.timer.toFixed(1)} timer (${antallMann} mann × ${Math.ceil(bd.dager)} dager)\nFra kalkyle: ${k.title}\n\nFordel ansatte i ressursplanleggeren.`,
-                  created_by: user?.id
-                })
+                const dager = Math.max(Math.ceil(bd.dager), 1)
+                // Opprett én milepæl per bygningsdel som dekker hele perioden
+                for (let d = 0; d < dager; d++) {
+                  const date = addWorkdays(startD.toISOString().split('T')[0], d)
+                  const dateStr = date.toISOString().split('T')[0]
+                  events.push({
+                    title: `📐 ${bd.name}`,
+                    start_date: dateStr,
+                    type: 'milestone',
+                    project_id: projId,
+                    color: '#2563eb',
+                    description: `${bd.timer.toFixed(1)} timer totalt · ${antallMann} mann · Dag ${d + 1} av ${dager}\nFra kalkyle: ${k.title}`,
+                    created_by: user?.id
+                  })
+                }
               }
-              const { error } = await supabase.from('calendar_events').insert(events)
-              if (error) throw error
+              // Insert i batches
+              for (let i = 0; i < events.length; i += 200) {
+                const batch = events.slice(i, i + 200)
+                const { error } = await supabase.from('calendar_events').insert(batch)
+                if (error) throw error
+              }
               setSent({ type: 'ressurs', count: events.length })
             } catch (e) { alert('Feil: ' + e.message) }
             finally { setSending(false) }
