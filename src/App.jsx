@@ -27426,6 +27426,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             try {
               const plans = []
               const useEmployees = tildelingsmodus === 'ansatte' && selectedEmployees.length > 0
+              const placeholderIds = {} // Gjenbruk UUID per mann-nummer
 
               for (const bd of bdPlan) {
                 const bdStartD = addWorkdays(startDato, Math.floor(bd.startDag))
@@ -27446,9 +27447,11 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   }
                 } else {
                   for (let mannNr = 1; mannNr <= antallMann; mannNr++) {
+                    // Gjenbruk samme placeholder-ID per mann på tvers av bygningsdeler
+                    if (!placeholderIds[mannNr]) placeholderIds[mannNr] = crypto.randomUUID()
                     for (const dateStr of workDates) {
                       plans.push({
-                        resource_id: `placeholder_${projId}_${mannNr}`,
+                        resource_id: placeholderIds[mannNr],
                         resource_type: 'placeholder',
                         project_id: projId,
                         date: dateStr, hours: timerPerDag,
@@ -27488,7 +27491,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 ).join('\n')
 
                 matPlans.push({
-                  resource_id: `material_${projId}_${bd.name.replace(/\s/g, '_')}`,
+                  resource_id: crypto.randomUUID(),
                   resource_type: 'material',
                   project_id: projId,
                   date: leveringsDato.toISOString().split('T')[0],
