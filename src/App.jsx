@@ -22174,6 +22174,18 @@ function safeMengde(v, fallback = 1) { const n = parseFloat(v); return isNaN(n) 
 
 function beregnBygningsdel(bd, faktorer) {
   const mengde = safeMengde(bd.mengde, 1)
+
+  // ── Beregn åpningsfradrag for materialer ──
+  // Totalt åpningsareal trekkes fra material-mengde (aldri under 0)
+  let totalApningsareal = 0
+  if (bd.fradrag_apninger !== false) { // Default: fradrag aktivert
+    ;(bd.apningstillegg || []).forEach(at => {
+      const antall = parseFloat(at.antall) || 0
+      const areal = parseFloat(at.areal) || 0
+      totalApningsareal += antall * areal
+    })
+  }
+  const materialMengde = Math.max(mengde - totalApningsareal, 0)
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
@@ -22188,8 +22200,8 @@ function beregnBygningsdel(bd, faktorer) {
   })
   ;(bd.materialer || []).forEach(m => {
     const r = beregnMaterialkostnad(m, faktorer)
-    totalMaterial += r.medJustering * mengde
-    totalMaterialMedFortjeneste += r.medFortjeneste * mengde
+    totalMaterial += r.medJustering * materialMengde
+    totalMaterialMedFortjeneste += r.medFortjeneste * materialMengde
   })
   ;(bd.underleverandorer || []).forEach(u => {
     const kost = parseFloat(u.kostnad) || 0
@@ -22253,7 +22265,7 @@ function beregnBygningsdel(bd, faktorer) {
   const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE + flatetilleggMedFortjeneste + totalApningstillegg
   const dekningsbidrag = totalMedFortjeneste - selvkost
   const dbProsent = totalMedFortjeneste > 0 ? (dekningsbidrag / totalMedFortjeneste) * 100 : 0
-  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
+  return { mengde, materialMengde, totalApningsareal, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
@@ -26253,7 +26265,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
                               {/* Materialer - editable */}
                               <div style={{ marginBottom:'12px' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>📦 MATERIALER</div>
+                                {bdT.totalApningsareal > 0 && (
+                                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background:'#eff6ff', borderRadius:'8px', fontSize:'11px' }}>
+                                    <span style={{ color:'#2563eb' }}>🚪 Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} trekkes fra</span>
+                                    <span style={{ color:'#64748b' }}>→ Materialer beregnes for <strong>{bdT.materialMengde.toFixed(1)} {bd.enhet || 'm²'}</strong> (ikke {bd.mengde})</span>
+                                    <label style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer', flexShrink:0 }}>
+                                      <input type="checkbox" checked={bd.fradrag_apninger !== false} onChange={e => updateBdField(kalk.id, bd.id, 'fradrag_apninger', e.target.checked)} style={{ cursor:'pointer' }} />
+                                      <span style={{ fontSize:'10px', color:'#64748b' }}>Aktiv</span>
+                                    </label>
+                                  </div>
+                                )}
                                 {(bd.materialer||[]).length > 0 && (
                                   <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
                                     <colgroup>
@@ -26275,13 +26297,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                       <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Pris/enh" info={<span><b>Innkjøpspris per enhet.</b><br/><br/>Hentes automatisk fra din prisliste (5001-fil) via NOBB-nummer, eller tastes inn manuelt.</span>} /></th>
                                       <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span><b>Ren materialkostnad per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Mengde × pris/enhet<br/><br/>Uten påslag — hva materialet koster deg i innkjøp.</span>} align="right" /></th>
                                       <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="M/påslag" info={<span><b>Materialpris med alle påslag per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Kostnad<br/>× (1 + mat.justering {fakt.mat_justering_prosent}%)<br/>× (1 + fortjeneste innkjøp {fakt.fortjeneste_innkjop_prosent}%)<br/><br/>Inkluderer svinn-justering og din fortjeneste på materialer.</span>} align="right" /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span><b>Total materialpris for hele bygningsdelen.</b><br/><br/>Beregning:<br/>M/påslag × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'})</span>} align="right" /></th>
+                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span><b>Total materialpris for hele bygningsdelen.</b><br/><br/>Beregning:<br/>M/påslag × {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? `materialmengde (${bdT.materialMengde.toFixed(1)} ${bd.enhet || 'enhet'} etter åpningsfradrag)` : `mengde (${bd.mengde ?? 1} ${bd.enhet || 'enhet'})`}</span>} align="right" /></th>
                                       <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
                                     </tr></thead>
                                     <tbody>
                                       {(bd.materialer||[]).map(m => {
                                         const r = beregnMaterialkostnad(m, fakt)
-                                        const bdMengde = safeMengde(bd.mengde, 1)
+                                        const matMengde = bdT.materialMengde
                                         return (
                                           <tr key={m.id}>
                                             <td style={{ padding:'3px 2px' }}>
@@ -26308,7 +26330,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{fmt(r.medFortjeneste)}</td>
-                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengde)}</td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * matMengde)}</td>
                                             <td style={{ padding:'3px 2px' }}><button onClick={()=>removeMaterial(kalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
                                           </tr>
                                         )
@@ -26392,6 +26414,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeidMedFortjeneste + (bdT.flatetilleggMedFortjeneste || 0) + (bdT.totalApningstillegg || 0))}</span></div>
                                   <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterial)}</span></div>
                                   <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterialMedFortjeneste)}</span></div>
+                                  {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#2563eb', fontSize:'11px' }}>↳ Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} ({bdT.materialMengde.toFixed(1)} av {bd.mengde ?? 1} {bd.enhet || 'm²'} beregnet)</span></div>}
                                   {bdT.totalUE > 0 && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Underleverandør</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalUE)}</span></div>}
                                   <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bdT.totalTimer.toFixed(1)} t</span></div>
                                   <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Selvkost</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{fmt(bdT.selvkost)}</span></div>
@@ -27177,6 +27200,19 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           )
 
           // ── FULL PLANLEGGER: Har tilgang ──
+          const [employees, setEmployees] = useState([])
+          const [selectedEmployees, setSelectedEmployees] = useState([])
+          const [projects, setProjects] = useState([])
+          const [selectedProject, setSelectedProject] = useState(k.project_id || '')
+          const [sending, setSending] = useState(false)
+          const [sent, setSent] = useState(null) // { type: 'ressurs'|'levering', count }
+          const [leveringsdager, setLeveringsdager] = useState(2) // dager før fase-start
+
+          useEffect(() => {
+            supabase.from('employees').select('id, name, role').order('name').then(({ data }) => setEmployees(data || []))
+            supabase.from('projects').select('id, name, project_number').eq('status', 'Aktiv').order('name').then(({ data }) => setProjects(data || []))
+          }, [])
+
           const totalTimer = totals.totTimer
           const dagerTotalt = antallMann > 0 && timerPerDag > 0 ? totalTimer / (antallMann * timerPerDag) : 0
           const ukerTotalt = dagerTotalt / 5
@@ -27195,7 +27231,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 name: bd.name || 'Uten navn', fag: fag.name, emoji: fag.emoji,
                 timer: r.totalTimer, dager: bdDager, startDag, sluttDag: akkumulertDager,
                 startUke: Math.floor(startDag / 5) + 1, sluttUke: Math.ceil(akkumulertDager / 5),
-                materialer: (bd.materialer || []).filter(m => m.varenavn), dbProsent: r.dbProsent
+                materialer: (bd.materialer || []).filter(m => m.varenavn).map(m => ({
+                  nobb: m.nobb || '', varenavn: m.varenavn, mengde: parseFloat(m.mengde) || 0,
+                  enhet: m.enhet || 'stk', enhetspris: parseFloat(m.enhetspris) || 0,
+                  totalMengde: (parseFloat(m.mengde) || 0) * (r.materialMengde || safeMengde(bd.mengde, 1))
+                })),
+                dbProsent: r.dbProsent
               })
             })
           })
@@ -27205,6 +27246,108 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             while (added < Math.max(days, 0)) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) added++ }
             return d
           }
+
+          // ── Send til ressursplan ──
+          const handleSendRessursplan = async () => {
+            if (selectedEmployees.length === 0) return alert('Velg minst én ansatt')
+            if (!selectedProject) return alert('Velg et prosjekt')
+            setSending(true)
+            try {
+              const plans = []
+              for (const bd of bdPlan) {
+                const startD = addWorkdays(startDato, Math.floor(bd.startDag))
+                const dager = Math.max(Math.ceil(bd.dager), 1)
+                for (let d = 0; d < dager; d++) {
+                  const date = addWorkdays(startD.toISOString().split('T')[0], d)
+                  const dateStr = date.toISOString().split('T')[0]
+                  for (const empId of selectedEmployees) {
+                    plans.push({
+                      resource_id: empId, resource_type: 'employee', project_id: selectedProject,
+                      date: dateStr, hours: timerPerDag,
+                      notes: `📐 ${bd.name} (fra kalkyle: ${k.title})`,
+                      created_by: user?.id, source: 'kalkyle', source_id: k.id
+                    })
+                  }
+                }
+              }
+              // Insert in batches
+              for (let i = 0; i < plans.length; i += 200) {
+                const batch = plans.slice(i, i + 200)
+                const { error } = await supabase.from('resource_plans').insert(batch)
+                if (error) throw error
+              }
+              setSent({ type: 'ressurs', count: plans.length })
+            } catch (e) { alert('Feil: ' + e.message) }
+            finally { setSending(false) }
+          }
+
+          // ── Generer leveringsplan med milepæler ──
+          const handleGenererLevering = async () => {
+            if (!selectedProject) return alert('Velg et prosjekt')
+            setSending(true)
+            try {
+              const milestones = []
+              for (const bd of bdPlan) {
+                if (bd.materialer.length === 0) continue
+                const faseStart = addWorkdays(startDato, Math.floor(bd.startDag))
+                const leveringsDato = new Date(faseStart)
+                leveringsDato.setDate(leveringsDato.getDate() - leveringsdager)
+                // Skip weekends for leveringsdato
+                while (leveringsDato.getDay() === 0 || leveringsDato.getDay() === 6) leveringsDato.setDate(leveringsDato.getDate() - 1)
+
+                const matListe = bd.materialer.map(m =>
+                  `${m.nobb ? m.nobb + ' ' : ''}${m.varenavn}: ${m.totalMengde.toFixed(1)} ${m.enhet}`
+                ).join('\n')
+
+                milestones.push({
+                  title: `📦 Levering: ${bd.name}`,
+                  start_date: leveringsDato.toISOString().split('T')[0],
+                  type: 'milestone',
+                  project_id: selectedProject,
+                  color: '#059669',
+                  description: `Materialleveranse for ${bd.name} (${bd.materialer.length} poster)\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\nMATERIALLISTE:\n${matListe}\n\nFra kalkyle: ${k.title}`,
+                  created_by: user?.id
+                })
+              }
+
+              if (milestones.length === 0) { alert('Ingen bygningsdeler med materialer'); setSending(false); return }
+
+              const { error } = await supabase.from('calendar_events').insert(milestones)
+              if (error) throw error
+              setSent({ type: 'levering', count: milestones.length })
+            } catch (e) { alert('Feil: ' + e.message) }
+            finally { setSending(false) }
+          }
+
+          // ── Suksessvisning ──
+          if (sent) return (
+            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'32px', textAlign:'center' }}>
+                <div style={{ fontSize:'48px', marginBottom:'16px' }}>{sent.type === 'ressurs' ? '📅' : '📦'}</div>
+                <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>
+                  {sent.type === 'ressurs' ? 'Sendt til ressursplan!' : 'Leveringsplan opprettet!'}
+                </h3>
+                <p style={{ margin:'0 0 8px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
+                  {sent.type === 'ressurs'
+                    ? `${sent.count} bookinger opprettet for ${selectedEmployees.length} ansatt${selectedEmployees.length > 1 ? 'e' : ''}.`
+                    : `${sent.count} leveringsmilepæl${sent.count > 1 ? 'er' : ''} lagt til i kalenderen.`}
+                </p>
+                <p style={{ margin:'0 0 24px', color:'#94a3b8', fontSize:'13px' }}>
+                  {sent.type === 'ressurs'
+                    ? 'Åpne ressursplanleggeren for å se og justere bookingene.'
+                    : 'Åpne kalenderen eller ressursplanen for å se milepælene. Klikk på en milepæl for å se materiallisten.'}
+                </p>
+                <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
+                  <button onClick={onClose} style={{ padding:'10px 24px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Lukk</button>
+                  <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate(sent.type === 'ressurs' ? 'ressursplan' : 'kalender') }}
+                    style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+                    {sent.type === 'ressurs' ? '→ Åpne ressursplan' : '→ Åpne kalender'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
 
           return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -27307,11 +27450,46 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   </table>
                 </div>
 
-                {/* Footer */}
-                <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
-                  <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>Lukk</button>
-                  <button onClick={() => { /* TODO: impl */ }} style={{ padding:'10px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>📅 Send til ressursplan</button>
-                  <button onClick={() => { /* TODO: impl */ }} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>📦 Generer leveringsplan</button>
+                {/* Footer med ansattvelger og handlingsknapper */}
+                <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
+                  {/* Prosjekt og ansatte */}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', flexWrap:'wrap' }}>
+                    <div style={{ flex:1, minWidth:'200px' }}>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Koble til prosjekt *</label>
+                      <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
+                        <option value="">Velg prosjekt...</option>
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex:1, minWidth:'200px' }}>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Ansatte på prosjektet (for ressursplan)</label>
+                      <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                        {employees.map(emp => (
+                          <button key={emp.id} onClick={() => setSelectedEmployees(prev => prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
+                            style={{ padding:'3px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'600', cursor:'pointer', border: selectedEmployees.includes(emp.id) ? '2px solid #059669' : '1px solid #e2e8f0', background: selectedEmployees.includes(emp.id) ? '#f0fdf4' : 'white', color: selectedEmployees.includes(emp.id) ? '#059669' : '#64748b' }}>
+                            {emp.name}
+                          </button>
+                        ))}
+                        {employees.length === 0 && <span style={{ fontSize:'11px', color:'#94a3b8' }}>Ingen ansatte registrert</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px', marginBottom:'8px', minWidth:'200px' }}>
+                    <label style={{ fontSize:'11px', fontWeight:'600', color:'#64748b', whiteSpace:'nowrap', lineHeight:'32px' }}>Levering dager før oppstart:</label>
+                    <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, width:'50px', textAlign:'center', padding:'4px 8px' }} />
+                  </div>
+                  {/* Knapper */}
+                  <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
+                    <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>Lukk</button>
+                    <button onClick={handleSendRessursplan} disabled={sending || selectedEmployees.length === 0 || !selectedProject}
+                      style={{ padding:'10px 20px', background: sending || selectedEmployees.length === 0 || !selectedProject ? '#94a3b8' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+                      {sending ? '⏳ Sender...' : `📅 Send til ressursplan (${selectedEmployees.length} mann)`}
+                    </button>
+                    <button onClick={handleGenererLevering} disabled={sending || !selectedProject}
+                      style={{ padding:'10px 20px', background: sending || !selectedProject ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+                      {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan (${bdPlan.filter(b => b.materialer.length > 0).length} faser)`}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
