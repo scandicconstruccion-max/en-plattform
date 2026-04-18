@@ -25249,6 +25249,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const [versions, setVersions] = useState([])
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [compareVersion, setCompareVersion] = useState(null)
+  const [showPlanlegg, setShowPlanlegg] = useState(false)
 
   // ── Versjonering — snapshot-basert ──
   const loadVersions = async () => {
@@ -25835,6 +25836,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', width: isMobKV ? '100%' : 'auto' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>
+            <button onClick={() => setShowPlanlegg(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'700' }}>{isMobKV ? '📅' : '📅 Planlegg prosjekt'}</button>
 
             {/* Mer-dropdown for sekundære handlinger */}
             <div style={{ position:'relative' }}>
@@ -27085,6 +27087,211 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
       {/* Send til kunde modal */}
       {showSendModal && <KalkSendModal kalk={k} totals={totals} kalkyler={kalkyler} alleFaktorer={alleFaktorer} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); updateStatus('Tilbud sendt') }} />}
+
+      {/* Planlegg prosjekt modal */}
+      {showPlanlegg && (() => {
+        const PlanleggModal = ({ onClose }) => {
+          const [antallMann, setAntallMann] = useState(2)
+          const [timerPerDag, setTimerPerDag] = useState(7.5)
+          const [startDato, setStartDato] = useState(new Date().toISOString().split('T')[0])
+          const [hasRessursplan, setHasRessursplan] = useState(null)
+          const [loading, setLoading] = useState(true)
+
+          useEffect(() => {
+            supabase.from('company_settings').select('active_modules').limit(1).single()
+              .then(({ data }) => {
+                setHasRessursplan((data?.active_modules || []).includes('ressursplan'))
+                setLoading(false)
+              })
+              .catch(() => setLoading(false))
+          }, [])
+
+          const totalTimer = totals.totTimer
+          const dagerTotalt = antallMann > 0 && timerPerDag > 0 ? totalTimer / (antallMann * timerPerDag) : 0
+          const ukerTotalt = dagerTotalt / 5
+
+          // Beregn per bygningsdel
+          const bdPlan = []
+          let akkumulertDager = 0
+          kalkyler.forEach(kalk => {
+            const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
+            const fag = getFaggruppe(kalk.fag)
+            ;(kalk.bygningsdeler || []).forEach(bd => {
+              const r = beregnBygningsdel(bd, fakt)
+              const bdDager = antallMann > 0 && timerPerDag > 0 ? r.totalTimer / (antallMann * timerPerDag) : 0
+              const startDag = akkumulertDager
+              akkumulertDager += bdDager
+              bdPlan.push({
+                name: bd.name || 'Uten navn',
+                fag: fag.name,
+                emoji: fag.emoji,
+                timer: r.totalTimer,
+                dager: bdDager,
+                startDag,
+                sluttDag: akkumulertDager,
+                startUke: Math.floor(startDag / 5) + 1,
+                sluttUke: Math.ceil(akkumulertDager / 5),
+                materialer: (bd.materialer || []).filter(m => m.varenavn),
+                dbProsent: r.dbProsent
+              })
+            })
+          })
+
+          // Beregn datoer
+          const addWorkdays = (fromDate, days) => {
+            const d = new Date(fromDate)
+            let added = 0
+            while (added < days) {
+              d.setDate(d.getDate() + 1)
+              if (d.getDay() !== 0 && d.getDay() !== 6) added++
+            }
+            return d
+          }
+
+          return (
+            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'800px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+                <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <h3 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📅 Planlegg prosjekt</h3>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                  </div>
+                  <p style={{ margin:'6px 0 0', fontSize:'13px', color:'#64748b' }}>{k.title} — {totalTimer.toFixed(0)} timer totalt</p>
+                </div>
+
+                <div style={{ overflowY:'auto', flex:1, padding:'20px 24px' }}>
+                  {/* Bemanning input */}
+                  <div style={{ display:'flex', gap:'16px', marginBottom:'20px', padding:'16px', background:'#f8fafc', borderRadius:'12px', flexWrap:'wrap' }}>
+                    <div style={{ flex:1, minWidth:'120px' }}>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Antall mann</label>
+                      <input type="number" min="1" max="50" value={antallMann} onChange={e => setAntallMann(parseInt(e.target.value) || 1)} style={{ ...qInp, textAlign:'center', fontWeight:'700', fontSize:'18px', color:'#059669' }} />
+                    </div>
+                    <div style={{ flex:1, minWidth:'120px' }}>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Timer per dag</label>
+                      <input type="number" min="1" max="12" step="0.5" value={timerPerDag} onChange={e => setTimerPerDag(parseFloat(e.target.value) || 7.5)} style={{ ...qInp, textAlign:'center', fontWeight:'700', fontSize:'18px' }} />
+                    </div>
+                    <div style={{ flex:1, minWidth:'140px' }}>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Ønsket oppstart</label>
+                      <input type="date" value={startDato} onChange={e => setStartDato(e.target.value)} style={{ ...qInp, fontWeight:'600' }} />
+                    </div>
+                  </div>
+
+                  {/* Resultat-boks */}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap' }}>
+                    <div style={{ flex:1, background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>TOTAL TID</div>
+                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{totalTimer.toFixed(0)} t</div>
+                    </div>
+                    <div style={{ flex:1, background:'#eff6ff', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>ARBEIDSDAGER</div>
+                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#2563eb' }}>{Math.ceil(dagerTotalt)}</div>
+                    </div>
+                    <div style={{ flex:1, background:'#faf5ff', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>UKER</div>
+                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#7c3aed' }}>{ukerTotalt.toFixed(1)}</div>
+                    </div>
+                    <div style={{ flex:1, background:'#fefce8', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
+                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>FERDIG CA.</div>
+                      <div style={{ fontSize:'16px', fontWeight:'800', color:'#ca8a04' }}>{addWorkdays(startDato, Math.ceil(dagerTotalt)).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric' })}</div>
+                    </div>
+                  </div>
+
+                  {/* Fremdriftsplan per bygningsdel */}
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>Fremdriftsplan</div>
+                  <div style={{ marginBottom:'20px' }}>
+                    {bdPlan.map((bd, i) => {
+                      const barStart = dagerTotalt > 0 ? (bd.startDag / dagerTotalt) * 100 : 0
+                      const barWidth = dagerTotalt > 0 ? Math.max((bd.dager / dagerTotalt) * 100, 2) : 0
+                      const startD = addWorkdays(startDato, Math.floor(bd.startDag))
+                      const sluttD = addWorkdays(startDato, Math.ceil(bd.sluttDag))
+                      return (
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px', fontSize:'12px' }}>
+                          <div style={{ width:'180px', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            <span>{bd.emoji} </span>
+                            <span style={{ fontWeight:'600', color:'#0f172a' }}>{bd.name}</span>
+                          </div>
+                          <div style={{ flex:1, height:'22px', background:'#f1f5f9', borderRadius:'6px', position:'relative', overflow:'hidden' }}>
+                            <div style={{ position:'absolute', left: barStart + '%', width: barWidth + '%', height:'100%', background: bd.dbProsent >= 25 ? '#059669' : bd.dbProsent >= 15 ? '#ca8a04' : '#dc2626', borderRadius:'6px', opacity:0.8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                              <span style={{ fontSize:'9px', color:'white', fontWeight:'700', whiteSpace:'nowrap' }}>{bd.timer.toFixed(0)}t</span>
+                            </div>
+                          </div>
+                          <div style={{ width:'110px', flexShrink:0, textAlign:'right', color:'#64748b', fontSize:'11px' }}>
+                            uke {bd.startUke}{bd.sluttUke !== bd.startUke ? `–${bd.sluttUke}` : ''}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Tidsplan tabell */}
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>Detaljert tidsplan</div>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px', marginBottom:'20px' }}>
+                    <thead><tr style={{ background:'#f8fafc' }}>
+                      <th style={{ padding:'8px', textAlign:'left', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Bygningsdel</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Timer</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Dager</th>
+                      <th style={{ padding:'8px', textAlign:'left', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Periode</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>DB%</th>
+                    </tr></thead>
+                    <tbody>
+                      {bdPlan.map((bd, i) => {
+                        const startD = addWorkdays(startDato, Math.floor(bd.startDag))
+                        const sluttD = addWorkdays(startDato, Math.ceil(bd.sluttDag))
+                        return (
+                          <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                            <td style={{ padding:'6px 8px', fontWeight:'500' }}>{bd.emoji} {bd.name}</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right' }}>{bd.timer.toFixed(1)} t</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right' }}>{Math.ceil(bd.dager)} d</td>
+                            <td style={{ padding:'6px 8px', color:'#64748b' }}>{startD.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })} – {sluttD.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}</td>
+                            <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'600', color: bd.dbProsent >= 25 ? '#16a34a' : bd.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{bd.dbProsent.toFixed(1)}%</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer med handlingsknapper */}
+                <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
+                  {loading ? (
+                    <div style={{ textAlign:'center', color:'#94a3b8', fontSize:'13px' }}>Sjekker modultilgang...</div>
+                  ) : hasRessursplan ? (
+                    <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
+                      <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>Lukk</button>
+                      <button onClick={() => { /* TODO: Send to ressursplan */ onClose() }} style={{ padding:'10px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>📅 Send til ressursplan</button>
+                      <button onClick={() => { /* TODO: Generate materialliste per fase */ onClose() }} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>📦 Generer leveringsplan</button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ background:'linear-gradient(135deg, #f0fdf4, #eff6ff)', borderRadius:'12px', padding:'20px', marginBottom:'12px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                          <span style={{ fontSize:'28px' }}>🚀</span>
+                          <div>
+                            <h4 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Lås opp full prosjektplanlegging</h4>
+                            <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#64748b' }}>Med ressursplan-modulen kan du:</p>
+                          </div>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'12px', color:'#374151', marginBottom:'12px' }}>
+                          <div>✅ Sende timer direkte til ressursplanen</div>
+                          <div>✅ Koble ansatte til bygningsdeler</div>
+                          <div>✅ Generere leveringsplaner per fase</div>
+                          <div>✅ Bestillingslister med NOBB til leverandør</div>
+                          <div>✅ Gantt-visning av prosjektfremdrift</div>
+                          <div>✅ Automatisk materialtiming</div>
+                        </div>
+                        <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('minbedrift') }} style={{ width:'100%', padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>Aktiver ressursplan-modulen →</button>
+                      </div>
+                      <button onClick={onClose} style={{ width:'100%', padding:'10px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Lukk</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return <PlanleggModal onClose={() => setShowPlanlegg(false)} />
+      })()}
 
       {/* UE forespørsel sendt popup */}
       {showUESuccess && (
