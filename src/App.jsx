@@ -14203,7 +14203,7 @@ function RessursGanttGrid({
                   const firstLine = (mp.notes || '').split('\n')[0].replace('📦 Levering: ', '').replace('📦 ', '')
                   return (
                     <div key={mp.id} title={`${firstLine}${proj?` (${proj.name})`:''} — klikk for detaljer`}
-                      onClick={() => onOpenMateriell && onOpenMateriell({ title: firstLine, notes: mp.notes || '', date: mp.date, project: proj?.name })}
+                      onClick={() => onOpenMateriell && onOpenMateriell({ id: mp.id, title: firstLine, notes: mp.notes || '', date: mp.date, project: proj?.name })}
                       style={{
                         position:'absolute', top:'4px', bottom:'4px',
                         left:`${idx * colW + colW/2 - 12}px`,
@@ -14509,6 +14509,7 @@ function RessursGanttGrid({
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function RessursPage() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const [employees, setEmployees] = useState([])
   const [machines, setMachines] = useState([])
   const [projects, setProjects] = useState([])
@@ -15101,7 +15102,7 @@ function RessursPage() {
                 const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
                 return (
                   <div key={mp.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'220px', maxWidth:'300px', cursor:'pointer' }}
-                    onClick={() => setMateriellDetail({ title: title.replace('📦 Levering: ', '').replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
+                    onClick={() => setMateriellDetail({ id: mp.id, title: title.replace('📦 Levering: ', '').replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
                       <span style={{ fontSize:'14px' }}>📦</span>
                       <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 Levering: ', '').replace('📦 ', '')}</span>
@@ -15573,7 +15574,41 @@ function RessursPage() {
                 )
               })()}
             </div>
-            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', justifyContent:'flex-end' }}>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
+                <label style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Leveringsdato:</label>
+                <input type="date" value={materiellDetail.date || ''}
+                  onChange={async (e) => {
+                    const newDate = e.target.value
+                    if (!newDate || !materiellDetail.id) return
+                    try {
+                      const { error } = await supabase.from('resource_plans').update({ date: newDate, updated_at: new Date().toISOString() }).eq('id', materiellDetail.id)
+                      if (error) throw error
+                      setMateriellDetail({ ...materiellDetail, date: newDate })
+                      load()
+                    } catch (err) { alert('Kunne ikke endre dato: ' + err.message) }
+                  }}
+                  style={{ padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', fontFamily:'system-ui,sans-serif', cursor:'pointer', color:'#0f172a' }} />
+                <button onClick={async () => {
+                    if (!materiellDetail.id) return
+                    const ok = await confirm({
+                      message: 'Slett materialleveranse?',
+                      subMessage: `Leveransen "${materiellDetail.title}" planlagt ${materiellDetail.date} vil bli slettet. Dette kan ikke angres.`,
+                      confirmLabel: 'Slett leveranse',
+                      danger: true,
+                    })
+                    if (!ok) return
+                    try {
+                      const { error } = await supabase.from('resource_plans').delete().eq('id', materiellDetail.id)
+                      if (error) throw error
+                      setMateriellDetail(null)
+                      load()
+                    } catch (err) { alert('Kunne ikke slette: ' + err.message) }
+                  }}
+                  style={{ padding:'8px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                  🗑️ Slett leveranse
+                </button>
+              </div>
               <button onClick={() => setMateriellDetail(null)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Lukk</button>
             </div>
           </div>
