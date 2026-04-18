@@ -27004,29 +27004,62 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               </div>
 
                               {/* ── Oppsummering / Dekningsbidrag ── */}
-                              <div style={{ marginTop:'14px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', borderRadius:'10px', padding:'12px 16px', border: `1px solid ${bdT.dbProsent >= 25 ? '#bbf7d0' : bdT.dbProsent >= 15 ? '#fde68a' : '#fecaca'}` }}>
-                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b' }}>📊 OPPSUMMERING BYGNINGSDEL</span>
-                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>
-                                    DB: {bdT.dbProsent.toFixed(1)}%
-                                  </span>
-                                </div>
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px 16px', fontSize:'12px' }}>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeid)}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeidMedFortjeneste + (bdT.flatetilleggMedFortjeneste || 0) + (bdT.totalApningstillegg || 0))}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterial)}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterialMedFortjeneste)}</span></div>
-                                  {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#2563eb', fontSize:'11px' }}>↳ Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} ({bdT.materialMengde.toFixed(1)} av {bd.mengde ?? 1} {bd.enhet || 'm²'} beregnet)</span></div>}
-                                  {bdT.totalUE > 0 && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Underleverandør</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalUE)}</span></div>}
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bdT.totalTimer.toFixed(1)} t</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Selvkost</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{fmt(bdT.selvkost)}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Totalpris</span><span style={{ fontWeight:'700', color:'#059669' }}>{fmt(bdT.totalMedFortjeneste)}</span></div>
-                                </div>
-                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop: `1px solid ${bdT.dbProsent >= 25 ? '#86efac' : bdT.dbProsent >= 15 ? '#fde68a' : '#fca5a5'}` }}>
-                                  <span style={{ fontSize:'13px', fontWeight:'700', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>Dekningsbidrag</span>
-                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{fmt(bdT.dekningsbidrag)} ({bdT.dbProsent.toFixed(1)}%)</span>
-                                </div>
-                              </div>
+                              {(() => {
+                                const dbStatus = bdT.dbProsent >= 25 ? 'god' : bdT.dbProsent >= 15 ? 'ok' : 'lav'
+                                const statusEmoji = dbStatus === 'god' ? '✅' : dbStatus === 'ok' ? '⚠️' : '🚨'
+                                const statusText = dbStatus === 'god' ? 'God margin' : dbStatus === 'ok' ? 'OK margin' : 'Lav margin — gjennomgå'
+                                const statusBg = dbStatus === 'god' ? '#f0fdf4' : dbStatus === 'ok' ? '#fefce8' : '#fef2f2'
+                                const statusBorder = dbStatus === 'god' ? '#bbf7d0' : dbStatus === 'ok' ? '#fde68a' : '#fecaca'
+                                const statusColor = dbStatus === 'god' ? '#16a34a' : dbStatus === 'ok' ? '#ca8a04' : '#dc2626'
+                                const arbeidTotal = bdT.totalArbeidMedFortjeneste + (bdT.flatetilleggMedFortjeneste || 0) + (bdT.totalApningstillegg || 0)
+                                return (
+                                  <div style={{ marginTop:'14px', background: statusBg, borderRadius:'12px', padding:'16px 18px', border: `1px solid ${statusBorder}` }}>
+                                    {/* Tittel */}
+                                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'12px', letterSpacing:'0.04em' }}>📊 OPPSUMMERING BYGNINGSDEL</div>
+
+                                    {/* Tre-kort layout: Kostnad → Pris → DB */}
+                                    <div style={{ display:'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap:'12px', marginBottom:'14px' }}>
+                                      {/* Kort 1: Selvkost */}
+                                      <div style={{ background:'white', borderRadius:'10px', padding:'12px 14px', border:'1px solid rgba(0,0,0,0.05)' }}>
+                                        <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px', letterSpacing:'0.04em' }}>DINE KOSTNADER</div>
+                                        <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a', marginBottom:'2px' }}>{fmt(bdT.selvkost)}</div>
+                                        <div style={{ fontSize:'11px', color:'#64748b' }}>Lønn, materialer, UE</div>
+                                      </div>
+                                      {/* Kort 2: Totalpris */}
+                                      <div style={{ background:'white', borderRadius:'10px', padding:'12px 14px', border:'1px solid rgba(0,0,0,0.05)' }}>
+                                        <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px', letterSpacing:'0.04em' }}>PRIS TIL KUNDE</div>
+                                        <div style={{ fontSize:'18px', fontWeight:'800', color:'#059669', marginBottom:'2px' }}>{fmt(bdT.totalMedFortjeneste)}</div>
+                                        <div style={{ fontSize:'11px', color:'#64748b' }}>Eks. mva</div>
+                                      </div>
+                                      {/* Kort 3: Dekningsbidrag */}
+                                      <div style={{ background:'white', borderRadius:'10px', padding:'12px 14px', border: `1px solid ${statusBorder}` }}>
+                                        <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px', letterSpacing:'0.04em', display:'flex', alignItems:'center', gap:'4px' }}>
+                                          DU SITTER IGJEN MED
+                                          <InfoTip label="" info={<span><b>Dekningsbidrag (DB)</b> er det du har igjen etter at direkte kostnader er betalt.<br/><br/>DB skal dekke:<br/>• Kontor, bil, forsikring<br/>• Administrasjon og regnskap<br/>• Verktøy og utstyr<br/>• Din egen fortjeneste<br/><br/><b>Tommelfingerregel:</b><br/>🚨 Under 15% — lav, risikabelt<br/>⚠️ 15–25% — ok, men sjekk<br/>✅ Over 25% — god margin<br/><br/>Merk: DB er ikke det samme som nettofortjeneste. Du må trekke fra dine faste kostnader først.</span>} align="right" />
+                                        </div>
+                                        <div style={{ fontSize:'18px', fontWeight:'800', color: statusColor, marginBottom:'2px' }}>{fmt(bdT.dekningsbidrag)}</div>
+                                        <div style={{ fontSize:'11px', fontWeight:'700', color: statusColor }}>{bdT.dbProsent.toFixed(1)}% · {statusEmoji} {statusText}</div>
+                                      </div>
+                                    </div>
+
+                                    {/* Detaljer-toggle */}
+                                    <details style={{ fontSize:'12px' }}>
+                                      <summary style={{ cursor:'pointer', color:'#64748b', fontSize:'11px', fontWeight:'600', userSelect:'none', padding:'4px 0' }}>
+                                        Vis detaljert nedbrytning ▾
+                                      </summary>
+                                      <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px 16px', fontSize:'12px', marginTop:'10px', padding:'10px 12px', background:'rgba(255,255,255,0.6)', borderRadius:'8px' }}>
+                                        <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeid)}</span></div>
+                                        <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (til kunde)</span><span style={{ color:'#0f172a' }}>{fmt(arbeidTotal)}</span></div>
+                                        <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterial)}</span></div>
+                                        <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (til kunde)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterialMedFortjeneste)}</span></div>
+                                        {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false && <div style={{ gridColumn:'1/-1', display:'flex', justifyContent:'space-between', fontSize:'11px' }}><span style={{ color:'#2563eb' }}>↳ Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} trekkes fra ({bdT.materialMengde.toFixed(1)} av {bd.mengde ?? 1} beregnet)</span></div>}
+                                        {bdT.totalUE > 0 && <><div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Underleverandør</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalUE)}</span></div><div /></>}
+                                        <div style={{ display:'flex', justifyContent:'space-between', gridColumn:'1/-1', marginTop:'4px', paddingTop:'6px', borderTop:'1px solid rgba(0,0,0,0.08)' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bdT.totalTimer.toFixed(1)} t</span></div>
+                                      </div>
+                                    </details>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           )}
                         </div>
