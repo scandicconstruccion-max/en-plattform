@@ -13818,6 +13818,7 @@ const stripePattern = (color='#dc2626', alpha=0.08) =>
 
 function RessursGanttGrid({
   resources, plans, projects, milestones, resourceType,
+  materiellPlans, onOpenMateriell,
   ganttZoom, setGanttZoom,
   ganttAnchor,
   filterProject, filterEmployee,
@@ -14171,6 +14172,59 @@ function RessursGanttGrid({
             </div>
           )}
 
+          {/* Materiell row — materialleveranser som grønne tags på leveringsdatoer */}
+          {materiellPlans && materiellPlans.some(m => dateIndex.has(m.date)) && (
+            <div style={{ display:'flex', background:'#f0fdf4', borderBottom:'1px solid #bbf7d0', minHeight:'28px' }}>
+              <div style={{
+                width:`${RESOURCE_COL}px`, flexShrink:0,
+                padding:'4px 20px',
+                fontSize:'11px', fontWeight:'700', color:'#059669',
+                borderRight:'2px solid #e2e8f0',
+                background:'#f0fdf4',
+                display:'flex', alignItems:'center', gap:'4px',
+                position:'sticky', left:0, zIndex:2,
+              }}>
+                📦 Materiell
+              </div>
+              <div style={{ position:'relative', display:'flex', width:`${totalGridWidth}px`, flexShrink:0 }}>
+                {dates.map((d) => {
+                  const we = isWeekend(d); const tod = isToday(d)
+                  return (
+                    <div key={d} style={{
+                      width:`${colW}px`, flexShrink:0,
+                      background: tod ? '#f0fdf4' : we ? '#fafafa' : 'transparent',
+                      borderRight: ganttZoom==='days' ? '1px solid #d1fae5' : (new Date(d+'T12:00:00').getDay()===0 ? '1px solid #bbf7d0' : 'none'),
+                    }} />
+                  )
+                })}
+                {materiellPlans.filter(m => dateIndex.has(m.date)).map(mp => {
+                  const idx = dateIndex.get(mp.date)
+                  const proj = projects.find(p => p.id === mp.project_id)
+                  const firstLine = (mp.notes || '').split('\n')[0].replace('📦 Levering: ', '').replace('📦 ', '')
+                  return (
+                    <div key={mp.id} title={`${firstLine}${proj?` (${proj.name})`:''} — klikk for detaljer`}
+                      onClick={() => onOpenMateriell && onOpenMateriell({ title: firstLine, notes: mp.notes || '', date: mp.date, project: proj?.name })}
+                      style={{
+                        position:'absolute', top:'4px', bottom:'4px',
+                        left:`${idx * colW + colW/2 - 12}px`,
+                        width:'24px',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        background:'#059669',
+                        color:'white',
+                        borderRadius:'4px',
+                        fontSize:'11px',
+                        cursor:'pointer',
+                        boxShadow:'0 1px 3px rgba(0,0,0,0.15)',
+                        zIndex:2,
+                      }}>
+                      📦
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Resource rows */}
           {orderedResources.map(res => {
             const util = getUtilization(res.id)
@@ -14471,6 +14525,8 @@ function RessursPage() {
   const [filterProject, setFilterProject] = useState('alle')
   const [filterEmployee, setFilterEmployee] = useState('alle')
   const [showMilestones, setShowMilestones] = useState(false)
+  const [showMateriell, setShowMateriell] = useState(false)
+  const [materiellDetail, setMateriellDetail] = useState(null) // { title, notes, date, project }
   const [showNewMilestone, setShowNewMilestone] = useState(null)
   const [milestoneRange, setMilestoneRange] = useState(90)
   const [showLedigMannskap, setShowLedigMannskap] = useState(false)
@@ -14589,6 +14645,7 @@ function RessursPage() {
 
   // Filter plans by project
   const filteredPlans = filterProject==='alle' ? plans : plans.filter(p=>p.project_id===filterProject)
+  const materiellPlans = plans.filter(p => (p.notes || '').startsWith('📦 Levering:'))
 
   const getPlansForCell = (resourceId, date) =>
     filteredPlans.filter(p=>p.resource_id===resourceId&&p.date===date)
@@ -14803,6 +14860,10 @@ function RessursPage() {
             <button onClick={()=>setShowMilestones(v=>!v)}
               style={{ padding:'9px 16px', background:showMilestones?'#7c3aed':'white', color:showMilestones?'white':'#7c3aed', border:'2px solid #7c3aed', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
               🏁 Milepæler {milestonesInRange.length>0&&<span style={{ background:showMilestones?'rgba(255,255,255,0.3)':'#7c3aed', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{milestonesInRange.length}</span>}
+            </button>
+            <button onClick={()=>setShowMateriell(v=>!v)}
+              style={{ padding:'9px 16px', background:showMateriell?'#059669':'white', color:showMateriell?'white':'#059669', border:'2px solid #059669', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              📦 Materiell {materiellPlans.length>0&&<span style={{ background:showMateriell?'rgba(255,255,255,0.3)':'#059669', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{materiellPlans.length}</span>}
             </button>
             <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
               style={{ padding:'9px 16px', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
@@ -15019,6 +15080,52 @@ function RessursPage() {
         </div>
       )}
 
+      {/* Materiell panel */}
+      {showMateriell && (
+        <div style={{ background:'#f0fdf4', borderBottom:'2px solid #bbf7d0', padding:'16px 24px', flexShrink:0, maxHeight:'260px', overflowY:'auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <span style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>📦 Materialleveranser</span>
+            <span style={{ fontSize:'12px', color:'#64748b' }}>{materiellPlans.length} leveranse{materiellPlans.length !== 1 ? 'r' : ''} planlagt</span>
+          </div>
+          {materiellPlans.length === 0 ? (
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', fontStyle:'italic' }}>Ingen materialleveranser planlagt. Bruk «Generer leveringsplan» i kalkulasjonsmodulen.</p>
+          ) : (
+            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+              {materiellPlans.sort((a,b) => a.date.localeCompare(b.date)).map(mp => {
+                const proj = projects.find(p => p.id === mp.project_id)
+                const daysLeft = Math.ceil((new Date(mp.date) - new Date()) / (1000*60*60*24))
+                const isPast = daysLeft < 0
+                const isUrgent = daysLeft >= 0 && daysLeft <= 3
+                const lines = (mp.notes || '').split('\n')
+                const title = lines[0] || 'Materialleveranse'
+                const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
+                return (
+                  <div key={mp.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'220px', maxWidth:'300px', cursor:'pointer' }}
+                    onClick={() => setMateriellDetail({ title: title.replace('📦 Levering: ', '').replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                      <span style={{ fontSize:'14px' }}>📦</span>
+                      <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 Levering: ', '').replace('📦 ', '')}</span>
+                    </div>
+                    <div style={{ fontSize:'12px', color: isPast ? '#dc2626' : isUrgent ? '#d97706' : '#059669', fontWeight:'700', marginBottom:'4px' }}>
+                      {isPast ? `Skulle vært levert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'Levering i dag!' : daysLeft === 1 ? 'Levering i morgen' : `Levering om ${daysLeft} dager`}
+                    </div>
+                    {matLines.length > 0 && (
+                      <div style={{ fontSize:'10px', color:'#64748b', lineHeight:1.4, marginBottom:'4px' }}>
+                        {matLines.slice(0, 3).map((l, i) => <div key={i} style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l}</div>)}
+                        {matLines.length > 3 && <div style={{ fontStyle:'italic' }}>+ {matLines.length - 3} flere...</div>}
+                      </div>
+                    )}
+                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                      📅 {mp.date}{proj ? ` · 🏗️ ${proj.name}` : ''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Month view scroll hint */}
       {viewMode==='maned'&&(
         <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 }}>
@@ -15075,6 +15182,8 @@ function RessursPage() {
           plans={plans}
           projects={projects}
           milestones={milestones}
+          materiellPlans={materiellPlans}
+          onOpenMateriell={(md) => setMateriellDetail(md)}
           resourceType={resourceType}
           ganttZoom={ganttZoom}
           setGanttZoom={setGanttZoom}
@@ -15412,6 +15521,63 @@ function RessursPage() {
           defaultStartTime={settings.workdayStart}
           defaultEndTime={settings.workdayEnd}
         />
+      )}
+      {materiellDetail && (
+        <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setMateriellDetail(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+              <div>
+                <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📦 {materiellDetail.title}</h2>
+                <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
+                  📅 Levering: {materiellDetail.date}{materiellDetail.project ? ` · 🏗️ ${materiellDetail.project}` : ''}
+                </div>
+              </div>
+              <button onClick={() => setMateriellDetail(null)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto', flex:1, padding:'20px 24px' }}>
+              {(() => {
+                const lines = (materiellDetail.notes || '').split('\n')
+                const infoLines = lines.filter(l => !l.match(/^\d{7}/) && !l.match(/^[A-Z]{2,}.*:/) && l.trim())
+                const matLines = lines.filter(l => l.match(/^\d{7}/) || (l.match(/^[A-Z]{2,}.*:/) && l.includes(':')))
+                return (
+                  <>
+                    {infoLines.length > 0 && (
+                      <div style={{ marginBottom:'16px', fontSize:'13px', color:'#64748b', lineHeight:1.6 }}>
+                        {infoLines.map((l, i) => <div key={i}>{l}</div>)}
+                      </div>
+                    )}
+                    {matLines.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#059669', marginBottom:'8px' }}>MATERIALLISTE ({matLines.length} poster)</div>
+                        <div style={{ border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                          {matLines.map((l, i) => {
+                            const parts = l.split(':')
+                            const name = parts[0]?.trim() || l
+                            const qty = parts.slice(1).join(':')?.trim() || ''
+                            const nobb = name.match(/^(\d{7})\s/)?.[1]
+                            return (
+                              <div key={i} style={{ padding:'8px 12px', borderBottom: i < matLines.length - 1 ? '1px solid #f1f5f9' : 'none', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', background: i % 2 === 0 ? 'white' : '#f8fafc' }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  {nobb && <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', marginRight:'6px' }}>{nobb}</span>}
+                                  <span style={{ color:'#0f172a' }}>{name.replace(/^\d{7}\s*/, '')}</span>
+                                </div>
+                                <span style={{ fontWeight:'600', color:'#059669', flexShrink:0, marginLeft:'12px' }}>{qty}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setMateriellDetail(null)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Lukk</button>
+            </div>
+          </div>
+        </div>
       )}
       {showNewMilestone&&(
         <MilestoneModal
