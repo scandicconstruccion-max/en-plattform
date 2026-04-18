@@ -27126,6 +27126,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           const [sending, setSending] = useState(false)
           const [sent, setSent] = useState(null)
           const [leveringsdager, setLeveringsdager] = useState(2)
+          const [showProjectPicker, setShowProjectPicker] = useState(null)
 
           useEffect(() => {
             supabase.from('company_settings').select('active_modules').limit(1).single()
@@ -27248,8 +27249,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           }
 
           // ── Prosjektvalg popup ──
-          const [showProjectPicker, setShowProjectPicker] = useState(null) // 'ressurs' | 'levering'
-
           const getProjId = () => k.project_id || selectedProject || null
 
           const handleAction = (action) => {
