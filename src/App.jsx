@@ -27462,9 +27462,10 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         </select>
                       )}
                     </div>
-                    <div style={{ width:'160px' }}>
-                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering dager før start</label>
+                    <div style={{ width:'180px' }}>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering før oppstart (dager)</label>
                       <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, textAlign:'center' }} />
+                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px' }}>Materialer bør leveres {leveringsdager} arbeidsdager før arbeidet starter</div>
                     </div>
                   </div>
 
