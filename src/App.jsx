@@ -27622,11 +27622,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   <div style={{ display:'flex', gap:'10px' }}>
                     <button onClick={() => setShowProjectPicker(null)}
                       style={{ flex:1, padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
-                    <button onClick={() => { setShowProjectPicker(null); onClose(); if (typeof onNavigate === 'function') onNavigate('prosjekter') }}
-                      style={{ flex:1, padding:'12px', background:'#f59e0b', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>+ Opprett nytt prosjekt</button>
-                    {selectedProject && (
+                    {selectedProject ? (
                       <button onClick={() => { const action = showProjectPicker; setShowProjectPicker(null); if (action === 'ressurs') doSendRessursplan(selectedProject); else doGenererLevering(selectedProject) }}
-                        style={{ flex:1, padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>Bruk valgt prosjekt →</button>
+                        style={{ flex:2, padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>Bruk valgt prosjekt →</button>
+                    ) : (
+                      <button onClick={() => { setShowProjectPicker(null); onClose(); if (typeof onNavigate === 'function') onNavigate('prosjekter') }}
+                        style={{ flex:2, padding:'12px', background:'#f59e0b', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>+ Opprett nytt prosjekt</button>
                     )}
                   </div>
                 </div>
