@@ -22971,17 +22971,17 @@ function beregnMaterialkostnad(material, faktorer) {
 function beregnBygningsdel(bd, faktorer) {
   const mengde = parseFloat(bd.mengde) || 1
 
-  // ── Beregn åpningsfradrag for materialer ──
-  // Totalt åpningsareal trekkes fra material-mengde (aldri under 0)
+  // ── Beregn totalt åpningsareal (alltid — vi viser det i UI uansett) ──
   let totalApningsareal = 0
-  if (bd.fradrag_apninger !== false) { // Default: fradrag aktivert
-    ;(bd.apningstillegg || []).forEach(at => {
-      const antall = parseFloat(at.antall) || 0
-      const areal = parseFloat(at.areal) || 0
-      totalApningsareal += antall * areal
-    })
-  }
-  const materialMengde = Math.max(mengde - totalApningsareal, 0)
+  ;(bd.apningstillegg || []).forEach(at => {
+    const antall = parseFloat(at.antall) || 0
+    const areal = parseFloat(at.areal) || 0
+    totalApningsareal += antall * areal
+  })
+  // Trekk bare fra material-mengden når fradraget er aktivt (default: aktivert)
+  const materialMengde = bd.fradrag_apninger !== false
+    ? Math.max(mengde - totalApningsareal, 0)
+    : mengde
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
@@ -26843,9 +26843,15 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
                                 {bdT.totalApningsareal > 0 && (
-                                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background:'#eff6ff', borderRadius:'8px', fontSize:'11px', flexWrap:'wrap' }}>
-                                    <span style={{ color:'#2563eb' }}>🚪 Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} trekkes fra</span>
-                                    <span style={{ color:'#64748b' }}>→ Materialer beregnes for <strong>{bdT.materialMengde.toFixed(1)} {bd.enhet || 'm²'}</strong> (ikke {bd.mengde})</span>
+                                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background: bd.fradrag_apninger !== false ? '#eff6ff' : '#f8fafc', borderRadius:'8px', fontSize:'11px', flexWrap:'wrap' }}>
+                                    {bd.fradrag_apninger !== false ? (
+                                      <>
+                                        <span style={{ color:'#2563eb' }}>🚪 Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} trekkes fra</span>
+                                        <span style={{ color:'#64748b' }}>→ Materialer beregnes for <strong>{bdT.materialMengde.toFixed(1)} {bd.enhet || 'm²'}</strong> (ikke {bd.mengde})</span>
+                                      </>
+                                    ) : (
+                                      <span style={{ color:'#94a3b8' }}>🚪 Åpningsfradrag er slått av — materialer beregnes for hele <strong>{bd.mengde} {bd.enhet || 'm²'}</strong> ({bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} åpninger ignoreres)</span>
+                                    )}
                                     <label style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer', flexShrink:0 }}>
                                       <input type="checkbox" checked={bd.fradrag_apninger !== false} onChange={e => updateBdField(kalk.id, bd.id, 'fradrag_apninger', e.target.checked)} style={{ cursor:'pointer' }} />
                                       <span style={{ fontSize:'10px', color:'#64748b' }}>Aktiv</span>
