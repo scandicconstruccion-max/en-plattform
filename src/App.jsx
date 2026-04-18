@@ -14036,7 +14036,7 @@ function RessursGanttGrid({
   }, [ganttZoom, ganttAnchor, colW, dateIndex])
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'system-ui,sans-serif', background:'white' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'system-ui,sans-serif', background:'white', minWidth:0 }}>
 
       {/* Grid container with synchronized horizontal scroll */}
       <div ref={gridScrollRef} style={{ flex:1, overflow:'auto', position:'relative' }}>
@@ -29605,7 +29605,7 @@ function AppContent() {
       </div>
       )}
 
-      <main style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh' }}>
+      <main style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh', minWidth: 0, overflowX: 'hidden' }}>
         {/* Global top bar */}
         <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMobile ? '0 12px' : '0 28px', height: isMobile ? '52px' : '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           {/* Mobil: Hamburger + Logo */}
