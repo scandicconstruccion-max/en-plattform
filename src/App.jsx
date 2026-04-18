@@ -20067,7 +20067,6 @@ const MODULE_CATALOG = [
     navId: 'faktura',
   },
   {
-  {
     id: 'timelister',
     name: 'Timelister',
     desc: 'Timeføring og rapportering',
