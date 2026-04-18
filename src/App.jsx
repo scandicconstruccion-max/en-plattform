@@ -886,24 +886,28 @@ function ProsjekterPage({ onNavigateDetail }) {
   const handleCreate = async (form) => {
     setSaving(true)
     try {
+      // Rens tomme strenger til null for UUID-felter
+      const cleanForm = { ...form }
+      ;['parent_id', 'project_manager_id', 'customer_id'].forEach(field => {
+        if (cleanForm[field] === '' || cleanForm[field] === undefined) cleanForm[field] = null
+      })
       // Beregn depth og prosjektnummer basert på parent
       let depth = 0
-      let projectNumber = form.project_number || nextSequenceNumber(projects, 'P', 'project_number', { withYear: false })
-      if (form.parent_id) {
-        const parent = projects.find(p => p.id === form.parent_id)
+      let projectNumber = cleanForm.project_number || nextSequenceNumber(projects, 'P', 'project_number', { withYear: false })
+      if (cleanForm.parent_id) {
+        const parent = projects.find(p => p.id === cleanForm.parent_id)
         depth = (parent?.depth || 0) + 1
-        if (!form.project_number && parent?.project_number) {
-          const siblings = projects.filter(p => p.parent_id === form.parent_id)
+        if (!cleanForm.project_number && parent?.project_number) {
+          const siblings = projects.filter(p => p.parent_id === cleanForm.parent_id)
           projectNumber = parent.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
         }
       }
       // Duplikatsjekk — siste forsvarslinje
       const existing = projects.find(p => p.project_number?.trim().toUpperCase() === projectNumber.trim().toUpperCase())
       if (existing) {
-        // Auto-generert nummer kolliderte — legg til tidsstempel
         projectNumber = projectNumber + 'B'
       }
-      await db.createProject({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      await db.createProject({ ...cleanForm, project_number: projectNumber, parent_id: cleanForm.parent_id || null, depth, address: [cleanForm.address_street, `${cleanForm.address_postal || ''} ${cleanForm.address_city || ''}`.trim()].filter(Boolean).join(', '), budget: cleanForm.budget ? parseFloat(cleanForm.budget) : null, created_by: user?.id })
       setShowCreate(false)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
