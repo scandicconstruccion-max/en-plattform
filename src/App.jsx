@@ -27385,12 +27385,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           )
 
           return (
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-                  </div>
-                  <p style={{ margin:'6px 0 0', fontSize:'13px', color:'#64748b' }}>{k.title} — {totalTimer.toFixed(0)} timer totalt</p>
-                </div>
-
-          return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
               <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'800px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
