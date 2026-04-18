@@ -27119,12 +27119,24 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           const [antallMann, setAntallMann] = useState(2)
           const [timerPerDag, setTimerPerDag] = useState(7.5)
           const [startDato, setStartDato] = useState(new Date().toISOString().split('T')[0])
+          const [employees, setEmployees] = useState([])
+          const [selectedEmployees, setSelectedEmployees] = useState([])
+          const [projects, setProjects] = useState([])
+          const [selectedProject, setSelectedProject] = useState(k.project_id || '')
+          const [sending, setSending] = useState(false)
+          const [sent, setSent] = useState(null)
+          const [leveringsdager, setLeveringsdager] = useState(2)
 
           useEffect(() => {
             supabase.from('company_settings').select('active_modules').limit(1).single()
               .then(({ data }) => {
-                setHasRessursplan((data?.active_modules || []).includes('ressursplan'))
+                const hasIt = (data?.active_modules || []).includes('ressursplan')
+                setHasRessursplan(hasIt)
                 setLoading(false)
+                if (hasIt) {
+                  supabase.from('employees').select('id, name, role').order('name').then(({ data: empData }) => setEmployees(empData || []))
+                  supabase.from('projects').select('id, name, project_number').eq('status', 'Aktiv').order('name').then(({ data: projData }) => setProjects(projData || []))
+                }
               })
               .catch(() => { setHasRessursplan(false); setLoading(false) })
           }, [])
@@ -27200,18 +27212,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           )
 
           // ── FULL PLANLEGGER: Har tilgang ──
-          const [employees, setEmployees] = useState([])
-          const [selectedEmployees, setSelectedEmployees] = useState([])
-          const [projects, setProjects] = useState([])
-          const [selectedProject, setSelectedProject] = useState(k.project_id || '')
-          const [sending, setSending] = useState(false)
-          const [sent, setSent] = useState(null) // { type: 'ressurs'|'levering', count }
-          const [leveringsdager, setLeveringsdager] = useState(2) // dager før fase-start
-
-          useEffect(() => {
-            supabase.from('employees').select('id, name, role').order('name').then(({ data }) => setEmployees(data || []))
-            supabase.from('projects').select('id, name, project_number').eq('status', 'Aktiv').order('name').then(({ data }) => setProjects(data || []))
-          }, [])
 
           const totalTimer = totals.totTimer
           const dagerTotalt = antallMann > 0 && timerPerDag > 0 ? totalTimer / (antallMann * timerPerDag) : 0
