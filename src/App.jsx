@@ -13923,7 +13923,7 @@ function RessursPage() {
     const placeholderIds = [...new Set(plans.filter(p => p.resource_type === 'placeholder').map(p => p.resource_id))]
     const placeholderResources = placeholderIds.map(pid => ({
       id: pid,
-      first_name: plans.find(p => p.resource_id === pid)?.placeholder_label || 'Reservert',
+      first_name: (plans.find(p => p.resource_id === pid)?.notes || '').includes('Ressurs') ? (plans.find(p => p.resource_id === pid)?.notes || '').split('|').pop().trim() : 'Reservert',
       last_name: '(ikke tildelt)',
       department: 'placeholder',
       _isPlaceholder: true
@@ -27452,8 +27452,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         resource_type: 'placeholder',
                         project_id: projId,
                         date: dateStr, hours: timerPerDag,
-                        notes: `📐 ${bd.name} (fra kalkyle)`,
-                        placeholder_label: `Ressurs ${mannNr}`,
+                        notes: `📐 ${bd.name} (fra kalkyle) | Ressurs ${mannNr}`,
                         created_by: user?.id
                       })
                     }
@@ -27495,7 +27494,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   date: leveringsDato.toISOString().split('T')[0],
                   hours: 0,
                   notes: `📦 Levering: ${bd.name}\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\n${matListe}`,
-                  placeholder_label: `📦 ${bd.name}`,
                   created_by: user?.id
                 })
               }
