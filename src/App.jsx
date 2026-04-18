@@ -15639,6 +15639,7 @@ function RessursPage() {
           initial={typeof showNewMilestone==='object'&&showNewMilestone.edit?showNewMilestone.edit:null}
           date={typeof showNewMilestone==='string'?showNewMilestone:null}
           projects={projects}
+          employees={employees}
           user={user}
           onClose={()=>setShowNewMilestone(null)}
           onSaved={()=>{setShowNewMilestone(null);load()}}
@@ -15648,83 +15649,210 @@ function RessursPage() {
   )
 }
 
-function MilestoneModal({ initial, date, projects, user, onClose, onSaved }) {
+function MilestoneModal({ initial, date, projects, employees, user, onClose, onSaved }) {
   const confirm = useConfirm()
   const isEdit = !!initial
+
+  // ── Milepæltyper med emoji, farge og beskrivelse ──
+  const MILESTONE_TYPES = [
+    { id: 'okonomi',       label: 'Økonomi',       emoji: '💰', color: '#059669', desc: 'Fakturering, bonusvilkår, dagmulkt' },
+    { id: 'regulatorisk',  label: 'Regulatorisk',  emoji: '📋', color: '#2563eb', desc: 'Søknader, kontroll, ferdigattest' },
+    { id: 'overlevering',  label: 'Overlevering',  emoji: '🤝', color: '#7c3aed', desc: 'Overtakelse, befaring, reklamasjon' },
+    { id: 'leveranse',     label: 'Leveranse',     emoji: '📦', color: '#d97706', desc: 'Materiell, kran, spesialutstyr' },
+    { id: 'annet',         label: 'Annet',         emoji: '📌', color: '#64748b', desc: 'Generell milepæl' },
+  ]
+
   const [form, setForm] = useState({
-    title: initial?.title||'',
-    start_date: initial?.start_date||date||new Date().toISOString().split('T')[0],
-    project_id: initial?.project_id||'',
-    description: initial?.description||'',
-    color: initial?.color||'#7c3aed',
+    title: initial?.title || '',
+    start_date: initial?.start_date || date || new Date().toISOString().split('T')[0],
+    project_id: initial?.project_id || '',
+    description: initial?.description || '',
+    milestone_type: initial?.milestone_type || 'annet',
+    responsible_employee_id: initial?.responsible_employee_id || '',
+    reminder_days: initial?.reminder_days ?? '',
+    invoice_amount: initial?.invoice_amount ?? '',
   })
   const [saving, setSaving] = useState(false)
-  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Auto-farge basert på type
+  const currentType = MILESTONE_TYPES.find(t => t.id === form.milestone_type) || MILESTONE_TYPES[4]
+  const autoColor = currentType.color
 
   const handleSave = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, type:'milestone', project_id:form.project_id||null, updated_at:new Date().toISOString() }
-      if (isEdit) { const {error}=await supabase.from('calendar_events').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('calendar_events').insert({...payload,created_by:user?.id}); if(error) throw error }
+      const payload = {
+        title: form.title.trim(),
+        start_date: form.start_date,
+        project_id: form.project_id || null,
+        description: form.description || null,
+        milestone_type: form.milestone_type,
+        responsible_employee_id: form.responsible_employee_id || null,
+        reminder_days: form.reminder_days === '' ? null : parseInt(form.reminder_days),
+        invoice_amount: (form.milestone_type === 'okonomi' && form.invoice_amount !== '') ? parseFloat(form.invoice_amount) : null,
+        color: autoColor, // Auto-farge fra type
+        type: 'milestone',
+        updated_at: new Date().toISOString(),
+      }
+      if (isEdit) {
+        const { error } = await supabase.from('calendar_events').update(payload).eq('id', initial.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('calendar_events').insert({ ...payload, created_by: user?.id })
+        if (error) throw error
+      }
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch (e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async () => {
     if (!(await confirm({ message: 'Slett denne milepælen?', subMessage: 'Milepælen slettes permanent.', danger: true }))) return
-    await supabase.from('calendar_events').delete().eq('id',initial.id)
+    await supabase.from('calendar_events').delete().eq('id', initial.id)
     onSaved()
   }
 
-  const MILESTONE_COLORS = ['#7c3aed','#dc2626','#d97706','#059669','#2563eb','#0891b2']
+  // Finn valgt prosjektfarge for preview
+  const selectedProject = form.project_id ? projects.find(p => p.id === form.project_id) : null
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'440px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🏁 {isEdit?'Rediger':'Ny'} milepæl</h2>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        {/* Header med dynamisk farge basert på type */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', background: `linear-gradient(135deg, ${autoColor}15, ${autoColor}05)`, flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'22px' }}>{currentType.emoji}</span>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{isEdit ? 'Rediger' : 'Ny'} milepæl</h2>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
         </div>
-        <div style={{ padding:'22px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
+
+        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px', overflowY:'auto', flex:1 }}>
+
+          {/* Type-velger (øverst for å trigge auto-farge) */}
           <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Tittel *</label>
-            <input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Ferdigstillelse råbygg, Søknadsfrist plan..." style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} />
-          </div>
-          <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Dato *</label>
-            <input type="date" value={form.start_date} onChange={e=>set('start_date',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} />
-          </div>
-          <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt</label>
-            <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
-              <option value="">Ingen / Generell</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Farge</label>
-            <div style={{ display:'flex',gap:'8px' }}>
-              {MILESTONE_COLORS.map(col=>(
-                <button key={col} type="button" onClick={()=>set('color',col)}
-                  style={{ width:'32px',height:'32px',borderRadius:'50%',background:col,border:form.color===col?'3px solid #0f172a':'2px solid transparent',cursor:'pointer' }}/>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Type milepæl</label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:'6px' }}>
+              {MILESTONE_TYPES.map(t => (
+                <button key={t.id} type="button" onClick={() => set('milestone_type', t.id)}
+                  style={{
+                    padding:'10px 8px',
+                    borderRadius:'10px',
+                    border: form.milestone_type === t.id ? `2px solid ${t.color}` : '2px solid #f1f5f9',
+                    background: form.milestone_type === t.id ? `${t.color}10` : 'white',
+                    cursor:'pointer',
+                    textAlign:'left',
+                    display:'flex', alignItems:'center', gap:'6px',
+                    transition:'all 0.15s',
+                  }}>
+                  <span style={{ fontSize:'18px' }}>{t.emoji}</span>
+                  <div style={{ minWidth:0, flex:1 }}>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color: form.milestone_type === t.id ? t.color : '#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{t.label}</div>
+                  </div>
+                </button>
               ))}
             </div>
+            <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px', fontStyle:'italic' }}>{currentType.desc}</div>
           </div>
+
+          {/* Tittel */}
           <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Beskrivelse</label>
-            <textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={2} placeholder="Valgfri beskrivelse..." style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',resize:'none',boxSizing:'border-box' }} />
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Tittel *</label>
+            <input value={form.title} onChange={e => set('title', e.target.value)}
+              placeholder="F.eks. Ferdigstillelse råbygg, Søknadsfrist rammetillatelse..."
+              style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
           </div>
-          <div style={{ display:'flex',gap:'8px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
-            {isEdit&&<button onClick={handleDelete} style={{ padding:'10px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️</button>}
-            <button onClick={onClose} style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ flex:2,padding:'10px',background:saving?'#c4b5fd':'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
-              {saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett milepæl'}
+
+          {/* Dato + Prosjekt på samme rad */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Dato *</label>
+              <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Prosjekt</label>
+              <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}>
+                <option value="">Ingen / Generell</option>
+                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Ansvarlig + Påminnelse på samme rad */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Ansvarlig</label>
+              <select value={form.responsible_employee_id} onChange={e => set('responsible_employee_id', e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}>
+                <option value="">Ingen ansvarlig</option>
+                {(employees || []).map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Varsle (dager før)</label>
+              <select value={form.reminder_days} onChange={e => set('reminder_days', e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}>
+                <option value="">Ingen varsel</option>
+                <option value="1">1 dag før</option>
+                <option value="3">3 dager før</option>
+                <option value="7">7 dager før (1 uke)</option>
+                <option value="14">14 dager før (2 uker)</option>
+                <option value="30">30 dager før (1 måned)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Faktureringsbeløp — kun synlig ved type=okonomi */}
+          {form.milestone_type === 'okonomi' && (
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px 14px' }}>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#059669', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>💰 Faktureringsbeløp</label>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                <input type="number" step="1000" value={form.invoice_amount} onChange={e => set('invoice_amount', e.target.value)}
+                  placeholder="0"
+                  style={{ flex:1, padding:'10px 12px', border:'1px solid #bbf7d0', borderRadius:'8px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', textAlign:'right' }} />
+                <span style={{ fontSize:'14px', fontWeight:'600', color:'#059669' }}>kr</span>
+              </div>
+              <div style={{ fontSize:'11px', color:'#64748b', marginTop:'6px' }}>Valgfritt — beløpet som skal faktureres når milepælen er nådd</div>
+            </div>
+          )}
+
+          {/* Beskrivelse */}
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Notater</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={3}
+              placeholder="Valgfri beskrivelse, detaljer eller referanser..."
+              style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'inherit' }} />
+          </div>
+
+          {/* Info-boks: farge og prosjekt */}
+          <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 14px', display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', color:'#64748b' }}>
+            <div style={{ width:'14px', height:'14px', borderRadius:'4px', background: autoColor, flexShrink:0 }} />
+            <span>Milepælen vises i {currentType.label.toLowerCase()}-farge{selectedProject ? ` knyttet til prosjekt "${selectedProject.name}"` : ''}</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', flexShrink:0 }}>
+          {isEdit && (
+            <button onClick={handleDelete}
+              style={{ padding:'10px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px', fontWeight:'600' }}>
+              🗑️ Slett
             </button>
-          </div>
+          )}
+          <button onClick={onClose}
+            style={{ flex:1, padding:'10px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
+            Avbryt
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex:2, padding:'10px', background: saving ? '#c4b5fd' : autoColor, color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+            {saving ? 'Lagrer...' : isEdit ? 'Lagre endringer' : 'Opprett milepæl'}
+          </button>
         </div>
       </div>
     </div>
