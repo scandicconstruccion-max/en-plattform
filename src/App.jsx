@@ -15081,6 +15081,96 @@ function RessursPage() {
         </div>
       </div>
 
+      {/* Milestone panel */}
+      {showMilestones && (
+        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'12px 20px', flexShrink:0, maxHeight:'220px', overflowY:'auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px', flexWrap:'wrap', gap:'8px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+              <span style={{ fontSize:'14px', fontWeight:'700', color:'#7c3aed' }}>🏁 Milepæler</span>
+              <select value={milestoneRange} onChange={e=>setMilestoneRange(+e.target.value)}
+                style={{ padding:'4px 8px',border:'1px solid #ddd6fe',borderRadius:'6px',fontSize:'12px',color:'#7c3aed',fontWeight:'600',background:'white',outline:'none' }}>
+                {[30,60,90,180,365].map(d=><option key={d} value={d}>Neste {d} dager</option>)}
+              </select>
+            </div>
+            <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
+              style={{ padding:'5px 12px',background:'#7c3aed',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:'700' }}>+ Ny milepæl</button>
+          </div>
+          {milestonesInRange.length===0 ? (
+            <p style={{ margin:0,color:'#94a3b8',fontSize:'12px',fontStyle:'italic' }}>Ingen milepæler de neste {milestoneRange} dagene</p>
+          ) : (
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {milestonesInRange.map(ms=>{
+                const proj = projects.find(p=>p.id===ms.project_id)
+                const daysLeft = Math.ceil((new Date(ms.start_date)-new Date())/(1000*60*60*24))
+                const isPast = daysLeft<0
+                const isUrgent = daysLeft>=0&&daysLeft<=7
+                return (
+                  <div key={ms.id} style={{ background:'white', borderRadius:'10px', padding:'10px 14px', border:`2px solid ${isPast?'#fecaca':isUrgent?'#fde68a':'#ddd6fe'}`, minWidth:'180px', maxWidth:'240px', cursor:'pointer' }}
+                    onClick={()=>setShowNewMilestone({ edit:ms })}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px' }}>
+                      <span style={{ fontSize:'14px' }}>🏁</span>
+                      <span style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ms.title}</span>
+                    </div>
+                    <div style={{ fontSize:'11px', color:isPast?'#dc2626':isUrgent?'#d97706':'#7c3aed', fontWeight:'700', marginBottom:'3px' }}>
+                      {isPast?`Passert for ${Math.abs(daysLeft)}d siden`:daysLeft===0?'I dag!':daysLeft===1?'I morgen':`Om ${daysLeft} dager`}
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8' }}>
+                      📅 {ms.start_date}{proj?` · 🏗️ ${proj.name}`:''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Materiell panel */}
+      {showMateriell && (
+        <div style={{ background:'#f0fdf4', borderBottom:'2px solid #bbf7d0', padding:'12px 20px', flexShrink:0, maxHeight:'260px', overflowY:'auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+            <span style={{ fontSize:'14px', fontWeight:'700', color:'#059669' }}>📦 Materialleveranser</span>
+            <span style={{ fontSize:'11px', color:'#64748b' }}>{materiellPlans.length} leveranse{materiellPlans.length !== 1 ? 'r' : ''} planlagt</span>
+          </div>
+          {materiellPlans.length === 0 ? (
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'12px', fontStyle:'italic' }}>Ingen materialleveranser planlagt. Bruk «Generer leveringsplan» i kalkulasjonsmodulen.</p>
+          ) : (
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {materiellPlans.sort((a,b) => a.date.localeCompare(b.date)).map(mp => {
+                const proj = projects.find(p => p.id === mp.project_id)
+                const daysLeft = Math.ceil((new Date(mp.date) - new Date()) / (1000*60*60*24))
+                const isPast = daysLeft < 0
+                const isUrgent = daysLeft >= 0 && daysLeft <= 3
+                const lines = (mp.notes || '').split('\n')
+                const title = lines[0] || 'Materialleveranse'
+                const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
+                return (
+                  <div key={mp.id} style={{ background:'white', borderRadius:'10px', padding:'10px 14px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'200px', maxWidth:'280px', cursor:'pointer' }}
+                    onClick={() => setMateriellDetail({ id: mp.id, title: title.replace('📦 Levering: ', '').replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px' }}>
+                      <span style={{ fontSize:'13px' }}>📦</span>
+                      <span style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 Levering: ', '').replace('📦 ', '')}</span>
+                    </div>
+                    <div style={{ fontSize:'11px', color: isPast ? '#dc2626' : isUrgent ? '#d97706' : '#059669', fontWeight:'700', marginBottom:'3px' }}>
+                      {isPast ? `Skulle vært levert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'Levering i dag!' : daysLeft === 1 ? 'Levering i morgen' : `Levering om ${daysLeft} dager`}
+                    </div>
+                    {matLines.length > 0 && (
+                      <div style={{ fontSize:'10px', color:'#64748b', lineHeight:1.4, marginBottom:'3px' }}>
+                        {matLines.slice(0, 2).map((l, i) => <div key={i} style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l}</div>)}
+                        {matLines.length > 2 && <div style={{ fontStyle:'italic' }}>+ {matLines.length - 2} flere...</div>}
+                      </div>
+                    )}
+                    <div style={{ fontSize:'10px', color:'#94a3b8' }}>
+                      📅 {mp.date}{proj ? ` · 🏗️ ${proj.name}` : ''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── GANTT-VIEW (del 9, Float-inspirert) ─── */}
       {viewMode==='gantt' ? (
         <RessursGanttGrid
