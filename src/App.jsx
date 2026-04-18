@@ -22926,7 +22926,11 @@ function beregnBygningsdel(bd, faktorer) {
 
   const selvkost = totalArbeid + totalMaterial
   const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE
-  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste }
+  // Ekstra felt som PlanleggModal trenger (bevart fra del 8 — del 9 har forenklet motor uten fradrag/tillegg)
+  const materialMengde = mengde // del 9: ingen åpningsfradrag, så material-mengde = bygningsdel-mengde
+  const dekningsbidrag = totalMedFortjeneste - selvkost
+  const dbProsent = totalMedFortjeneste > 0 ? (dekningsbidrag / totalMedFortjeneste) * 100 : 0
+  return { mengde, materialMengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, dekningsbidrag, dbProsent }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
