@@ -27689,17 +27689,22 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         const [empList, setEmpList] = useState([])
                         const [loadingEmp, setLoadingEmp] = useState(true)
                         const [isOpen, setIsOpen] = useState(false)
+                        const [errMsg, setErrMsg] = useState('')
                         useEffect(() => {
-                          supabase.from('employees').select('id, first_name, last_name, role, department, email, phone')
-                            .order('first_name')
-                            .then(({ data }) => { setEmpList(data || []); setLoadingEmp(false) })
-                            .catch(() => setLoadingEmp(false))
+                          supabase.from('employees').select('*').order('first_name')
+                            .then(({ data, error }) => {
+                              if (error) { console.error('EmpPicker error:', error); setErrMsg(error.message) }
+                              setEmpList(data || [])
+                              setLoadingEmp(false)
+                            })
+                            .catch(e => { console.error('EmpPicker catch:', e); setErrMsg(e.message); setLoadingEmp(false) })
                         }, [])
 
                         if (loadingEmp) return <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Laster ansatte...</div>
+                        if (errMsg) return <div style={{ padding:'12px', background:'#fef2f2', borderRadius:'8px', fontSize:'12px', color:'#dc2626', marginBottom:'8px' }}>Feil ved lasting av ansatte: {errMsg}</div>
                         if (empList.length === 0) return (
                           <div style={{ padding:'12px', background:'#fefce8', borderRadius:'8px', fontSize:'12px', color:'#92400e', textAlign:'center', marginBottom:'8px' }}>
-                            Ingen ansatte registrert. <span onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ansatte') }} style={{ textDecoration:'underline', cursor:'pointer', fontWeight:'700' }}>Legg til ansatte →</span>
+                            Ingen ansatte funnet i databasen. <span onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ansatte') }} style={{ textDecoration:'underline', cursor:'pointer', fontWeight:'700' }}>Gå til Ansatte-modulen →</span>
                           </div>
                         )
 
