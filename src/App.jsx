@@ -13729,7 +13729,7 @@ function ganttLabel(zoom) {
   return { days:'Dager', weeks:'Uker', months:'Måneder', quarters:'Kvartaler' }[zoom] || zoom
 }
 
-function getWeekNumber(dateStr) {
+function ganttWeekNumber(dateStr) {
   const d = new Date(dateStr + 'T12:00:00')
   d.setHours(0,0,0,0)
   d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7)
@@ -13870,7 +13870,7 @@ function RessursGanttGrid({
       dates.forEach((d, i) => {
         const weekStart = startOfWeek(d)
         if (!current || current.key !== weekStart) {
-          current = { key: weekStart, label: `Uke ${getWeekNumber(d)}`, startIdx: i, count: 1, monthLabel: null }
+          current = { key: weekStart, label: `Uke ${ganttWeekNumber(d)}`, startIdx: i, count: 1, monthLabel: null }
           groups.push(current)
         } else current.count++
       })
@@ -13922,7 +13922,7 @@ function RessursGanttGrid({
   const subLabel = (date) => {
     const d = new Date(date + 'T12:00:00')
     if (ganttZoom === 'days') return d.getDate()
-    if (ganttZoom === 'weeks') return `U${getWeekNumber(date)}`
+    if (ganttZoom === 'weeks') return `U${ganttWeekNumber(date)}`
     if (ganttZoom === 'months') return MONTH_NAMES[d.getMonth()].slice(0,3)
     return `Q${Math.floor(d.getMonth()/3)+1}`
   }
