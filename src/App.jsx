@@ -443,7 +443,7 @@ function Field({ label, children }) {
 function EmployeeSelect({ value, onChange, placeholder, style, required, allowClear }) {
   const [emps, setEmps] = useState([])
   useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, role, department').eq('status', 'Aktiv').order('last_name').then(({ data }) => setEmps(data || []))
+    supabase.from('employees').select('id, first_name, last_name, email, role, department').order('last_name').then(({ data }) => setEmps(data || []))
   }, [])
   const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', cursor:'pointer', ...style }
   return (
@@ -462,7 +462,7 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style }) {
   const [emps, setEmps] = useState([])
   const [showDrop, setShowDrop] = useState(false)
   useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, phone, role, department').eq('status', 'Aktiv').order('last_name').then(({ data }) => setEmps(data || []))
+    supabase.from('employees').select('id, first_name, last_name, email, phone, role, department').order('last_name').then(({ data }) => setEmps(data || []))
   }, [])
   const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
   return (
@@ -27278,7 +27278,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 setLoading(false)
                 if (hasIt) {
                   supabase.from('projects').select('id, name, project_number').order('name').then(({ data: projData }) => setProjects(projData || []))
-                  supabase.from('employees').select('id, name, role').order('name').then(({ data: empData }) => setEmployees(empData || []))
+                  supabase.from('employees').select('id, first_name, last_name, role, department').order('last_name').then(({ data: empData }) => setEmployees(empData || []))
                 }
               })
               .catch(() => { setHasRessursplan(false); setLoading(false) })
