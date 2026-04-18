@@ -27640,19 +27640,38 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     {tildelingsmodus === 'ansatte' && (
                       <div style={{ padding:'10px 12px', background:'#f8fafc', borderRadius:'8px', marginBottom:'8px' }}>
                         <div style={{ fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'6px' }}>Velg ansatte som skal jobbe på prosjektet:</div>
-                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                          {employees.length > 0 ? employees.map(emp => (
-                            <button key={emp.id} onClick={() => setSelectedEmployees(prev => prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
-                              style={{ padding:'5px 10px', borderRadius:'8px', fontSize:'12px', fontWeight:'600', cursor:'pointer',
-                                border: selectedEmployees.includes(emp.id) ? '2px solid #059669' : '1px solid #e2e8f0',
-                                background: selectedEmployees.includes(emp.id) ? '#f0fdf4' : 'white',
-                                color: selectedEmployees.includes(emp.id) ? '#059669' : '#64748b' }}>
-                              {selectedEmployees.includes(emp.id) ? '✅ ' : ''}{emp.name}
-                            </button>
-                          )) : <span style={{ fontSize:'11px', color:'#94a3b8' }}>Ingen ansatte registrert — legg til ansatte under Ansatte-modulen</span>}
-                        </div>
+                        {employees.length > 0 ? (
+                          <div style={{ maxHeight:'160px', overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white' }}>
+                            {employees.map(emp => {
+                              const empName = emp.first_name ? `${emp.first_name} ${emp.last_name || ''}`.trim() : (emp.name || 'Uten navn')
+                              const isSelected = selectedEmployees.includes(emp.id)
+                              return (
+                                <label key={emp.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f8fafc', background: isSelected ? '#f0fdf4' : 'white' }}>
+                                  <input type="checkbox" checked={isSelected} onChange={() => setSelectedEmployees(prev => isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id])} style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669' }} />
+                                  <div style={{ flex:1 }}>
+                                    <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
+                                    {emp.department && <div style={{ fontSize:'10px', color:'#94a3b8' }}>{emp.department}</div>}
+                                  </div>
+                                  {isSelected && <span style={{ fontSize:'11px', color:'#059669', fontWeight:'700' }}>✓</span>}
+                                </label>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div style={{ padding:'12px', background:'#fefce8', borderRadius:'8px', fontSize:'12px', color:'#92400e', textAlign:'center' }}>
+                            Ingen ansatte registrert. Legg til ansatte under Ansatte-modulen først.
+                          </div>
+                        )}
                         {selectedEmployees.length > 0 && (
-                          <div style={{ fontSize:'11px', color:'#059669', marginTop:'6px', fontWeight:'600' }}>{selectedEmployees.length} ansatt{selectedEmployees.length > 1 ? 'e' : ''} valgt</div>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'6px' }}>
+                            <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>✅ {selectedEmployees.length} ansatt{selectedEmployees.length > 1 ? 'e' : ''} valgt</span>
+                            <button onClick={() => setSelectedEmployees(employees.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
+                          </div>
+                        )}
+                        {selectedEmployees.length === 0 && employees.length > 0 && (
+                          <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'4px' }}>
+                            <button onClick={() => setSelectedEmployees(employees.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
+                          </div>
                         )}
                       </div>
                     )}
