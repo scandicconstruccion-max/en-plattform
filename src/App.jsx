@@ -14528,6 +14528,9 @@ function RessursPage() {
   const [showMilestones, setShowMilestones] = useState(false)
   const [showMateriell, setShowMateriell] = useState(false)
   const [materiellDetail, setMateriellDetail] = useState(null) // { title, notes, date, project }
+  const [showNyMeny, setShowNyMeny] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showProjectLegend, setShowProjectLegend] = useState(false)
   const [showNewMilestone, setShowNewMilestone] = useState(null)
   const [milestoneRange, setMilestoneRange] = useState(90)
   const [showLedigMannskap, setShowLedigMannskap] = useState(false)
@@ -14833,322 +14836,284 @@ function RessursPage() {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible', overflowX:fullscreen?'hidden':'clip', maxWidth:'100%', minWidth:0 }}>
-      {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:0, position:'sticky', top:56, zIndex:20, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
-          <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📅 Ressursplanlegger</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Planlegg ansatte og maskiner på tvers av prosjekter</p>
-          </div>
-          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-            {doubleBookCount>0&&(
-              <button onClick={()=>setShowDoubleBookings(true)} style={{ background:'#fef2f2',borderRadius:'10px',padding:'8px 14px',border:'1px solid #fecaca',fontSize:'13px',color:'#dc2626',fontWeight:'700',cursor:'pointer' }}>
-                ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
-              </button>
-            )}
-            <button onClick={()=>setShowLedigMannskap(true)}
-              style={{ padding:'9px 14px', background:'#eff6ff', color:'#2563eb', border:'2px solid #bfdbfe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-              👷 Ledig mannskap
-            </button>
-            <button onClick={()=>setShowLedigMaskiner(true)}
-              style={{ padding:'9px 14px', background:'#f5f3ff', color:'#7c3aed', border:'2px solid #ddd6fe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-              🚜 Ledig utstyr
-            </button>
-            <button onClick={()=>setShowOppgaveModal(true)}
-              style={{ padding:'9px 14px', background:'#f0fdf4', color:'#059669', border:'2px solid #bbf7d0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-              ➕ Planlegg oppgave
-            </button>
-            <button onClick={()=>setShowMilestones(v=>!v)}
-              style={{ padding:'9px 16px', background:showMilestones?'#7c3aed':'white', color:showMilestones?'white':'#7c3aed', border:'2px solid #7c3aed', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-              🏁 Milepæler {milestonesInRange.length>0&&<span style={{ background:showMilestones?'rgba(255,255,255,0.3)':'#7c3aed', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{milestonesInRange.length}</span>}
-            </button>
-            <button onClick={()=>setShowMateriell(v=>!v)}
-              style={{ padding:'9px 16px', background:showMateriell?'#059669':'white', color:showMateriell?'white':'#059669', border:'2px solid #059669', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-              📦 Materiell {materiellPlans.length>0&&<span style={{ background:showMateriell?'rgba(255,255,255,0.3)':'#059669', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{materiellPlans.length}</span>}
-            </button>
-            <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
-              style={{ padding:'9px 16px', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-              + Ny milepæl
-            </button>
-          </div>
-        </div>
+      {/* Header — kompakt redesign (2 rader) */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'10px 16px', flexShrink:0, position:'sticky', top:56, zIndex:20, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+        {/* Rad 1 — Hovedkontroller */}
+        <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+          {/* Tittel */}
+          <h1 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0, whiteSpace:'nowrap' }}>📅 Ressursplan</h1>
 
-        {/* Controls row */}
-        <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
-          {/* Resource type */}
-          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['ansatte','👷 Ansatte'],['maskiner','🚜 Maskiner']].map(([v,l])=>(
-              <button key={v} onClick={()=>setResourceType(v)}
-                style={{ padding:'8px 16px',border:'none',background:resourceType===v?'#059669':'white',color:resourceType===v?'white':'#64748b',fontWeight:resourceType===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
+          {/* Ansatte/Maskiner toggle */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', flexShrink:0 }}>
+            {[['ansatte','👷'],['maskiner','🚜']].map(([v,emoji])=>(
+              <button key={v} onClick={()=>setResourceType(v)} title={v==='ansatte'?'Ansatte':'Maskiner'}
+                style={{ padding:'6px 10px',border:'none',background:resourceType===v?'#059669':'white',color:resourceType===v?'white':'#64748b',fontWeight:resourceType===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:v==='ansatte'?'1px solid #e2e8f0':'none' }}>{emoji}</button>
             ))}
           </div>
 
-          {/* View mode */}
-          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['uke','Uke'],['14','14 dager'],['maned','Måned'],['gantt','📈 Gantt']].map(([v,l])=>(
+          {/* Visningsmodus toggle */}
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', flexShrink:0 }}>
+            {[['uke','Uke'],['14','14d'],['maned','Måned'],['gantt','Gantt']].map(([v,l],idx,arr)=>(
               <button key={v} onClick={()=>{
                 setViewMode(v)
-                // When switching to month view, show the month containing today
-                // to avoid showing wrong month (e.g. week starts Mar 30, month would show March)
-                if (v==='maned') {
-                  setCurrentDate(startOfMonth(new Date().toISOString().split('T')[0]))
-                } else if (v==='uke') {
-                  setCurrentDate(startOfWeek(new Date().toISOString().split('T')[0]))
-                } else if (v==='gantt') {
-                  setGanttAnchor(startOfWeek(new Date().toISOString().split('T')[0]))
-                }
+                if (v==='maned') setCurrentDate(startOfMonth(new Date().toISOString().split('T')[0]))
+                else if (v==='uke') setCurrentDate(startOfWeek(new Date().toISOString().split('T')[0]))
+                else if (v==='gantt') setGanttAnchor(startOfWeek(new Date().toISOString().split('T')[0]))
               }}
-                style={{ padding:'8px 14px',border:'none',background:viewMode===v?(v==='gantt'?'#7c3aed':'#0f172a'):'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding:'6px 12px',border:'none',background:viewMode===v?(v==='gantt'?'#7c3aed':'#0f172a'):'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:idx<arr.length-1?'1px solid #e2e8f0':'none' }}>{l}</button>
             ))}
           </div>
 
-          {/* Project filter */}
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
-            style={{ padding:'8px 12px',border:`2px solid ${filterProject!=='alle'?'#059669':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterProject!=='alle'?'700':'400',color:filterProject!=='alle'?'#059669':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
-            <option value="alle">🏗️ Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-          </select>
-
-          {/* Employee filter (ansatte only) */}
-          {resourceType==='ansatte' && (
-            <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
-              style={{ padding:'8px 12px',border:`2px solid ${filterEmployee!=='alle'?'#2563eb':'#e2e8f0'}`,borderRadius:'10px',fontSize:'13px',fontWeight:filterEmployee!=='alle'?'700':'400',color:filterEmployee!=='alle'?'#2563eb':'#475569',background:'white',cursor:'pointer',outline:'none' }}>
-              <option value="alle">👷 Alle ansatte</option>
-              {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+          {/* Gantt zoom (kun gantt) */}
+          {viewMode==='gantt' && (
+            <select value={ganttZoom} onChange={e=>setGanttZoom(e.target.value)}
+              style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',fontWeight:'500',minWidth:'90px' }}>
+              <option value="days">Dager</option>
+              <option value="weeks">Uker</option>
+              <option value="months">Måneder</option>
+              <option value="quarters">Kvartaler</option>
             </select>
           )}
 
-          {/* Date nav */}
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto' }}>
-            <button onClick={()=>navigate(-1)} style={{ width:'34px',height:'34px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
-            <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'14px',whiteSpace:'nowrap',minWidth:'160px',textAlign:'center' }}>
-              {viewMode==='maned'
-                ? `${MONTH_NAMES[new Date(currentDate).getMonth()]} ${new Date(currentDate).getFullYear()}`
-                : `${new Date(dates[0]+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})} – ${new Date(dates[dates.length-1]+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short',year:'numeric'})}`
-              }
-            </span>
-            <button onClick={()=>navigate(1)} style={{ width:'34px',height:'34px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>›</button>
-            <button onClick={goToToday} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
-            {/* Settings + Fullscreen */}
-            <div style={{ position:'relative', marginLeft:'4px' }}>
-              <button onClick={()=>setShowSettings(v=>!v)}
-                style={{ width:'34px',height:'34px',borderRadius:'8px',border:`1px solid ${showSettings?'#059669':'#e2e8f0'}`,background:showSettings?'#f0fdf4':'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center',color:showSettings?'#059669':'#64748b' }}
-                title="Innstillinger">⚙️</button>
-              {showSettings&&(
+          {/* Prosjekt-filter */}
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
+            style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth:'160px',fontWeight:'500' }}>
+            <option value="alle">🏗️ Alle prosjekter</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+
+          {/* Ansatt-filter (kun ansatte) */}
+          {resourceType==='ansatte' && (
+            <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
+              style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth:'140px',fontWeight:'500' }}>
+              <option value="alle">👷 Alle ansatte</option>
+              {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+            </select>
+          )}
+
+          {/* Spacer — dytter resten til høyre */}
+          <div style={{ flex:1, minWidth:'10px' }} />
+
+          {/* Datonavigering — én klikkbar pill som åpner datovelger */}
+          <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+            <button onClick={()=>navigate(-1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Forrige">‹</button>
+            <div style={{ position:'relative' }}>
+              <button onClick={()=>setShowDatePicker(v=>!v)}
+                style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#0f172a',minWidth:'140px' }}>
+                {viewMode==='maned'
+                  ? new Date(currentDate+'T12:00:00').toLocaleDateString('nb-NO',{month:'long',year:'numeric'})
+                  : viewMode==='gantt'
+                    ? new Date(ganttAnchor+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})+' →'
+                    : `${new Date(currentDate+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})} – ${(()=>{const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+(viewMode==='uke'?6:13));return d.toLocaleDateString('nb-NO',{day:'numeric',month:'short'})})()}`}
+              </button>
+              {showDatePicker && (
                 <>
-                  <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} onClick={()=>setShowSettings(false)} />
-                  <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',zIndex:101,width:'min(420px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',fontFamily:'system-ui,sans-serif' }}>
-                    <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-                      <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
-                        <span style={{ fontSize:'18px' }}>⚙️</span>
-                        <span style={{ fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
-                      </div>
-                      <button onClick={()=>setShowSettings(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
-                    </div>
-                    <div style={{ overflowY:'auto',flex:1,padding:'18px 22px',display:'flex',flexDirection:'column',gap:'2px',WebkitOverflowScrolling:'touch' }}>
-                      {/* Section: Visning */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px' }}>Visning</div>
-                      {[
-                        ['showWeekends','🗓️','Vis lørdag og søndag','Helger vises i planleggingsrutenettet'],
-                        ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i rutenettet'],
-                        ['skipWeekends','🚫','Hopp over helger ved dra','Helger blir ikke booket når du drar en booking over en helg'],
-                      ].map(([k,emoji,label,desc])=>(
-                        <div key={k} onClick={()=>setSettings(s=>({...s,[k]:!s[k]}))}
-                          style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}>
-                          <span style={{ fontSize:'18px',flexShrink:0 }}>{emoji}</span>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{label}</div>
-                            <div style={{ fontSize:'11px',color:'#94a3b8',marginTop:'1px' }}>{desc}</div>
-                          </div>
-                          <div style={{ width:'36px',height:'20px',borderRadius:'999px',background:settings[k]?'#059669':'#e2e8f0',position:'relative',flexShrink:0,transition:'background 0.2s' }}>
-                            <div style={{ width:'16px',height:'16px',borderRadius:'50%',background:'white',position:'absolute',top:'2px',left:settings[k]?'18px':'2px',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Section: Arbeidstid */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Standard arbeidstid</div>
-                      <div style={{ background:'#f8fafc',borderRadius:'12px',padding:'14px',border:'1px solid #f1f5f9' }}>
-                        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
-                          <div>
-                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Starter</label>
-                            <input type="time" value={settings.workdayStart} onChange={e=>setSettings(s=>({...s,workdayStart:e.target.value}))}
-                              style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
-                          </div>
-                          <div>
-                            <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Slutter</label>
-                            <input type="time" value={settings.workdayEnd} onChange={e=>setSettings(s=>({...s,workdayEnd:e.target.value}))}
-                              style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
-                          </div>
-                        </div>
-                        <div style={{ marginTop:'10px',background:'#eff6ff',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bfdbfe' }}>
-                          <div style={{ fontSize:'12px',color:'#2563eb',fontWeight:'600' }}>
-                            ⏰ {settings.workdayStart} – {settings.workdayEnd} ({(() => { const [sh,sm]=settings.workdayStart.split(':').map(Number); const [eh,em]=settings.workdayEnd.split(':').map(Number); return (((eh*60+em)-(sh*60+sm))/60).toFixed(1) })()}t/dag)
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section: Hurtigtilgang */}
-                      <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
-                      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px' }}>
-                        {[['07:00','15:30','Normaltid'],['07:00','16:00','Lang dag'],['08:00','16:00','Kontortid'],['06:00','14:00','Tidligvakt']].map(([start,end,label])=>(
-                          <button key={label} onClick={()=>setSettings(s=>({...s,workdayStart:start,workdayEnd:end}))}
-                            style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#f1f5f9'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
-                            {label}<br/><span style={{ fontWeight:'400',opacity:0.7,fontSize:'11px' }}>{start} – {end}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px',flexShrink:0 }}>
-                      <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,skipWeekends:true,workdayStart:'07:00',workdayEnd:'15:30'})}
-                        style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
-                      <button onClick={()=>setShowSettings(false)}
-                        style={{ flex:2,padding:'10px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lukk</button>
-                    </div>
+                  <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowDatePicker(false)} />
+                  <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,padding:'14px',minWidth:'240px' }}>
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'8px' }}>GÅ TIL DATO</div>
+                    <input type="date" value={viewMode==='gantt'?ganttAnchor:currentDate}
+                      onChange={e=>{
+                        const d=e.target.value
+                        if (viewMode==='gantt') setGanttAnchor(startOfWeek(d))
+                        else if (viewMode==='maned') setCurrentDate(startOfMonth(d))
+                        else setCurrentDate(startOfWeek(d))
+                        setShowDatePicker(false)
+                      }}
+                      style={{ width:'100%',padding:'8px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',boxSizing:'border-box' }} />
                   </div>
                 </>
               )}
             </div>
-            <button onClick={()=>setFullscreen(v=>!v)}
-              style={{ width:'34px',height:'34px',borderRadius:'8px',border:`1px solid ${fullscreen?'#059669':'#e2e8f0'}`,background:fullscreen?'#f0fdf4':'white',cursor:'pointer',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',color:fullscreen?'#059669':'#64748b',transition:'all 0.15s' }}
-              title={fullscreen?'Avslutt fullskjerm (Esc)':'Fullskjerm'}>
-              {fullscreen?'⊡':'⛶'}
-            </button>
+            <button onClick={()=>navigate(1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Neste">›</button>
+            <button onClick={goToToday} style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:'#374151' }}>I dag</button>
           </div>
-        </div>
 
-        {/* Active filters display */}
-        {(filterProject!=='alle'||filterEmployee!=='alle') && (
-          <div style={{ display:'flex', gap:'8px', marginTop:'10px', flexWrap:'wrap', alignItems:'center' }}>
-            <span style={{ fontSize:'12px', color:'#64748b' }}>Filtrert:</span>
-            {filterProject!=='alle' && (
-              <span style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
-                🏗️ {projects.find(p=>p.id===filterProject)?.name}
-                <button onClick={()=>setFilterProject('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#059669',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
-              </span>
-            )}
-            {filterEmployee!=='alle' && (
-              <span style={{ background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
-                👷 {employees.find(e=>e.id===filterEmployee)?.first_name} {employees.find(e=>e.id===filterEmployee)?.last_name}
-                <button onClick={()=>setFilterEmployee('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2563eb',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Milestone panel */}
-      {showMilestones && (
-        <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'16px 24px', flexShrink:0, maxHeight:'200px', overflowY:'auto' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px', flexWrap:'wrap', gap:'10px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-              <span style={{ fontSize:'16px', fontWeight:'800', color:'#7c3aed' }}>🏁 Milepæler</span>
-              <select value={milestoneRange} onChange={e=>setMilestoneRange(+e.target.value)}
-                style={{ padding:'5px 10px',border:'1px solid #ddd6fe',borderRadius:'8px',fontSize:'12px',color:'#7c3aed',fontWeight:'600',background:'white',outline:'none' }}>
-                {[30,60,90,180,365].map(d=><option key={d} value={d}>Neste {d} dager</option>)}
-              </select>
-            </div>
-            <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
-              style={{ padding:'6px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'700' }}>+ Ny milepæl</button>
-          </div>
-          {milestonesInRange.length===0 ? (
-            <p style={{ margin:0,color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen milepæler de neste {milestoneRange} dagene</p>
-          ) : (
-            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-              {milestonesInRange.map(ms=>{
-                const proj = projects.find(p=>p.id===ms.project_id)
-                const daysLeft = Math.ceil((new Date(ms.start_date)-new Date())/(1000*60*60*24))
-                const isPast = daysLeft<0
-                const isUrgent = daysLeft>=0&&daysLeft<=7
-                return (
-                  <div key={ms.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast?'#fecaca':isUrgent?'#fde68a':'#ddd6fe'}`, minWidth:'200px', maxWidth:'260px', cursor:'pointer' }}
-                    onClick={()=>setShowNewMilestone({ edit:ms })}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
-                      <span style={{ fontSize:'16px' }}>🏁</span>
-                      <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ms.title}</span>
+          {/* Settings-tannhjul */}
+          <div style={{ position:'relative', flexShrink:0 }}>
+            <button onClick={()=>setShowSettings(v=>!v)}
+              style={{ width:'30px',height:'30px',borderRadius:'6px',border:`1px solid ${showSettings?'#059669':'#e2e8f0'}`,background:showSettings?'#f0fdf4':'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:showSettings?'#059669':'#64748b' }}
+              title="Innstillinger">⚙️</button>
+            {showSettings&&(
+              <>
+                <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} onClick={()=>setShowSettings(false)} />
+                <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',zIndex:101,width:'min(420px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',fontFamily:'system-ui,sans-serif' }}>
+                  <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                    <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                      <span style={{ fontSize:'18px' }}>⚙️</span>
+                      <span style={{ fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>Innstillinger</span>
                     </div>
-                    <div style={{ fontSize:'12px', color:isPast?'#dc2626':isUrgent?'#d97706':'#7c3aed', fontWeight:'700', marginBottom:'4px' }}>
-                      {isPast?`Passert for ${Math.abs(daysLeft)}d siden`:daysLeft===0?'I dag!':daysLeft===1?'I morgen':`Om ${daysLeft} dager`}
-                    </div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
-                      📅 {ms.start_date}{proj?` · 🏗️ ${proj.name}`:''}
-                    </div>
+                    <button onClick={()=>setShowSettings(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Materiell panel */}
-      {showMateriell && (
-        <div style={{ background:'#f0fdf4', borderBottom:'2px solid #bbf7d0', padding:'16px 24px', flexShrink:0, maxHeight:'260px', overflowY:'auto' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
-            <span style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>📦 Materialleveranser</span>
-            <span style={{ fontSize:'12px', color:'#64748b' }}>{materiellPlans.length} leveranse{materiellPlans.length !== 1 ? 'r' : ''} planlagt</span>
-          </div>
-          {materiellPlans.length === 0 ? (
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', fontStyle:'italic' }}>Ingen materialleveranser planlagt. Bruk «Generer leveringsplan» i kalkulasjonsmodulen.</p>
-          ) : (
-            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-              {materiellPlans.sort((a,b) => a.date.localeCompare(b.date)).map(mp => {
-                const proj = projects.find(p => p.id === mp.project_id)
-                const daysLeft = Math.ceil((new Date(mp.date) - new Date()) / (1000*60*60*24))
-                const isPast = daysLeft < 0
-                const isUrgent = daysLeft >= 0 && daysLeft <= 3
-                const lines = (mp.notes || '').split('\n')
-                const title = lines[0] || 'Materialleveranse'
-                const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
-                return (
-                  <div key={mp.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'220px', maxWidth:'300px', cursor:'pointer' }}
-                    onClick={() => setMateriellDetail({ id: mp.id, title: title.replace('📦 Levering: ', '').replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
-                      <span style={{ fontSize:'14px' }}>📦</span>
-                      <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 Levering: ', '').replace('📦 ', '')}</span>
-                    </div>
-                    <div style={{ fontSize:'12px', color: isPast ? '#dc2626' : isUrgent ? '#d97706' : '#059669', fontWeight:'700', marginBottom:'4px' }}>
-                      {isPast ? `Skulle vært levert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'Levering i dag!' : daysLeft === 1 ? 'Levering i morgen' : `Levering om ${daysLeft} dager`}
-                    </div>
-                    {matLines.length > 0 && (
-                      <div style={{ fontSize:'10px', color:'#64748b', lineHeight:1.4, marginBottom:'4px' }}>
-                        {matLines.slice(0, 3).map((l, i) => <div key={i} style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l}</div>)}
-                        {matLines.length > 3 && <div style={{ fontStyle:'italic' }}>+ {matLines.length - 3} flere...</div>}
+                  <div style={{ overflowY:'auto',flex:1,padding:'18px 22px',display:'flex',flexDirection:'column',gap:'2px',WebkitOverflowScrolling:'touch' }}>
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px' }}>Visning</div>
+                    {[
+                      ['showWeekends','🗓️','Vis lørdag og søndag','Helger vises i planleggingsrutenettet'],
+                      ['showHolidays','🎉','Vis norske helligdager','Helligdager markeres i rutenettet'],
+                      ['skipWeekends','🚫','Hopp over helger ved dra','Helger blir ikke booket når du drar en booking over en helg'],
+                    ].map(([k,emoji,label,desc])=>(
+                      <div key={k} onClick={()=>setSettings(s=>({...s,[k]:!s[k]}))}
+                        style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 12px',borderRadius:'10px',cursor:'pointer',background:settings[k]?'#f0fdf4':'white',border:`1px solid ${settings[k]?'#bbf7d0':'#f1f5f9'}`,marginBottom:'4px',transition:'all 0.15s' }}>
+                        <span style={{ fontSize:'18px',flexShrink:0 }}>{emoji}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a' }}>{label}</div>
+                          <div style={{ fontSize:'11px',color:'#94a3b8',marginTop:'1px' }}>{desc}</div>
+                        </div>
+                        <div style={{ width:'36px',height:'20px',borderRadius:'999px',background:settings[k]?'#059669':'#e2e8f0',position:'relative',flexShrink:0,transition:'background 0.2s' }}>
+                          <div style={{ width:'16px',height:'16px',borderRadius:'50%',background:'white',position:'absolute',top:'2px',left:settings[k]?'18px':'2px',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
+                        </div>
                       </div>
-                    )}
-                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
-                      📅 {mp.date}{proj ? ` · 🏗️ ${proj.name}` : ''}
+                    ))}
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Standard arbeidstid</div>
+                    <div style={{ background:'#f8fafc',borderRadius:'12px',padding:'14px',border:'1px solid #f1f5f9' }}>
+                      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
+                        <div>
+                          <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Starter</label>
+                          <input type="time" value={settings.workdayStart} onChange={e=>setSettings(s=>({...s,workdayStart:e.target.value}))}
+                            style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
+                        </div>
+                        <div>
+                          <label style={{ display:'block',fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'5px',textTransform:'uppercase' }}>Slutter</label>
+                          <input type="time" value={settings.workdayEnd} onChange={e=>setSettings(s=>({...s,workdayEnd:e.target.value}))}
+                            style={{ width:'100%',padding:'9px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'14px',fontWeight:'700',outline:'none',boxSizing:'border-box',color:'#0f172a',textAlign:'center' }} />
+                        </div>
+                      </div>
+                      <div style={{ marginTop:'10px',background:'#eff6ff',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bfdbfe' }}>
+                        <div style={{ fontSize:'12px',color:'#2563eb',fontWeight:'600' }}>
+                          ⏰ {settings.workdayStart} – {settings.workdayEnd} ({(() => { const [sh,sm]=settings.workdayStart.split(':').map(Number); const [eh,em]=settings.workdayEnd.split(':').map(Number); return (((eh*60+em)-(sh*60+sm))/60).toFixed(1) })()}t/dag)
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'16px',marginBottom:'8px' }}>Hurtiginnstillinger</div>
+                    <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px' }}>
+                      {[['07:00','15:30','Normaltid'],['07:00','16:00','Lang dag'],['08:00','16:00','Kontortid'],['06:00','14:00','Tidligvakt']].map(([start,end,label])=>(
+                        <button key={label} onClick={()=>setSettings(s=>({...s,workdayStart:start,workdayEnd:end}))}
+                          style={{ padding:'10px',borderRadius:'10px',border:`2px solid ${settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#f1f5f9'}`,background:settings.workdayStart===start&&settings.workdayEnd===end?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:settings.workdayStart===start&&settings.workdayEnd===end?'#059669':'#64748b' }}>
+                          {label}<br/><span style={{ fontWeight:'400',opacity:0.7,fontSize:'11px' }}>{start} – {end}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Month view scroll hint */}
-      {viewMode==='maned'&&(
-        <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 }}>
-          <span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'600' }}>
-            📅 Månedsvisning — {visibleDates.length} dager · Skroll horisontalt for å se hele måneden
-          </span>
-          <span style={{ fontSize:'12px', color:'#64748b' }}>
-            Totalt {filteredPlans.filter(p=>visibleDates.includes(p.date)).length} bookinger denne måneden
-          </span>
-        </div>
-      )}
-
-      {/* Legend */}
-      <div style={{ padding:'8px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'center', flexShrink:0 }}>
-        <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Prosjekter:</span>
-        {(filterProject!=='alle' ? projects.filter(p=>p.id===filterProject) : projects).slice(0,8).map(p=>(
-          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'5px', cursor:'pointer' }} onClick={()=>setFilterProject(p.id===filterProject?'alle':p.id)}>
-            <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(p.id,projects),flexShrink:0 }}/>
-            <span style={{ fontSize:'12px',color:'#475569' }}>{p.name}</span>
+                  <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px',flexShrink:0 }}>
+                    <button onClick={()=>setSettings({showWeekends:true,showHolidays:true,skipWeekends:true,workdayStart:'07:00',workdayEnd:'15:30'})}
+                      style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',color:'#64748b',fontWeight:'500' }}>Nullstill</button>
+                    <button onClick={()=>setShowSettings(false)}
+                      style={{ flex:2,padding:'10px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>✓ Lukk</button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-        ))}
-        {filterProject==='alle'&&projects.length>8&&<span style={{ fontSize:'12px',color:'#94a3b8' }}>+{projects.length-8} til</span>}
+
+          {/* Fullskjerm */}
+          <button onClick={()=>setFullscreen(v=>!v)}
+            style={{ width:'30px',height:'30px',borderRadius:'6px',border:`1px solid ${fullscreen?'#059669':'#e2e8f0'}`,background:fullscreen?'#f0fdf4':'white',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',justifyContent:'center',color:fullscreen?'#059669':'#64748b',flexShrink:0 }}
+            title={fullscreen?'Avslutt fullskjerm (Esc)':'Fullskjerm'}>
+            {fullscreen?'⊡':'⛶'}
+          </button>
+
+          {/* + Ny-dropdown */}
+          <div style={{ position:'relative', flexShrink:0 }}>
+            <button onClick={()=>setShowNyMeny(v=>!v)}
+              style={{ padding:'6px 14px',background:'#059669',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'700',display:'flex',alignItems:'center',gap:'5px' }}>
+              ＋ Ny <span style={{ fontSize:'10px',opacity:0.85 }}>▾</span>
+            </button>
+            {showNyMeny && (
+              <>
+                <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowNyMeny(false)} />
+                <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,minWidth:'200px',overflow:'hidden' }}>
+                  <button onClick={()=>{ setShowOppgaveModal(true); setShowNyMeny(false) }}
+                    style={{ display:'flex',alignItems:'center',gap:'10px',width:'100%',padding:'10px 14px',border:'none',background:'white',cursor:'pointer',fontSize:'13px',color:'#0f172a',textAlign:'left',borderBottom:'1px solid #f1f5f9' }}
+                    onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+                    onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                    <span style={{ fontSize:'16px' }}>➕</span>
+                    <span style={{ fontWeight:'600' }}>Planlegg oppgave</span>
+                  </button>
+                  <button onClick={()=>{ setShowNewMilestone(new Date().toISOString().split('T')[0]); setShowNyMeny(false) }}
+                    style={{ display:'flex',alignItems:'center',gap:'10px',width:'100%',padding:'10px 14px',border:'none',background:'white',cursor:'pointer',fontSize:'13px',color:'#0f172a',textAlign:'left' }}
+                    onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+                    onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                    <span style={{ fontSize:'16px' }}>🏁</span>
+                    <span style={{ fontWeight:'600' }}>Ny milepæl</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Rad 2 — Filter-pills */}
+        <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'8px', flexWrap:'wrap' }}>
+          {doubleBookCount>0&&(
+            <button onClick={()=>setShowDoubleBookings(true)}
+              style={{ padding:'4px 10px',background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',borderRadius:'999px',fontSize:'12px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}>
+              ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
+            </button>
+          )}
+          <button onClick={()=>setShowLedigMannskap(true)}
+            style={{ padding:'4px 10px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            👷 Ledig mannskap
+          </button>
+          <button onClick={()=>setShowLedigMaskiner(true)}
+            style={{ padding:'4px 10px',background:'#f5f3ff',color:'#7c3aed',border:'1px solid #ddd6fe',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            🚜 Ledig utstyr
+          </button>
+          <button onClick={()=>setShowMilestones(v=>!v)}
+            style={{ padding:'4px 10px',background:showMilestones?'#7c3aed':'white',color:showMilestones?'white':'#7c3aed',border:'1px solid #7c3aed',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            🏁 Milepæler
+          </button>
+          <button onClick={()=>setShowMateriell(v=>!v)}
+            style={{ padding:'4px 10px',background:showMateriell?'#059669':'white',color:showMateriell?'white':'#059669',border:'1px solid #059669',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            📦 Materiell
+          </button>
+
+          {/* Aktive filter-pills */}
+          {filterProject!=='alle' && (
+            <span style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
+              🏗️ {projects.find(p=>p.id===filterProject)?.name}
+              <button onClick={()=>setFilterProject('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#059669',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
+            </span>
+          )}
+          {filterEmployee!=='alle' && (
+            <span style={{ background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
+              👷 {employees.find(e=>e.id===filterEmployee)?.first_name} {employees.find(e=>e.id===filterEmployee)?.last_name}
+              <button onClick={()=>setFilterEmployee('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2563eb',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
+            </span>
+          )}
+
+          {/* Spacer */}
+          <div style={{ flex:1, minWidth:'10px' }} />
+
+          {/* Prosjektfarger info-popover */}
+          <div style={{ position:'relative' }}>
+            <button onClick={()=>setShowProjectLegend(v=>!v)}
+              style={{ padding:'4px 10px',background:'white',color:'#64748b',border:'1px solid #e2e8f0',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}
+              title="Prosjektfarger">
+              <span style={{ display:'inline-flex',width:'14px',height:'14px',borderRadius:'50%',background:'#e2e8f0',color:'#64748b',fontSize:'9px',fontWeight:'800',alignItems:'center',justifyContent:'center' }}>i</span>
+              {projects.length} prosjekt{projects.length!==1?'er':''}
+            </button>
+            {showProjectLegend && (
+              <>
+                <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowProjectLegend(false)} />
+                <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,padding:'12px',minWidth:'220px',maxHeight:'340px',overflowY:'auto' }}>
+                  <div style={{ fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.04em' }}>Prosjekter ({projects.length})</div>
+                  {projects.length===0 ? (
+                    <div style={{ fontSize:'12px',color:'#94a3b8',fontStyle:'italic' }}>Ingen prosjekter</div>
+                  ) : (
+                    <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
+                      {projects.map(p=>(
+                        <div key={p.id} onClick={()=>{ setFilterProject(p.id===filterProject?'alle':p.id); setShowProjectLegend(false) }}
+                          style={{ display:'flex',alignItems:'center',gap:'8px',padding:'6px 8px',borderRadius:'6px',cursor:'pointer',background:p.id===filterProject?'#f0fdf4':'transparent' }}>
+                          <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(p.id,projects),flexShrink:0 }}/>
+                          <span style={{ fontSize:'12px',color:'#0f172a',fontWeight:p.id===filterProject?'700':'500' }}>{p.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ─── GANTT-VIEW (del 9, Float-inspirert) ─── */}
