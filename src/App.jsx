@@ -27133,9 +27133,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 const hasIt = (data?.active_modules || []).includes('ressursplan')
                 setHasRessursplan(hasIt)
                 setLoading(false)
-                if (hasIt) {
-                  supabase.from('employees').select('id, name, role').order('name').then(({ data: empData }) => setEmployees(empData || []))
-                  supabase.from('projects').select('id, name, project_number').eq('status', 'Aktiv').order('name').then(({ data: projData }) => setProjects(projData || []))
+                if (hasIt && !k.project_id) {
+                  supabase.from('projects').select('id, name, project_number').order('name').then(({ data: projData }) => setProjects(projData || []))
                 }
               })
               .catch(() => { setHasRessursplan(false); setLoading(false) })
@@ -27249,41 +27248,37 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           // ── Send til ressursplan ──
           const handleSendRessursplan = async () => {
-            if (selectedEmployees.length === 0) return alert('Velg minst én ansatt')
-            if (!selectedProject) return alert('Velg et prosjekt')
+            const projId = k.project_id || selectedProject
+            if (!projId) return alert('Kalkylen er ikke koblet til et prosjekt')
             setSending(true)
             try {
-              const plans = []
+              // Opprett milepæler for hver bygningsdel med start/slutt-dato
+              const events = []
               for (const bd of bdPlan) {
                 const startD = addWorkdays(startDato, Math.floor(bd.startDag))
-                const dager = Math.max(Math.ceil(bd.dager), 1)
-                for (let d = 0; d < dager; d++) {
-                  const date = addWorkdays(startD.toISOString().split('T')[0], d)
-                  const dateStr = date.toISOString().split('T')[0]
-                  for (const empId of selectedEmployees) {
-                    plans.push({
-                      resource_id: empId, resource_type: 'employee', project_id: selectedProject,
-                      date: dateStr, hours: timerPerDag,
-                      notes: `📐 ${bd.name} (fra kalkyle: ${k.title})`,
-                      created_by: user?.id, source: 'kalkyle', source_id: k.id
-                    })
-                  }
-                }
+                const sluttD = addWorkdays(startDato, Math.ceil(bd.sluttDag))
+                events.push({
+                  title: `📐 ${bd.name}`,
+                  start_date: startD.toISOString().split('T')[0],
+                  end_date: sluttD.toISOString().split('T')[0],
+                  type: 'milestone',
+                  project_id: projId,
+                  color: '#2563eb',
+                  description: `Arbeid: ${bd.timer.toFixed(1)} timer (${antallMann} mann × ${Math.ceil(bd.dager)} dager)\nFra kalkyle: ${k.title}\n\nFordel ansatte i ressursplanleggeren.`,
+                  created_by: user?.id
+                })
               }
-              // Insert in batches
-              for (let i = 0; i < plans.length; i += 200) {
-                const batch = plans.slice(i, i + 200)
-                const { error } = await supabase.from('resource_plans').insert(batch)
-                if (error) throw error
-              }
-              setSent({ type: 'ressurs', count: plans.length })
+              const { error } = await supabase.from('calendar_events').insert(events)
+              if (error) throw error
+              setSent({ type: 'ressurs', count: events.length })
             } catch (e) { alert('Feil: ' + e.message) }
             finally { setSending(false) }
           }
 
           // ── Generer leveringsplan med milepæler ──
           const handleGenererLevering = async () => {
-            if (!selectedProject) return alert('Velg et prosjekt')
+            const projId = k.project_id || selectedProject
+            if (!projId) return alert('Kalkylen er ikke koblet til et prosjekt')
             setSending(true)
             try {
               const milestones = []
@@ -27292,7 +27287,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 const faseStart = addWorkdays(startDato, Math.floor(bd.startDag))
                 const leveringsDato = new Date(faseStart)
                 leveringsDato.setDate(leveringsDato.getDate() - leveringsdager)
-                // Skip weekends for leveringsdato
                 while (leveringsDato.getDay() === 0 || leveringsDato.getDay() === 6) leveringsDato.setDate(leveringsDato.getDate() - 1)
 
                 const matListe = bd.materialer.map(m =>
@@ -27303,7 +27297,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   title: `📦 Levering: ${bd.name}`,
                   start_date: leveringsDato.toISOString().split('T')[0],
                   type: 'milestone',
-                  project_id: selectedProject,
+                  project_id: projId,
                   color: '#059669',
                   description: `Materialleveranse for ${bd.name} (${bd.materialer.length} poster)\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\nMATERIALLISTE:\n${matListe}\n\nFra kalkyle: ${k.title}`,
                   created_by: user?.id
@@ -27450,43 +27444,45 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   </table>
                 </div>
 
-                {/* Footer med ansattvelger og handlingsknapper */}
+                {/* Footer — forenklet flyt */}
                 <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
-                  {/* Prosjekt og ansatte */}
-                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', flexWrap:'wrap' }}>
+                  {/* Prosjekt — automatisk fra kalkyle eller velg */}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-end', flexWrap:'wrap' }}>
                     <div style={{ flex:1, minWidth:'200px' }}>
-                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Koble til prosjekt *</label>
-                      <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
-                        <option value="">Velg prosjekt...</option>
-                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                      </select>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Prosjekt</label>
+                      {k.project_id ? (
+                        <div style={{ padding:'10px 12px', background:'#f0fdf4', borderRadius:'10px', fontSize:'13px', color:'#059669', fontWeight:'600', border:'1px solid #bbf7d0' }}>
+                          ✅ Koblet til prosjekt fra kalkylen
+                          <input type="hidden" value={k.project_id} />
+                        </div>
+                      ) : (
+                        <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
+                          <option value="">Velg prosjekt...</option>
+                          {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                        </select>
+                      )}
                     </div>
-                    <div style={{ flex:1, minWidth:'200px' }}>
-                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Ansatte på prosjektet (for ressursplan)</label>
-                      <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                        {employees.map(emp => (
-                          <button key={emp.id} onClick={() => setSelectedEmployees(prev => prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
-                            style={{ padding:'3px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'600', cursor:'pointer', border: selectedEmployees.includes(emp.id) ? '2px solid #059669' : '1px solid #e2e8f0', background: selectedEmployees.includes(emp.id) ? '#f0fdf4' : 'white', color: selectedEmployees.includes(emp.id) ? '#059669' : '#64748b' }}>
-                            {emp.name}
-                          </button>
-                        ))}
-                        {employees.length === 0 && <span style={{ fontSize:'11px', color:'#94a3b8' }}>Ingen ansatte registrert</span>}
-                      </div>
+                    <div style={{ width:'160px' }}>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering dager før start</label>
+                      <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, textAlign:'center' }} />
                     </div>
                   </div>
-                  <div style={{ display:'flex', gap:'6px', marginBottom:'8px', minWidth:'200px' }}>
-                    <label style={{ fontSize:'11px', fontWeight:'600', color:'#64748b', whiteSpace:'nowrap', lineHeight:'32px' }}>Levering dager før oppstart:</label>
-                    <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, width:'50px', textAlign:'center', padding:'4px 8px' }} />
+
+                  {/* Info-tekst */}
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'10px', lineHeight:1.5 }}>
+                    <strong>Send til ressursplan:</strong> Oppretter {Math.ceil(dagerTotalt)} arbeidsdager med {timerPerDag}t/dag på prosjektet. Fordel ansatte i ressursplanen etterpå.<br/>
+                    <strong>Generer leveringsplan:</strong> Oppretter milepæler i kalenderen med materiallister {leveringsdager} dager før hver fase starter.
                   </div>
+
                   {/* Knapper */}
                   <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
                     <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>Lukk</button>
-                    <button onClick={handleSendRessursplan} disabled={sending || selectedEmployees.length === 0 || !selectedProject}
-                      style={{ padding:'10px 20px', background: sending || selectedEmployees.length === 0 || !selectedProject ? '#94a3b8' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
-                      {sending ? '⏳ Sender...' : `📅 Send til ressursplan (${selectedEmployees.length} mann)`}
+                    <button onClick={handleSendRessursplan} disabled={sending || !(k.project_id || selectedProject)}
+                      style={{ padding:'10px 20px', background: sending || !(k.project_id || selectedProject) ? '#94a3b8' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+                      {sending ? '⏳ Sender...' : `📅 Send til ressursplan (${antallMann} mann × ${Math.ceil(dagerTotalt)} dager)`}
                     </button>
-                    <button onClick={handleGenererLevering} disabled={sending || !selectedProject}
-                      style={{ padding:'10px 20px', background: sending || !selectedProject ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+                    <button onClick={handleGenererLevering} disabled={sending || !(k.project_id || selectedProject)}
+                      style={{ padding:'10px 20px', background: sending || !(k.project_id || selectedProject) ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
                       {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan (${bdPlan.filter(b => b.materialer.length > 0).length} faser)`}
                     </button>
                   </div>
