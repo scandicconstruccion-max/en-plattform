@@ -22903,10 +22903,23 @@ function beregnMaterialkostnad(material, faktorer) {
 
 function beregnBygningsdel(bd, faktorer) {
   const mengde = parseFloat(bd.mengde) || 1
+
+  // ── Beregn åpningsfradrag for materialer ──
+  // Totalt åpningsareal trekkes fra material-mengde (aldri under 0)
+  let totalApningsareal = 0
+  if (bd.fradrag_apninger !== false) { // Default: fradrag aktivert
+    ;(bd.apningstillegg || []).forEach(at => {
+      const antall = parseFloat(at.antall) || 0
+      const areal = parseFloat(at.areal) || 0
+      totalApningsareal += antall * areal
+    })
+  }
+  const materialMengde = Math.max(mengde - totalApningsareal, 0)
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
   const fortjenesteInnkjop = parseFloat(faktorer.fortjeneste_innkjop_prosent) || 0
+  const fortjenesteLonn = parseFloat(faktorer.fortjeneste_lonn_prosent) || 0
 
   ;(bd.arbeidsarter || []).forEach(a => {
     const r = beregnArbeidskostnad(a, faktorer)
@@ -22916,21 +22929,72 @@ function beregnBygningsdel(bd, faktorer) {
   })
   ;(bd.materialer || []).forEach(m => {
     const r = beregnMaterialkostnad(m, faktorer)
-    totalMaterial += r.medJustering * mengde
-    totalMaterialMedFortjeneste += r.medFortjeneste * mengde
+    totalMaterial += r.medJustering * materialMengde
+    totalMaterialMedFortjeneste += r.medFortjeneste * materialMengde
   })
   ;(bd.underleverandorer || []).forEach(u => {
     const kost = parseFloat(u.kostnad) || 0
     totalUE += kost * (1 + fortjenesteInnkjop / 100) * mengde
   })
 
-  const selvkost = totalArbeid + totalMaterial
-  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE
-  // Ekstra felt som PlanleggModal trenger (bevart fra del 8 — del 9 har forenklet motor uten fradrag/tillegg)
-  const materialMengde = mengde // del 9: ingen åpningsfradrag, så material-mengde = bygningsdel-mengde
+  // Timekostnad for tillegg (brukes både av flatetillegg og åpningstillegg)
+  const lonn = parseFloat(faktorer.produksjonslonn) || 0
+  const sosiale = parseFloat(faktorer.sosiale_prosent) || 0
+  const faste = parseFloat(faktorer.faste_prosent) || 0
+  const justering = parseFloat(faktorer.grunntid_justering) || 1.0
+  const tilleggTimekostnad = lonn * (1 + sosiale / 100 + faste / 100)
+
+  // ── Flatetillegg: mertid for tilpasning til hjørner, avslutninger etc. ──
+  // Per tømrertariffen: skjønnsmessig antall flatetillegg × timer/stk
+  let totalFlatetillegg = 0
+  let totalFlatetilleggTimer = 0
+  ;(bd.flatetillegg || []).forEach(ft => {
+    const antall = parseFloat(ft.antall) || 0
+    const timerPerFlate = parseFloat(ft.timer_per_flate) || 0
+    const faktiskTid = antall * timerPerFlate * justering
+    const kost = faktiskTid * tilleggTimekostnad
+    totalFlatetillegg += kost
+    totalFlatetilleggTimer += faktiskTid
+  })
+  const flatetilleggMedFortjeneste = totalFlatetillegg * (1 + fortjenesteLonn / 100)
+  totalTimer += totalFlatetilleggTimer
+
+  // ── Åpningstillegg: mertid for tilpasning til åpninger (dører, vinduer) ──
+  // Per tømrertariffen telleregler:
+  //   0,5-2,5 m² = 1 stk, 2,5-4,5 m² = 2 stk, 4,5-6,5 m² = 3 stk, >6,5 m² = 4 stk
+  //   + 1 ekstra i bærende bindingsverk
+  let totalApningstillegg = 0
+  let totalApningstilleggTimer = 0
+  ;(bd.apningstillegg || []).forEach(at => {
+    const areal = parseFloat(at.areal) || 0
+    const antall = parseFloat(at.antall) || 1
+    const baerende = at.baerende === true || at.baerende === 'true'
+    const timerPerTillegg = parseFloat(at.timer_per_tillegg) || 0
+
+    // Beregn antall åpningstillegg basert på areal (telleregler)
+    let tilleggPerAapning = 0
+    if (areal > 0.5 && areal <= 2.5) tilleggPerAapning = 1
+    else if (areal > 2.5 && areal <= 4.5) tilleggPerAapning = 2
+    else if (areal > 4.5 && areal <= 6.5) tilleggPerAapning = 3
+    else if (areal > 6.5) tilleggPerAapning = 4
+
+    if (baerende && tilleggPerAapning > 0) tilleggPerAapning += 1
+
+    const totaltTillegg = antall * tilleggPerAapning
+    const faktiskTid = totaltTillegg * timerPerTillegg * justering
+    const kost = faktiskTid * tilleggTimekostnad
+    const medFortjeneste = kost * (1 + fortjenesteLonn / 100)
+
+    totalApningstillegg += medFortjeneste
+    totalApningstilleggTimer += faktiskTid
+  })
+  totalTimer += totalApningstilleggTimer
+
+  const selvkost = totalArbeid + totalMaterial + totalFlatetillegg + (totalApningstillegg / (1 + fortjenesteLonn / 100)) + (totalUE / (1 + fortjenesteInnkjop / 100))
+  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE + flatetilleggMedFortjeneste + totalApningstillegg
   const dekningsbidrag = totalMedFortjeneste - selvkost
   const dbProsent = totalMedFortjeneste > 0 ? (dekningsbidrag / totalMedFortjeneste) * 100 : 0
-  return { mengde, materialMengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, dekningsbidrag, dbProsent }
+  return { mengde, materialMengde, totalApningsareal, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
@@ -25660,6 +25724,34 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: (b.arbeidsarter||[]).filter(a => a.id !== aId) } : b) } : kl))
   }
 
+  // Flatetillegg CRUD
+  const updateFlatetillegg = (kalId, bdId, ftId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).map(ft => ft.id === ftId ? { ...ft, [field]: value } : ft) } : b) } : kl))
+  }
+  const addFlatetillegg = (kalId, bdId) => {
+    const kal = kalkyler.find(k => k.id === kalId)
+    const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
+    const defaultTimer = parseFloat(fakt.default_timer_flate) || 0.5
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: [...(b.flatetillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, timer_per_flate: defaultTimer }] } : b) } : kl))
+  }
+  const removeFlatetillegg = (kalId, bdId, ftId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).filter(ft => ft.id !== ftId) } : b) } : kl))
+  }
+
+  // Åpningstillegg CRUD
+  const updateApningstillegg = (kalId, bdId, atId, field, value) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).map(at => at.id === atId ? { ...at, [field]: value } : at) } : b) } : kl))
+  }
+  const addApningstillegg = (kalId, bdId) => {
+    const kal = kalkyler.find(k => k.id === kalId)
+    const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
+    const defaultTimer = parseFloat(fakt.default_timer_aapning) || 0.5
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: [...(b.apningstillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, areal: 2.0, baerende: false, timer_per_tillegg: defaultTimer }] } : b) } : kl))
+  }
+  const removeApningstillegg = (kalId, bdId, atId) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).filter(at => at.id !== atId) } : b) } : kl))
+  }
+
   // Material update
   const updateMaterial = (kalId, bdId, mId, field, value) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(m => m.id === mId ? { ...m, [field]: value } : m) } : b) } : kl))
@@ -26482,6 +26574,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bi+1}</span>
                               <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bd.name || 'Uten navn'}</span>
                               {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
+                              {!isExpanded && (bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>📐 {(bd.flatetillegg||[]).length}</span>}
+                              {!isExpanded && (bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#fef2f2', color:'#dc2626', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>🚪 {(bd.apningstillegg||[]).length}</span>}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
@@ -26550,6 +26644,131 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   </tbody>
                                 </table>
                                 <button onClick={() => addArbeidsart(kalk.id, bd.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Arbeidsart</button>
+
+                                {/* ── Flatetillegg (del av arbeidsarter) ── */}
+                                {(bd.flatetillegg||[]).length > 0 && (
+                                  <div style={{ marginTop:'10px', borderTop:'1px dashed #e2e8f0', paddingTop:'8px' }}>
+                                    <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', marginBottom:'4px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid for hjørner, avslutninger og tilpasning)</span></div>
+                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
+                                      <colgroup>
+                                        <col style={{ width:'auto' }} />
+                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'80px' }} />
+                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'75px' }} />
+                                        <col style={{ width:'28px' }} />
+                                      </colgroup>
+                                      <thead><tr>
+                                        <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Ant. flater</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/flate</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Totalt</th>
+                                        <th style={{ padding:'3px 4px', borderBottom:'1px solid #f8fafc' }}></th>
+                                      </tr></thead>
+                                      <tbody>
+                                        {(bd.flatetillegg||[]).map(ft => {
+                                          const antall = parseFloat(ft.antall) || 0
+                                          const timerPerFlate = parseFloat(ft.timer_per_flate) || 0
+                                          const just = parseFloat(fakt.grunntid_justering) || 1.0
+                                          const lonnF = parseFloat(fakt.produksjonslonn) || 0
+                                          const sosF = parseFloat(fakt.sosiale_prosent) || 0
+                                          const fastF = parseFloat(fakt.faste_prosent) || 0
+                                          const timekostF = lonnF * (1 + sosF / 100 + fastF / 100)
+                                          const fortjLonnF = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
+                                          const faktiskTid = antall * timerPerFlate * just
+                                          const kostMedFortj = faktiskTid * timekostF * (1 + fortjLonnF / 100)
+                                          return (
+                                            <tr key={ft.id}>
+                                              <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Fasader, hjørneavslutninger" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" step="1" value={ft.antall||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'antall', e.target.value)} placeholder="1" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={ft.timer_per_flate||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'timer_per_flate', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{faktiskTid.toFixed(2)} t</td>
+                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
+                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                            </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                {/* ── Åpningstillegg (del av arbeidsarter) ── */}
+                                {(bd.apningstillegg||[]).length > 0 && (
+                                  <div style={{ marginTop:'10px', borderTop: (bd.flatetillegg||[]).length === 0 ? '1px dashed #e2e8f0' : 'none', paddingTop: (bd.flatetillegg||[]).length === 0 ? '8px' : '4px' }}>
+                                    <div style={{ fontSize:'10px', fontWeight:'700', color:'#dc2626', marginBottom:'4px' }}>🚪 ÅPNINGSTILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid rundt dører, vinduer, gjennomføringer)</span></div>
+                                    <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'3px 6px', borderRadius:'4px' }}>
+                                      Telleregel: 0,5–2,5 m² = 1 stk · 2,5–4,5 m² = 2 stk · 4,5–6,5 m² = 3 stk · &gt;6,5 m² = 4 stk · bærende +1
+                                    </div>
+                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
+                                      <colgroup>
+                                        <col style={{ width:'auto' }} />
+                                        <col style={{ width:'58px' }} />
+                                        <col style={{ width:'65px' }} />
+                                        <col style={{ width:'40px' }} />
+                                        <col style={{ width:'78px' }} />
+                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'75px' }} />
+                                        <col style={{ width:'28px' }} />
+                                      </colgroup>
+                                      <thead><tr>
+                                        <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Type åpning</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Antall</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Areal/stk</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'center', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Bær.</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/tillegg</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Totalt</th>
+                                        <th style={{ padding:'3px 4px', borderBottom:'1px solid #f8fafc' }}></th>
+                                      </tr></thead>
+                                      <tbody>
+                                        {(bd.apningstillegg||[]).map(at => {
+                                          const antall = parseFloat(at.antall) || 0
+                                          const areal = parseFloat(at.areal) || 0
+                                          const baerende = at.baerende === true || at.baerende === 'true'
+                                          const timerPerTillegg = parseFloat(at.timer_per_tillegg) || 0
+                                          let tilleggPerAapning = 0
+                                          if (areal > 0.5 && areal <= 2.5) tilleggPerAapning = 1
+                                          else if (areal > 2.5 && areal <= 4.5) tilleggPerAapning = 2
+                                          else if (areal > 4.5 && areal <= 6.5) tilleggPerAapning = 3
+                                          else if (areal > 6.5) tilleggPerAapning = 4
+                                          if (baerende && tilleggPerAapning > 0) tilleggPerAapning += 1
+                                          const totaltTillegg = antall * tilleggPerAapning
+                                          const just = parseFloat(fakt.grunntid_justering) || 1.0
+                                          const lonnA = parseFloat(fakt.produksjonslonn) || 0
+                                          const sosA = parseFloat(fakt.sosiale_prosent) || 0
+                                          const fastA = parseFloat(fakt.faste_prosent) || 0
+                                          const timekostA = lonnA * (1 + sosA / 100 + fastA / 100)
+                                          const fortjLonnA = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
+                                          const faktiskTid = totaltTillegg * timerPerTillegg * just
+                                          const kostMedFortj = faktiskTid * timekostA * (1 + fortjLonnA / 100)
+                                          return (
+                                            <tr key={at.id}>
+                                              <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Vindu, Dør" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Gir ${tilleggPerAapning} stk åpningstillegg`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><input type="checkbox" checked={baerende} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'baerende', e.target.checked)} title="+1 ekstra tillegg per åpning" style={{ cursor:'pointer' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.timer_per_tillegg||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'timer_per_tillegg', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>
+                                                <div>{faktiskTid.toFixed(2)} t</div>
+                                                {totaltTillegg > 0 && <div style={{ fontSize:'9px', color:'#94a3b8' }}>{totaltTillegg} stk</div>}
+                                              </td>
+                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
+                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
+                                            </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                {/* Tillegg-knapper */}
+                                <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
+                                  <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📐 + Flatetillegg</button>
+                                  <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>🚪 + Åpningstillegg</button>
+                                </div>
                               </div>
 
                               {/* Materialer - editable */}
