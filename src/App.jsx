@@ -13820,7 +13820,7 @@ function RessursGanttGrid({
   resources, plans, projects, milestones, resourceType,
   materiellPlans, onOpenMateriell, onOpenMilestone,
   ganttZoom, setGanttZoom,
-  ganttAnchor,
+  ganttAnchor, scrollToTodayTrigger,
   filterProject, filterEmployee,
   settings, isWeekend, isToday,
   getProjectColor, holidays,
@@ -14033,7 +14033,7 @@ function RessursGanttGrid({
     // Scroll so today is ~30% from left (past the resource column)
     const target = RESOURCE_COL + todayIdx * colW - (gridScrollRef.current.clientWidth - RESOURCE_COL) * 0.3
     gridScrollRef.current.scrollLeft = Math.max(0, target)
-  }, [ganttZoom, ganttAnchor, colW, dateIndex])
+  }, [ganttZoom, ganttAnchor, colW, dateIndex, scrollToTodayTrigger])
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'system-ui,sans-serif', background:'white', minWidth:0 }}>
@@ -14558,6 +14558,7 @@ function RessursPage() {
   // ── Gantt-view state (Float-inspired redesign — del 9) ──
   const [ganttZoom, setGanttZoom] = useState('weeks') // 'days' | 'weeks' | 'months' | 'quarters'
   const [ganttAnchor, setGanttAnchor] = useState(() => startOfWeek(new Date().toISOString().split('T')[0]))
+  const [scrollToTodayTrigger, setScrollToTodayTrigger] = useState(0)
   const [ganttDragCreate, setGanttDragCreate] = useState(null) // { resourceId, startDate, endDate }
 
   const load = async () => {
@@ -14613,7 +14614,11 @@ function RessursPage() {
 
   const goToToday = () => {
     const today = new Date().toISOString().split('T')[0]
-    if (viewMode==='gantt') { setGanttAnchor(startOfWeek(today)); return }
+    if (viewMode==='gantt') {
+      setGanttAnchor(startOfWeek(today))
+      setScrollToTodayTrigger(t => t + 1) // Tving auto-scroll selv om anker ikke endret seg
+      return
+    }
     setCurrentDate(viewMode==='maned'?startOfMonth(today):startOfWeek(today))
   }
 
@@ -15211,6 +15216,7 @@ function RessursPage() {
           ganttZoom={ganttZoom}
           setGanttZoom={setGanttZoom}
           ganttAnchor={ganttAnchor}
+          scrollToTodayTrigger={scrollToTodayTrigger}
           filterProject={filterProject}
           filterEmployee={filterEmployee}
           settings={settings}
