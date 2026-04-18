@@ -21926,7 +21926,7 @@ function MinBedriftPage() {
                   </div>
                   <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#475569' }}>Alle grunnleggende moduler for prosjektstyring og kvalitetssikring</p>
                   <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                    {['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'].map(m => (
+                    {['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Ansatte','Kundeoversikt','Varsler'].map(m => (
                       <span key={m} style={{ background:'white', color:'#059669', border:'1px solid #bbf7d0', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px' }}>✓ {m}</span>
                     ))}
                   </div>
