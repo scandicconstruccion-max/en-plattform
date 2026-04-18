@@ -22249,9 +22249,11 @@ function beregnBygningsdel(bd, faktorer) {
   })
   totalTimer += totalApningstilleggTimer
 
-  const selvkost = totalArbeid + totalMaterial + totalFlatetillegg
+  const selvkost = totalArbeid + totalMaterial + totalFlatetillegg + (totalApningstillegg / (1 + fortjenesteLonn / 100)) + (totalUE / (1 + fortjenesteInnkjop / 100))
   const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE + flatetilleggMedFortjeneste + totalApningstillegg
-  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer }
+  const dekningsbidrag = totalMedFortjeneste - selvkost
+  const dbProsent = totalMedFortjeneste > 0 ? (dekningsbidrag / totalMedFortjeneste) * 100 : 0
+  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
@@ -26036,6 +26038,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
+                              <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
                                 <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>
@@ -26374,6 +26377,29 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                 <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
                               </div>
 
+                              {/* ── Oppsummering / Dekningsbidrag ── */}
+                              <div style={{ marginTop:'14px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', borderRadius:'10px', padding:'12px 16px', border: `1px solid ${bdT.dbProsent >= 25 ? '#bbf7d0' : bdT.dbProsent >= 15 ? '#fde68a' : '#fecaca'}` }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b' }}>📊 OPPSUMMERING BYGNINGSDEL</span>
+                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>
+                                    DB: {bdT.dbProsent.toFixed(1)}%
+                                  </span>
+                                </div>
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px 16px', fontSize:'12px' }}>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeid)}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeidMedFortjeneste + (bdT.flatetilleggMedFortjeneste || 0) + (bdT.totalApningstillegg || 0))}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterial)}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterialMedFortjeneste)}</span></div>
+                                  {bdT.totalUE > 0 && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Underleverandør</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalUE)}</span></div>}
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bdT.totalTimer.toFixed(1)} t</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Selvkost</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{fmt(bdT.selvkost)}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Totalpris</span><span style={{ fontWeight:'700', color:'#059669' }}>{fmt(bdT.totalMedFortjeneste)}</span></div>
+                                </div>
+                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop: `1px solid ${bdT.dbProsent >= 25 ? '#86efac' : bdT.dbProsent >= 15 ? '#fde68a' : '#fca5a5'}` }}>
+                                  <span style={{ fontSize:'13px', fontWeight:'700', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>Dekningsbidrag</span>
+                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{fmt(bdT.dekningsbidrag)} ({bdT.dbProsent.toFixed(1)}%)</span>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
