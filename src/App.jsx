@@ -13815,6 +13815,7 @@ function RessursPage() {
   const [filterEmployee, setFilterEmployee] = useState('alle')
   const [showMilestones, setShowMilestones] = useState(false)
   const [showMateriell, setShowMateriell] = useState(false)
+  const [materiellDetail, setMateriellDetail] = useState(null) // { title, lines }
   const [showNewMilestone, setShowNewMilestone] = useState(null)
   const [milestoneRange, setMilestoneRange] = useState(90)
   const [showLedigMannskap, setShowLedigMannskap] = useState(false)
@@ -14387,10 +14388,7 @@ function RessursPage() {
                 const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
                 return (
                   <div key={mp.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'220px', maxWidth:'300px', cursor:'pointer' }}
-                    onClick={() => {
-                      const detail = mp.notes || 'Ingen detaljer'
-                      alert(detail)
-                    }}>
+                    onClick={() => setMateriellDetail({ title: title.replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
                       <span style={{ fontSize:'14px' }}>📦</span>
                       <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 ', '')}</span>
@@ -14504,7 +14502,7 @@ function RessursPage() {
                     {matOnDate.map(mp=>(
                       <div key={mp.id} title={(mp.notes||'').split('\n')[0]}
                         style={{ background:'#059669',borderRadius:'4px',padding:'2px 5px',marginBottom:'1px',cursor:'pointer' }}
-                        onClick={()=>alert(mp.notes||'Ingen detaljer')}>
+                        onClick={()=>setMateriellDetail({ title: (mp.notes||'').split('\n')[0].replace('📦 Levering: ',''), notes: mp.notes || '', date: mp.date })}>
                         <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{viewMode!=='maned'?(mp.notes||'').split('\n')[0].replace('📦 ',''):'📦'}</div>
                       </div>
                     ))}
@@ -14766,6 +14764,65 @@ function RessursPage() {
           onClose={()=>setShowNewMilestone(null)}
           onSaved={()=>{setShowNewMilestone(null);load()}}
         />
+      )}
+
+      {/* Materiell detalj-modal */}
+      {materiellDetail && (
+        <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setMateriellDetail(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+              <div>
+                <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📦 {materiellDetail.title}</h2>
+                <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
+                  📅 Levering: {materiellDetail.date}{materiellDetail.project ? ` · 🏗️ ${materiellDetail.project}` : ''}
+                </div>
+              </div>
+              <button onClick={() => setMateriellDetail(null)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ overflowY:'auto', flex:1, padding:'20px 24px' }}>
+              {(() => {
+                const lines = (materiellDetail.notes || '').split('\n')
+                const infoLines = lines.filter(l => !l.match(/^\d{7}/) && !l.match(/^[A-Z]{2,}.*:/) && l.trim())
+                const matLines = lines.filter(l => l.match(/^\d{7}/) || (l.match(/^[A-Z]{2,}.*:/) && l.includes(':')))
+                return (
+                  <>
+                    {infoLines.length > 0 && (
+                      <div style={{ marginBottom:'16px', fontSize:'13px', color:'#64748b', lineHeight:1.6 }}>
+                        {infoLines.map((l, i) => <div key={i}>{l}</div>)}
+                      </div>
+                    )}
+                    {matLines.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#059669', marginBottom:'8px' }}>MATERIALLISTE ({matLines.length} poster)</div>
+                        <div style={{ border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                          {matLines.map((l, i) => {
+                            const parts = l.split(':')
+                            const name = parts[0]?.trim() || l
+                            const qty = parts.slice(1).join(':')?.trim() || ''
+                            const nobb = name.match(/^(\d{7})\s/)?.[1]
+                            return (
+                              <div key={i} style={{ padding:'8px 12px', borderBottom: i < matLines.length - 1 ? '1px solid #f1f5f9' : 'none', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', background: i % 2 === 0 ? 'white' : '#f8fafc' }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  {nobb && <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', marginRight:'6px' }}>{nobb}</span>}
+                                  <span style={{ color:'#0f172a' }}>{name.replace(/^\d{7}\s*/, '')}</span>
+                                </div>
+                                <span style={{ fontWeight:'600', color:'#059669', flexShrink:0, marginLeft:'12px' }}>{qty}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setMateriellDetail(null)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Lukk</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
