@@ -14810,9 +14810,9 @@ function RessursPage() {
   const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible', overflowX:fullscreen?'hidden':'clip', maxWidth:'100%', minWidth:0 }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'calc(100vh - 56px)', overflow:'hidden', maxWidth:'100%', minWidth:0 }}>
       {/* Header — kompakt redesign (2 rader) */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'10px 16px', flexShrink:0, position:'sticky', top:56, zIndex:20, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'10px 16px', flexShrink:0, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
         {/* Rad 1 — Hovedkontroller */}
         <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
           {/* Tittel */}
