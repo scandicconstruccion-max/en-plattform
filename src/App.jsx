@@ -27385,9 +27385,29 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           })
 
           const addWorkdays = (fromDate, days) => {
-            const d = new Date(fromDate); let added = 0
-            while (added < Math.max(days, 0)) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) added++ }
+            const d = new Date(fromDate + 'T12:00:00')
+            // Først: hopp over helg om startdatoen er lørdag/søndag
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+            let added = 0
+            while (added < Math.max(days, 0)) {
+              d.setDate(d.getDate() + 1)
+              if (d.getDay() !== 0 && d.getDay() !== 6) added++
+            }
             return d
+          }
+
+          // Generer liste med N arbeidsdager fra startdato (ekskl. helger)
+          const getWorkdayList = (fromDate, numDays) => {
+            const dates = []
+            const d = new Date(fromDate + 'T12:00:00')
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+            dates.push(d.toISOString().split('T')[0])
+            for (let i = 1; i < numDays; i++) {
+              d.setDate(d.getDate() + 1)
+              while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+              dates.push(d.toISOString().split('T')[0])
+            }
+            return dates
           }
 
           // ── Prosjektvalg popup ──
@@ -27408,14 +27428,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               const useEmployees = tildelingsmodus === 'ansatte' && selectedEmployees.length > 0
 
               for (const bd of bdPlan) {
-                const startD = addWorkdays(startDato, Math.floor(bd.startDag))
+                const bdStartD = addWorkdays(startDato, Math.floor(bd.startDag))
+                const bdStartStr = bdStartD.toISOString().split('T')[0]
                 const dager = Math.max(Math.ceil(bd.dager), 1)
+                const workDates = getWorkdayList(bdStartStr, dager)
 
                 if (useEmployees) {
-                  // Scenario A: Navngitte ansatte
-                  for (let d = 0; d < dager; d++) {
-                    const date = addWorkdays(startD.toISOString().split('T')[0], d)
-                    const dateStr = date.toISOString().split('T')[0]
+                  for (const dateStr of workDates) {
                     for (const empId of selectedEmployees) {
                       plans.push({
                         resource_id: empId, resource_type: 'employee', project_id: projId,
@@ -27426,11 +27445,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     }
                   }
                 } else {
-                  // Scenario B: Reserver kapasitet (placeholder)
                   for (let mannNr = 1; mannNr <= antallMann; mannNr++) {
-                    for (let d = 0; d < dager; d++) {
-                      const date = addWorkdays(startD.toISOString().split('T')[0], d)
-                      const dateStr = date.toISOString().split('T')[0]
+                    for (const dateStr of workDates) {
                       plans.push({
                         resource_id: `placeholder_${projId}_${mannNr}`,
                         resource_type: 'placeholder',
