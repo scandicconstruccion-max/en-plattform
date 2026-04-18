@@ -13818,7 +13818,7 @@ const stripePattern = (color='#dc2626', alpha=0.08) =>
 
 function RessursGanttGrid({
   resources, plans, projects, milestones, resourceType,
-  materiellPlans, onOpenMateriell,
+  materiellPlans, onOpenMateriell, onOpenMilestone,
   ganttZoom, setGanttZoom,
   ganttAnchor,
   filterProject, filterEmployee,
@@ -14120,9 +14120,10 @@ function RessursGanttGrid({
                 {milestones.filter(m => dateIndex.has(m.start_date)).map(ms => {
                   const idx = dateIndex.get(ms.start_date)
                   const proj = projects.find(p => p.id === ms.project_id)
-                  const projCol = proj ? getProjectColor(ms.project_id, projects) : '#7c3aed'
+                  const projCol = ms.color || (proj ? getProjectColor(ms.project_id, projects) : '#7c3aed')
                   return (
-                    <div key={ms.id} title={`${ms.title}${proj?` (${proj.name})`:''}`}
+                    <div key={ms.id} title={`${ms.title}${proj?` (${proj.name})`:''} — klikk for detaljer`}
+                      onClick={(e) => { e.stopPropagation(); onOpenMilestone && onOpenMilestone(ms) }}
                       style={{
                         position:'absolute', top:'4px', bottom:'4px',
                         left:`${idx * colW + colW/2 - 12}px`,
@@ -15205,6 +15206,7 @@ function RessursPage() {
           milestones={milestones}
           materiellPlans={materiellPlans}
           onOpenMateriell={(md) => setMateriellDetail(md)}
+          onOpenMilestone={(ms) => setShowNewMilestone({ edit: ms })}
           resourceType={resourceType}
           ganttZoom={ganttZoom}
           setGanttZoom={setGanttZoom}
