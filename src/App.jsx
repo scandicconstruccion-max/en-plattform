@@ -22887,6 +22887,9 @@ function beregnArbeidskostnad(arbeidsart, faktorer) {
   return { faktiskTid, timekostnad, arbeidskostnad, medFortjeneste }
 }
 
+// Hjelper brukt av PlanleggModal — samme logikk som inlinet parseFloat(v) || fallback
+function safeMengde(v, fallback = 1) { const n = parseFloat(v); return isNaN(n) ? fallback : n }
+
 function beregnMaterialkostnad(material, faktorer) {
   const mengde = parseFloat(material.mengde) || 0
   const pris = parseFloat(material.enhetspris) || 0
