@@ -14037,34 +14037,6 @@ function RessursGanttGrid({
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'system-ui,sans-serif', background:'white' }}>
-      {/* Zoom toolbar */}
-      <div style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 24px', background:'#faf5ff', borderBottom:'1px solid #e9d5ff', flexShrink:0, flexWrap:'wrap' }}>
-        <span style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', textTransform:'uppercase', letterSpacing:'0.05em' }}>🔍 Zoom</span>
-        <div style={{ display:'flex', border:'1px solid #ddd6fe', borderRadius:'10px', overflow:'hidden', background:'white' }}>
-          {['days','weeks','months','quarters'].map(z => (
-            <button key={z} onClick={() => setGanttZoom(z)}
-              style={{ padding:'7px 14px', border:'none', background: ganttZoom===z?'#7c3aed':'white', color: ganttZoom===z?'white':'#7c3aed', fontWeight: ganttZoom===z?'700':'500', fontSize:'12px', cursor:'pointer', borderRight:'1px solid #ddd6fe' }}>
-              {ganttLabel(z)}
-            </button>
-          ))}
-        </div>
-
-        {/* Period indicator */}
-        {dates.length > 0 && (() => {
-          const first = new Date(dates[0]+'T12:00:00')
-          const last = new Date(dates[dates.length-1]+'T12:00:00')
-          const fmt = (d) => `${d.getDate()}. ${MONTH_NAMES[d.getMonth()].slice(0,3).toLowerCase()} ${d.getFullYear()}`
-          return (
-            <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', background:'white', padding:'6px 12px', borderRadius:'8px', border:'1px solid #e9d5ff' }}>
-              📅 {fmt(first)} — {fmt(last)}
-            </span>
-          )
-        })()}
-
-        <span style={{ fontSize:'11px', color:'#94a3b8', marginLeft:'auto' }}>
-          {orderedResources.length} {resourceType==='ansatte'?'ansatte':'maskiner'} · Klikk tom celle for å opprette · Dra bjelker for å flytte
-        </span>
-      </div>
 
       {/* Grid container with synchronized horizontal scroll */}
       <div ref={gridScrollRef} style={{ flex:1, overflow:'auto', position:'relative' }}>
@@ -14889,13 +14861,16 @@ function RessursPage() {
             <button onClick={()=>navigate(-1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Forrige">‹</button>
             <div style={{ position:'relative' }}>
               <button onClick={()=>setShowDatePicker(v=>!v)}
-                style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#0f172a',minWidth:'140px' }}>
+                style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#0f172a',minWidth:'180px' }}>
                 {(() => {
-                  const d = new Date(ganttAnchor+'T12:00:00')
-                  if (ganttZoom === 'months' || ganttZoom === 'quarters') {
-                    return d.toLocaleDateString('nb-NO',{month:'long',year:'numeric'})
-                  }
-                  return d.toLocaleDateString('nb-NO',{day:'numeric',month:'short',year:'numeric'}) + ' →'
+                  const start = new Date(ganttAnchor+'T12:00:00')
+                  // Ganttens visningsvindu starter ~30% før anker (matches Gantt-kode)
+                  const offsetBefore = ganttZoom==='days' ? 7 : ganttZoom==='weeks' ? 21 : ganttZoom==='months' ? 56 : 120
+                  start.setDate(start.getDate() - offsetBefore)
+                  const end = new Date(start)
+                  end.setDate(end.getDate() + GANTT_VISIBLE_DAYS[ganttZoom] - 1)
+                  const fmt = d => `${d.getDate()}. ${MONTH_NAMES[d.getMonth()].slice(0,3).toLowerCase()} ${d.getFullYear()}`
+                  return `📅 ${fmt(start)} — ${fmt(end)}`
                 })()}
               </button>
               {showDatePicker && (
