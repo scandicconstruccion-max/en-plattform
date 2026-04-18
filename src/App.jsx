@@ -132,7 +132,6 @@ const navGroups = [
       { id: 'avvik',        label: 'Avvik',         emoji: '⚠️' },
       { id: 'hms',          label: 'HMS & Risiko',  emoji: '🛡️' },
       { id: 'maskiner',     label: 'Maskiner',      emoji: '🚜' },
-      { id: 'ansatte',      label: 'Ansatte',       emoji: '👷' },
       { id: 'kunder',       label: 'Kundeoversikt', emoji: '🏢' },
       { id: 'varsler',      label: 'Varsler',       emoji: '🔔' },
     ]
@@ -151,6 +150,7 @@ const navGroups = [
   {
     title: 'PERSONELL & RESSURSER',
     items: [
+      { id: 'ansatte',     label: 'Ansatte',      emoji: '👷' },
       { id: 'timelister',  label: 'Timelister',   emoji: '⏱️' },
       { id: 'ressursplan', label: 'Ressursplan',  emoji: '📅' },
       { id: 'kalender',    label: 'Kalender',     emoji: '📆' },
@@ -222,7 +222,7 @@ const moduleSections = [
   },
   {
     title: '👷 PERSONELL & RESSURSER',
-    modules: ['timelister', 'ressursplan', 'kalender', 'chat'],
+    modules: ['ansatte', 'timelister', 'ressursplan', 'kalender', 'chat'],
   },
   {
     title: '📸 DOKUMENTASJON, OVERLEVERING & SALG',
@@ -410,86 +410,11 @@ function Modal({ open, onClose, title, children, size }) {
   )
 }
 
-function InfoTip({ label, info, align }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:'2px' }}>
-      {label}
-      <span onClick={e => { e.stopPropagation(); setOpen(!open) }}
-        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'13px', height:'13px', borderRadius:'50%', background: open ? '#059669' : '#e2e8f0', color: open ? 'white' : '#94a3b8', fontSize:'8px', fontWeight:'800', cursor:'pointer', lineHeight:1, flexShrink:0, userSelect:'none' }}>i</span>
-      {open && (
-        <>
-          <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setOpen(false)} />
-          <div style={{ position:'absolute', top:'100%', [align === 'right' ? 'right' : 'left']:0, marginTop:'4px', background:'#0f172a', color:'white', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', lineHeight:1.5, width:'260px', zIndex:51, boxShadow:'0 8px 24px rgba(0,0,0,0.25)' }}>
-            {info}
-            <div style={{ position:'absolute', top:'-4px', [align === 'right' ? 'right' : 'left']:'10px', width:'8px', height:'8px', background:'#0f172a', transform:'rotate(45deg)' }} />
-          </div>
-        </>
-      )}
-    </span>
-  )
-}
-
 function Field({ label, children }) {
   return (
     <div>
       <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>{label}</label>
       {children}
-    </div>
-  )
-}
-
-// ── Gjenbrukbar ansattvelger med dropdown ──
-function EmployeeSelect({ value, onChange, placeholder, style, required, allowClear }) {
-  const [emps, setEmps] = useState([])
-  useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, role, department').order('last_name').then(({ data }) => setEmps(data || []))
-  }, [])
-  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', cursor:'pointer', ...style }
-  return (
-    <select value={value || ''} onChange={e => onChange(e.target.value, emps.find(emp => emp.id === e.target.value))} required={required} style={selStyle}>
-      <option value="">{placeholder || 'Velg ansatt...'}</option>
-      {emps.map(emp => {
-        const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email || 'Uten navn'
-        return <option key={emp.id} value={emp.id}>{name}{emp.role ? ` (${emp.role})` : ''}</option>
-      })}
-    </select>
-  )
-}
-
-// ── Ansattvelger som setter navn/epost/telefon fra valgt ansatt ──
-function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style }) {
-  const [emps, setEmps] = useState([])
-  const [showDrop, setShowDrop] = useState(false)
-  useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, phone, role, department').order('last_name').then(({ data }) => setEmps(data || []))
-  }, [])
-  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
-  return (
-    <div style={{ position:'relative' }}>
-      <input value={value || ''} onChange={e => { onChange(e.target.value); setShowDrop(true) }} onFocus={() => setShowDrop(true)} placeholder={placeholder || 'Skriv eller velg ansatt...'} style={selStyle} />
-      {showDrop && emps.length > 0 && (
-        <>
-          <div style={{ position:'fixed', inset:0, zIndex:49 }} onClick={() => setShowDrop(false)} />
-          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'180px', overflowY:'auto', marginTop:'2px' }}>
-            {emps.filter(emp => {
-              if (!value) return true
-              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim().toLowerCase()
-              return name.includes(value.toLowerCase())
-            }).map(emp => {
-              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
-              return (
-                <div key={emp.id} onClick={() => { onChange(name); if (onSelect) onSelect(emp); setShowDrop(false) }}
-                  style={{ padding:'8px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
-                  onMouseEnter={e => e.target.style.background='#f0fdf4'} onMouseLeave={e => e.target.style.background='white'}>
-                  <div style={{ fontWeight:'600', color:'#0f172a' }}>{name}</div>
-                  {emp.role && <div style={{ fontSize:'11px', color:'#94a3b8' }}>{emp.role}{emp.department ? ` · ${emp.department}` : ''}</div>}
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
     </div>
   )
 }
@@ -582,7 +507,7 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
       <div>
         <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>Prosjektleder</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <Field label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></Field>
+          <Field label="Navn"><Input2 value={form.project_manager_name} onChange={e => set('project_manager_name', e.target.value)} placeholder="Fullt navn" /></Field>
           <Field label="Telefon"><Input2 value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></Field>
           <div style={{ gridColumn: '1 / -1' }}><Field label="E-post"><Input2 type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></Field></div>
         </div>
@@ -862,7 +787,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
             </div>
             {sec('Prosjektleder')}
             <div style={g2}>
-              <FLabel label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></FLabel>
+              <FLabel label="Navn"><FInput value={form.project_manager_name} onChange={e => set('project_manager_name', e.target.value)} placeholder="Fullt navn" /></FLabel>
               <FLabel label="Telefon"><FInput value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></FLabel>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="E-post"><FInput type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></FLabel></div>
             </div>
@@ -941,28 +866,24 @@ function ProsjekterPage({ onNavigateDetail }) {
   const handleCreate = async (form) => {
     setSaving(true)
     try {
-      // Rens tomme strenger til null for UUID-felter
-      const cleanForm = { ...form }
-      ;['parent_id', 'project_manager_id', 'customer_id'].forEach(field => {
-        if (cleanForm[field] === '' || cleanForm[field] === undefined) cleanForm[field] = null
-      })
       // Beregn depth og prosjektnummer basert på parent
       let depth = 0
-      let projectNumber = cleanForm.project_number || nextSequenceNumber(projects, 'P', 'project_number', { withYear: false })
-      if (cleanForm.parent_id) {
-        const parent = projects.find(p => p.id === cleanForm.parent_id)
+      let projectNumber = form.project_number || nextSequenceNumber(projects, 'P', 'project_number', { withYear: false })
+      if (form.parent_id) {
+        const parent = projects.find(p => p.id === form.parent_id)
         depth = (parent?.depth || 0) + 1
-        if (!cleanForm.project_number && parent?.project_number) {
-          const siblings = projects.filter(p => p.parent_id === cleanForm.parent_id)
+        if (!form.project_number && parent?.project_number) {
+          const siblings = projects.filter(p => p.parent_id === form.parent_id)
           projectNumber = parent.project_number + '-' + String(siblings.length + 1).padStart(2, '0')
         }
       }
       // Duplikatsjekk — siste forsvarslinje
       const existing = projects.find(p => p.project_number?.trim().toUpperCase() === projectNumber.trim().toUpperCase())
       if (existing) {
+        // Auto-generert nummer kolliderte — legg til tidsstempel
         projectNumber = projectNumber + 'B'
       }
-      await db.createProject({ ...cleanForm, project_number: projectNumber, parent_id: cleanForm.parent_id || null, depth, address: [cleanForm.address_street, `${cleanForm.address_postal || ''} ${cleanForm.address_city || ''}`.trim()].filter(Boolean).join(', '), budget: cleanForm.budget ? parseFloat(cleanForm.budget) : null, created_by: user?.id })
+      await db.createProject({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
       setShowCreate(false)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
@@ -4531,7 +4452,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Ansvarlig</label>
-              <EmployeeNameSelect value={form.assigned_to} onChange={v => set('assigned_to', v)} onSelect={emp => set('assigned_to', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" />
+              <input value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} style={inp} />
             </div>
           </div>
           <div>
@@ -4916,7 +4837,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><EmployeeNameSelect value={ansvarlig} onChange={v=>setAnsvarlig(v)} onSelect={emp => setAnsvarlig(`${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><input value={ansvarlig} onChange={e=>setAnsvarlig(e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Arbeidsbeskrivelse</label><textarea value={arbeidsBeskrivelse} onChange={e=>setArbeidsBeskrivelse(e.target.value)} rows={3} style={{ ...hmsInp, resize:'none' }} placeholder="Beskriv arbeidet..." /></div>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Verneutstyr (PPE)</label><textarea value={utstyr} onChange={e=>setUtstyr(e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hjelm, sele, refleksvest..." /></div>
         </div>
@@ -5078,7 +4999,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Sted</label><input value={form.sted} onChange={e=>set('sted',e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
-          <div><label style={lbl()}>Rapportert av</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansatt" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+          <div><label style={lbl()}>Rapportert av</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Involverte</label><input value={form.involverte} onChange={e=>set('involverte',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Vitner</label><input value={form.vitner} onChange={e=>set('vitner',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Beskrivelse av hendelsen *</label><textarea value={form.hendelsesBeskrivelse} onChange={e=>set('hendelsesBeskrivelse',e.target.value)} rows={4} required style={{ ...hmsInp, resize:'none' }} placeholder="Hva skjedde?" /></div>
@@ -5165,7 +5086,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
-          <div><label style={lbl()}>Ansvarlig</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+          <div><label style={lbl()}>Ansvarlig</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Formål</label><textarea value={form.formal} onChange={e=>set('formal',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Formål med analysen..." /></div>
         </div>
         <div style={{ background:'#f5f3ff', borderRadius:'10px', padding:'12px', border:'1px solid #ddd6fe', display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center' }}>
@@ -5441,8 +5362,8 @@ function HandbokModal({ user, initial, onClose, onSaved }) {
         {/* Toppinfo */}
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', flexShrink:0 }}>
           <div><label style={lbl()}>Bedrift</label><input value={form.bedrift} onChange={e=>set('bedrift',e.target.value)} placeholder="Bedriftens navn" style={hmsInp} /></div>
-          <div><label style={lbl()}>HMS-ansvarlig *</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
-          <div><label style={lbl()}>Revisjonsansvarlig</label><EmployeeNameSelect value={form.revisjonsansvarlig} onChange={v=>set('revisjonsansvarlig',v)} onSelect={emp => set('revisjonsansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+          <div><label style={lbl()}>HMS-ansvarlig *</label><input value={form.ansvarlig} onChange={e=>set('ansvarlig',e.target.value)} required placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Revisjonsansvarlig</label><input value={form.revisjonsansvarlig} onChange={e=>set('revisjonsansvarlig',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
           <div><label style={lbl()}>Versjon</label><input value={form.versjon} onChange={e=>set('versjon',e.target.value)} placeholder="1.0" style={hmsInp} /></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Neste revisjon</label><input type="date" value={form.neste_revisjon} onChange={e=>set('neste_revisjon',e.target.value)} style={hmsInp} /></div>
@@ -13795,6 +13716,667 @@ const MONTH_NAMES = ['Januar','Februar','Mars','April','Mai','Juni','Juli','Augu
 
 function rInp(extra={}) { return { ...extra, width:'100%', padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' } }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GANTT-VIEW (Float-inspired, del 9)
+// Props: resources, plans, projects, ganttZoom, ganttAnchor, filters, handlers
+// Uses a fixed-width day column with dual-level header (period + day).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GANTT_COL_WIDTH = { days: 56, weeks: 28, months: 14, quarters: 7 }
+const GANTT_VISIBLE_DAYS = { days: 35, weeks: 90, months: 240, quarters: 540 }
+
+function ganttLabel(zoom) {
+  return { days:'Dager', weeks:'Uker', months:'Måneder', quarters:'Kvartaler' }[zoom] || zoom
+}
+
+function getWeekNumber(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setHours(0,0,0,0)
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7)
+  const week1 = new Date(d.getFullYear(), 0, 4)
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7)
+}
+
+// Pattern helpers (SVG-less, via CSS gradients)
+const stripePattern = (color='#dc2626', alpha=0.08) =>
+  `repeating-linear-gradient(135deg, ${color.replace('rgb','rgba').replace(')', `,${alpha})`)} 0 6px, transparent 6px 12px)`
+
+function RessursGanttGrid({
+  resources, plans, projects, milestones, resourceType,
+  ganttZoom, setGanttZoom,
+  ganttAnchor,
+  filterProject, filterEmployee,
+  settings, isWeekend, isToday,
+  getProjectColor, holidays,
+  onOpenBooking, onMovePlan, onDragStart, onDragEnd, onResizePlan,
+  dragging, resizing,
+  setShowOppgaveModal,
+  conflictHighlight,
+}) {
+  const colW = GANTT_COL_WIDTH[ganttZoom]
+  const dayCount = GANTT_VISIBLE_DAYS[ganttZoom]
+
+  // Build date array centered on ganttAnchor
+  // For weeks/months/quarters we start a bit before anchor so the current day is ~30% from left
+  const dates = React.useMemo(() => {
+    const offset = ganttZoom==='days' ? 7 : ganttZoom==='weeks' ? 21 : ganttZoom==='months' ? 56 : 120
+    const start = new Date(ganttAnchor + 'T12:00:00')
+    start.setDate(start.getDate() - offset)
+    return Array.from({ length: dayCount }, (_, i) => {
+      const d = new Date(start)
+      d.setDate(d.getDate() + i)
+      return d.toISOString().split('T')[0]
+    })
+  }, [ganttAnchor, ganttZoom, dayCount])
+
+  // Date index lookup for bar positioning
+  const dateIndex = React.useMemo(() => {
+    const m = new Map()
+    dates.forEach((d, i) => m.set(d, i))
+    return m
+  }, [dates])
+
+  // Separate resources by kind (for placeholder styling)
+  // Regular resources first (employee/machine), then placeholders last
+  const orderedResources = React.useMemo(() => {
+    const regular = resources.filter(r => !r._isPlaceholder)
+    const placeholders = resources.filter(r => r._isPlaceholder)
+    return [...regular, ...placeholders]
+  }, [resources])
+
+  // Filter plans (for bjelker som tilhører ressurs-rader)
+  const visiblePlans = React.useMemo(() => {
+    let fp = filterProject==='alle' ? plans : plans.filter(p=>p.project_id===filterProject)
+    if (filterEmployee !== 'alle' && resourceType==='ansatte') {
+      fp = fp.filter(p => p.resource_id === filterEmployee || p.resource_type === 'material')
+    }
+    return fp
+  }, [plans, filterProject, filterEmployee, resourceType])
+
+  // Build bars for a resource (consecutive days + same project = one bar)
+  // Also extracts material-tags from linked material plans.
+  const buildBars = React.useCallback((resourceId) => {
+    const own = visiblePlans
+      .filter(p => p.resource_id === resourceId && p.resource_type !== 'material')
+      .sort((a,b) => a.date.localeCompare(b.date))
+    const materialOnProj = (projectId, date) =>
+      visiblePlans.filter(p => p.resource_type === 'material' && p.project_id === projectId && p.date === date)
+    const bars = []
+    const seen = new Set()
+    for (const plan of own) {
+      if (seen.has(plan.id)) continue
+      let endDate = plan.date
+      const planGroup = [plan]
+      const mats = new Set()
+      materialOnProj(plan.project_id, plan.date).forEach(m => mats.add(m.notes || 'Materiell'))
+      seen.add(plan.id)
+      let cursor = new Date(plan.date + 'T12:00:00')
+      while (true) {
+        cursor.setDate(cursor.getDate() + 1)
+        const cstr = cursor.toISOString().split('T')[0]
+        // Allow gaps across weekends only
+        const isWE = cursor.getDay() === 0 || cursor.getDay() === 6
+        if (isWE && settings.skipWeekends) continue
+        const next = own.find(p => !seen.has(p.id) && p.date === cstr && p.project_id === plan.project_id)
+        if (next) {
+          seen.add(next.id)
+          planGroup.push(next)
+          endDate = cstr
+          materialOnProj(plan.project_id, cstr).forEach(m => mats.add(m.notes || 'Materiell'))
+        } else break
+      }
+      // Sjekk om noen av planene i denne baren har dobbeltbooking (>8t på samme dag)
+      const hasConflict = planGroup.some(p => {
+        const totalOnDate = plans
+          .filter(pp => pp.resource_id === resourceId && pp.date === p.date)
+          .reduce((s, pp) => s + (parseFloat(pp.hours)||0), 0)
+        return totalOnDate > 8
+      })
+      bars.push({
+        id: plan.id,
+        projectId: plan.project_id,
+        startDate: plan.date,
+        endDate,
+        plans: planGroup,
+        hours: planGroup.reduce((s,p)=>s+(parseFloat(p.hours)||0), 0),
+        notes: plan.notes,
+        resourceId,
+        resourceType: plan.resource_type,
+        isPlaceholder: plan.resource_type === 'placeholder',
+        materials: Array.from(mats),
+        linkedMachineId: plan.linked_machine_id,
+        hasConflict,
+      })
+    }
+    return bars
+  }, [visiblePlans, plans, settings.skipWeekends])
+
+  // Capacity
+  const getUtilization = React.useCallback((resourceId) => {
+    const last30 = dates.slice(0, 30).filter(d => !isWeekend(d))
+    const booked = last30.reduce((s, d) => s + plans
+      .filter(p => p.resource_id === resourceId && p.date === d)
+      .reduce((ss, p) => ss + (parseFloat(p.hours)||0), 0), 0)
+    const cap = last30.length * 8
+    return { booked, cap, pct: cap>0 ? Math.round(booked/cap*100) : 0 }
+  }, [plans, dates, isWeekend])
+
+  // Header: compute period groupings for dual header
+  const periodGroups = React.useMemo(() => {
+    const groups = []
+    if (ganttZoom === 'days') {
+      // Group by week
+      let current = null
+      dates.forEach((d, i) => {
+        const weekStart = startOfWeek(d)
+        if (!current || current.key !== weekStart) {
+          current = { key: weekStart, label: `Uke ${getWeekNumber(d)}`, startIdx: i, count: 1, monthLabel: null }
+          groups.push(current)
+        } else current.count++
+      })
+    } else if (ganttZoom === 'weeks') {
+      // Group by month
+      let current = null
+      dates.forEach((d, i) => {
+        const key = d.slice(0, 7) // YYYY-MM
+        if (!current || current.key !== key) {
+          const dt = new Date(d + 'T12:00:00')
+          current = { key, label: MONTH_NAMES[dt.getMonth()] + ' ' + dt.getFullYear().toString().slice(2), startIdx: i, count: 1 }
+          groups.push(current)
+        } else current.count++
+      })
+    } else if (ganttZoom === 'months') {
+      // Group by quarter
+      let current = null
+      dates.forEach((d, i) => {
+        const dt = new Date(d + 'T12:00:00')
+        const q = Math.floor(dt.getMonth()/3) + 1
+        const key = `${dt.getFullYear()}-Q${q}`
+        if (!current || current.key !== key) {
+          current = { key, label: `Q${q} ${dt.getFullYear()}`, startIdx: i, count: 1 }
+          groups.push(current)
+        } else current.count++
+      })
+    } else {
+      // quarters: group by year
+      let current = null
+      dates.forEach((d, i) => {
+        const year = d.slice(0, 4)
+        if (!current || current.key !== year) {
+          current = { key: year, label: year, startIdx: i, count: 1 }
+          groups.push(current)
+        } else current.count++
+      })
+    }
+    return groups
+  }, [dates, ganttZoom])
+
+  // Sub-header: which dates to label in bottom row
+  const shouldShowSubLabel = (date, idx) => {
+    const d = new Date(date + 'T12:00:00')
+    if (ganttZoom === 'days') return true
+    if (ganttZoom === 'weeks') return d.getDay() === 1 // Mondays
+    if (ganttZoom === 'months') return d.getDate() === 1
+    return d.getDate() === 1 && (d.getMonth() % 3 === 0)
+  }
+  const subLabel = (date) => {
+    const d = new Date(date + 'T12:00:00')
+    if (ganttZoom === 'days') return d.getDate()
+    if (ganttZoom === 'weeks') return `U${getWeekNumber(date)}`
+    if (ganttZoom === 'months') return MONTH_NAMES[d.getMonth()].slice(0,3)
+    return `Q${Math.floor(d.getMonth()/3)+1}`
+  }
+
+  // Holiday lookup
+  const holidayForDate = (date) => holidays.find(h => h.date === date)
+
+  // Today marker position
+  const todayStr = new Date().toISOString().split('T')[0]
+  const todayIdx = dateIndex.get(todayStr)
+
+  const totalGridWidth = dates.length * colW
+  const RESOURCE_COL = 260
+
+  // Click on empty cell → open new booking modal
+  const handleCellClick = (resourceId, date, resource) => {
+    onOpenBooking({
+      resourceId,
+      resourceName: resource._isPlaceholder ? resource.name : (resource.first_name ? `${resource.first_name} ${resource.last_name}` : resource.name),
+      date,
+      existingPlans: [],
+      editPlan: null,
+    })
+  }
+
+  // Auto-scroll to today when view mounts or zoom/anchor changes
+  const gridScrollRef = React.useRef(null)
+  React.useEffect(() => {
+    if (!gridScrollRef.current) return
+    const todayIdx = dateIndex.get(new Date().toISOString().split('T')[0])
+    if (todayIdx === undefined) return
+    // Scroll so today is ~30% from left (past the resource column)
+    const target = RESOURCE_COL + todayIdx * colW - (gridScrollRef.current.clientWidth - RESOURCE_COL) * 0.3
+    gridScrollRef.current.scrollLeft = Math.max(0, target)
+  }, [ganttZoom, ganttAnchor, colW, dateIndex])
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'system-ui,sans-serif', background:'white' }}>
+      {/* Zoom toolbar */}
+      <div style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 24px', background:'#faf5ff', borderBottom:'1px solid #e9d5ff', flexShrink:0, flexWrap:'wrap' }}>
+        <span style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', textTransform:'uppercase', letterSpacing:'0.05em' }}>🔍 Zoom</span>
+        <div style={{ display:'flex', border:'1px solid #ddd6fe', borderRadius:'10px', overflow:'hidden', background:'white' }}>
+          {['days','weeks','months','quarters'].map(z => (
+            <button key={z} onClick={() => setGanttZoom(z)}
+              style={{ padding:'7px 14px', border:'none', background: ganttZoom===z?'#7c3aed':'white', color: ganttZoom===z?'white':'#7c3aed', fontWeight: ganttZoom===z?'700':'500', fontSize:'12px', cursor:'pointer', borderRight:'1px solid #ddd6fe' }}>
+              {ganttLabel(z)}
+            </button>
+          ))}
+        </div>
+
+        {/* Period indicator */}
+        {dates.length > 0 && (() => {
+          const first = new Date(dates[0]+'T12:00:00')
+          const last = new Date(dates[dates.length-1]+'T12:00:00')
+          const fmt = (d) => `${d.getDate()}. ${MONTH_NAMES[d.getMonth()].slice(0,3).toLowerCase()} ${d.getFullYear()}`
+          return (
+            <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', background:'white', padding:'6px 12px', borderRadius:'8px', border:'1px solid #e9d5ff' }}>
+              📅 {fmt(first)} — {fmt(last)}
+            </span>
+          )
+        })()}
+
+        <span style={{ fontSize:'11px', color:'#94a3b8', marginLeft:'auto' }}>
+          {orderedResources.length} {resourceType==='ansatte'?'ansatte':'maskiner'} · Klikk tom celle for å opprette · Dra bjelker for å flytte
+        </span>
+      </div>
+
+      {/* Grid container with synchronized horizontal scroll */}
+      <div ref={gridScrollRef} style={{ flex:1, overflow:'auto', position:'relative' }}>
+        <div style={{ position:'relative', minWidth: `${RESOURCE_COL + totalGridWidth}px` }}>
+
+          {/* Sticky header */}
+          <div style={{ position:'sticky', top:0, zIndex:30, background:'white', borderBottom:'2px solid #e2e8f0' }}>
+            {/* Top row: period groups */}
+            <div style={{ display:'flex', height:'28px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
+              <div style={{ width:`${RESOURCE_COL}px`, flexShrink:0, borderRight:'2px solid #e2e8f0', background:'#f8fafc', position:'sticky', left:0, zIndex:2 }}/>
+              <div style={{ display:'flex', position:'relative' }}>
+                {periodGroups.map(g => (
+                  <div key={g.key} style={{
+                    width: `${g.count * colW}px`,
+                    display:'flex', alignItems:'center', justifyContent:'flex-start',
+                    paddingLeft:'8px',
+                    borderRight:'1px solid #e2e8f0',
+                    fontSize:'11px', fontWeight:'700', color:'#475569',
+                    whiteSpace:'nowrap', overflow:'hidden',
+                  }}>
+                    {g.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Bottom row: day-level ticks */}
+            <div style={{ display:'flex', height:'26px' }}>
+              <div style={{ width:`${RESOURCE_COL}px`, flexShrink:0, padding:'4px 20px', fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', borderRight:'2px solid #e2e8f0', background:'white', display:'flex', alignItems:'center', position:'sticky', left:0, zIndex:2 }}>
+                {resourceType==='ansatte' ? '👷 Ansatt' : '🚜 Maskin'} / utnyttelse
+              </div>
+              <div style={{ display:'flex' }}>
+                {dates.map((d, i) => {
+                  const we = isWeekend(d); const tod = isToday(d)
+                  const hol = holidayForDate(d)
+                  const showLbl = shouldShowSubLabel(d, i)
+                  return (
+                    <div key={d} style={{
+                      width:`${colW}px`, flexShrink:0,
+                      background: tod ? '#f0fdf4' : we ? '#fafafa' : 'white',
+                      borderRight: ganttZoom==='days' ? '1px solid #f1f5f9' : (i%7===6?'1px solid #e2e8f0':'none'),
+                      borderBottom: tod ? '2px solid #059669' : 'none',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize: ganttZoom==='days' ? '11px' : '9px',
+                      fontWeight: tod?'800':'600',
+                      color: tod?'#059669': we?'#cbd5e1':'#64748b',
+                      position:'relative',
+                    }} title={hol?.title || ''}>
+                      {showLbl ? subLabel(d) : ''}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Milestone row */}
+          {milestones && milestones.some(m => dates.includes(m.start_date)) && (
+            <div style={{ display:'flex', background:'#faf5ff', borderBottom:'1px solid #e9d5ff', minHeight:'28px' }}>
+              <div style={{
+                width:`${RESOURCE_COL}px`, flexShrink:0,
+                padding:'4px 20px',
+                fontSize:'11px', fontWeight:'700', color:'#7c3aed',
+                borderRight:'2px solid #e2e8f0',
+                background:'#faf5ff',
+                display:'flex', alignItems:'center', gap:'4px',
+                position:'sticky', left:0, zIndex:2,
+              }}>
+                🏁 Milepæler
+              </div>
+              <div style={{ position:'relative', display:'flex', width:`${totalGridWidth}px`, flexShrink:0 }}>
+                {dates.map((d) => {
+                  const we = isWeekend(d); const tod = isToday(d)
+                  return (
+                    <div key={d} style={{
+                      width:`${colW}px`, flexShrink:0,
+                      background: tod ? '#f0fdf4' : we ? '#fafafa' : 'transparent',
+                      borderRight: ganttZoom==='days' ? '1px solid #f3e8ff' : (new Date(d+'T12:00:00').getDay()===0 ? '1px solid #e9d5ff' : 'none'),
+                    }} />
+                  )
+                })}
+                {milestones.filter(m => dateIndex.has(m.start_date)).map(ms => {
+                  const idx = dateIndex.get(ms.start_date)
+                  const proj = projects.find(p => p.id === ms.project_id)
+                  const projCol = proj ? getProjectColor(ms.project_id, projects) : '#7c3aed'
+                  return (
+                    <div key={ms.id} title={`${ms.title}${proj?` (${proj.name})`:''}`}
+                      style={{
+                        position:'absolute', top:'4px', bottom:'4px',
+                        left:`${idx * colW + colW/2 - 12}px`,
+                        width:'24px',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        background: projCol,
+                        color:'white',
+                        borderRadius:'4px',
+                        fontSize:'11px',
+                        cursor:'pointer',
+                        boxShadow:'0 1px 3px rgba(0,0,0,0.15)',
+                        zIndex:2,
+                      }}>
+                      🏁
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Resource rows */}
+          {orderedResources.map(res => {
+            const util = getUtilization(res.id)
+            const bars = buildBars(res.id)
+            const name = res._isPlaceholder
+              ? res.name
+              : (res.first_name ? `${res.first_name} ${res.last_name}` : res.name)
+            const role = res._isPlaceholder
+              ? (res.role || 'Ubesatt rolle')
+              : (res.department || res.category || '')
+            const isHighlighted = conflictHighlight?.resourceId === res.id
+            const rowHeight = 64
+
+            return (
+              <div key={res.id} style={{
+                display:'flex',
+                borderBottom:'1px solid #f1f5f9',
+                minHeight:`${rowHeight}px`,
+                background: isHighlighted ? '#fef2f2' : 'transparent',
+                transition:'background 0.3s',
+              }}>
+                {/* Resource column */}
+                <div style={{
+                  width:`${RESOURCE_COL}px`, flexShrink:0,
+                  padding:'10px 16px', borderRight:'2px solid #e2e8f0',
+                  background: isHighlighted ? '#fef2f2' : 'white',
+                  display:'flex', alignItems:'center', gap:'10px',
+                  position:'sticky', left:0, zIndex:10,
+                }}>
+                  <div style={{
+                    width:'36px', height:'36px', borderRadius:'50%',
+                    background: res._isPlaceholder
+                      ? 'linear-gradient(135deg,#fef3c7,#fde68a)'
+                      : 'linear-gradient(135deg,#e0e7ff,#c7d2fe)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:'14px', fontWeight:'700',
+                    color: res._isPlaceholder ? '#92400e' : '#4338ca',
+                    flexShrink:0,
+                    border: res._isPlaceholder ? '2px dashed #d97706' : 'none',
+                  }}>
+                    {res._isPlaceholder ? '?' : (res.first_name?.[0] || res.name?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{
+                      fontWeight:'600', fontSize:'13px',
+                      color: res._isPlaceholder ? '#92400e' : '#0f172a',
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                      fontStyle: res._isPlaceholder ? 'italic' : 'normal',
+                    }}>{name}</div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {role}
+                    </div>
+                  </div>
+                  <div style={{ flexShrink:0, textAlign:'right', minWidth:'52px' }}>
+                    <div style={{
+                      fontSize:'12px', fontWeight:'800',
+                      color: util.pct>100?'#dc2626':util.pct>80?'#d97706':util.pct>0?'#16a34a':'#cbd5e1',
+                      lineHeight:1.1,
+                    }}>
+                      {util.booked.toFixed(0)}t
+                    </div>
+                    <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'3px' }}>{util.pct}%</div>
+                    <div style={{ height:'3px', borderRadius:'999px', background:'#f1f5f9', overflow:'hidden' }}>
+                      <div style={{
+                        height:'100%', borderRadius:'999px',
+                        background: util.pct>100?'#dc2626':util.pct>80?'#d97706':'#16a34a',
+                        width:`${Math.min(util.pct, 100)}%`,
+                        transition:'width 0.3s',
+                      }}/>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline area */}
+                <div style={{ position:'relative', display:'flex', width:`${totalGridWidth}px`, flexShrink:0 }}>
+                  {/* Background cells */}
+                  {dates.map((d, i) => {
+                    const we = isWeekend(d); const tod = isToday(d)
+                    const hol = holidayForDate(d) && settings.showHolidays
+                    return (
+                      <div key={d}
+                        id={`gantt-cell-${res.id}-${d}`}
+                        onClick={(e) => {
+                          // Only trigger on direct clicks (not on bar bubbles)
+                          if (e.target === e.currentTarget) handleCellClick(res.id, d, res)
+                        }}
+                        onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move' }}
+                        onDrop={(e)=>{
+                          e.preventDefault()
+                          if (dragging) onMovePlan(dragging, res.id, d, e.altKey || e.ctrlKey)
+                        }}
+                        style={{
+                          width:`${colW}px`, flexShrink:0,
+                          background: tod ? '#f0fdf4' : we ? '#f8fafc' : 'white',
+                          borderRight: ganttZoom==='days' ? '1px solid #f8fafc' : (i%7===6 ? '1px solid #e2e8f0' : 'none'),
+                          cursor:'pointer',
+                          position:'relative',
+                          ...(hol ? { backgroundImage: `repeating-linear-gradient(135deg, rgba(217,119,6,0.08) 0 6px, transparent 6px 12px)` } : {}),
+                          ...(we && !hol ? { backgroundImage: `repeating-linear-gradient(135deg, rgba(148,163,184,0.08) 0 6px, transparent 6px 12px)` } : {}),
+                        }}
+                        title={hol?.title || ''}
+                      />
+                    )
+                  })}
+
+                  {/* Today line */}
+                  {todayIdx >= 0 && (
+                    <div style={{
+                      position:'absolute', top:0, bottom:0,
+                      left:`${todayIdx * colW + colW/2}px`,
+                      width:'2px', background:'#059669',
+                      pointerEvents:'none', zIndex:2,
+                    }}/>
+                  )}
+
+                  {/* Empty state hint */}
+                  {bars.length === 0 && (
+                    <div style={{
+                      position:'absolute', top:0, bottom:0, left:0, right:0,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      color:'#cbd5e1', fontSize:'11px',
+                      pointerEvents:'none', fontStyle:'italic',
+                    }}>
+                      {filterProject !== 'alle' ? 'Ingen bookinger på dette prosjektet' : 'Klikk en dag for å planlegge'}
+                    </div>
+                  )}
+
+                  {/* Bars */}
+                  {bars.map(bar => {
+                    const startIdx = dateIndex.get(bar.startDate)
+                    const endIdx = dateIndex.get(bar.endDate)
+                    if (startIdx === undefined || endIdx === undefined) return null
+                    const span = endIdx - startIdx + 1
+                    const left = startIdx * colW + 2
+                    const width = span * colW - 4
+                    const col = getProjectColor(bar.projectId, projects)
+                    const proj = projects.find(p => p.id === bar.projectId)
+                    const firstPlan = bar.plans[0]
+                    const lastPlan = bar.plans[bar.plans.length - 1]
+                    const isDraggingThis = dragging?.id === firstPlan.id
+                    const showCode = width > 32
+                    const showName = width > 80
+                    const showHours = width > 60
+                    const isZoomedOut = ganttZoom === 'months' || ganttZoom === 'quarters'
+
+                    return (
+                      <div key={bar.id}
+                        draggable
+                        onDragStart={(e)=>{ e.stopPropagation(); onDragStart(firstPlan, e) }}
+                        onDragEnd={()=>onDragEnd()}
+                        onClick={(e)=>{
+                          e.stopPropagation()
+                          onOpenBooking({
+                            resourceId: res.id,
+                            resourceName: name,
+                            date: bar.startDate,
+                            existingPlans: bar.plans,
+                            editPlan: firstPlan,
+                          })
+                        }}
+                        style={{
+                          position:'absolute',
+                          top:'8px', bottom:'8px',
+                          left:`${left}px`, width:`${width}px`,
+                          borderRadius:'6px',
+                          background: bar.isPlaceholder
+                            ? `repeating-linear-gradient(135deg, ${col}bb 0 6px, ${col}66 6px 12px)`
+                            : `linear-gradient(135deg, ${col}, ${col}dd)`,
+                          border: bar.hasConflict
+                            ? '2px solid #dc2626'
+                            : bar.isPlaceholder ? `2px dashed ${col}` : 'none',
+                          cursor: dragging ? 'grabbing' : 'grab',
+                          userSelect:'none',
+                          display:'flex', alignItems:'center',
+                          padding: '0 8px',
+                          gap:'4px',
+                          zIndex: isDraggingThis ? 1 : 3,
+                          boxShadow: isDraggingThis
+                            ? 'none'
+                            : bar.hasConflict
+                              ? '0 0 0 2px rgba(220,38,38,0.15), 0 1px 4px rgba(0,0,0,0.15)'
+                              : '0 1px 4px rgba(0,0,0,0.15)',
+                          opacity: isDraggingThis ? 0.35 : 1,
+                          transform: isDraggingThis ? 'scale(0.95)' : 'scale(1)',
+                          transition:'box-shadow 0.15s, opacity 0.15s, transform 0.15s',
+                          overflow:'hidden',
+                          color:'white',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)'}
+                        onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.15)'}
+                      >
+                        {/* Left resize handle */}
+                        <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onResizePlan(firstPlan, 'left', e) }}
+                          onDragStart={(e)=>e.preventDefault()}
+                          style={{ position:'absolute', left:0, top:0, bottom:0, width:'8px', cursor:'ew-resize', zIndex:4, borderRadius:'6px 0 0 6px' }}
+                          onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(255,255,255,0.4)'; e.currentTarget.parentElement.setAttribute('draggable','false') }}
+                          onMouseLeave={(e)=>{ e.currentTarget.style.background='transparent'; e.currentTarget.parentElement.setAttribute('draggable','true') }}
+                        />
+                        {/* Right resize handle */}
+                        <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onResizePlan(lastPlan, 'right', e) }}
+                          onDragStart={(e)=>e.preventDefault()}
+                          style={{ position:'absolute', right:0, top:0, bottom:0, width:'8px', cursor:'ew-resize', zIndex:4, borderRadius:'0 6px 6px 0' }}
+                          onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(255,255,255,0.4)'; e.currentTarget.parentElement.setAttribute('draggable','false') }}
+                          onMouseLeave={(e)=>{ e.currentTarget.style.background='transparent'; e.currentTarget.parentElement.setAttribute('draggable','true') }}
+                        />
+
+                        {/* Content */}
+                        <div style={{ flex:1, minWidth:0, overflow:'hidden', padding: '0 6px' }}>
+                          {!isZoomedOut && showCode && (
+                            <div style={{
+                              fontSize: width > 120 ? '11px' : '10px',
+                              fontWeight:'800',
+                              lineHeight:1.2,
+                              textTransform:'uppercase',
+                              letterSpacing:'0.02em',
+                              opacity:0.9,
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                            }}>
+                              {proj?.project_number || (proj?.name || '').slice(0,3)}
+                            </div>
+                          )}
+                          {!isZoomedOut && showName && (
+                            <div style={{
+                              fontSize: width > 150 ? '12px' : '11px',
+                              fontWeight:'700',
+                              lineHeight:1.2,
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                            }}>
+                              {proj?.name || '—'}
+                            </div>
+                          )}
+                          {isZoomedOut && (
+                            <div style={{ fontSize:'9px', fontWeight:'800', opacity:0.9, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                              {proj?.project_number || proj?.name?.slice(0,6) || ''}
+                            </div>
+                          )}
+                          {showHours && (
+                            <div style={{
+                              fontSize:'10px', opacity:0.85, marginTop:'2px',
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                            }}>
+                              {bar.hours.toFixed(1)}t
+                              {bar.plans.length > 1 && ` · ${bar.plans.length}d`}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Corner icons */}
+                        <div style={{ position:'absolute', top:'4px', right:'6px', display:'flex', gap:'3px', pointerEvents:'none' }}>
+                          {bar.hasConflict && <span title="Dobbeltbooking (>8t på én dag)" style={{ fontSize:'10px', background:'#dc2626', color:'white', borderRadius:'4px', padding:'0 4px', fontWeight:'800', pointerEvents:'auto' }}>⚠</span>}
+                          {bar.notes && <span style={{ fontSize:'9px', opacity:0.8 }}>💬</span>}
+                          {bar.materials.length > 0 && (
+                            <span title={bar.materials.join(', ')} style={{
+                              fontSize:'9px', opacity:0.9,
+                              background:'rgba(255,255,255,0.25)', borderRadius:'3px',
+                              padding:'0 4px', pointerEvents:'auto',
+                            }}>📦{bar.materials.length>1?bar.materials.length:''}</span>
+                          )}
+                          {bar.linkedMachineId && <span style={{ fontSize:'9px', opacity:0.8 }}>🚜</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Empty state */}
+          {orderedResources.length === 0 && (
+            <div style={{ padding:'60px 24px', textAlign:'center', color:'#94a3b8' }}>
+              <div style={{ fontSize:'36px', marginBottom:'12px' }}>📭</div>
+              <div style={{ fontSize:'14px' }}>Ingen ressurser å vise med nåværende filtre.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function RessursPage() {
   const { user } = useAuth()
@@ -13814,8 +14396,6 @@ function RessursPage() {
   const [filterProject, setFilterProject] = useState('alle')
   const [filterEmployee, setFilterEmployee] = useState('alle')
   const [showMilestones, setShowMilestones] = useState(false)
-  const [showMateriell, setShowMateriell] = useState(false)
-  const [materiellDetail, setMateriellDetail] = useState(null) // { title, lines }
   const [showNewMilestone, setShowNewMilestone] = useState(null)
   const [milestoneRange, setMilestoneRange] = useState(90)
   const [showLedigMannskap, setShowLedigMannskap] = useState(false)
@@ -13864,6 +14444,10 @@ function RessursPage() {
     workdayStart: '07:00',
     workdayEnd: '15:30',
   })
+  // ── Gantt-view state (Float-inspired redesign — del 9) ──
+  const [ganttZoom, setGanttZoom] = useState('weeks') // 'days' | 'weeks' | 'months' | 'quarters'
+  const [ganttAnchor, setGanttAnchor] = useState(() => startOfWeek(new Date().toISOString().split('T')[0]))
+  const [ganttDragCreate, setGanttDragCreate] = useState(null) // { resourceId, startDate, endDate }
 
   const load = async () => {
     try {
@@ -13900,6 +14484,14 @@ function RessursPage() {
   const dates = getDatesInRange(viewMode==='maned'?startOfMonth(currentDate):currentDate, days)
 
   const navigate = (dir) => {
+    if (viewMode==='gantt') {
+      // In Gantt mode we move the anchor by a fraction of the visible window
+      const step = ganttZoom==='days' ? 14 : ganttZoom==='weeks' ? 28 : ganttZoom==='months' ? 60 : 90
+      const d = new Date(ganttAnchor+'T12:00:00')
+      d.setDate(d.getDate()+dir*step)
+      setGanttAnchor(startOfWeek(d.toISOString().split('T')[0]))
+      return
+    }
     const d = new Date(currentDate)
     if (viewMode==='uke') d.setDate(d.getDate()+dir*7)
     else if (viewMode==='14') d.setDate(d.getDate()+dir*14)
@@ -13910,6 +14502,7 @@ function RessursPage() {
 
   const goToToday = () => {
     const today = new Date().toISOString().split('T')[0]
+    if (viewMode==='gantt') { setGanttAnchor(startOfWeek(today)); return }
     setCurrentDate(viewMode==='maned'?startOfMonth(today):startOfWeek(today))
   }
 
@@ -13919,22 +14512,8 @@ function RessursPage() {
     resources = resources.filter(r=>r.id===filterEmployee)
   }
 
-  // Add placeholder resources (reservert kapasitet fra kalkyler)
-  if (resourceType === 'ansatte') {
-    const placeholderIds = [...new Set(plans.filter(p => (p.notes || '').includes('| Ressurs ')).map(p => p.resource_id))]
-    const placeholderResources = placeholderIds.map(pid => ({
-      id: pid,
-      first_name: (plans.find(p => p.resource_id === pid)?.notes || '').includes('Ressurs') ? (plans.find(p => p.resource_id === pid)?.notes || '').split('|').pop().trim() : 'Reservert',
-      last_name: '(ikke tildelt)',
-      department: 'placeholder',
-      _isPlaceholder: true
-    }))
-    resources = [...resources, ...placeholderResources]
-  }
-
   // Filter plans by project
   const filteredPlans = filterProject==='alle' ? plans : plans.filter(p=>p.project_id===filterProject)
-  const materiellPlans = plans.filter(p => (p.notes || '').startsWith('📦 Levering:'))
 
   const getPlansForCell = (resourceId, date) =>
     filteredPlans.filter(p=>p.resource_id===resourceId&&p.date===date)
@@ -14150,10 +14729,6 @@ function RessursPage() {
               style={{ padding:'9px 16px', background:showMilestones?'#7c3aed':'white', color:showMilestones?'white':'#7c3aed', border:'2px solid #7c3aed', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
               🏁 Milepæler {milestonesInRange.length>0&&<span style={{ background:showMilestones?'rgba(255,255,255,0.3)':'#7c3aed', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{milestonesInRange.length}</span>}
             </button>
-            <button onClick={()=>setShowMateriell(v=>!v)}
-              style={{ padding:'9px 16px', background:showMateriell?'#059669':'white', color:showMateriell?'white':'#059669', border:'2px solid #059669', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-              📦 Materiell {materiellPlans.length>0&&<span style={{ background:showMateriell?'rgba(255,255,255,0.3)':'#059669', color:'white', borderRadius:'999px', fontSize:'11px', padding:'1px 6px', marginLeft:'4px' }}>{materiellPlans.length}</span>}
-            </button>
             <button onClick={()=>setShowNewMilestone(new Date().toISOString().split('T')[0])}
               style={{ padding:'9px 16px', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
               + Ny milepæl
@@ -14173,7 +14748,7 @@ function RessursPage() {
 
           {/* View mode */}
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['uke','Uke'],['14','14 dager'],['maned','Måned']].map(([v,l])=>(
+            {[['uke','Uke'],['14','14 dager'],['maned','Måned'],['gantt','📈 Gantt']].map(([v,l])=>(
               <button key={v} onClick={()=>{
                 setViewMode(v)
                 // When switching to month view, show the month containing today
@@ -14182,9 +14757,11 @@ function RessursPage() {
                   setCurrentDate(startOfMonth(new Date().toISOString().split('T')[0]))
                 } else if (v==='uke') {
                   setCurrentDate(startOfWeek(new Date().toISOString().split('T')[0]))
+                } else if (v==='gantt') {
+                  setGanttAnchor(startOfWeek(new Date().toISOString().split('T')[0]))
                 }
               }}
-                style={{ padding:'8px 14px',border:'none',background:viewMode===v?'#0f172a':'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
+                style={{ padding:'8px 14px',border:'none',background:viewMode===v?(v==='gantt'?'#7c3aed':'#0f172a'):'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:'1px solid #e2e8f0' }}>{l}</button>
             ))}
           </div>
 
@@ -14367,52 +14944,6 @@ function RessursPage() {
         </div>
       )}
 
-      {/* Materiell panel */}
-      {showMateriell && (
-        <div style={{ background:'#f0fdf4', borderBottom:'2px solid #bbf7d0', padding:'16px 24px', flexShrink:0, maxHeight:'260px', overflowY:'auto' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
-            <span style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>📦 Materialleveranser</span>
-            <span style={{ fontSize:'12px', color:'#64748b' }}>{materiellPlans.length} leveranse{materiellPlans.length !== 1 ? 'r' : ''} planlagt</span>
-          </div>
-          {materiellPlans.length === 0 ? (
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', fontStyle:'italic' }}>Ingen materialleveranser planlagt. Bruk «Generer leveringsplan» i kalkulasjonsmodulen.</p>
-          ) : (
-            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-              {materiellPlans.sort((a,b) => a.date.localeCompare(b.date)).map(mp => {
-                const proj = projects.find(p => p.id === mp.project_id)
-                const daysLeft = Math.ceil((new Date(mp.date) - new Date()) / (1000*60*60*24))
-                const isPast = daysLeft < 0
-                const isUrgent = daysLeft >= 0 && daysLeft <= 3
-                const lines = (mp.notes || '').split('\n')
-                const title = lines[0] || 'Materialleveranse'
-                const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
-                return (
-                  <div key={mp.id} style={{ background:'white', borderRadius:'12px', padding:'12px 16px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'220px', maxWidth:'300px', cursor:'pointer' }}
-                    onClick={() => setMateriellDetail({ title: title.replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
-                      <span style={{ fontSize:'14px' }}>📦</span>
-                      <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 ', '')}</span>
-                    </div>
-                    <div style={{ fontSize:'12px', color: isPast ? '#dc2626' : isUrgent ? '#d97706' : '#059669', fontWeight:'700', marginBottom:'4px' }}>
-                      {isPast ? `Skulle vært levert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'Levering i dag!' : daysLeft === 1 ? 'Levering i morgen' : `Levering om ${daysLeft} dager`}
-                    </div>
-                    {matLines.length > 0 && (
-                      <div style={{ fontSize:'10px', color:'#64748b', lineHeight:1.4, marginBottom:'4px' }}>
-                        {matLines.map((l, i) => <div key={i} style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l}</div>)}
-                        {lines.length > matLines.length + 3 && <div style={{ color:'#94a3b8' }}>+{lines.length - matLines.length - 3} poster til...</div>}
-                      </div>
-                    )}
-                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
-                      📅 {mp.date}{proj ? ` · 🏗️ ${proj.name}` : ''}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Month view scroll hint */}
       {viewMode==='maned'&&(
         <div style={{ padding:'6px 24px', background:'#eff6ff', borderBottom:'1px solid #bfdbfe', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 }}>
@@ -14437,6 +14968,79 @@ function RessursPage() {
         {filterProject==='alle'&&projects.length>8&&<span style={{ fontSize:'12px',color:'#94a3b8' }}>+{projects.length-8} til</span>}
       </div>
 
+      {/* ─── GANTT-VIEW (del 9, Float-inspirert) ─── */}
+      {viewMode==='gantt' ? (
+        <RessursGanttGrid
+          resources={(() => {
+            const base = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
+            // Placeholder-rader: samle unike placeholders fra plans (resource_type='placeholder')
+            // Vises kun i ansatte-modus siden placeholders representerer ubesatte roller
+            let placeholderRows = []
+            if (resourceType === 'ansatte') {
+              const placeholderIds = new Set()
+              plans.filter(p=>p.resource_type==='placeholder').forEach(p=>placeholderIds.add(p.resource_id))
+              placeholderRows = Array.from(placeholderIds).map(id => {
+                const samplePlan = plans.find(p=>p.resource_id===id && p.resource_type==='placeholder')
+                const rawName = samplePlan?.notes || ''
+                const cleanName = rawName.replace(/^\[PLACEHOLDER:\s*/i,'').replace(/\]$/,'').trim()
+                return {
+                  id,
+                  name: cleanName || 'Ubesatt rolle',
+                  role: 'Placeholder',
+                  _isPlaceholder: true,
+                }
+              })
+            }
+            let allRows = [...base, ...placeholderRows]
+            if (filterEmployee!=='alle' && resourceType==='ansatte') {
+              allRows = allRows.filter(r=>r.id===filterEmployee)
+            }
+            return allRows
+          })()}
+          plans={plans}
+          projects={projects}
+          milestones={milestones}
+          resourceType={resourceType}
+          ganttZoom={ganttZoom}
+          setGanttZoom={setGanttZoom}
+          ganttAnchor={ganttAnchor}
+          filterProject={filterProject}
+          filterEmployee={filterEmployee}
+          settings={settings}
+          isWeekend={isWeekend}
+          isToday={isToday}
+          getProjectColor={getProjectColor}
+          holidays={ALL_HOLIDAYS}
+          onOpenBooking={(modalData) => setShowBookingModal(modalData)}
+          onMovePlan={async (plan, newResourceId, newDate, isCopy) => {
+            const { id, resource_id, date, created_at, updated_at, ...rest } = plan
+            if (isCopy) {
+              await supabase.from('resource_plans').insert({ ...rest, date: newDate, resource_id: newResourceId, created_by: user?.id })
+            } else {
+              await supabase.from('resource_plans').update({ date: newDate, resource_id: newResourceId, updated_at: new Date().toISOString() }).eq('id', id)
+            }
+            load()
+            setDragging(null); setDragCopy(false)
+          }}
+          onDragStart={(plan, e) => {
+            setDragging(plan)
+            setDragCopy(e?.altKey || e?.ctrlKey || false)
+            if (e?.dataTransfer) {
+              e.dataTransfer.effectAllowed = 'copyMove'
+              e.dataTransfer.setData('text/plain', plan.id)
+            }
+          }}
+          onDragEnd={() => { setDragging(null); setDragCopy(false) }}
+          onResizePlan={(plan, direction, e) => {
+            handleResizeStart(plan, direction, e)
+          }}
+          dragging={dragging}
+          resizing={resizing}
+          setShowOppgaveModal={setShowOppgaveModal}
+          conflictHighlight={conflictHighlight}
+        />
+      ) : (
+      <>
       {/* Grid */}
       <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:'auto', flex:1 }}>
         <div style={{ minWidth: viewMode==='maned' ? `${240+visibleDates.length*68}px` : '100%' }}>
@@ -14491,41 +15095,19 @@ function RessursPage() {
             </div>
           )}
 
-          {/* Material delivery row */}
-          {materiellPlans.some(m=>visibleDates.includes(m.date)) && (
-            <div style={{ display:'flex', background:'#f0fdf4', borderBottom:'1px solid #bbf7d0' }}>
-              <div style={{ width:'240px',flexShrink:0,padding:'6px 20px',fontSize:'11px',fontWeight:'700',color:'#059669',borderRight:'1px solid #bbf7d0',display:'flex',alignItems:'center',gap:'4px' }}>📦 Materiell</div>
-              {visibleDates.map(date=>{
-                const matOnDate=materiellPlans.filter(m=>m.date===date)
-                return (
-                  <div key={date} style={{ ...(viewMode==='maned' ? {width:'68px',flexShrink:0} : {flex:1,minWidth:0}),padding:'3px',borderRight:'1px solid #bbf7d0' }}>
-                    {matOnDate.map(mp=>(
-                      <div key={mp.id} title={(mp.notes||'').split('\n')[0]}
-                        style={{ background:'#059669',borderRadius:'4px',padding:'2px 5px',marginBottom:'1px',cursor:'pointer' }}
-                        onClick={()=>setMateriellDetail({ title: (mp.notes||'').split('\n')[0].replace('📦 Levering: ',''), notes: mp.notes || '', date: mp.date })}>
-                        <div style={{ fontSize:'9px',fontWeight:'700',color:'white',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{viewMode!=='maned'?(mp.notes||'').split('\n')[0].replace('📦 ',''):'📦'}</div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
           {/* Resource rows — bar-based layout */}
           {resources.map(res=>{
             const cap=getWeekCapacity(res.id)
             const name=res.first_name?`${res.first_name} ${res.last_name}`:res.name
             const bars=getResourceBars(res.id)
             const colW=viewMode==='maned'?68:viewMode==='14'?60:90
-            const isPlaceholder = res._isPlaceholder === true
             return (
-              <div key={res.id} style={{ display:'flex', borderBottom: isPlaceholder ? '2px dashed #fde68a' : '1px solid #f1f5f9', minHeight:'56px', transition:'background 0.3s', background: conflictHighlight?.resourceId===res.id ? '#fef2f2' : isPlaceholder ? '#fffbeb' : 'transparent' }} onMouseLeave={()=>setDragOver(null)}>
-                <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background: conflictHighlight?.resourceId===res.id ? '#fef2f2' : isPlaceholder ? '#fffbeb' : 'white',display:'flex',alignItems:'center',gap:'10px',transition:'background 0.3s' }}>
-                  <div style={{ width:'32px',height:'32px',borderRadius:'50%',background: isPlaceholder ? 'linear-gradient(135deg,#fef3c7,#fde68a)' : 'linear-gradient(135deg,#e0e7ff,#c7d2fe)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'700',color: isPlaceholder ? '#92400e' : '#4338ca',flexShrink:0, border: isPlaceholder ? '2px dashed #f59e0b' : 'none' }}>{isPlaceholder ? '?' : (res.first_name?.[0]||res.name?.[0]||'?').toUpperCase()}</div>
+              <div key={res.id} style={{ display:'flex', borderBottom:'1px solid #f1f5f9', minHeight:'56px', transition:'background 0.3s', background: conflictHighlight?.resourceId===res.id ? '#fef2f2' : 'transparent' }} onMouseLeave={()=>setDragOver(null)}>
+                <div style={{ width:'240px',flexShrink:0,padding:'10px 16px 10px 20px',borderRight:'1px solid #f1f5f9',background: conflictHighlight?.resourceId===res.id ? '#fef2f2' : 'white',display:'flex',alignItems:'center',gap:'10px',transition:'background 0.3s' }}>
+                  <div style={{ width:'32px',height:'32px',borderRadius:'50%',background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'700',color:'#4338ca',flexShrink:0 }}>{(res.first_name?.[0]||res.name?.[0]||'?').toUpperCase()}</div>
                   <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ fontWeight:'600',fontSize:'13px',color: isPlaceholder ? '#92400e' : '#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{isPlaceholder ? `👤 ${name}` : name}</div>
-                    <div style={{ fontSize:'10px',color:'#94a3b8' }}>{isPlaceholder ? 'Ikke tildelt — klikk for å tildele' : res.department||res.category||''}</div>
+                    <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
+                    <div style={{ fontSize:'10px',color:'#94a3b8' }}>{res.department||res.category||''}</div>
                   </div>
                   <div style={{ flexShrink:0,width:'40px' }}>
                     <div style={{ fontSize:'10px',color:cap.pct>100?'#dc2626':cap.pct>75?'#d97706':'#16a34a',fontWeight:'700',textAlign:'center',marginBottom:'2px' }}>{cap.pct}%</div>
@@ -14606,6 +15188,7 @@ function RessursPage() {
           })}
         </div>
       </div>
+      </>)}
 
       {/* Resize tip */}
       {resizing && (
@@ -14764,65 +15347,6 @@ function RessursPage() {
           onClose={()=>setShowNewMilestone(null)}
           onSaved={()=>{setShowNewMilestone(null);load()}}
         />
-      )}
-
-      {/* Materiell detalj-modal */}
-      {materiellDetail && (
-        <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setMateriellDetail(null)} />
-          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-              <div>
-                <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📦 {materiellDetail.title}</h2>
-                <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
-                  📅 Levering: {materiellDetail.date}{materiellDetail.project ? ` · 🏗️ ${materiellDetail.project}` : ''}
-                </div>
-              </div>
-              <button onClick={() => setMateriellDetail(null)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
-            </div>
-            <div style={{ overflowY:'auto', flex:1, padding:'20px 24px' }}>
-              {(() => {
-                const lines = (materiellDetail.notes || '').split('\n')
-                const infoLines = lines.filter(l => !l.match(/^\d{7}/) && !l.match(/^[A-Z]{2,}.*:/) && l.trim())
-                const matLines = lines.filter(l => l.match(/^\d{7}/) || (l.match(/^[A-Z]{2,}.*:/) && l.includes(':')))
-                return (
-                  <>
-                    {infoLines.length > 0 && (
-                      <div style={{ marginBottom:'16px', fontSize:'13px', color:'#64748b', lineHeight:1.6 }}>
-                        {infoLines.map((l, i) => <div key={i}>{l}</div>)}
-                      </div>
-                    )}
-                    {matLines.length > 0 && (
-                      <div>
-                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#059669', marginBottom:'8px' }}>MATERIALLISTE ({matLines.length} poster)</div>
-                        <div style={{ border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                          {matLines.map((l, i) => {
-                            const parts = l.split(':')
-                            const name = parts[0]?.trim() || l
-                            const qty = parts.slice(1).join(':')?.trim() || ''
-                            const nobb = name.match(/^(\d{7})\s/)?.[1]
-                            return (
-                              <div key={i} style={{ padding:'8px 12px', borderBottom: i < matLines.length - 1 ? '1px solid #f1f5f9' : 'none', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', background: i % 2 === 0 ? 'white' : '#f8fafc' }}>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                  {nobb && <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', marginRight:'6px' }}>{nobb}</span>}
-                                  <span style={{ color:'#0f172a' }}>{name.replace(/^\d{7}\s*/, '')}</span>
-                                </div>
-                                <span style={{ fontWeight:'600', color:'#059669', flexShrink:0, marginLeft:'12px' }}>{qty}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
-            </div>
-            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', justifyContent:'flex-end' }}>
-              <button onClick={() => setMateriellDetail(null)} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Lukk</button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )
@@ -19101,7 +19625,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>+ Nytt oppfølgingspunkt</div>
                 <input value={newFollowup.description} onChange={e=>setNewFollowup(f=>({...f,description:e.target.value}))} placeholder="Beskrivelse av oppfølging..." style={bInp} />
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
-                  <EmployeeNameSelect value={newFollowup.responsible} onChange={v=>setNewFollowup(f=>({...f,responsible:v}))} onSelect={emp => setNewFollowup(f=>({...f,responsible:`${emp.first_name||''} ${emp.last_name||''}`.trim()}))} placeholder="Ansvarlig person" style={{ padding:'8px 10px', fontSize:'13px' }} />
+                  <input value={newFollowup.responsible} onChange={e=>setNewFollowup(f=>({...f,responsible:e.target.value}))} placeholder="Ansvarlig person" style={bInp} />
                   <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
                 </div>
                 <button onClick={addFollowup} style={{ padding: isMobBD ? '10px' : '9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700' }}>{isMobBD ? '+ Oppfølging' : 'Legg til oppfølging'}</button>
@@ -20067,11 +20591,11 @@ const MODULE_CATALOG = [
   {
     id: 'grunnpakke',
     name: 'Grunnpakke',
-    desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Ansatte, Kundeoversikt og Varsler',
+    desc: 'Dashboard, Prosjekter, Prosjektfiler, Sjekklister, Avvik, HMS & Risiko, Maskiner, Kundeoversikt og Varsler',
     emoji: '🔹',
     pricePerUser: 199,
     required: true,
-    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Ansatte','Kundeoversikt','Varsler'],
+    includes: ['Dashboard','Prosjekter','Prosjektfiler','Sjekklister','Avvik','HMS & Risiko','Maskiner','Kundeoversikt','Varsler'],
   },
   {
     id: 'kalkulator',
@@ -20122,6 +20646,14 @@ const MODULE_CATALOG = [
     emoji: '🧾',
     price: 49,
     navId: 'faktura',
+  },
+  {
+    id: 'ansatte',
+    name: 'Ansatte',
+    desc: 'Personaladministrasjon og kompetanser',
+    emoji: '👷',
+    price: 19,
+    navId: 'ansatte',
   },
   {
     id: 'timelister',
@@ -21318,8 +21850,8 @@ function MinBedriftPage() {
             <div style={mbCard}>
               {mbSec('Nøkkelpersoner')}
               <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
-                <div>{mbLbl('Daglig leder')}<EmployeeNameSelect value={settings?.contact_ceo||''} onChange={v=>set('contact_ceo',v)} onSelect={emp => set('contact_ceo', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg daglig leder" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
-                <div>{mbLbl('HMS-ansvarlig')}<EmployeeNameSelect value={settings?.contact_hms||''} onChange={v=>set('contact_hms',v)} onSelect={emp => set('contact_hms', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg HMS-ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+                <div>{mbLbl('Daglig leder')}<input value={settings?.contact_ceo||''} onChange={e=>set('contact_ceo',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
+                <div>{mbLbl('HMS-ansvarlig')}<input value={settings?.contact_hms||''} onChange={e=>set('contact_hms',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
                 <div>{mbLbl('Regnskapsfører')}<input value={settings?.contact_accountant||''} onChange={e=>set('contact_accountant',e.target.value)} placeholder="Navn og kontakt" style={mbInp} /></div>
               </div>
             </div>
@@ -21515,12 +22047,12 @@ const ALL_MODULES_LIST = [
   { id:'avvik',        label:'Avvik',              emoji:'⚠️' },
   { id:'hms',          label:'HMS & Risiko',       emoji:'🛡️' },
   { id:'maskiner',     label:'Maskiner',           emoji:'🚜' },
-  { id:'ansatte',      label:'Ansatte',            emoji:'👷' },
   { id:'tilbud',       label:'Tilbud',             emoji:'📋' },
   { id:'kalkulator',   label:'Kalkulasjon',        emoji:'🧮' },
   { id:'anbudsmodul',  label:'Anbudsmodul',        emoji:'⚖️' },
   { id:'ordre',        label:'Ordre',              emoji:'📝' },
   { id:'faktura',      label:'Faktura',            emoji:'🧾' },
+  { id:'ansatte',      label:'Ansatte',            emoji:'👷' },
   { id:'timelister',   label:'Timelister',         emoji:'⏱️' },
   { id:'ressursplan',  label:'Ressursplanlegger',  emoji:'📅' },
   { id:'kalender',     label:'Kalender',           emoji:'📆' },
@@ -22310,16 +22842,16 @@ function LockedModulePage({ pageId, onNavigate }) {
 // ─── FAGGRUPPER OG KALKULASJONSFAKTORER ──────────────────────────────────────
 
 const FAGGRUPPER = [
-  { id: 'tomrer',     name: 'Tømrer',           emoji: '🪚', defaultLonn: 380, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.5, defaultTimerAapning: 0.5 },
-  { id: 'murer',      name: 'Murer',            emoji: '🧱', defaultLonn: 370, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.4, defaultTimerAapning: 0.6 },
-  { id: 'betong',     name: 'Betongarbeider',   emoji: '🏗️', defaultLonn: 390, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.3, defaultTimerAapning: 0.4 },
-  { id: 'maler',      name: 'Maler',            emoji: '🎨', defaultLonn: 340, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.25, defaultTimerAapning: 0.3 },
-  { id: 'rorleger',   name: 'Rørlegger',        emoji: '🔧', defaultLonn: 420, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 25, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.2, defaultTimerAapning: 0.5 },
-  { id: 'elektriker', name: 'Elektriker',       emoji: '⚡', defaultLonn: 430, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 25, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.15, defaultTimerAapning: 0.4 },
-  { id: 'blikkenslager', name: 'Blikkenslager', emoji: '🔩', defaultLonn: 380, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.4, defaultTimerAapning: 0.5 },
-  { id: 'grunnarbeid', name: 'Grunnarbeid',     emoji: '🪨', defaultLonn: 360, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0.3, defaultTimerAapning: 0.3 },
-  { id: 'rigg',       name: 'Rigg og drift',    emoji: '🚧', defaultLonn: 350, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 20, defaultMatJustering: 5, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0, defaultTimerAapning: 0 },
-  { id: 'ue',         name: 'Underleverandør',  emoji: '🤝', defaultLonn: 0,   defaultSosiale: 0,  defaultFaste: 0,  defaultFortjenestLonn: 0,  defaultFortjenesteInnkjop: 15, defaultMatJustering: 0, defaultGrunntidJustering: 1.0, defaultTimerFlate: 0, defaultTimerAapning: 0 },
+  { id: 'tomrer',     name: 'Tømrer',           emoji: '🪚', defaultLonn: 380, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'murer',      name: 'Murer',            emoji: '🧱', defaultLonn: 370, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'betong',     name: 'Betongarbeider',   emoji: '🏗️', defaultLonn: 390, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'maler',      name: 'Maler',            emoji: '🎨', defaultLonn: 340, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'rorleger',   name: 'Rørlegger',        emoji: '🔧', defaultLonn: 420, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 25, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'elektriker', name: 'Elektriker',       emoji: '⚡', defaultLonn: 430, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 25, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'blikkenslager', name: 'Blikkenslager', emoji: '🔩', defaultLonn: 380, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'grunnarbeid', name: 'Grunnarbeid',     emoji: '🪨', defaultLonn: 360, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 25, defaultFortjenesteInnkjop: 30, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'rigg',       name: 'Rigg og drift',    emoji: '🚧', defaultLonn: 350, defaultSosiale: 15, defaultFaste: 25, defaultFortjenestLonn: 20, defaultFortjenesteInnkjop: 20, defaultMatJustering: 5, defaultGrunntidJustering: 1.0 },
+  { id: 'ue',         name: 'Underleverandør',  emoji: '🤝', defaultLonn: 0,   defaultSosiale: 0,  defaultFaste: 0,  defaultFortjenestLonn: 0,  defaultFortjenesteInnkjop: 15, defaultMatJustering: 0, defaultGrunntidJustering: 1.0 },
 ]
 
 const getFaggruppe = (id) => FAGGRUPPER.find(f => f.id === id) || FAGGRUPPER[0]
@@ -22335,8 +22867,6 @@ function getDefaultFaktorer(fagId) {
     fortjeneste_innkjop_prosent: fag.defaultFortjenesteInnkjop,
     mat_justering_prosent: fag.defaultMatJustering,
     grunntid_justering: fag.defaultGrunntidJustering,
-    default_timer_flate: fag.defaultTimerFlate ?? 0.5,
-    default_timer_aapning: fag.defaultTimerAapning ?? 0.5,
   }
 }
 
@@ -22368,27 +22898,12 @@ function beregnMaterialkostnad(material, faktorer) {
   return { kostnad, medJustering, medFortjeneste }
 }
 
-function safeMengde(v, fallback = 1) { const n = parseFloat(v); return isNaN(n) ? fallback : n }
-
 function beregnBygningsdel(bd, faktorer) {
-  const mengde = safeMengde(bd.mengde, 1)
-
-  // ── Beregn åpningsfradrag for materialer ──
-  // Totalt åpningsareal trekkes fra material-mengde (aldri under 0)
-  let totalApningsareal = 0
-  if (bd.fradrag_apninger !== false) { // Default: fradrag aktivert
-    ;(bd.apningstillegg || []).forEach(at => {
-      const antall = parseFloat(at.antall) || 0
-      const areal = parseFloat(at.areal) || 0
-      totalApningsareal += antall * areal
-    })
-  }
-  const materialMengde = Math.max(mengde - totalApningsareal, 0)
+  const mengde = parseFloat(bd.mengde) || 1
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
   const fortjenesteInnkjop = parseFloat(faktorer.fortjeneste_innkjop_prosent) || 0
-  const fortjenesteLonn = parseFloat(faktorer.fortjeneste_lonn_prosent) || 0
 
   ;(bd.arbeidsarter || []).forEach(a => {
     const r = beregnArbeidskostnad(a, faktorer)
@@ -22398,72 +22913,17 @@ function beregnBygningsdel(bd, faktorer) {
   })
   ;(bd.materialer || []).forEach(m => {
     const r = beregnMaterialkostnad(m, faktorer)
-    totalMaterial += r.medJustering * materialMengde
-    totalMaterialMedFortjeneste += r.medFortjeneste * materialMengde
+    totalMaterial += r.medJustering * mengde
+    totalMaterialMedFortjeneste += r.medFortjeneste * mengde
   })
   ;(bd.underleverandorer || []).forEach(u => {
     const kost = parseFloat(u.kostnad) || 0
     totalUE += kost * (1 + fortjenesteInnkjop / 100) * mengde
   })
 
-  // Timekostnad for tillegg (brukes både av flatetillegg og åpningstillegg)
-  const lonn = parseFloat(faktorer.produksjonslonn) || 0
-  const sosiale = parseFloat(faktorer.sosiale_prosent) || 0
-  const faste = parseFloat(faktorer.faste_prosent) || 0
-  const justering = parseFloat(faktorer.grunntid_justering) || 1.0
-  const tilleggTimekostnad = lonn * (1 + sosiale / 100 + faste / 100)
-
-  // ── Flatetillegg: mertid for tilpasning til hjørner, avslutninger etc. ──
-  // Per tømrertariffen: skjønnsmessig antall flatetillegg × timer/stk
-  let totalFlatetillegg = 0
-  let totalFlatetilleggTimer = 0
-  ;(bd.flatetillegg || []).forEach(ft => {
-    const antall = parseFloat(ft.antall) || 0
-    const timerPerFlate = parseFloat(ft.timer_per_flate) || 0
-    const faktiskTid = antall * timerPerFlate * justering
-    const kost = faktiskTid * tilleggTimekostnad
-    totalFlatetillegg += kost
-    totalFlatetilleggTimer += faktiskTid
-  })
-  const flatetilleggMedFortjeneste = totalFlatetillegg * (1 + fortjenesteLonn / 100)
-  totalTimer += totalFlatetilleggTimer
-
-  // ── Åpningstillegg: mertid for tilpasning til åpninger (dører, vinduer) ──
-  // Per tømrertariffen telleregler:
-  //   0,5-2,5 m² = 1 stk, 2,5-4,5 m² = 2 stk, 4,5-6,5 m² = 3 stk, >6,5 m² = 4 stk
-  //   + 1 ekstra i bærende bindingsverk
-  let totalApningstillegg = 0
-  let totalApningstilleggTimer = 0
-  ;(bd.apningstillegg || []).forEach(at => {
-    const areal = parseFloat(at.areal) || 0
-    const antall = parseFloat(at.antall) || 1
-    const baerende = at.baerende === true || at.baerende === 'true'
-    const timerPerTillegg = parseFloat(at.timer_per_tillegg) || 0
-
-    // Beregn antall åpningstillegg basert på areal (telleregler)
-    let tilleggPerAapning = 0
-    if (areal > 0.5 && areal <= 2.5) tilleggPerAapning = 1
-    else if (areal > 2.5 && areal <= 4.5) tilleggPerAapning = 2
-    else if (areal > 4.5 && areal <= 6.5) tilleggPerAapning = 3
-    else if (areal > 6.5) tilleggPerAapning = 4
-
-    if (baerende && tilleggPerAapning > 0) tilleggPerAapning += 1
-
-    const totaltTillegg = antall * tilleggPerAapning
-    const faktiskTid = totaltTillegg * timerPerTillegg * justering
-    const kost = faktiskTid * tilleggTimekostnad
-    const medFortjeneste = kost * (1 + fortjenesteLonn / 100)
-
-    totalApningstillegg += medFortjeneste
-    totalApningstilleggTimer += faktiskTid
-  })
-  totalTimer += totalApningstilleggTimer
-
-  const selvkost = totalArbeid + totalMaterial + totalFlatetillegg + (totalApningstillegg / (1 + fortjenesteLonn / 100)) + (totalUE / (1 + fortjenesteInnkjop / 100))
-  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE + flatetilleggMedFortjeneste + totalApningstillegg
-  const dekningsbidrag = totalMedFortjeneste - selvkost
-  const dbProsent = totalMedFortjeneste > 0 ? (dekningsbidrag / totalMedFortjeneste) * 100 : 0
-  return { mengde, materialMengde, totalApningsareal, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
+  const selvkost = totalArbeid + totalMaterial
+  const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE
+  return { mengde, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
@@ -22609,7 +23069,7 @@ function KalkulasjonPage({ onNavigate }) {
         } catch(e) {}
       }
     }} />}
-    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} onNavigate={onNavigate} />
+    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} />
   </>
 
   if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
@@ -24000,7 +24460,7 @@ function getBibliotekByFag() {
 
 // Convert a bibliotek-bygningsdel to the runtime format used in kalkyler
 function bibliotekTilBygningsdel(bd, mengde) {
-  const m = safeMengde(mengde, 1)
+  const m = parseFloat(mengde) || 1
   return {
     id: Date.now() + Math.random() * 1000,
     name: bd.name,
@@ -24347,7 +24807,6 @@ function PrisbokPage({ onBack }) {
   const [colMapping, setColMapping] = useState({ varenummer: '', varenavn: '', enhet: '', pris: '', kategori: '' })
   const [is5001, setIs5001] = useState(false)
   const [importProgress, setImportProgress] = useState('')
-  const [importTestFilter, setImportTestFilter] = useState('')
   const [toast, setToast] = useState(null) // { type: 'success'|'error', message }
   const fileRef = React.useRef(null)
 
@@ -24397,113 +24856,48 @@ function PrisbokPage({ onBack }) {
       let prisKr = prisOre / 100
       if (!varenavn || varenavn === '') continue
 
-      const fullText = (varenavn + ' ' + tillegg).toUpperCase()
-      const originalEnhet = enhet
-      const originalPris = prisKr
-      let paknStr = null
-      let paknEnhet = null
+      // Smart konvertering: rull/pakke-pris → pris per m²
+      // Gjelder når enhet er RUL, STK eller PAK og produktet har areal-dimensjoner
+      if ((enhet === 'RUL' || enhet === 'STK' || enhet === 'PAK') && prisKr > 0) {
+        let areal = 0
 
-      // ── Smart pakningskonvertering ──────────────────────────────────
-      // Konverterer fra pakke/rull/sekk/spann-pris til bruksenhetpris
-      if ((enhet === 'RUL' || enhet === 'STK' || enhet === 'PAK' || enhet === 'SEK' || enhet === 'SPAN' || enhet === 'BNT' || enhet === 'SAK') && prisKr > 0) {
-
-        // 1. KG-produkter: flislim, mørtel, sparkel, sement, maling, beis etc.
-        //    Match "15KG", "20 KG", "25KG" i varenavn/tillegg
-        const kgMatch = fullText.match(/(\d+[,.]?\d*)\s*KG/)
-        if (kgMatch) {
-          const kg = parseFloat(kgMatch[1].replace(',', '.'))
-          if (kg > 0) {
-            paknStr = kg
-            paknEnhet = 'kg'
-            prisKr = originalPris / kg
-            enhet = 'KG'
-          }
+        // 1. Sjekk tilleggsinfo for "XX M2" (f.eks. "39 M2", "100M2")
+        const m2Match = tillegg.match(/(\d+[,.]?\d*)\s*M2/i)
+        if (m2Match) {
+          areal = parseFloat(m2Match[1].replace(',', '.'))
         }
 
-        // 2. LITER-produkter: maling, primer, grunning, lakk, beis
-        if (!paknStr) {
-          const litMatch = fullText.match(/(\d+[,.]?\d*)\s*(?:LTR|LIT|L)(?:\b|$)/)
-          if (litMatch) {
-            const lit = parseFloat(litMatch[1].replace(',', '.'))
-            if (lit > 0) {
-              paknStr = lit
-              paknEnhet = 'l'
-              prisKr = originalPris / lit
-              enhet = 'LTR'
-            }
-          }
-        }
-
-        // 3. M²-produkter: isolasjon, membran, undertak, dampsperre, vindsperre
-        //    Match "XX M2" i tillegg eller dimensjoner som gir areal
-        if (!paknStr) {
-          const m2Match = fullText.match(/(\d+[,.]?\d*)\s*M2/)
-          if (m2Match) {
-            const m2 = parseFloat(m2Match[1].replace(',', '.'))
-            if (m2 > 1) {
-              paknStr = m2
-              paknEnhet = 'm2'
-              prisKr = originalPris / m2
-              enhet = 'M2'
-            }
-          }
-        }
-
-        // 4. Areal fra dimensjoner: "1,30X50M" (bredde × lengde i m)
-        if (!paknStr) {
-          const dimMatch = fullText.match(/(\d+[,.]?\d*)\s*[xX]\s*(\d+[,.]?\d*)\s*M(?:\b|$)/)
+        // 2. Parsér bredde×lengde fra varenavn (f.eks. "1,30X50M", "2600X15M", "0,20X2600X15M")
+        if (areal === 0) {
+          const fullText = varenavn + ' ' + tillegg
+          // Match patterns like "1,30X50M" or "1,5X50M" or "2X15M"
+          const dimMatch = fullText.match(/(\d+[,.]?\d*)\s*[xX]\s*(\d+[,.]?\d*)\s*M(?:\b|$)/i)
           if (dimMatch) {
             let d1 = parseFloat(dimMatch[1].replace(',', '.'))
             let d2 = parseFloat(dimMatch[2].replace(',', '.'))
+            // If d1 is in mm (>100), convert to m
             if (d1 > 100) d1 = d1 / 1000
             if (d2 > 100) d2 = d2 / 1000
-            const areal = d1 * d2
-            if (areal > 1) {
-              paknStr = Math.round(areal * 100) / 100
-              paknEnhet = 'm2'
-              prisKr = originalPris / areal
-              enhet = 'M2'
-            }
+            areal = d1 * d2
           }
         }
 
-        // 5. LM-produkter fra lengde: "50M", "25M" (uten X foran = lengde, ikke dimensjon)
-        if (!paknStr) {
-          const lmMatch = fullText.match(/(?:^|\s)(\d+[,.]?\d*)\s*M(?:\b|$)/)
-          if (lmMatch) {
-            const lm = parseFloat(lmMatch[1].replace(',', '.'))
-            if (lm > 1 && lm < 500) {
-              paknStr = lm
-              paknEnhet = 'lm'
-              prisKr = originalPris / lm
-              enhet = 'LM'
-            }
-          }
-        }
-
-        // 6. STK-pakker: "10 STK", "100STK" — antall i pakke
-        if (!paknStr) {
-          const stkMatch = fullText.match(/(\d+)\s*STK/)
-          if (stkMatch && (enhet === 'PAK' || enhet === 'BNT')) {
-            const stk = parseInt(stkMatch[1])
-            if (stk > 1) {
-              paknStr = stk
-              paknEnhet = 'stk'
-              prisKr = originalPris / stk
-              enhet = 'STK'
-            }
-          }
+        // 3. Konverter til m²-pris hvis vi fant areal > 1 m²
+        if (areal > 1) {
+          prisKr = prisKr / areal
+          enhet = 'M2'
         }
       }
+
+      // Også konverter LM-produkter der pris er per pakke (sjekk for lengde i navn)
+      // F.eks. stenderverk "48X148X4800" — enhet LM er allerede korrekt per lm
 
       const bruttoPrisKr = bruttoPrisOre / 100
       const origNetto = nettoPrisOre / 100
       rows.push({
         nobb, kategoriNavn, varenavn: varenavn + (tillegg ? ' ' + tillegg : ''),
-        enhet: enhet || 'STK', prisKr,
-        bruttoPrisKr: paknStr && bruttoPrisKr > prisKr * 5 ? prisKr * (bruttoPrisKr / (origNetto || prisKr)) : bruttoPrisKr,
-        nettoPrisKr: prisKr, rabatt: rabattProm / 100,
-        originalEnhet, originalPris, paknStr, paknEnhet
+        enhet: enhet || 'STK', prisKr, bruttoPrisKr: enhet === 'M2' && bruttoPrisKr > prisKr * 10 ? prisKr * (bruttoPrisKr / origNetto) : bruttoPrisKr,
+        nettoPrisKr: prisKr, rabatt: rabattProm / 100
       })
     }
     return rows
@@ -24556,96 +24950,38 @@ function PrisbokPage({ onBack }) {
     e.target.value = ''
   }
 
-  const doImport = async (items, navn, existingPrislisteId = null) => {
+  const doImport = async (items, navn) => {
     setImporting(true)
     try {
-      let plId
-      if (existingPrislisteId) {
-        // ── RE-IMPORT: oppdater eksisterende prisliste ──
-        plId = existingPrislisteId
-        await supabase.from('prislister').update({ navn, antall_varer: items.length, updated_at: new Date().toISOString() }).eq('id', plId)
-        
-        // Hent eksisterende varenumre med manuell pakn_str for å bevare dem
-        const { data: existingItems } = await supabase.from('prisbok').select('varenummer, pakn_str, pakn_enhet, pakn_manuell, enhet').eq('prisliste_id', plId)
-        const manualMap = {}
-        ;(existingItems || []).forEach(e => { if (e.pakn_manuell && e.pakn_str) manualMap[e.varenummer] = e })
-        
-        // Slett eksisterende og re-insert (med manuelle korrigeringer bevart)
-        setImportProgress('Fjerner gamle priser...')
-        await supabase.from('prisbok').delete().eq('prisliste_id', plId)
-        
-        let inserted = 0
-        for (let i = 0; i < items.length; i += 500) {
-          const batch = items.slice(i, i + 500).map(item => {
-            const manual = manualMap[item.varenummer]
-            if (manual) {
-              // Bevare manuell pakn_str: reberegn pris med ny original_pris / gammel pakn_str
-              const origPris = item.original_pris || item.pris_per_enhet
-              return {
-                ...item, prisliste_id: plId, prisliste_navn: navn,
-                pakn_str: manual.pakn_str,
-                pakn_enhet: manual.pakn_enhet,
-                pakn_manuell: true,
-                enhet: manual.enhet,
-                pris_per_enhet: origPris / manual.pakn_str
-              }
-            }
-            return { ...item, prisliste_id: plId, prisliste_navn: navn }
-          })
-          setImportProgress(`Oppdaterer ${Math.min(i + 500, items.length)} av ${items.length}...`)
-          const { error } = await supabase.from('prisbok').insert(batch)
-          if (error) throw error
-          inserted += batch.length
-        }
-        setImportStep(null)
-        setImportProgress('')
-        await loadData()
-        const manuellCount = Object.keys(manualMap).length
-        setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer oppdatert i "${navn}"${manuellCount > 0 ? `. ${manuellCount} manuelle pakningskorrigeringer bevart.` : ''}` })
-      } else {
-        // ── NY IMPORT ──
-        const { data: pl, error: plErr } = await supabase.from('prislister').insert({
-          user_id: user?.id, navn, leverandor: navn, antall_varer: items.length, aktiv: prislister.length === 0
-        }).select().single()
-        if (plErr) throw plErr
-        plId = pl.id
-        let inserted = 0
-        for (let i = 0; i < items.length; i += 500) {
-          const batch = items.slice(i, i + 500).map(item => ({ ...item, prisliste_id: plId, prisliste_navn: navn }))
-          setImportProgress(`Importerer ${Math.min(i + 500, items.length)} av ${items.length}...`)
-          const { error } = await supabase.from('prisbok').insert(batch)
-          if (error) throw error
-          inserted += batch.length
-        }
-        setImportStep(null)
-        setImportProgress('')
-        await loadData()
-        setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
+      // Create prisliste entry
+      const { data: pl, error: plErr } = await supabase.from('prislister').insert({
+        user_id: user?.id, navn, leverandor: navn, antall_varer: items.length, aktiv: prislister.length === 0
+      }).select().single()
+      if (plErr) throw plErr
+      // Insert items in batches
+      let inserted = 0
+      for (let i = 0; i < items.length; i += 500) {
+        const batch = items.slice(i, i + 500).map(item => ({ ...item, prisliste_id: pl.id, prisliste_navn: navn }))
+        setImportProgress(`Importerer ${Math.min(i + 500, items.length)} av ${items.length}...`)
+        const { error } = await supabase.from('prisbok').insert(batch)
+        if (error) throw error
+        inserted += batch.length
       }
+      setImportStep(null)
+      setImportProgress('')
+      await loadData()
+      setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
     } catch(e) { setToast({ type: 'error', message: 'Feil ved import: ' + e.message }) }
     finally { setImporting(false); setImportProgress('') }
   }
 
-  // Detect if we should update an existing prisliste
-  const findExistingPrisliste = () => {
-    if (!prislister.length) return null
-    // If there's an active prisliste, offer to update it
-    const aktiv = prislister.find(p => p.aktiv)
-    return aktiv || prislister[0]
-  }
-
-  const handleImport5001 = (updateExisting = false) => {
+  const handleImport5001 = () => {
     const items = rawRows.map(r => ({
       varenummer: r.nobb, varenavn: r.varenavn, enhet: r.enhet,
       pris_per_enhet: r.nettoPrisKr > 0 ? r.nettoPrisKr : r.prisKr,
       kategori: r.kategoriNavn, kilde: '5001', user_id: user?.id,
-      original_enhet: r.originalEnhet || null,
-      original_pris: r.originalPris || null,
-      pakn_str: r.paknStr || null,
-      pakn_enhet: r.paknEnhet || null,
     })).filter(i => i.varenavn && i.pris_per_enhet > 0)
-    const existingPl = updateExisting ? findExistingPrisliste() : null
-    doImport(items, importNavn || 'Optimera 5001', existingPl?.id || null)
+    doImport(items, importNavn || 'Optimera 5001')
   }
 
   const handleImportCSV = () => {
@@ -24678,21 +25014,17 @@ function PrisbokPage({ onBack }) {
   const searchPrisbok = async () => {
     if (!search.trim()) { setPrisbok([]); return }
     try {
-      // Use optimized RPC function with trigram index
-      const { data, error } = await supabase.rpc('search_prisbok', {
-        p_search_term: search.trim(),
-        p_prisliste_id: aktivPrisliste?.id || null,
-        p_user_id: aktivPrisliste ? null : user?.id,
-        p_category_keywords: null,
-        p_limit: 50
-      })
-      if (!error && data) { setPrisbok(data); return }
-      // Fallback: old ilike method if RPC not available yet
       let query = supabase.from('prisbok').select('*')
       if (aktivPrisliste) query = query.eq('prisliste_id', aktivPrisliste.id)
       else query = query.eq('user_id', user?.id)
-      const { data: fb } = await query.or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
-      setPrisbok(fb || [])
+      const { data, error } = await query.or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
+      if (error) {
+        // Fallback without prisliste filter
+        const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
+        setPrisbok(fb || [])
+      } else {
+        setPrisbok(data || [])
+      }
     } catch(e) { setPrisbok([]) }
   }
   useEffect(() => { if (search.trim().length >= 2) { const t = setTimeout(searchPrisbok, 300); return () => clearTimeout(t) } else { setPrisbok([]) } }, [search, aktivPrisliste])
@@ -24766,87 +25098,33 @@ function PrisbokPage({ onBack }) {
               <input value={importNavn} onChange={e => setImportNavn(e.target.value)} placeholder="F.eks. Optimera desember 2024" style={{ ...qInp, maxWidth:'350px' }} />
             </div>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>Forhåndsvisning</div>
-            <div style={{ background:'#eff6ff', borderRadius:'8px', padding:'8px 12px', marginBottom:'10px', fontSize:'12px', color:'#1e40af' }}>
-              💡 Varer med pakke/sekk/rull-pris konverteres automatisk til bruksenhetpris (per kg, m², lm). Du kan korrigere pakningsstørrelser manuelt i prislisten etterpå.
-            </div>
             <div style={{ overflowX:'auto', marginBottom:'16px' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                 <thead><tr style={{ background:'#f8fafc' }}>
-                  {['NOBB','Varenavn','Kategori','Orig.enh','Orig.pris','Pakn.str','Ny enhet','Enhetspris','Rabatt'].map((h,i) => (
+                  {['NOBB','Varenavn','Kategori','Enhet','Nettopris','Bruttopris','Rabatt'].map((h,i) => (
                     <th key={i} style={{ padding:'6px 8px', textAlign: i>=4 ? 'right' : 'left', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
-                  {rawRows.filter(r => r.prisKr > 0).slice(0, 12).map((r, i) => (
-                    <tr key={i} style={{ borderBottom:'1px solid #f8fafc', background: r.paknStr ? '#f0fdf4' : 'transparent' }}>
+                  {rawRows.filter(r => r.prisKr > 0).slice(0, 8).map((r, i) => (
+                    <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
                       <td style={{ padding:'5px 8px', fontFamily:'monospace', color:'#64748b' }}>{r.nobb}</td>
-                      <td style={{ padding:'5px 8px', color:'#0f172a', maxWidth:'250px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
+                      <td style={{ padding:'5px 8px', color:'#0f172a', maxWidth:'300px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
                       <td style={{ padding:'5px 8px', color:'#64748b', fontSize:'11px' }}>{r.kategoriNavn}</td>
-                      <td style={{ padding:'5px 8px', color:'#94a3b8' }}>{r.originalEnhet || r.enhet}</td>
-                      <td style={{ padding:'5px 8px', textAlign:'right', color:'#94a3b8' }}>{r.originalPris ? r.originalPris.toFixed(2) : '—'}</td>
-                      <td style={{ padding:'5px 8px', textAlign:'right', color: r.paknStr ? '#059669' : '#94a3b8', fontWeight: r.paknStr ? '600' : '400' }}>
-                        {r.paknStr ? `${r.paknStr} ${r.paknEnhet}` : '—'}
-                      </td>
-                      <td style={{ padding:'5px 8px', color: r.paknStr ? '#059669' : '#64748b', fontWeight: r.paknStr ? '600' : '400' }}>{r.enhet}</td>
-                      <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:'600', color:'#059669' }}>{r.prisKr.toFixed(2)}</td>
+                      <td style={{ padding:'5px 8px', color:'#64748b' }}>{r.enhet}</td>
+                      <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:'600', color:'#059669' }}>{r.nettoPrisKr > 0 ? r.nettoPrisKr.toFixed(2) : '—'}</td>
+                      <td style={{ padding:'5px 8px', textAlign:'right', color:'#94a3b8' }}>{r.bruttoPrisKr.toFixed(2)}</td>
                       <td style={{ padding:'5px 8px', textAlign:'right', color:'#ca8a04' }}>{r.rabatt > 0 ? r.rabatt.toFixed(0) + '%' : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {rawRows.filter(r => r.paknStr).length > 0 && (
-                <div style={{ fontSize:'11px', color:'#059669', marginTop:'6px' }}>
-                  ✅ {rawRows.filter(r => r.paknStr).length.toLocaleString('nb-NO')} av {rawRows.length.toLocaleString('nb-NO')} varer konvertert fra pakke/sekk/rull til bruksenhetpris
-                </div>
-              )}
             </div>
             {importProgress && <div style={{ fontSize:'13px', color:'#2563eb', marginBottom:'8px' }}>{importProgress}</div>}
-
-            {/* Filter/test panel */}
-            <div style={{ marginBottom:'16px' }}>
-              <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px' }}>
-                <input value={importTestFilter || ''} onChange={e => setImportTestFilter(e.target.value)} placeholder="🔍 Test: filtrer varer (f.eks. 'flislim', 'membran', 'vindsperre')..." style={{ ...qInp, flex:1, maxWidth:'400px' }} />
-                <span style={{ fontSize:'11px', color:'#94a3b8' }}>
-                  {importTestFilter?.trim().length >= 2 ? `${rawRows.filter(r => r.prisKr > 0 && (r.varenavn || '').toUpperCase().includes(importTestFilter.trim().toUpperCase())).length} treff` : ''}
-                </span>
-              </div>
-              {importTestFilter?.trim().length >= 2 && (
-                <div style={{ overflowX:'auto', maxHeight:'200px', overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:'8px' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
-                    <thead><tr style={{ background:'#fefce8', position:'sticky', top:0 }}>
-                      {['NOBB','Varenavn','Orig.enh','Orig.pris','Pakn.str','Ny enh','Enhetspris'].map((h,i) => (
-                        <th key={i} style={{ padding:'4px 6px', textAlign: i>=3 ? 'right' : 'left', fontWeight:'600', color:'#92400e', borderBottom:'1px solid #fde68a' }}>{h}</th>
-                      ))}
-                    </tr></thead>
-                    <tbody>
-                      {rawRows.filter(r => r.prisKr > 0 && (r.varenavn || '').toUpperCase().includes(importTestFilter.trim().toUpperCase())).slice(0, 30).map((r, i) => (
-                        <tr key={i} style={{ borderBottom:'1px solid #f8fafc', background: r.paknStr ? '#f0fdf4' : r.originalEnhet !== r.enhet ? '#fef2f2' : 'white' }}>
-                          <td style={{ padding:'3px 6px', fontFamily:'monospace', color:'#64748b' }}>{r.nobb}</td>
-                          <td style={{ padding:'3px 6px', color:'#0f172a', maxWidth:'280px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
-                          <td style={{ padding:'3px 6px', color:'#94a3b8' }}>{r.originalEnhet}</td>
-                          <td style={{ padding:'3px 6px', textAlign:'right', color:'#94a3b8' }}>{r.originalPris?.toFixed(2)}</td>
-                          <td style={{ padding:'3px 6px', textAlign:'right', color: r.paknStr ? '#059669' : '#dc2626', fontWeight:'600' }}>
-                            {r.paknStr ? `${r.paknStr} ${r.paknEnhet}` : <span title="Ikke konvertert — kan korrigeres manuelt etter import">⚠️ —</span>}
-                          </td>
-                          <td style={{ padding:'3px 6px', color: r.paknStr ? '#059669' : '#64748b', fontWeight: r.paknStr ? '600' : '400' }}>{r.enhet}</td>
-                          <td style={{ padding:'3px 6px', textAlign:'right', fontWeight:'600', color:'#059669' }}>{r.prisKr.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end' }}>
               <button onClick={() => setImportStep(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Avbryt</button>
-              {findExistingPrisliste() && (
-                <button onClick={() => handleImport5001(true)} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
-                  {importing ? importProgress || 'Oppdaterer...' : `🔄 Oppdater "${findExistingPrisliste()?.navn}"`}
-                </button>
-              )}
-              <button onClick={() => handleImport5001(false)} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
-                {importing ? importProgress || 'Importerer...' : `+ Ny prisliste (${rawRows.filter(r => r.prisKr > 0).length.toLocaleString('nb-NO')} varer)`}
+              <button onClick={handleImport5001} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+                {importing ? importProgress || 'Importerer...' : `Importer ${rawRows.filter(r => r.prisKr > 0).length.toLocaleString('nb-NO')} varer`}
               </button>
             </div>
           </div>
@@ -24910,8 +25188,8 @@ function PrisbokPage({ onBack }) {
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', overflow:'hidden' }}>
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
               <thead><tr style={{ background:'#f8fafc' }}>
-                {['NOBB','Varenavn','Kategori','Enhet','Enhetspris','Pakn.','Orig.pris',''].map((h,i) => (
-                  <th key={i} style={{ padding:'10px 14px', textAlign: i>=4 ? 'right' : 'left', fontSize:'12px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
+                {['NOBB','Varenavn','Kategori','Enhet','Nettopris'].map((h,i) => (
+                  <th key={i} style={{ padding:'10px 14px', textAlign: i===4 ? 'right' : 'left', fontSize:'12px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f1f5f9' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -24922,25 +25200,6 @@ function PrisbokPage({ onBack }) {
                     <td style={{ padding:'8px 14px', fontSize:'12px', color:'#64748b' }}>{p.kategori}</td>
                     <td style={{ padding:'8px 14px', fontSize:'12px', color:'#64748b' }}>{p.enhet}</td>
                     <td style={{ padding:'8px 14px', fontSize:'13px', color:'#059669', fontWeight:'600', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</td>
-                    <td style={{ padding:'8px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'right' }}>
-                      {p.pakn_str ? <span title={`${p.original_enhet} → ${p.pakn_str} ${p.pakn_enhet}`} style={{ background:'#f0fdf4', padding:'2px 6px', borderRadius:'4px', color:'#059669', fontWeight:'600' }}>{p.pakn_str} {p.pakn_enhet}/{p.original_enhet || '?'}</span> : '—'}
-                    </td>
-                    <td style={{ padding:'8px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'right' }}>
-                      {p.original_pris && p.original_pris !== p.pris_per_enhet ? `${Math.round(p.original_pris)} kr/${p.original_enhet || '?'}` : '—'}
-                    </td>
-                    <td style={{ padding:'4px 8px' }}>
-                      <button onClick={async () => {
-                        const nyPakn = prompt(`Pakningsstørrelse for ${p.varenavn}\n\nOppgi antall bruksenheter per ${p.original_enhet || 'pakke'} (f.eks. 15 for 15kg sekk, 50 for 50m² rull):`, p.pakn_str || '')
-                        if (nyPakn === null) return
-                        const val = parseFloat(nyPakn.replace(',', '.'))
-                        if (!val || val <= 0) return
-                        const nyEnhet = prompt('Bruksenhet (f.eks. kg, m2, lm, stk):', p.pakn_enhet || p.enhet || '')
-                        if (!nyEnhet) return
-                        const nyPris = (p.original_pris || p.pris_per_enhet) / val
-                        await supabase.from('prisbok').update({ pakn_str: val, pakn_enhet: nyEnhet, pakn_manuell: true, pris_per_enhet: nyPris, enhet: nyEnhet.toUpperCase() }).eq('id', p.id)
-                        searchPrisbok()
-                      }} title="Korriger pakningsstørrelse" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', cursor:'pointer', fontSize:'11px', color:'#64748b' }}>✏️</button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -25258,7 +25517,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
 
 // ─── PROSJEKT VISNING (Read-only detaljer) ───────────────────────────────────
 
-function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
+function KalkProsjektView({ kalk: init, onBack, onEdit }) {
   const confirm = useConfirm()
   const { user } = useAuth()
   const [k, setK] = useState(init)
@@ -25416,34 +25675,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : kl))
   }
 
-  // Flatetillegg CRUD
-  const updateFlatetillegg = (kalId, bdId, ftId, field, value) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).map(ft => ft.id === ftId ? { ...ft, [field]: value } : ft) } : b) } : kl))
-  }
-  const addFlatetillegg = (kalId, bdId) => {
-    const kal = kalkyler.find(k => k.id === kalId)
-    const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
-    const defaultTimer = parseFloat(fakt.default_timer_flate) || 0.5
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: [...(b.flatetillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, timer_per_flate: defaultTimer }] } : b) } : kl))
-  }
-  const removeFlatetillegg = (kalId, bdId, ftId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).filter(ft => ft.id !== ftId) } : b) } : kl))
-  }
-
-  // Åpningstillegg CRUD
-  const updateApningstillegg = (kalId, bdId, atId, field, value) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).map(at => at.id === atId ? { ...at, [field]: value } : at) } : b) } : kl))
-  }
-  const addApningstillegg = (kalId, bdId) => {
-    const kal = kalkyler.find(k => k.id === kalId)
-    const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
-    const defaultTimer = parseFloat(fakt.default_timer_aapning) || 0.5
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: [...(b.apningstillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, areal: 2.0, baerende: false, timer_per_tillegg: defaultTimer }] } : b) } : kl))
-  }
-  const removeApningstillegg = (kalId, bdId, atId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).filter(at => at.id !== atId) } : b) } : kl))
-  }
-
   // Send tilbudsforespørsel til UE
   const [showUESuccess, setShowUESuccess] = useState(null)
   const [showUEExtraPoster, setShowUEExtraPoster] = useState(null)
@@ -25459,7 +25690,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
   const [versions, setVersions] = useState([])
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [compareVersion, setCompareVersion] = useState(null)
-  const [showPlanlegg, setShowPlanlegg] = useState(false)
 
   // ── Versjonering — snapshot-basert ──
   const loadVersions = async () => {
@@ -25772,10 +26002,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
       const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
       const posts = (kalk.bygningsdeler || []).map(bd => {
         const bdT = beregnBygningsdel(bd, fakt)
-        const bdMengde = safeMengde(bd.mengde, 1)
-        return { id: bd.id, description: bd.name || 'Bygningsdel', qty: bdMengde, unit: bd.enhet || 'stk',
-          unitPriceWork: bdT.totalTimer > 0 && bdMengde > 0 ? Math.round(bdT.totalArbeidMedFortjeneste / bdMengde) : 0,
-          unitPriceMaterial: bdMengde > 0 ? Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / bdMengde) : 0 }
+        return { id: bd.id, description: bd.name || 'Bygningsdel', qty: parseFloat(bd.mengde) || 1, unit: bd.enhet || 'stk',
+          unitPriceWork: bdT.totalTimer > 0 ? Math.round(bdT.totalArbeidMedFortjeneste / (parseFloat(bd.mengde) || 1)) : 0,
+          unitPriceMaterial: Math.round((bdT.totalMaterialMedFortjeneste + bdT.totalUE) / (parseFloat(bd.mengde) || 1)) }
       })
       return { id: kalk.id, title: `${fag.emoji} ${kalk.name}`, description: '', markup: 0, posts }
     })
@@ -25809,7 +26038,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
       const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
       const fortjInnkjop = parseFloat(fakt.fortjeneste_innkjop_prosent) || 0
       ;(kl.bygningsdeler || []).forEach(bd => {
-        const mengde = safeMengde(bd.mengde, 1)
+        const mengde = parseFloat(bd.mengde) || 1
         const bdt = beregnBygningsdel(bd, fakt)
         // Bygningsdel header row
         lines.push({
@@ -25902,7 +26131,7 @@ td{border-bottom:1px solid #f1f5f9} .total td{border-top:3px solid #0f172a;font-
         if (visning === 'bygningsdel' || visning === 'detaljert') {
           ;(kl.bygningsdeler || []).forEach(bd => {
             const bdt = beregnBygningsdel(bd, fakt)
-            const mengde = safeMengde(bd.mengde, 1)
+            const mengde = parseFloat(bd.mengde) || 1
             tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name || 'Bygningsdel'}</td><td style="padding:6px 10px;text-align:right;font-size:13px">${mengde}</td><td style="padding:6px 10px;font-size:13px;color:#64748b">${fmtEnhetPreview(bd.enhet)}</td><td style="padding:6px 14px;text-align:right;font-size:13px;font-weight:600">${Math.round(bdt.totalMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
             if (visning === 'detaljert') {
               ;(bd.arbeidsarter || []).forEach(a => {
@@ -25957,7 +26186,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         rows += `<tr class="fag-hdr"><td colspan="6">${fag.emoji} ${kl.name}</td><td class="r b">${fmt(kt.totSelvkost)}</td><td class="r b">${fmt(kt.totMedFortjeneste)}</td></tr>`
         ;(kl.bygningsdeler || []).forEach(bd => {
           const bdt = beregnBygningsdel(bd, fakt)
-          const mengde = safeMengde(bd.mengde, 1)
+          const mengde = parseFloat(bd.mengde) || 1
           rows += `<tr class="bd-hdr"><td colspan="4">${bd.name} × ${mengde} ${bd.enhet||'stk'}</td><td colspan="2">${bdt.totalTimer.toFixed(1)}t</td><td class="r">${fmt(bdt.totalSelvkost)}</td><td class="r">${fmt(bdt.totalMedFortjeneste)}</td></tr>`
           ;(bd.arbeidsarter||[]).forEach(a => {
             const r = beregnArbeidskostnad(a, fakt)
@@ -26046,7 +26275,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', width: isMobKV ? '100%' : 'auto' }}>
             <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>
-            <button onClick={() => setShowPlanlegg(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'700' }}>{isMobKV ? '📅' : '📅 Planlegg prosjekt'}</button>
 
             {/* Mer-dropdown for sekundære handlinger */}
             <div style={{ position:'relative' }}>
@@ -26245,12 +26473,9 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bi+1}</span>
                               <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bd.name || 'Uten navn'}</span>
                               {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
-                              {!isExpanded && (bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>📐 {(bd.flatetillegg||[]).length}</span>}
-                              {!isExpanded && (bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#fef2f2', color:'#dc2626', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>🚪 {(bd.apningstillegg||[]).length}</span>}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
-                              <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
                                 <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>
@@ -26290,218 +26515,48 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               {/* Arbeidsarter - editable */}
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
-                                <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
-                                  <colgroup>
-                                    <col style={{ width:'auto' }} />
-                                    <col style={{ width:'80px' }} />
-                                    <col style={{ width:'68px' }} />
-                                    <col style={{ width:'68px' }} />
-                                    <col style={{ width:'68px' }} />
-                                    <col style={{ width:'72px' }} />
-                                    <col style={{ width:'78px' }} />
-                                    <col style={{ width:'82px' }} />
-                                    <col style={{ width:'28px' }} />
-                                  </colgroup>
+                                <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                   <thead><tr>
-                                    <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Grunntid (t)" info={<span><b>Normtid i timer per {bd.enhet || 'enhet'}.</b><br/><br/>Tiden angis i desimaltimer. For å regne om til minutter: gang med 60.<br/><br/>Eksempler:<br/>• 0,1 t = 6 min<br/>• 0,25 t = 15 min<br/>• 0,5 t = 30 min<br/>• 0,6 t = 36 min<br/>• 0,75 t = 45 min<br/>• 1,0 t = 60 min<br/><br/>Basert på bransjetariffer eller egne erfaringstall.</span>} /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Faktisk tid" info={<span><b>Grunntid justert for prosjektets vanskelighetsgrad.</b><br/><br/>Beregning:<br/>Grunntid × grunntid-justering ({parseFloat(fakt.grunntid_justering)||1.0})<br/><br/>Justering = 1.0 betyr normalt tempo.<br/>Over 1.0 = vanskeligere/tregere.<br/>Under 1.0 = enklere/raskere.<br/><br/>Også her i timer — gang med 60 for minutter.</span>} /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Timer tot." info={<span><b>Totalt antall timer for denne arbeidsarten.</b><br/><br/>Beregning:<br/>Faktisk tid × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'})<br/><br/>Viser hvor mange timer som faktisk går med til denne oppgaven på hele bygningsdelen.</span>} /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Timekost" info={<span><b>Din fulle timekostnad.</b><br/><br/>Beregning:<br/>Produksjonslønn ({fakt.produksjonslonn} kr/t)<br/>× (1 + sosiale {fakt.sosiale_prosent}% + faste {fakt.faste_prosent}%)<br/>= {Math.round((parseFloat(fakt.produksjonslonn)||0) * (1 + (parseFloat(fakt.sosiale_prosent)||0)/100 + (parseFloat(fakt.faste_prosent)||0)/100))} kr/t<br/><br/>Inkluderer lønn, sosiale avgifter og faste kostnader.</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span><b>Ren selvkost per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Faktisk tid × timekostnad<br/><br/>Hva arbeidet koster deg — uten fortjeneste.</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Med fortj." info={<span><b>Din pris per {bd.enhet || 'enhet'} inkl. fortjeneste.</b><br/><br/>Beregning:<br/>Kostnad × (1 + fortjeneste lønn {fakt.fortjeneste_lonn_prosent}%)<br/><br/>Dette er hva du tar betalt for arbeidet per {bd.enhet || 'enhet'}.</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span><b>Total pris for hele bygningsdelen.</b><br/><br/>Beregning:<br/>Med fortjeneste × mengde ({bd.mengde ?? 1} {bd.enhet || 'enhet'})</span>} align="right" /></th>
-                                    <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
+                                    {['Beskrivelse','Grunntid (t)','Faktisk tid','Timekost','Kostnad','Med fortj.','Totalt',''].map((h,i) => (
+                                      <th key={i} style={{ padding:'3px 4px', textAlign:i>=1?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                    ))}
                                   </tr></thead>
                                   <tbody>
                                     {(bd.arbeidsarter||[]).map(a => {
                                       const r = beregnArbeidskostnad(a, fakt)
-                                      const bdMengdeA = safeMengde(bd.mengde, 1)
+                                      const bdMengdeA = parseFloat(bd.mengde) || 1
                                       return (
                                         <tr key={a.id}>
-                                          <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                          <td style={{ padding:'3px 2px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                          <td style={{ padding:'3px 2px' }}><input value={a.beskrivelse} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'beskrivelse',e.target.value)} placeholder="Beskrivelse" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                          <td style={{ padding:'3px 2px' }}><input type="number" step="0.5" value={a.grunntid} onChange={e=>updateArbeidsart(kalk.id,bd.id,a.id,'grunntid',e.target.value)} style={{ ...qInp, width:'65px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{r.faktiskTid.toFixed(1)} t</td>
-                                          <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#2563eb' }}>{(r.faktiskTid * bdMengdeA).toFixed(1)} t</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{Math.round(r.timekostnad)}</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.arbeidskostnad)}</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.medFortjeneste)}</td>
                                           <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengdeA)}</td>
-                                          <td style={{ padding:'3px 2px', textAlign:'center' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(kalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>}</td>
+                                          <td style={{ padding:'3px 2px' }}>{(bd.arbeidsarter||[]).length > 1 && <button onClick={()=>removeArbeidsart(kalk.id,bd.id,a.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button>}</td>
                                         </tr>
                                       )
                                     })}
                                   </tbody>
                                 </table>
                                 <button onClick={() => addArbeidsart(kalk.id, bd.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Arbeidsart</button>
-
-                                {/* ── Flatetillegg (del av arbeidsarter) ── */}
-                                {(bd.flatetillegg||[]).length > 0 && (
-                                  <div style={{ marginTop:'10px', borderTop:'1px dashed #e2e8f0', paddingTop:'8px' }}>
-                                    <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', marginBottom:'4px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid for hjørner, avslutninger og tilpasning)</span></div>
-                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
-                                      <colgroup>
-                                        <col style={{ width:'auto' }} />
-                                        <col style={{ width:'70px' }} />
-                                        <col style={{ width:'80px' }} />
-                                        <col style={{ width:'70px' }} />
-                                        <col style={{ width:'75px' }} />
-                                        <col style={{ width:'28px' }} />
-                                      </colgroup>
-                                      <thead><tr>
-                                        <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Beskrivelse</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Ant. flater</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/flate</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Totalt</th>
-                                        <th style={{ padding:'3px 4px', borderBottom:'1px solid #f8fafc' }}></th>
-                                      </tr></thead>
-                                      <tbody>
-                                        {(bd.flatetillegg||[]).map(ft => {
-                                          const antall = parseFloat(ft.antall) || 0
-                                          const timerPerFlate = parseFloat(ft.timer_per_flate) || 0
-                                          const just = parseFloat(fakt.grunntid_justering) || 1.0
-                                          const lonnF = parseFloat(fakt.produksjonslonn) || 0
-                                          const sosF = parseFloat(fakt.sosiale_prosent) || 0
-                                          const fastF = parseFloat(fakt.faste_prosent) || 0
-                                          const timekostF = lonnF * (1 + sosF / 100 + fastF / 100)
-                                          const fortjLonnF = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
-                                          const faktiskTid = antall * timerPerFlate * just
-                                          const kostMedFortj = faktiskTid * timekostF * (1 + fortjLonnF / 100)
-                                          return (
-                                            <tr key={ft.id}>
-                                              <td style={{ padding:'3px 2px' }}><input value={ft.beskrivelse||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Fasader, hjørneavslutninger" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" step="1" value={ft.antall||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'antall', e.target.value)} placeholder="1" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={ft.timer_per_flate||''} onChange={e => updateFlatetillegg(kalk.id, bd.id, ft.id, 'timer_per_flate', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{faktiskTid.toFixed(2)} t</td>
-                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
-                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeFlatetillegg(kalk.id, bd.id, ft.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
-                                            </tr>
-                                          )
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-
-                                {/* ── Åpningstillegg (del av arbeidsarter) ── */}
-                                {(bd.apningstillegg||[]).length > 0 && (
-                                  <div style={{ marginTop:'10px', borderTop: (bd.flatetillegg||[]).length === 0 ? '1px dashed #e2e8f0' : 'none', paddingTop: (bd.flatetillegg||[]).length === 0 ? '8px' : '4px' }}>
-                                    <div style={{ fontSize:'10px', fontWeight:'700', color:'#dc2626', marginBottom:'4px' }}>🚪 ÅPNINGSTILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid rundt dører, vinduer, gjennomføringer)</span></div>
-                                    <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'3px 6px', borderRadius:'4px' }}>
-                                      Telleregel: 0,5–2,5 m² = 1 stk · 2,5–4,5 m² = 2 stk · 4,5–6,5 m² = 3 stk · &gt;6,5 m² = 4 stk · bærende +1
-                                    </div>
-                                    <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
-                                      <colgroup>
-                                        <col style={{ width:'auto' }} />
-                                        <col style={{ width:'58px' }} />
-                                        <col style={{ width:'65px' }} />
-                                        <col style={{ width:'40px' }} />
-                                        <col style={{ width:'78px' }} />
-                                        <col style={{ width:'70px' }} />
-                                        <col style={{ width:'75px' }} />
-                                        <col style={{ width:'28px' }} />
-                                      </colgroup>
-                                      <thead><tr>
-                                        <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Type åpning</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Antall</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Areal/stk</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'center', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Bær.</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/tillegg</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Totalt</th>
-                                        <th style={{ padding:'3px 4px', borderBottom:'1px solid #f8fafc' }}></th>
-                                      </tr></thead>
-                                      <tbody>
-                                        {(bd.apningstillegg||[]).map(at => {
-                                          const antall = parseFloat(at.antall) || 0
-                                          const areal = parseFloat(at.areal) || 0
-                                          const baerende = at.baerende === true || at.baerende === 'true'
-                                          const timerPerTillegg = parseFloat(at.timer_per_tillegg) || 0
-                                          let tilleggPerAapning = 0
-                                          if (areal > 0.5 && areal <= 2.5) tilleggPerAapning = 1
-                                          else if (areal > 2.5 && areal <= 4.5) tilleggPerAapning = 2
-                                          else if (areal > 4.5 && areal <= 6.5) tilleggPerAapning = 3
-                                          else if (areal > 6.5) tilleggPerAapning = 4
-                                          if (baerende && tilleggPerAapning > 0) tilleggPerAapning += 1
-                                          const totaltTillegg = antall * tilleggPerAapning
-                                          const just = parseFloat(fakt.grunntid_justering) || 1.0
-                                          const lonnA = parseFloat(fakt.produksjonslonn) || 0
-                                          const sosA = parseFloat(fakt.sosiale_prosent) || 0
-                                          const fastA = parseFloat(fakt.faste_prosent) || 0
-                                          const timekostA = lonnA * (1 + sosA / 100 + fastA / 100)
-                                          const fortjLonnA = parseFloat(fakt.fortjeneste_lonn_prosent) || 0
-                                          const faktiskTid = totaltTillegg * timerPerTillegg * just
-                                          const kostMedFortj = faktiskTid * timekostA * (1 + fortjLonnA / 100)
-                                          return (
-                                            <tr key={at.id}>
-                                              <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Vindu, Dør" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Gir ${tilleggPerAapning} stk åpningstillegg`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><input type="checkbox" checked={baerende} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'baerende', e.target.checked)} title="+1 ekstra tillegg per åpning" style={{ cursor:'pointer' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.timer_per_tillegg||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'timer_per_tillegg', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>
-                                                <div>{faktiskTid.toFixed(2)} t</div>
-                                                {totaltTillegg > 0 && <div style={{ fontSize:'9px', color:'#94a3b8' }}>{totaltTillegg} stk</div>}
-                                              </td>
-                                              <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
-                                              <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
-                                            </tr>
-                                          )
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-
-                                {/* Tillegg-knapper */}
-                                <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
-                                  <button onClick={() => addFlatetillegg(kalk.id, bd.id)} style={{ background:'#faf5ff', color:'#7c3aed', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>📐 + Flatetillegg</button>
-                                  <button onClick={() => addApningstillegg(kalk.id, bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>🚪 + Åpningstillegg</button>
-                                </div>
                               </div>
 
                               {/* Materialer - editable */}
                               <div style={{ marginBottom:'12px' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>📦 MATERIALER</div>
-                                {bdT.totalApningsareal > 0 && (
-                                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background:'#eff6ff', borderRadius:'8px', fontSize:'11px' }}>
-                                    <span style={{ color:'#2563eb' }}>🚪 Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} trekkes fra</span>
-                                    <span style={{ color:'#64748b' }}>→ Materialer beregnes for <strong>{bdT.materialMengde.toFixed(1)} {bd.enhet || 'm²'}</strong> (ikke {bd.mengde})</span>
-                                    <label style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer', flexShrink:0 }}>
-                                      <input type="checkbox" checked={bd.fradrag_apninger !== false} onChange={e => updateBdField(kalk.id, bd.id, 'fradrag_apninger', e.target.checked)} style={{ cursor:'pointer' }} />
-                                      <span style={{ fontSize:'10px', color:'#64748b' }}>Aktiv</span>
-                                    </label>
-                                  </div>
-                                )}
+                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
                                 {(bd.materialer||[]).length > 0 && (
-                                  <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
-                                    <colgroup>
-                                      <col style={{ width:'85px' }} />
-                                      <col style={{ width:'auto' }} />
-                                      <col style={{ width:'68px' }} />
-                                      <col style={{ width:'50px' }} />
-                                      <col style={{ width:'78px' }} />
-                                      <col style={{ width:'72px' }} />
-                                      <col style={{ width:'78px' }} />
-                                      <col style={{ width:'82px' }} />
-                                      <col style={{ width:'28px' }} />
-                                    </colgroup>
+                                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead><tr>
-                                      <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>NOBB</th>
-                                      <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Varenavn</th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Mengde" info={<span><b>Forbruk per {bd.enhet || 'enhet'} av bygningsdelen.</b><br/><br/>F.eks. 3,5 lm stenderverk per m² vegg, eller 1,05 m² isolasjon per m² vegg (5% kapp/svinn).</span>} /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Enhet</th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Pris/enh" info={<span><b>Innkjøpspris per enhet.</b><br/><br/>Hentes automatisk fra din prisliste (5001-fil) via NOBB-nummer, eller tastes inn manuelt.</span>} /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Kostnad" info={<span><b>Ren materialkostnad per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Mengde × pris/enhet<br/><br/>Uten påslag — hva materialet koster deg i innkjøp.</span>} align="right" /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="M/påslag" info={<span><b>Materialpris med alle påslag per {bd.enhet || 'enhet'}.</b><br/><br/>Beregning:<br/>Kostnad<br/>× (1 + mat.justering {fakt.mat_justering_prosent}%)<br/>× (1 + fortjeneste innkjøp {fakt.fortjeneste_innkjop_prosent}%)<br/><br/>Inkluderer svinn-justering og din fortjeneste på materialer.</span>} align="right" /></th>
-                                      <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}><InfoTip label="Totalt" info={<span><b>Total materialpris for hele bygningsdelen.</b><br/><br/>Beregning:<br/>M/påslag × {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? `materialmengde (${bdT.materialMengde.toFixed(1)} ${bd.enhet || 'enhet'} etter åpningsfradrag)` : `mengde (${bd.mengde ?? 1} ${bd.enhet || 'enhet'})`}</span>} align="right" /></th>
-                                      <th style={{ padding:'3px 4px', fontSize:'10px', borderBottom:'1px solid #f8fafc' }}></th>
+                                      {['NOBB','Varenavn','Mengde','Enhet','Pris/enh','Per enh.','Totalt',''].map((h,i) => (
+                                        <th key={i} style={{ padding:'3px 4px', textAlign:i>=2?'right':'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>{h}</th>
+                                      ))}
                                     </tr></thead>
                                     <tbody>
                                       {(bd.materialer||[]).map(m => {
                                         const r = beregnMaterialkostnad(m, fakt)
-                                        const matMengde = bdT.materialMengde
+                                        const bdMengde = parseFloat(bd.mengde) || 1
                                         return (
                                           <tr key={m.id}>
                                             <td style={{ padding:'3px 2px' }}>
@@ -26518,17 +26573,16 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                                       updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb } : mt) } : b) } : kl))
                                                     }
                                                   } catch(err) {}
-                                                }} placeholder="NOBB" style={{ ...qInp, flex:1, minWidth:0, fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
+                                                }} placeholder="NOBB" style={{ ...qInp, width:'58px', fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
                                                 <button onClick={() => setShowProduktSok({ kalkId: kalk.id, bdId: bd.id, matId: m.id })} title="Søk i prisliste" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', width:'22px', height:'22px', cursor:'pointer', fontSize:'11px', padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔍</button>
                                               </div>
                                             </td>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'center', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
-                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>{fmt(r.medFortjeneste)}</td>
-                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * matMengde)}</td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengde)}</td>
                                             <td style={{ padding:'3px 2px' }}><button onClick={()=>removeMaterial(kalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
                                           </tr>
                                         )
@@ -26597,31 +26651,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   )
                                 })}
                                 <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
-                              </div>
-
-                              {/* ── Oppsummering / Dekningsbidrag ── */}
-                              <div style={{ marginTop:'14px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', borderRadius:'10px', padding:'12px 16px', border: `1px solid ${bdT.dbProsent >= 25 ? '#bbf7d0' : bdT.dbProsent >= 15 ? '#fde68a' : '#fecaca'}` }}>
-                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b' }}>📊 OPPSUMMERING BYGNINGSDEL</span>
-                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>
-                                    DB: {bdT.dbProsent.toFixed(1)}%
-                                  </span>
-                                </div>
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px 16px', fontSize:'12px' }}>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeid)}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeidMedFortjeneste + (bdT.flatetilleggMedFortjeneste || 0) + (bdT.totalApningstillegg || 0))}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterial)}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterialMedFortjeneste)}</span></div>
-                                  {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#2563eb', fontSize:'11px' }}>↳ Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} ({bdT.materialMengde.toFixed(1)} av {bd.mengde ?? 1} {bd.enhet || 'm²'} beregnet)</span></div>}
-                                  {bdT.totalUE > 0 && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Underleverandør</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalUE)}</span></div>}
-                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bdT.totalTimer.toFixed(1)} t</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Selvkost</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{fmt(bdT.selvkost)}</span></div>
-                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Totalpris</span><span style={{ fontWeight:'700', color:'#059669' }}>{fmt(bdT.totalMedFortjeneste)}</span></div>
-                                </div>
-                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop: `1px solid ${bdT.dbProsent >= 25 ? '#86efac' : bdT.dbProsent >= 15 ? '#fde68a' : '#fca5a5'}` }}>
-                                  <span style={{ fontSize:'13px', fontWeight:'700', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>Dekningsbidrag</span>
-                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{fmt(bdT.dekningsbidrag)} ({bdT.dbProsent.toFixed(1)}%)</span>
-                                </div>
                               </div>
                             </div>
                           )}
@@ -27309,571 +27338,6 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* Send til kunde modal */}
       {showSendModal && <KalkSendModal kalk={k} totals={totals} kalkyler={kalkyler} alleFaktorer={alleFaktorer} user={user} onClose={() => setShowSendModal(false)} onSent={() => { setShowSendModal(false); updateStatus('Tilbud sendt') }} />}
 
-      {/* Planlegg prosjekt modal */}
-      {showPlanlegg && (() => {
-        const PlanleggModal = ({ onClose }) => {
-          const [hasRessursplan, setHasRessursplan] = useState(null)
-          const [loading, setLoading] = useState(true)
-          const [antallMann, setAntallMann] = useState(2)
-          const [timerPerDag, setTimerPerDag] = useState(7.5)
-          const [startDato, setStartDato] = useState(new Date().toISOString().split('T')[0])
-          const [employees, setEmployees] = useState([])
-          const [selectedEmployees, setSelectedEmployees] = useState([])
-          const [projects, setProjects] = useState([])
-          const [selectedProject, setSelectedProject] = useState(k.project_id || '')
-          const [sending, setSending] = useState(false)
-          const [sent, setSent] = useState(null)
-          const [leveringsdager, setLeveringsdager] = useState(2)
-          const [showProjectPicker, setShowProjectPicker] = useState(null)
-          const [tildelingsmodus, setTildelingsmodus] = useState('reserver') // 'ansatte' | 'reserver'
-
-          useEffect(() => {
-            supabase.from('company_settings').select('active_modules').limit(1).single()
-              .then(({ data }) => {
-                const hasIt = (data?.active_modules || []).includes('ressursplan')
-                setHasRessursplan(hasIt)
-                setLoading(false)
-                if (hasIt) {
-                  supabase.from('projects').select('id, name, project_number').order('name').then(({ data: projData }) => setProjects(projData || []))
-                  supabase.from('employees').select('id, first_name, last_name, role, department').order('last_name').then(({ data: empData }) => setEmployees(empData || []))
-                }
-              })
-              .catch(() => { setHasRessursplan(false); setLoading(false) })
-          }, [])
-
-          if (loading) return (
-            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', padding:'40px', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
-                <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
-                <p style={{ color:'#94a3b8', fontSize:'14px', margin:0 }}>Sjekker tilgang...</p>
-              </div>
-            </div>
-          )
-
-          // ── UPSELL: Ingen tilgang på ressursplanlegger ──
-          if (!hasRessursplan) return (
-            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
-                {/* Header med gradient */}
-                <div style={{ background:'linear-gradient(135deg, #059669, #0891b2)', padding:'32px 28px', textAlign:'center', color:'white' }}>
-                  <div style={{ fontSize:'48px', marginBottom:'12px' }}>📅</div>
-                  <h2 style={{ margin:'0 0 6px', fontSize:'22px', fontWeight:'800' }}>Planlegg prosjektet ditt</h2>
-                  <p style={{ margin:0, fontSize:'14px', opacity:0.9 }}>Fra kalkyle til ferdig prosjektplan på minutter</p>
-                </div>
-
-                <div style={{ padding:'24px 28px' }}>
-                  {/* Eksempel-beregning */}
-                  <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'16px', marginBottom:'20px' }}>
-                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'8px' }}>DIN KALKYLE</div>
-                    <div style={{ display:'flex', justifyContent:'space-around', textAlign:'center' }}>
-                      <div>
-                        <div style={{ fontSize:'24px', fontWeight:'800', color:'#059669' }}>{totals.totTimer.toFixed(0)}</div>
-                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>timer beregnet</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:'24px', fontWeight:'800', color:'#2563eb' }}>{kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler||[]).length, 0)}</div>
-                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>bygningsdeler</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:'24px', fontWeight:'800', color:'#7c3aed' }}>{kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler||[]).reduce((s, bd) => s + (bd.materialer||[]).filter(m=>m.varenavn).length, 0), 0)}</div>
-                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>materialposter</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Hva du får */}
-                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>Med ressursplanleggeren kan du:</div>
-                  <div style={{ display:'grid', gap:'10px', marginBottom:'24px' }}>
-                    {[
-                      { emoji: '👷', title: 'Bemanningsplanlegger', desc: 'Velg antall mann og se automatisk hvor mange uker prosjektet tar. Juster bemanning og se effekten umiddelbart.' },
-                      { emoji: '📊', title: 'Visuell fremdriftsplan', desc: 'Gantt-lignende oversikt over alle bygningsdeler med tidsberegning, datoer og dekningsbidrag per fase.' },
-                      { emoji: '👥', title: 'Koble ansatte til prosjektet', desc: 'Send timer direkte til ressursplanen og book dine ansatte på riktige uker automatisk.' },
-                      { emoji: '📦', title: 'Leveringsplan for materialer', desc: 'Generer materiallister per fase med foreslått leveringsdato og NOBB-nummer — klar til å sende til leverandør.' },
-                      { emoji: '📅', title: 'Kalender-integrasjon', desc: 'Se prosjektfremdrift i bedriftskalenderen sammen med andre prosjekter og fravær.' },
-                    ].map((item, i) => (
-                      <div key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
-                        <span style={{ fontSize:'20px', flexShrink:0, marginTop:'2px' }}>{item.emoji}</span>
-                        <div>
-                          <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{item.title}</div>
-                          <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.4 }}>{item.desc}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* CTA knapper */}
-                  <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('minbedrift') }} style={{ width:'100%', padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700', marginBottom:'8px' }}>Aktiver ressursplanleggeren →</button>
-                  <button onClick={onClose} style={{ width:'100%', padding:'10px', border:'none', borderRadius:'10px', background:'transparent', cursor:'pointer', fontSize:'13px', color:'#94a3b8' }}>Ikke nå</button>
-                </div>
-              </div>
-            </div>
-          )
-
-          // ── FULL PLANLEGGER: Har tilgang ──
-
-          const totalTimer = totals.totTimer
-          const dagerTotalt = antallMann > 0 && timerPerDag > 0 ? totalTimer / (antallMann * timerPerDag) : 0
-          const ukerTotalt = dagerTotalt / 5
-
-          const bdPlan = []
-          let akkumulertDager = 0
-          kalkyler.forEach(kalk => {
-            const fakt = alleFaktorer[kalk.fag] || getDefaultFaktorer(kalk.fag)
-            const fag = getFaggruppe(kalk.fag)
-            ;(kalk.bygningsdeler || []).forEach(bd => {
-              const r = beregnBygningsdel(bd, fakt)
-              const bdDager = antallMann > 0 && timerPerDag > 0 ? r.totalTimer / (antallMann * timerPerDag) : 0
-              const startDag = akkumulertDager
-              akkumulertDager += bdDager
-              bdPlan.push({
-                name: bd.name || 'Uten navn', fag: fag.name, emoji: fag.emoji,
-                timer: r.totalTimer, dager: bdDager, startDag, sluttDag: akkumulertDager,
-                startUke: Math.floor(startDag / 5) + 1, sluttUke: Math.ceil(akkumulertDager / 5),
-                materialer: (bd.materialer || []).filter(m => m.varenavn).map(m => ({
-                  nobb: m.nobb || '', varenavn: m.varenavn, mengde: parseFloat(m.mengde) || 0,
-                  enhet: m.enhet || 'stk', enhetspris: parseFloat(m.enhetspris) || 0,
-                  totalMengde: (parseFloat(m.mengde) || 0) * (r.materialMengde || safeMengde(bd.mengde, 1))
-                })),
-                dbProsent: r.dbProsent
-              })
-            })
-          })
-
-          const addWorkdays = (fromDate, days) => {
-            const d = new Date(fromDate + 'T12:00:00')
-            // Først: hopp over helg om startdatoen er lørdag/søndag
-            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
-            let added = 0
-            while (added < Math.max(days, 0)) {
-              d.setDate(d.getDate() + 1)
-              if (d.getDay() !== 0 && d.getDay() !== 6) added++
-            }
-            return d
-          }
-
-          // Generer liste med N arbeidsdager fra startdato (ekskl. helger)
-          const getWorkdayList = (fromDate, numDays) => {
-            const dates = []
-            const d = new Date(fromDate + 'T12:00:00')
-            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
-            dates.push(d.toISOString().split('T')[0])
-            for (let i = 1; i < numDays; i++) {
-              d.setDate(d.getDate() + 1)
-              while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
-              dates.push(d.toISOString().split('T')[0])
-            }
-            return dates
-          }
-
-          // ── Prosjektvalg popup ──
-          const getProjId = () => k.project_id || selectedProject || null
-
-          const handleAction = (action) => {
-            const projId = getProjId()
-            if (!projId) { setShowProjectPicker(action); return }
-            if (action === 'ressurs') doSendRessursplan(projId)
-            else doGenererLevering(projId)
-          }
-
-          // ── Send til ressursplan (resource_plans) ──
-          const doSendRessursplan = async (projId) => {
-            setSending(true)
-            try {
-              const plans = []
-              const useEmployees = tildelingsmodus === 'ansatte' && selectedEmployees.length > 0
-              const placeholderIds = {} // Gjenbruk UUID per mann-nummer
-
-              for (const bd of bdPlan) {
-                const bdStartD = addWorkdays(startDato, Math.floor(bd.startDag))
-                const bdStartStr = bdStartD.toISOString().split('T')[0]
-                const dager = Math.max(Math.ceil(bd.dager), 1)
-                const workDates = getWorkdayList(bdStartStr, dager)
-
-                if (useEmployees) {
-                  for (const dateStr of workDates) {
-                    for (const empId of selectedEmployees) {
-                      plans.push({
-                        resource_id: empId, resource_type: 'employee', project_id: projId,
-                        date: dateStr, hours: timerPerDag,
-                        notes: `📐 ${bd.name} (fra kalkyle)`,
-                        created_by: user?.id
-                      })
-                    }
-                  }
-                } else {
-                  for (let mannNr = 1; mannNr <= antallMann; mannNr++) {
-                    // Gjenbruk samme placeholder-ID per mann på tvers av bygningsdeler
-                    if (!placeholderIds[mannNr]) placeholderIds[mannNr] = crypto.randomUUID()
-                    for (const dateStr of workDates) {
-                      plans.push({
-                        resource_id: placeholderIds[mannNr],
-                        resource_type: 'employee',
-                        project_id: projId,
-                        date: dateStr, hours: timerPerDag,
-                        notes: `📐 ${bd.name} (fra kalkyle) | Ressurs ${mannNr}`,
-                        created_by: user?.id
-                      })
-                    }
-                  }
-                }
-              }
-
-              // Insert i batches
-              for (let i = 0; i < plans.length; i += 200) {
-                const batch = plans.slice(i, i + 200)
-                const { error } = await supabase.from('resource_plans').insert(batch)
-                if (error) throw error
-              }
-              setSent({ type: 'ressurs', count: plans.length, mode: useEmployees ? 'ansatte' : 'placeholder' })
-            } catch (e) { alert('Feil: ' + e.message) }
-            finally { setSending(false) }
-          }
-
-          // ── Generer leveringsplan (resource_plans med type material) ──
-          const doGenererLevering = async (projId) => {
-            setSending(true)
-            try {
-              const matPlans = []
-              for (const bd of bdPlan) {
-                if (bd.materialer.length === 0) continue
-                const faseStart = addWorkdays(startDato, Math.floor(bd.startDag))
-                const leveringsDato = new Date(faseStart)
-                leveringsDato.setDate(leveringsDato.getDate() - leveringsdager)
-                while (leveringsDato.getDay() === 0 || leveringsDato.getDay() === 6) leveringsDato.setDate(leveringsDato.getDate() - 1)
-
-                const matListe = bd.materialer.map(m =>
-                  `${m.nobb ? m.nobb + ' ' : ''}${m.varenavn}: ${m.totalMengde.toFixed(1)} ${m.enhet}`
-                ).join('\n')
-
-                matPlans.push({
-                  resource_id: crypto.randomUUID(),
-                  resource_type: 'employee',
-                  project_id: projId,
-                  date: leveringsDato.toISOString().split('T')[0],
-                  hours: 0,
-                  notes: `📦 Levering: ${bd.name}\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\n${matListe}`,
-                  created_by: user?.id
-                })
-              }
-
-              if (matPlans.length === 0) { alert('Ingen bygningsdeler med materialer'); setSending(false); return }
-
-              const { error } = await supabase.from('resource_plans').insert(matPlans)
-              if (error) throw error
-              setSent({ type: 'levering', count: matPlans.length })
-            } catch (e) { alert('Feil: ' + e.message) }
-            finally { setSending(false) }
-          }
-
-          // ── Suksessvisning ──
-          if (sent) return (
-            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'32px', textAlign:'center' }}>
-                <div style={{ fontSize:'48px', marginBottom:'16px' }}>{sent.type === 'ressurs' ? '📅' : '📦'}</div>
-                <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>
-                  {sent.type === 'ressurs' ? 'Sendt til ressursplan!' : 'Leveringsplan opprettet!'}
-                </h3>
-                <p style={{ margin:'0 0 8px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
-                  {sent.type === 'ressurs'
-                    ? sent.mode === 'ansatte'
-                      ? `${sent.count} bookinger opprettet for ${selectedEmployees.length} ansatt${selectedEmployees.length > 1 ? 'e' : ''}.`
-                      : `${sent.count} reservasjoner opprettet for ${antallMann} mann.`
-                    : `${sent.count} materialleveranse${sent.count > 1 ? 'r' : ''} lagt til i ressursplanen.`}
-                </p>
-                <p style={{ margin:'0 0 24px', color:'#94a3b8', fontSize:'13px' }}>
-                  {sent.type === 'ressurs'
-                    ? sent.mode === 'ansatte'
-                      ? 'Åpne ressursplanleggeren for å se og justere bookingene.'
-                      : 'Åpne ressursplanleggeren for å se reservasjonene. Du kan tildele navngitte ansatte der.'
-                    : 'Åpne ressursplanleggeren og klikk «📦 Materiell» for å se leveringsplanen.'}
-                </p>
-                <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
-                  <button onClick={onClose} style={{ padding:'10px 24px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Lukk</button>
-                  <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ressursplan') }}
-                    style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
-                    → Åpne ressursplan
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-
-          // ── Prosjektvalg popup ──
-          if (showProjectPicker) return (
-            <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={() => setShowProjectPicker(null)} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
-                <div style={{ padding:'24px', textAlign:'center' }}>
-                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>⚠️</div>
-                  <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Kalkylen er ikke koblet til et prosjekt</h3>
-                  <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
-                    For å {showProjectPicker === 'ressurs' ? 'sende til ressursplan' : 'generere leveringsplan'} må kalkylen kobles til et prosjekt. Velg et eksisterende prosjekt eller opprett et nytt.
-                  </p>
-                  <div style={{ textAlign:'left', marginBottom:'16px' }}>
-                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Velg eksisterende prosjekt</label>
-                    <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
-                      <option value="">Velg prosjekt...</option>
-                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ display:'flex', gap:'10px' }}>
-                    <button onClick={() => setShowProjectPicker(null)}
-                      style={{ flex:1, padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
-                    {selectedProject ? (
-                      <button onClick={() => { const action = showProjectPicker; setShowProjectPicker(null); if (action === 'ressurs') doSendRessursplan(selectedProject); else doGenererLevering(selectedProject) }}
-                        style={{ flex:2, padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>Bruk valgt prosjekt →</button>
-                    ) : (
-                      <button onClick={() => { setShowProjectPicker(null); onClose(); if (typeof onNavigate === 'function') onNavigate('prosjekter') }}
-                        style={{ flex:2, padding:'12px', background:'#f59e0b', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>+ Opprett nytt prosjekt</button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )
-
-          return (
-            <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'800px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
-                <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <h3 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📅 Planlegg prosjekt</h3>
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-                  </div>
-                  <p style={{ margin:'6px 0 0', fontSize:'13px', color:'#64748b' }}>{k.title} — {totalTimer.toFixed(0)} timer totalt</p>
-                </div>
-
-                <div style={{ overflowY:'auto', flex:1, padding:'20px 24px' }}>
-                  {/* Bemanning input */}
-                  <div style={{ display:'flex', gap:'16px', marginBottom:'20px', padding:'16px', background:'#f8fafc', borderRadius:'12px', flexWrap:'wrap' }}>
-                    <div style={{ flex:1, minWidth:'120px' }}>
-                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Antall mann</label>
-                      <input type="number" min="1" max="50" value={antallMann} onChange={e => setAntallMann(parseInt(e.target.value) || 1)} style={{ ...qInp, textAlign:'center', fontWeight:'700', fontSize:'18px', color:'#059669' }} />
-                    </div>
-                    <div style={{ flex:1, minWidth:'120px' }}>
-                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Timer per dag</label>
-                      <input type="number" min="1" max="12" step="0.5" value={timerPerDag} onChange={e => setTimerPerDag(parseFloat(e.target.value) || 7.5)} style={{ ...qInp, textAlign:'center', fontWeight:'700', fontSize:'18px' }} />
-                    </div>
-                    <div style={{ flex:1, minWidth:'140px' }}>
-                      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Ønsket oppstart</label>
-                      <input type="date" value={startDato} onChange={e => setStartDato(e.target.value)} style={{ ...qInp, fontWeight:'600' }} />
-                    </div>
-                  </div>
-
-                  {/* Resultat-boks */}
-                  <div style={{ display:'flex', gap:'12px', marginBottom:'20px', flexWrap:'wrap' }}>
-                    <div style={{ flex:1, background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
-                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>TOTAL TID</div>
-                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{totalTimer.toFixed(0)} t</div>
-                    </div>
-                    <div style={{ flex:1, background:'#eff6ff', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
-                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>ARBEIDSDAGER</div>
-                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#2563eb' }}>{Math.ceil(dagerTotalt)}</div>
-                    </div>
-                    <div style={{ flex:1, background:'#faf5ff', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
-                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>UKER</div>
-                      <div style={{ fontSize:'22px', fontWeight:'800', color:'#7c3aed' }}>{ukerTotalt.toFixed(1)}</div>
-                    </div>
-                    <div style={{ flex:1, background:'#fefce8', borderRadius:'10px', padding:'14px', textAlign:'center', minWidth:'100px' }}>
-                      <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>FERDIG CA.</div>
-                      <div style={{ fontSize:'16px', fontWeight:'800', color:'#ca8a04' }}>{addWorkdays(startDato, Math.ceil(dagerTotalt)).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric' })}</div>
-                    </div>
-                  </div>
-
-                  {/* Fremdriftsplan visuell */}
-                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>Fremdriftsplan</div>
-                  <div style={{ marginBottom:'20px' }}>
-                    {bdPlan.map((bd, i) => {
-                      const barStart = dagerTotalt > 0 ? (bd.startDag / dagerTotalt) * 100 : 0
-                      const barWidth = dagerTotalt > 0 ? Math.max((bd.dager / dagerTotalt) * 100, 2) : 0
-                      return (
-                        <div key={i} style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px', fontSize:'12px' }}>
-                          <div style={{ width:'180px', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                            <span>{bd.emoji} </span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bd.name}</span>
-                          </div>
-                          <div style={{ flex:1, height:'22px', background:'#f1f5f9', borderRadius:'6px', position:'relative', overflow:'hidden' }}>
-                            <div style={{ position:'absolute', left: barStart + '%', width: barWidth + '%', height:'100%', background: bd.dbProsent >= 25 ? '#059669' : bd.dbProsent >= 15 ? '#ca8a04' : '#dc2626', borderRadius:'6px', opacity:0.8, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                              <span style={{ fontSize:'9px', color:'white', fontWeight:'700', whiteSpace:'nowrap' }}>{bd.timer.toFixed(0)}t</span>
-                            </div>
-                          </div>
-                          <div style={{ width:'110px', flexShrink:0, textAlign:'right', color:'#64748b', fontSize:'11px' }}>uke {bd.startUke}{bd.sluttUke !== bd.startUke ? `–${bd.sluttUke}` : ''}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Detaljert tabell */}
-                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>Detaljert tidsplan</div>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px', marginBottom:'20px' }}>
-                    <thead><tr style={{ background:'#f8fafc' }}>
-                      <th style={{ padding:'8px', textAlign:'left', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Bygningsdel</th>
-                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Timer</th>
-                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Dager</th>
-                      <th style={{ padding:'8px', textAlign:'left', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Periode</th>
-                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>Materialer</th>
-                      <th style={{ padding:'8px', textAlign:'right', fontWeight:'600', color:'#64748b', borderBottom:'1px solid #e2e8f0' }}>DB%</th>
-                    </tr></thead>
-                    <tbody>
-                      {bdPlan.map((bd, i) => {
-                        const startD = addWorkdays(startDato, Math.floor(bd.startDag))
-                        const sluttD = addWorkdays(startDato, Math.ceil(bd.sluttDag))
-                        return (
-                          <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
-                            <td style={{ padding:'6px 8px', fontWeight:'500' }}>{bd.emoji} {bd.name}</td>
-                            <td style={{ padding:'6px 8px', textAlign:'right' }}>{bd.timer.toFixed(1)} t</td>
-                            <td style={{ padding:'6px 8px', textAlign:'right' }}>{Math.ceil(bd.dager)} d</td>
-                            <td style={{ padding:'6px 8px', color:'#64748b' }}>{startD.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })} – {sluttD.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}</td>
-                            <td style={{ padding:'6px 8px', textAlign:'right', color:'#64748b' }}>{bd.materialer.length} poster</td>
-                            <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'600', color: bd.dbProsent >= 25 ? '#16a34a' : bd.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{bd.dbProsent.toFixed(1)}%</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Footer med tildelingsvalg */}
-                <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
-                  {/* Tildelingsmodus */}
-                  <div style={{ marginBottom:'12px' }}>
-                    <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'6px' }}>Tildeling av ansatte</label>
-                    <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
-                      <button onClick={() => setTildelingsmodus('ansatte')}
-                        style={{ flex:1, padding:'10px 14px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center',
-                          border: tildelingsmodus === 'ansatte' ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                          background: tildelingsmodus === 'ansatte' ? '#eff6ff' : 'white',
-                          color: tildelingsmodus === 'ansatte' ? '#2563eb' : '#64748b' }}>
-                        👷 Velg ansatte<br/><span style={{ fontSize:'10px', fontWeight:'400' }}>Jeg vet hvem som skal jobbe</span>
-                      </button>
-                      <button onClick={() => setTildelingsmodus('reserver')}
-                        style={{ flex:1, padding:'10px 14px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center',
-                          border: tildelingsmodus === 'reserver' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
-                          background: tildelingsmodus === 'reserver' ? '#fefce8' : 'white',
-                          color: tildelingsmodus === 'reserver' ? '#b45309' : '#64748b' }}>
-                        📋 Reserver kapasitet<br/><span style={{ fontSize:'10px', fontWeight:'400' }}>Bestemmes senere ({antallMann} mann reserveres)</span>
-                      </button>
-                    </div>
-
-                    {/* Ansattvelger (kun synlig i ansatte-modus) */}
-                    {tildelingsmodus === 'ansatte' && (() => {
-                      const EmpPicker = () => {
-                        const [empList, setEmpList] = useState([])
-                        const [loadingEmp, setLoadingEmp] = useState(true)
-                        const [isOpen, setIsOpen] = useState(false)
-                        const [errMsg, setErrMsg] = useState('')
-                        useEffect(() => {
-                          supabase.from('employees').select('*').order('first_name')
-                            .then(({ data, error }) => {
-                              if (error) { console.error('EmpPicker error:', error); setErrMsg(error.message) }
-                              setEmpList(data || [])
-                              setLoadingEmp(false)
-                            })
-                            .catch(e => { console.error('EmpPicker catch:', e); setErrMsg(e.message); setLoadingEmp(false) })
-                        }, [])
-
-                        if (loadingEmp) return <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Laster ansatte...</div>
-                        if (errMsg) return <div style={{ padding:'12px', background:'#fef2f2', borderRadius:'8px', fontSize:'12px', color:'#dc2626', marginBottom:'8px' }}>Feil ved lasting av ansatte: {errMsg}</div>
-                        if (empList.length === 0) return (
-                          <div style={{ padding:'12px', background:'#fefce8', borderRadius:'8px', fontSize:'12px', color:'#92400e', textAlign:'center', marginBottom:'8px' }}>
-                            Ingen ansatte funnet i databasen. <span onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ansatte') }} style={{ textDecoration:'underline', cursor:'pointer', fontWeight:'700' }}>Gå til Ansatte-modulen →</span>
-                          </div>
-                        )
-
-                        const selectedNames = empList.filter(e => selectedEmployees.includes(e.id)).map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim())
-
-                        return (
-                          <div style={{ marginBottom:'8px' }}>
-                            {/* Dropdown trigger */}
-                            <div onClick={() => setIsOpen(!isOpen)}
-                              style={{ padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', minHeight:'42px' }}>
-                              <div style={{ flex:1, fontSize:'13px', color: selectedNames.length > 0 ? '#0f172a' : '#94a3b8' }}>
-                                {selectedNames.length > 0 ? selectedNames.join(', ') : 'Klikk for å velge ansatte...'}
-                              </div>
-                              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'8px' }}>{isOpen ? '▲' : '▼'}</span>
-                            </div>
-
-                            {/* Dropdown liste */}
-                            {isOpen && (
-                              <div style={{ border:'1px solid #e2e8f0', borderTop:'none', borderRadius:'0 0 10px 10px', background:'white', maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}>
-                                {/* Velg alle / Fjern alle */}
-                                <div style={{ padding:'6px 12px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', background:'#f8fafc' }}>
-                                  <button onClick={() => setSelectedEmployees(empList.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
-                                  <button onClick={() => setSelectedEmployees([])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#dc2626', fontWeight:'600' }}>Fjern alle</button>
-                                </div>
-                                {empList.map(emp => {
-                                  const empName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Uten navn'
-                                  const isSelected = selectedEmployees.includes(emp.id)
-                                  return (
-                                    <label key={emp.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f8fafc', background: isSelected ? '#f0fdf4' : 'white', transition:'background 0.1s' }}
-                                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background='#f8fafc' }} onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background='white' }}>
-                                      <input type="checkbox" checked={isSelected}
-                                        onChange={() => setSelectedEmployees(prev => isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
-                                        style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669', flexShrink:0 }} />
-                                      <div style={{ flex:1, minWidth:0 }}>
-                                        <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
-                                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{[emp.role, emp.department].filter(Boolean).join(' · ') || emp.email || ''}</div>
-                                      </div>
-                                      {isSelected && <span style={{ color:'#059669', fontSize:'14px', flexShrink:0 }}>✓</span>}
-                                    </label>
-                                  )
-                                })}
-                              </div>
-                            )}
-
-                            {selectedEmployees.length > 0 && (
-                              <div style={{ fontSize:'12px', color:'#059669', fontWeight:'700', marginTop:'6px' }}>
-                                ✅ {selectedEmployees.length} ansatt{selectedEmployees.length > 1 ? 'e' : ''} valgt
-                              </div>
-                            )}
-                          </div>
-                        )
-                      }
-                      return <EmpPicker />
-                    })()}
-
-                    {tildelingsmodus === 'reserver' && (
-                      <div style={{ padding:'8px 12px', background:'#fefce8', borderRadius:'8px', marginBottom:'8px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
-                        💡 Det reserveres kapasitet for <strong>{antallMann} mann</strong> i ressursplanen. Du kan tildele navngitte ansatte senere ved å dra bookingene over til riktige personer.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Levering */}
-                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-end' }}>
-                    <div style={{ width:'180px' }}>
-                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering før oppstart (dager)</label>
-                      <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, textAlign:'center' }} />
-                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px' }}>Materialer leveres {leveringsdager} dager før arbeidet starter</div>
-                    </div>
-                  </div>
-
-                  {/* Knapper */}
-                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
-                    <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
-                    <div style={{ flex:1 }} />
-                    <button onClick={() => handleAction('ressurs')} disabled={sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0)}
-                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px',
-                        background: sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0) ? '#94a3b8' : '#2563eb',
-                        color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
-                      {sending ? '⏳ Sender...' : tildelingsmodus === 'ansatte' ? `📅 Send til ressursplan (${selectedEmployees.length} ansatte)` : `📅 Reserver i ressursplan (${antallMann} mann)`}
-                    </button>
-                    <button onClick={() => handleAction('levering')} disabled={sending}
-                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px', background: sending ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
-                      {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan`}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )
-        }
-        return <PlanleggModal onClose={() => setShowPlanlegg(false)} />
-      })()}
-
       {/* UE forespørsel sendt popup */}
       {showUESuccess && (
         <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -28111,54 +27575,41 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             setHasSearched(true)
 
             try {
-              // Build category keywords array if a category is selected
-              let catKeywords = null
-              if (katId) {
+              let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
+              if (plId) query = query.eq('prisliste_id', plId)
+              else query = query.eq('user_id', user?.id)
+
+              if (term.length >= 2 && katId) {
+                // Text + category: each word must match AND category keyword
                 const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                catKeywords = katObj?.keywords || null
-              }
-
-              // Try fast RPC function first
-              const { data, error } = await supabase.rpc('search_prisbok', {
-                p_search_term: term.length >= 2 ? term : '',
-                p_prisliste_id: plId || null,
-                p_user_id: plId ? null : user?.id,
-                p_category_keywords: catKeywords,
-                p_limit: 40
-              })
-
-              if (!error && data) {
-                if (searchRef.current === searchId) setRes(data)
-              } else {
-                // Fallback: old ilike method if RPC not available yet
-                let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
-                if (plId) query = query.eq('prisliste_id', plId)
-                else query = query.eq('user_id', user?.id)
-
-                if (term.length >= 2 && katId) {
-                  const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                  const kw = katObj?.keywords || []
-                  const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                  query = query.or(catFilters)
-                  const words = term.split(/\s+/).filter(w => w.length >= 2)
-                  words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
-                } else if (term.length >= 2) {
-                  const words = term.split(/\s+/).filter(w => w.length >= 1)
-                  if (words.length === 1 && /^\d+$/.test(words[0])) {
-                    query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
-                  } else {
-                    words.filter(w => w.length >= 2).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
-                  }
-                } else if (katId) {
-                  const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                  const kw = katObj?.keywords || []
-                  const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                  query = query.or(catFilters)
+                const kw = katObj?.keywords || []
+                const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
+                query = query.or(catFilters)
+                const words = term.split(/\s+/).filter(w => w.length >= 2)
+                words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+              } else if (term.length >= 2) {
+                // Text only: split into words, each word must match in varenavn
+                // First check if it looks like a NOBB number (all digits)
+                const words = term.split(/\s+/).filter(w => w.length >= 1)
+                if (words.length === 1 && /^\d+$/.test(words[0])) {
+                  query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+                } else {
+                  words.filter(w => w.length >= 2).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
                 }
-
-                const { data: fbData } = await query.order('varenavn').limit(40)
-                if (searchRef.current === searchId) setRes(fbData || [])
+              } else if (katId) {
+                // Category only - show first keyword results
+                const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
+                const kw = katObj?.keywords || []
+                const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
+                query = query.or(catFilters)
               }
+
+              const { data, error } = await query.order('varenavn').limit(40)
+
+              // Only update if this is still the latest search
+              if (searchRef.current !== searchId) return
+              if (!error) setRes(data || [])
+              else setRes([])
             } catch(e) { if (searchRef.current === searchId) setRes([]) }
             if (searchRef.current === searchId) setSearching(false)
           }
@@ -28166,7 +27617,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // Debounced search
           useEffect(() => {
             if (q.trim().length < 2 && !activeKat) { setRes([]); setHasSearched(false); return }
-            const timer = setTimeout(() => doSearch(q, activeKat), 250)
+            const timer = setTimeout(() => doSearch(q, activeKat), 500)
             return () => clearTimeout(timer)
           }, [q, activeKat])
 
@@ -28215,16 +27666,10 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                       <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'55px', flexShrink:0 }}>{p.varenummer}</span>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:'12px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
-                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>
-                          {p.kategori}
-                          {p.pakn_str ? <span style={{ marginLeft:'6px', color:'#059669', fontWeight:'600' }}>({p.pakn_str} {p.pakn_enhet}/{p.original_enhet || 'pk'})</span> : ''}
-                        </div>
+                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{p.kategori}</div>
                       </div>
                       <span style={{ fontSize:'11px', color:'#64748b', flexShrink:0, width:'28px', textAlign:'center' }}>{p.enhet}</span>
-                      <div style={{ flexShrink:0, width:'90px', textAlign:'right' }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#059669' }}>{fmt(p.pris_per_enhet)}</div>
-                        {p.original_pris && p.original_pris !== p.pris_per_enhet ? <div style={{ fontSize:'9px', color:'#94a3b8' }}>{Math.round(p.original_pris)} kr/{p.original_enhet || 'pk'}</div> : null}
-                      </div>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
                     </button>
                   ))}
                   {res.length >= 40 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 40 treff — skriv mer spesifikt</div>}
@@ -28361,7 +27806,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       const kt = beregnKalkyle(kl, fakt)
       const bdLines = (visning === 'bygningsdel' || visning === 'detaljert') ? (kl.bygningsdeler || []).map(bd => {
         const bdt = beregnBygningsdel(bd, fakt)
-        const mengde = safeMengde(bd.mengde, 1)
+        const mengde = parseFloat(bd.mengde) || 1
         const detailLines = visning === 'detaljert' ? [
           ...(bd.arbeidsarter || []).map(a => {
             const r = beregnArbeidskostnad(a, fakt)
@@ -28821,7 +28266,7 @@ function AppContent() {
     prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke', sjekklister: 'grunnpakke',
     avvik: 'grunnpakke', hms: 'grunnpakke', maskiner: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
     kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
-    ansatte: 'grunnpakke', timelister: 'timelister', ressursplan: 'ressursplan',
+    ansatte: 'ansatte', timelister: 'timelister', ressursplan: 'ressursplan',
     kalender: 'kalender', chat: 'chat',
     befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
     minbedrift: null, brukeradmin: null, superadmin: null, // admin always accessible
