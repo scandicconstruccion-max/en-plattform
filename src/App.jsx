@@ -14516,7 +14516,10 @@ function RessursPage() {
   const [plans, setPlans] = useState([])
   const [milestones, setMilestones] = useState([])
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState('uke')
+  // ── DEPRECATED 2026-04-18: viewMode låst til 'gantt'. Kalendervisning (uke/14/maned) er fjernet fra UI.
+  // Koden som håndterer uke/14/maned kjøres aldri lenger men er beholdt for å unngå regresjoner.
+  const viewMode = 'gantt'
+  const setViewMode = () => {} // no-op for å unngå krasj hvis noe kaller den
   const [resourceType, setResourceType] = useState('ansatte')
   const [currentDate, setCurrentDate] = useState(startOfWeek(new Date().toISOString().split('T')[0]))
   const [showBookingModal, setShowBookingModal] = useState(null)
@@ -14851,29 +14854,16 @@ function RessursPage() {
             ))}
           </div>
 
-          {/* Visningsmodus toggle */}
-          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', flexShrink:0 }}>
-            {[['uke','Uke'],['14','14d'],['maned','Måned'],['gantt','Gantt']].map(([v,l],idx,arr)=>(
-              <button key={v} onClick={()=>{
-                setViewMode(v)
-                if (v==='maned') setCurrentDate(startOfMonth(new Date().toISOString().split('T')[0]))
-                else if (v==='uke') setCurrentDate(startOfWeek(new Date().toISOString().split('T')[0]))
-                else if (v==='gantt') setGanttAnchor(startOfWeek(new Date().toISOString().split('T')[0]))
-              }}
-                style={{ padding:'6px 12px',border:'none',background:viewMode===v?(v==='gantt'?'#7c3aed':'#0f172a'):'white',color:viewMode===v?'white':'#64748b',fontWeight:viewMode===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:idx<arr.length-1?'1px solid #e2e8f0':'none' }}>{l}</button>
-            ))}
-          </div>
+          {/* Visningsmodus toggle — fjernet 2026-04-18. Gantt er nå eneste visning, styres av ganttZoom-dropdown nedenfor */}
 
-          {/* Gantt zoom (kun gantt) */}
-          {viewMode==='gantt' && (
-            <select value={ganttZoom} onChange={e=>setGanttZoom(e.target.value)}
-              style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',fontWeight:'500',minWidth:'90px' }}>
-              <option value="days">Dager</option>
-              <option value="weeks">Uker</option>
-              <option value="months">Måneder</option>
-              <option value="quarters">Kvartaler</option>
-            </select>
-          )}
+          {/* Gantt zoom — eneste visningsvelger */}
+          <select value={ganttZoom} onChange={e=>setGanttZoom(e.target.value)}
+            style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',fontWeight:'500',minWidth:'90px' }}>
+            <option value="days">Dager</option>
+            <option value="weeks">Uker</option>
+            <option value="months">Måneder</option>
+            <option value="quarters">Kvartaler</option>
+          </select>
 
           {/* Prosjekt-filter */}
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
@@ -14900,23 +14890,23 @@ function RessursPage() {
             <div style={{ position:'relative' }}>
               <button onClick={()=>setShowDatePicker(v=>!v)}
                 style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#0f172a',minWidth:'140px' }}>
-                {viewMode==='maned'
-                  ? new Date(currentDate+'T12:00:00').toLocaleDateString('nb-NO',{month:'long',year:'numeric'})
-                  : viewMode==='gantt'
-                    ? new Date(ganttAnchor+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})+' →'
-                    : `${new Date(currentDate+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})} – ${(()=>{const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+(viewMode==='uke'?6:13));return d.toLocaleDateString('nb-NO',{day:'numeric',month:'short'})})()}`}
+                {(() => {
+                  const d = new Date(ganttAnchor+'T12:00:00')
+                  if (ganttZoom === 'months' || ganttZoom === 'quarters') {
+                    return d.toLocaleDateString('nb-NO',{month:'long',year:'numeric'})
+                  }
+                  return d.toLocaleDateString('nb-NO',{day:'numeric',month:'short',year:'numeric'}) + ' →'
+                })()}
               </button>
               {showDatePicker && (
                 <>
                   <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowDatePicker(false)} />
                   <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,padding:'14px',minWidth:'240px' }}>
                     <div style={{ fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'8px' }}>GÅ TIL DATO</div>
-                    <input type="date" value={viewMode==='gantt'?ganttAnchor:currentDate}
+                    <input type="date" value={ganttAnchor}
                       onChange={e=>{
                         const d=e.target.value
-                        if (viewMode==='gantt') setGanttAnchor(startOfWeek(d))
-                        else if (viewMode==='maned') setCurrentDate(startOfMonth(d))
-                        else setCurrentDate(startOfWeek(d))
+                        if (d) setGanttAnchor(startOfWeek(d))
                         setShowDatePicker(false)
                       }}
                       style={{ width:'100%',padding:'8px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',boxSizing:'border-box' }} />
