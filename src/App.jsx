@@ -27684,44 +27684,76 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     </div>
 
                     {/* Ansattvelger (kun synlig i ansatte-modus) */}
-                    {tildelingsmodus === 'ansatte' && (
-                      <div style={{ padding:'10px 12px', background:'#f8fafc', borderRadius:'8px', marginBottom:'8px' }}>
-                        <div style={{ fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'6px' }}>Velg ansatte som skal jobbe på prosjektet:</div>
-                        {employees.length > 0 ? (
-                          <div style={{ maxHeight:'160px', overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white' }}>
-                            {employees.map(emp => {
-                              const empName = emp.first_name ? `${emp.first_name} ${emp.last_name || ''}`.trim() : (emp.name || 'Uten navn')
-                              const isSelected = selectedEmployees.includes(emp.id)
-                              return (
-                                <label key={emp.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f8fafc', background: isSelected ? '#f0fdf4' : 'white' }}>
-                                  <input type="checkbox" checked={isSelected} onChange={() => setSelectedEmployees(prev => isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id])} style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669' }} />
-                                  <div style={{ flex:1 }}>
-                                    <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
-                                    {emp.department && <div style={{ fontSize:'10px', color:'#94a3b8' }}>{emp.department}</div>}
-                                  </div>
-                                  {isSelected && <span style={{ fontSize:'11px', color:'#059669', fontWeight:'700' }}>✓</span>}
-                                </label>
-                              )
-                            })}
+                    {tildelingsmodus === 'ansatte' && (() => {
+                      const EmpPicker = () => {
+                        const [empList, setEmpList] = useState([])
+                        const [loadingEmp, setLoadingEmp] = useState(true)
+                        const [isOpen, setIsOpen] = useState(false)
+                        useEffect(() => {
+                          supabase.from('employees').select('id, first_name, last_name, role, department, email, phone')
+                            .order('first_name')
+                            .then(({ data }) => { setEmpList(data || []); setLoadingEmp(false) })
+                            .catch(() => setLoadingEmp(false))
+                        }, [])
+
+                        if (loadingEmp) return <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Laster ansatte...</div>
+                        if (empList.length === 0) return (
+                          <div style={{ padding:'12px', background:'#fefce8', borderRadius:'8px', fontSize:'12px', color:'#92400e', textAlign:'center', marginBottom:'8px' }}>
+                            Ingen ansatte registrert. <span onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ansatte') }} style={{ textDecoration:'underline', cursor:'pointer', fontWeight:'700' }}>Legg til ansatte →</span>
                           </div>
-                        ) : (
-                          <div style={{ padding:'12px', background:'#fefce8', borderRadius:'8px', fontSize:'12px', color:'#92400e', textAlign:'center' }}>
-                            Ingen ansatte registrert. Legg til ansatte under Ansatte-modulen først.
+                        )
+
+                        const selectedNames = empList.filter(e => selectedEmployees.includes(e.id)).map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim())
+
+                        return (
+                          <div style={{ marginBottom:'8px' }}>
+                            {/* Dropdown trigger */}
+                            <div onClick={() => setIsOpen(!isOpen)}
+                              style={{ padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', minHeight:'42px' }}>
+                              <div style={{ flex:1, fontSize:'13px', color: selectedNames.length > 0 ? '#0f172a' : '#94a3b8' }}>
+                                {selectedNames.length > 0 ? selectedNames.join(', ') : 'Klikk for å velge ansatte...'}
+                              </div>
+                              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'8px' }}>{isOpen ? '▲' : '▼'}</span>
+                            </div>
+
+                            {/* Dropdown liste */}
+                            {isOpen && (
+                              <div style={{ border:'1px solid #e2e8f0', borderTop:'none', borderRadius:'0 0 10px 10px', background:'white', maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}>
+                                {/* Velg alle / Fjern alle */}
+                                <div style={{ padding:'6px 12px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', background:'#f8fafc' }}>
+                                  <button onClick={() => setSelectedEmployees(empList.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
+                                  <button onClick={() => setSelectedEmployees([])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#dc2626', fontWeight:'600' }}>Fjern alle</button>
+                                </div>
+                                {empList.map(emp => {
+                                  const empName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Uten navn'
+                                  const isSelected = selectedEmployees.includes(emp.id)
+                                  return (
+                                    <label key={emp.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f8fafc', background: isSelected ? '#f0fdf4' : 'white', transition:'background 0.1s' }}
+                                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background='#f8fafc' }} onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background='white' }}>
+                                      <input type="checkbox" checked={isSelected}
+                                        onChange={() => setSelectedEmployees(prev => isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
+                                        style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669', flexShrink:0 }} />
+                                      <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
+                                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{[emp.role, emp.department].filter(Boolean).join(' · ') || emp.email || ''}</div>
+                                      </div>
+                                      {isSelected && <span style={{ color:'#059669', fontSize:'14px', flexShrink:0 }}>✓</span>}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {selectedEmployees.length > 0 && (
+                              <div style={{ fontSize:'12px', color:'#059669', fontWeight:'700', marginTop:'6px' }}>
+                                ✅ {selectedEmployees.length} ansatt{selectedEmployees.length > 1 ? 'e' : ''} valgt
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {selectedEmployees.length > 0 && (
-                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'6px' }}>
-                            <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>✅ {selectedEmployees.length} ansatt{selectedEmployees.length > 1 ? 'e' : ''} valgt</span>
-                            <button onClick={() => setSelectedEmployees(employees.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
-                          </div>
-                        )}
-                        {selectedEmployees.length === 0 && employees.length > 0 && (
-                          <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'4px' }}>
-                            <button onClick={() => setSelectedEmployees(employees.map(e => e.id))} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'600' }}>Velg alle</button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                        )
+                      }
+                      return <EmpPicker />
+                    })()}
 
                     {tildelingsmodus === 'reserver' && (
                       <div style={{ padding:'8px 12px', background:'#fefce8', borderRadius:'8px', marginBottom:'8px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
