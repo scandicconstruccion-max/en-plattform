@@ -22411,7 +22411,7 @@ function KalkulasjonPage({ onNavigate }) {
         } catch(e) {}
       }
     }} />}
-    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} />
+    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} onNavigate={onNavigate} />
   </>
 
   if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
@@ -25060,7 +25060,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
 
 // ─── PROSJEKT VISNING (Read-only detaljer) ───────────────────────────────────
 
-function KalkProsjektView({ kalk: init, onBack, onEdit }) {
+function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
   const confirm = useConfirm()
   const { user } = useAuth()
   const [k, setK] = useState(init)
@@ -27133,7 +27133,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 const hasIt = (data?.active_modules || []).includes('ressursplan')
                 setHasRessursplan(hasIt)
                 setLoading(false)
-                if (hasIt && !k.project_id) {
+                if (hasIt) {
+                  // Always load projects for the dropdown
                   supabase.from('projects').select('id, name, project_number').order('name').then(({ data: projData }) => setProjects(projData || []))
                 }
               })
@@ -27246,13 +27247,22 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             return d
           }
 
+          // ── Prosjektvalg popup ──
+          const [showProjectPicker, setShowProjectPicker] = useState(null) // 'ressurs' | 'levering'
+
+          const getProjId = () => k.project_id || selectedProject || null
+
+          const handleAction = (action) => {
+            const projId = getProjId()
+            if (!projId) { setShowProjectPicker(action); return }
+            if (action === 'ressurs') doSendRessursplan(projId)
+            else doGenererLevering(projId)
+          }
+
           // ── Send til ressursplan ──
-          const handleSendRessursplan = async () => {
-            const projId = k.project_id || selectedProject
-            if (!projId) return alert('Kalkylen er ikke koblet til et prosjekt')
+          const doSendRessursplan = async (projId) => {
             setSending(true)
             try {
-              // Opprett milepæler for hver bygningsdel med start/slutt-dato
               const events = []
               for (const bd of bdPlan) {
                 const startD = addWorkdays(startDato, Math.floor(bd.startDag))
@@ -27276,9 +27286,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           }
 
           // ── Generer leveringsplan med milepæler ──
-          const handleGenererLevering = async () => {
-            const projId = k.project_id || selectedProject
-            if (!projId) return alert('Kalkylen er ikke koblet til et prosjekt')
+          const doGenererLevering = async (projId) => {
             setSending(true)
             try {
               const milestones = []
@@ -27342,6 +27350,45 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               </div>
             </div>
           )
+
+          // ── Prosjektvalg popup ──
+          if (showProjectPicker) return (
+            <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={() => setShowProjectPicker(null)} />
+              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+                <div style={{ padding:'24px', textAlign:'center' }}>
+                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>⚠️</div>
+                  <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Kalkylen er ikke koblet til et prosjekt</h3>
+                  <p style={{ margin:'0 0 20px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
+                    For å {showProjectPicker === 'ressurs' ? 'sende til ressursplan' : 'generere leveringsplan'} må kalkylen kobles til et prosjekt. Velg et eksisterende prosjekt eller opprett et nytt.
+                  </p>
+                  <div style={{ textAlign:'left', marginBottom:'16px' }}>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Velg eksisterende prosjekt</label>
+                    <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
+                      <option value="">Velg prosjekt...</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display:'flex', gap:'10px' }}>
+                    <button onClick={() => setShowProjectPicker(null)}
+                      style={{ flex:1, padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
+                    <button onClick={() => { setShowProjectPicker(null); onClose(); if (typeof onNavigate === 'function') onNavigate('prosjekter') }}
+                      style={{ flex:1, padding:'12px', background:'#f59e0b', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>+ Opprett nytt prosjekt</button>
+                    {selectedProject && (
+                      <button onClick={() => { const action = showProjectPicker; setShowProjectPicker(null); if (action === 'ressurs') doSendRessursplan(selectedProject); else doGenererLevering(selectedProject) }}
+                        style={{ flex:1, padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>Bruk valgt prosjekt →</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+
+          return (
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                  </div>
+                  <p style={{ margin:'6px 0 0', fontSize:'13px', color:'#64748b' }}>{k.title} — {totalTimer.toFixed(0)} timer totalt</p>
+                </div>
 
           return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -27444,47 +27491,31 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   </table>
                 </div>
 
-                {/* Footer — forenklet flyt */}
+                {/* Footer */}
                 <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
-                  {/* Prosjekt — automatisk fra kalkyle eller velg */}
-                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-end', flexWrap:'wrap' }}>
-                    <div style={{ flex:1, minWidth:'200px' }}>
-                      <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Prosjekt</label>
-                      {k.project_id ? (
-                        <div style={{ padding:'10px 12px', background:'#f0fdf4', borderRadius:'10px', fontSize:'13px', color:'#059669', fontWeight:'600', border:'1px solid #bbf7d0' }}>
-                          ✅ Koblet til prosjekt fra kalkylen
-                          <input type="hidden" value={k.project_id} />
-                        </div>
-                      ) : (
-                        <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)} style={{ ...qInp, width:'100%' }}>
-                          <option value="">Velg prosjekt...</option>
-                          {projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                        </select>
-                      )}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-start' }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', lineHeight:1.5 }}>
+                        <strong>Send til ressursplan:</strong> Oppretter arbeidsperioder per bygningsdel i kalenderen. Fordel ansatte i ressursplanen etterpå.<br/>
+                        <strong>Generer leveringsplan:</strong> Oppretter milepæler med materiallister {leveringsdager} dager før hver fase starter.
+                      </div>
                     </div>
-                    <div style={{ width:'180px' }}>
+                    <div style={{ width:'180px', flexShrink:0 }}>
                       <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering før oppstart (dager)</label>
                       <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, textAlign:'center' }} />
-                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px' }}>Materialer bør leveres {leveringsdager} arbeidsdager før arbeidet starter</div>
+                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px' }}>Materialer leveres {leveringsdager} dager før arbeidet starter</div>
                     </div>
                   </div>
-
-                  {/* Info-tekst */}
-                  <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'10px', lineHeight:1.5 }}>
-                    <strong>Send til ressursplan:</strong> Oppretter {Math.ceil(dagerTotalt)} arbeidsdager med {timerPerDag}t/dag på prosjektet. Fordel ansatte i ressursplanen etterpå.<br/>
-                    <strong>Generer leveringsplan:</strong> Oppretter milepæler i kalenderen med materiallister {leveringsdager} dager før hver fase starter.
-                  </div>
-
-                  {/* Knapper */}
-                  <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap' }}>
-                    <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>Lukk</button>
-                    <button onClick={handleSendRessursplan} disabled={sending || !(k.project_id || selectedProject)}
-                      style={{ padding:'10px 20px', background: sending || !(k.project_id || selectedProject) ? '#94a3b8' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
-                      {sending ? '⏳ Sender...' : `📅 Send til ressursplan (${antallMann} mann × ${Math.ceil(dagerTotalt)} dager)`}
+                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
+                    <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
+                    <div style={{ flex:1 }} />
+                    <button onClick={() => handleAction('ressurs')} disabled={sending}
+                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px', background: sending ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
+                      {sending ? '⏳ Sender...' : `📅 Send til ressursplan`}
                     </button>
-                    <button onClick={handleGenererLevering} disabled={sending || !(k.project_id || selectedProject)}
-                      style={{ padding:'10px 20px', background: sending || !(k.project_id || selectedProject) ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
-                      {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan (${bdPlan.filter(b => b.materialer.length > 0).length} faser)`}
+                    <button onClick={() => handleAction('levering')} disabled={sending}
+                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px', background: sending ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
+                      {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan`}
                     </button>
                   </div>
                 </div>
