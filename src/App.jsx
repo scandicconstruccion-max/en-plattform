@@ -410,6 +410,26 @@ function Modal({ open, onClose, title, children, size }) {
   )
 }
 
+function InfoTip({ label, info, align }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:'2px' }}>
+      {label}
+      <span onClick={e => { e.stopPropagation(); setOpen(!open) }}
+        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'13px', height:'13px', borderRadius:'50%', background: open ? '#059669' : '#e2e8f0', color: open ? 'white' : '#94a3b8', fontSize:'8px', fontWeight:'800', cursor:'pointer', lineHeight:1, flexShrink:0, userSelect:'none' }}>i</span>
+      {open && (
+        <>
+          <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setOpen(false)} />
+          <div style={{ position:'absolute', top:'100%', [align === 'right' ? 'right' : 'left']:0, marginTop:'4px', background:'#0f172a', color:'white', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', lineHeight:1.5, width:'260px', zIndex:51, boxShadow:'0 8px 24px rgba(0,0,0,0.25)' }}>
+            {info}
+            <div style={{ position:'absolute', top:'-4px', [align === 'right' ? 'right' : 'left']:'10px', width:'8px', height:'8px', background:'#0f172a', transform:'rotate(45deg)' }} />
+          </div>
+        </>
+      )}
+    </span>
+  )
+}
+
 // ── Gjenbrukbar ansattvelger med dropdown ──
 function EmployeeSelect({ value, onChange, placeholder, style, required, allowClear }) {
   const [emps, setEmps] = useState([])
@@ -26626,6 +26646,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
+                              <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
                                 <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>
@@ -26821,6 +26842,16 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               {/* Materialer - editable */}
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
+                                {bdT.totalApningsareal > 0 && (
+                                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background:'#eff6ff', borderRadius:'8px', fontSize:'11px', flexWrap:'wrap' }}>
+                                    <span style={{ color:'#2563eb' }}>🚪 Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} trekkes fra</span>
+                                    <span style={{ color:'#64748b' }}>→ Materialer beregnes for <strong>{bdT.materialMengde.toFixed(1)} {bd.enhet || 'm²'}</strong> (ikke {bd.mengde})</span>
+                                    <label style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer', flexShrink:0 }}>
+                                      <input type="checkbox" checked={bd.fradrag_apninger !== false} onChange={e => updateBdField(kalk.id, bd.id, 'fradrag_apninger', e.target.checked)} style={{ cursor:'pointer' }} />
+                                      <span style={{ fontSize:'10px', color:'#64748b' }}>Aktiv</span>
+                                    </label>
+                                  </div>
+                                )}
                                 {(bd.materialer||[]).length > 0 && (
                                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead><tr>
@@ -26832,6 +26863,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                       {(bd.materialer||[]).map(m => {
                                         const r = beregnMaterialkostnad(m, fakt)
                                         const bdMengde = parseFloat(bd.mengde) || 1
+                                        // Bruk materialMengde fra motoren når åpningsfradrag er aktivt, ellers full bdMengde
+                                        const effektivMengde = bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? bdT.materialMengde : bdMengde
                                         return (
                                           <tr key={m.id}>
                                             <td style={{ padding:'3px 2px' }}>
@@ -26857,7 +26890,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                             <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
-                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * bdMengde)}</td>
+                                            <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * effektivMengde)}</td>
                                             <td style={{ padding:'3px 2px' }}><button onClick={()=>removeMaterial(kalk.id,bd.id,m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
                                           </tr>
                                         )
@@ -26926,6 +26959,31 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   )
                                 })}
                                 <button onClick={() => addUE(kalk.id, bd.id)} style={{ background:'#fefce8', color:'#ca8a04', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Underleverandør</button>
+                              </div>
+
+                              {/* ── Oppsummering / Dekningsbidrag ── */}
+                              <div style={{ marginTop:'14px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', borderRadius:'10px', padding:'12px 16px', border: `1px solid ${bdT.dbProsent >= 25 ? '#bbf7d0' : bdT.dbProsent >= 15 ? '#fde68a' : '#fecaca'}` }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b' }}>📊 OPPSUMMERING BYGNINGSDEL</span>
+                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>
+                                    DB: {bdT.dbProsent.toFixed(1)}%
+                                  </span>
+                                </div>
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px 16px', fontSize:'12px' }}>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeid)}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Arbeid (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalArbeidMedFortjeneste + (bdT.flatetilleggMedFortjeneste || 0) + (bdT.totalApningstillegg || 0))}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (selvkost)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterial)}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Materialer (m/fortjeneste)</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalMaterialMedFortjeneste)}</span></div>
+                                  {bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#2563eb', fontSize:'11px' }}>↳ Åpningsfradrag: {bdT.totalApningsareal.toFixed(1)} {bd.enhet || 'm²'} ({bdT.materialMengde.toFixed(1)} av {bd.mengde ?? 1} {bd.enhet || 'm²'} beregnet)</span></div>}
+                                  {bdT.totalUE > 0 && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Underleverandør</span><span style={{ color:'#0f172a' }}>{fmt(bdT.totalUE)}</span></div>}
+                                  <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#64748b' }}>Timer totalt</span><span style={{ fontWeight:'600', color:'#0f172a' }}>{bdT.totalTimer.toFixed(1)} t</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Selvkost</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{fmt(bdT.selvkost)}</span></div>
+                                  <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'4px', marginTop:'2px' }}><span style={{ color:'#64748b', fontWeight:'600' }}>Totalpris</span><span style={{ fontWeight:'700', color:'#059669' }}>{fmt(bdT.totalMedFortjeneste)}</span></div>
+                                </div>
+                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop: `1px solid ${bdT.dbProsent >= 25 ? '#86efac' : bdT.dbProsent >= 15 ? '#fde68a' : '#fca5a5'}` }}>
+                                  <span style={{ fontSize:'13px', fontWeight:'700', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>Dekningsbidrag</span>
+                                  <span style={{ fontSize:'13px', fontWeight:'800', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }}>{fmt(bdT.dekningsbidrag)} ({bdT.dbProsent.toFixed(1)}%)</span>
+                                </div>
                               </div>
                             </div>
                           )}
