@@ -13920,7 +13920,7 @@ function RessursPage() {
 
   // Add placeholder resources (reservert kapasitet fra kalkyler)
   if (resourceType === 'ansatte') {
-    const placeholderIds = [...new Set(plans.filter(p => p.resource_type === 'placeholder').map(p => p.resource_id))]
+    const placeholderIds = [...new Set(plans.filter(p => (p.notes || '').includes('| Ressurs ')).map(p => p.resource_id))]
     const placeholderResources = placeholderIds.map(pid => ({
       id: pid,
       first_name: (plans.find(p => p.resource_id === pid)?.notes || '').includes('Ressurs') ? (plans.find(p => p.resource_id === pid)?.notes || '').split('|').pop().trim() : 'Reservert',
@@ -13933,7 +13933,7 @@ function RessursPage() {
 
   // Filter plans by project
   const filteredPlans = filterProject==='alle' ? plans : plans.filter(p=>p.project_id===filterProject)
-  const materiellPlans = plans.filter(p => p.resource_type === 'material')
+  const materiellPlans = plans.filter(p => (p.notes || '').startsWith('📦 Levering:'))
 
   const getPlansForCell = (resourceId, date) =>
     filteredPlans.filter(p=>p.resource_id===resourceId&&p.date===date)
@@ -27452,7 +27452,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     for (const dateStr of workDates) {
                       plans.push({
                         resource_id: placeholderIds[mannNr],
-                        resource_type: 'placeholder',
+                        resource_type: 'employee',
                         project_id: projId,
                         date: dateStr, hours: timerPerDag,
                         notes: `📐 ${bd.name} (fra kalkyle) | Ressurs ${mannNr}`,
@@ -27492,7 +27492,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
                 matPlans.push({
                   resource_id: crypto.randomUUID(),
-                  resource_type: 'material',
+                  resource_type: 'employee',
                   project_id: projId,
                   date: leveringsDato.toISOString().split('T')[0],
                   hours: 0,
