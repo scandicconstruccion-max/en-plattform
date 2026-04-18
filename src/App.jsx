@@ -14832,7 +14832,7 @@ function RessursPage() {
   const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible' }}>
+    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'auto', overflow:fullscreen?'hidden':'visible', overflowX:fullscreen?'hidden':'clip', maxWidth:'100%', minWidth:0 }}>
       {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 24px', flexShrink:0, position:'sticky', top:56, zIndex:20, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px', marginBottom:'16px' }}>
@@ -15227,7 +15227,7 @@ function RessursPage() {
       ) : (
       <>
       {/* Grid */}
-      <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:'auto', flex:1 }}>
+      <div id="ressurs-grid-scroll" style={{ overflowX: viewMode==='maned' ? 'auto' : 'hidden', overflowY:'auto', flex:1, maxWidth:'100%', minWidth:0 }}>
         <div style={{ minWidth: viewMode==='maned' ? `${240+visibleDates.length*68}px` : '100%' }}>
           {/* Date header */}
           <div style={{ display:'flex', background:'white', borderBottom:'2px solid #e2e8f0', position:'sticky', top:0, zIndex:20 }}>
