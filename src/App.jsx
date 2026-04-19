@@ -465,13 +465,30 @@ function getCachedEmployees() {
   if (_employeeCache.data) return Promise.resolve(_employeeCache.data)
   if (_employeeCache.loading) return _employeeCache.loading
   _employeeCache.loading = supabase.from('employees')
-    .select('id, first_name, last_name, email, phone, role, department')
-    .order('last_name')
-    .then(({ data }) => {
+    .select('*')
+    .order('last_name', { nullsFirst: false })
+    .then(({ data, error }) => {
+      if (error) {
+        console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
+        _employeeCache.data = []
+        _employeeCache.loading = null
+        _employeeCache.subscribers.forEach(fn => fn([]))
+        // Ikke cache tom liste permanent — prøv på nytt neste gang
+        setTimeout(() => { _employeeCache.data = null }, 5000)
+        return []
+      }
       _employeeCache.data = data || []
       _employeeCache.loading = null
       _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
+      console.log(`[EmployeeCache] Lastet ${_employeeCache.data.length} ansatte`)
       return _employeeCache.data
+    })
+    .catch(err => {
+      console.error('[EmployeeCache] Exception:', err)
+      _employeeCache.data = []
+      _employeeCache.loading = null
+      setTimeout(() => { _employeeCache.data = null }, 5000)
+      return []
     })
   return _employeeCache.loading
 }
@@ -589,7 +606,7 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, val
     }}>
       {emps.length === 0 ? (
         <div style={{ padding:'14px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
-          Laster ansatte...
+          {_employeeCache.loading ? 'Laster ansatte...' : 'Ingen ansatte funnet. Se konsollen (F12) for eventuelle feil.'}
         </div>
       ) : (
         <>
