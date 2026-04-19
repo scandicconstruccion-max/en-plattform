@@ -13889,6 +13889,8 @@ function RessursGanttGrid({
       const mats = new Set()
       materialOnProj(plan.project_id, plan.date).forEach(m => mats.add(m.notes || 'Materiell'))
       seen.add(plan.id)
+      // Nøkkelen for "sammeslåbar": prosjekt + oppgave. Ulik oppgave → egen bar.
+      const planTask = plan.task_description || null
       let cursor = new Date(plan.date + 'T12:00:00')
       while (true) {
         cursor.setDate(cursor.getDate() + 1)
@@ -13896,7 +13898,12 @@ function RessursGanttGrid({
         // Allow gaps across weekends only
         const isWE = cursor.getDay() === 0 || cursor.getDay() === 6
         if (isWE && settings.skipWeekends) continue
-        const next = own.find(p => !seen.has(p.id) && p.date === cstr && p.project_id === plan.project_id)
+        const next = own.find(p =>
+          !seen.has(p.id) &&
+          p.date === cstr &&
+          p.project_id === plan.project_id &&
+          (p.task_description || null) === planTask  // NY: bryt ved endret oppgave
+        )
         if (next) {
           seen.add(next.id)
           planGroup.push(next)
@@ -13919,6 +13926,7 @@ function RessursGanttGrid({
         plans: planGroup,
         hours: planGroup.reduce((s,p)=>s+(parseFloat(p.hours)||0), 0),
         notes: plan.notes,
+        taskDescription: planTask, // NY: bar-nivå oppgave
         resourceId,
         resourceType: plan.resource_type,
         isPlaceholder: plan.resource_type === 'placeholder',
@@ -14513,7 +14521,7 @@ function RessursGanttGrid({
       {/* Custom tooltip — rik hover-popup for bookinger */}
       {hoveredBar && !dragging && !resizing && (() => {
         const { bar, proj, rect } = hoveredBar
-        const task = bar.plans.find(p => p.task_description)?.task_description
+        const task = bar.taskDescription
         const notes = bar.plans.find(p => p.notes && !p.notes.startsWith('📦'))?.notes
         const totalHours = bar.plans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
         const startFmt = new Date(bar.startDate + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })
@@ -14521,9 +14529,50 @@ function RessursGanttGrid({
         const dateRange = bar.startDate === bar.endDate ? startFmt : `${startFmt} – ${endFmt}`
         const projColor = proj ? getProjectColor(proj.id, projects) : '#64748b'
 
+        // ── Progresjonsberegning ──
+        // Sorter plans etter dato for å regne "dag X av Y"
+        const sortedPlans = [...bar.plans].sort((a,b) => a.date.localeCompare(b.date))
+        const todayStr = new Date().toISOString().split('T')[0]
+        const totalDays = sortedPlans.length
+        // Antall dager som er passert (dato < i dag)
+        const pastDays = sortedPlans.filter(p => p.date < todayStr).length
+        // Er vi på dagens dato?
+        const isOngoing = bar.startDate <= todayStr && todayStr <= bar.endDate
+        const isPast = bar.endDate < todayStr
+        const isFuture = bar.startDate > todayStr
+        // Nåværende progresjon i prosent
+        let progressPct = 0
+        if (isPast) progressPct = 100
+        else if (isFuture) progressPct = 0
+        else {
+          // Beregn inneværende dag inkludert i dag
+          const currentDay = sortedPlans.filter(p => p.date <= todayStr).length
+          progressPct = totalDays > 0 ? Math.round((currentDay / totalDays) * 100) : 0
+        }
+        // Statustekst
+        let statusLabel, statusColor, statusBg, statusEmoji
+        if (isPast) {
+          statusLabel = 'Fullført periode'
+          statusColor = '#64748b'
+          statusBg = '#f1f5f9'
+          statusEmoji = '✅'
+        } else if (isFuture) {
+          const daysUntil = Math.ceil((new Date(bar.startDate + 'T12:00:00') - new Date(todayStr + 'T12:00:00')) / (1000*60*60*24))
+          statusLabel = daysUntil === 1 ? 'Starter i morgen' : `Starter om ${daysUntil} dager`
+          statusColor = '#2563eb'
+          statusBg = '#eff6ff'
+          statusEmoji = '📅'
+        } else {
+          const currentDay = sortedPlans.filter(p => p.date <= todayStr).length
+          statusLabel = `Dag ${currentDay} av ${totalDays}`
+          statusColor = '#059669'
+          statusBg = '#f0fdf4'
+          statusEmoji = '⏱️'
+        }
+
         // Posisjoner tooltipen nær bjelken; juster hvis nær viewport-kant
-        const tooltipWidth = 280
-        const tooltipEstHeight = 180
+        const tooltipWidth = 300
+        const tooltipEstHeight = 240
         let left = rect.left + rect.width / 2 - tooltipWidth / 2
         let top = rect.bottom + 8
         // Juster horisontalt for å holde i viewport
@@ -14579,6 +14628,27 @@ function RessursGanttGrid({
                 <span style={{ fontSize:'11px', color:'#92400e', fontWeight:'500' }}>Ingen oppgave spesifisert — klikk for å legge til</span>
               </div>
             )}
+
+            {/* Progresjon */}
+            <div style={{ marginBottom:'10px', padding:'8px 10px', background:statusBg, borderRadius:'8px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                  <span style={{ fontSize:'13px' }}>{statusEmoji}</span>
+                  <span style={{ fontSize:'12px', fontWeight:'700', color: statusColor }}>{statusLabel}</span>
+                </div>
+                <span style={{ fontSize:'11px', fontWeight:'700', color: statusColor }}>{progressPct}%</span>
+              </div>
+              {/* Progresjonsbar */}
+              <div style={{ height:'5px', background:'rgba(255,255,255,0.6)', borderRadius:'3px', overflow:'hidden' }}>
+                <div style={{
+                  width: `${progressPct}%`,
+                  height: '100%',
+                  background: statusColor,
+                  borderRadius:'3px',
+                  transition:'width 0.3s',
+                }} />
+              </div>
+            </div>
 
             {/* Metadata */}
             <div style={{ display:'flex', flexDirection:'column', gap:'5px', fontSize:'12px', color:'#475569' }}>
