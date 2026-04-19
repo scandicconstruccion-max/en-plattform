@@ -14345,6 +14345,22 @@ function RessursGanttGrid({
 
                     return (
                       <div key={bar.id}
+                        title={(() => {
+                          const projName = proj?.name || 'Ukjent prosjekt'
+                          const projNum = proj?.project_number ? ` (${proj.project_number})` : ''
+                          const task = bar.plans.find(p => p.task_description)?.task_description
+                          const totalHours = bar.plans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
+                          const startFmt = new Date(bar.startDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })
+                          const endFmt = new Date(bar.endDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })
+                          const dateRange = bar.startDate === bar.endDate ? startFmt : `${startFmt} – ${endFmt}`
+                          let tip = `${projName}${projNum}`
+                          if (task) tip += `\n🔨 ${task}`
+                          tip += `\n📅 ${dateRange} · ${totalHours}t`
+                          if (bar.isPlaceholder) tip += `\n⚠️ Ubesatt rolle (placeholder)`
+                          if (bar.hasConflict) tip += `\n⚠️ Konflikt — dobbeltbooket`
+                          tip += `\n\nKlikk for å redigere`
+                          return tip
+                        })()}
                         draggable
                         onDragStart={(e)=>{ e.stopPropagation(); onDragStart(firstPlan, e) }}
                         onDragEnd={()=>onDragEnd()}
@@ -14766,6 +14782,16 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                             <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                               🏗️ {proj ? proj.name : 'Uten prosjekt'}
                             </div>
+                            {(() => {
+                              const tasks = [...new Set(bookings.map(b => b.task_description).filter(Boolean))]
+                              if (tasks.length === 0) return null
+                              const displayTask = tasks.length === 1 ? tasks[0] : `${tasks.length} oppgaver`
+                              return (
+                                <div style={{ fontSize:'11px', color, marginTop:'2px', fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                  🔨 {displayTask}
+                                </div>
+                              )
+                            })()}
                             <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                               {uniqueResources.length <= 2
                                 ? uniqueResources.join(', ')
@@ -16230,6 +16256,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   const [startTime, setStartTime] = useState(editPlan?.start_time||defaultStartTime)
   const [endTime, setEndTime] = useState(editPlan?.end_time||defaultEndTime)
   const [notes, setNotes] = useState(editPlan?.notes||'')
+  const [taskDescription, setTaskDescription] = useState(editPlan?.task_description||'')
 
   // ── Periode-booking state ──
   // Bare for nye bookinger (ikke ved redigering)
@@ -16394,6 +16421,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           date: d,
           hours: parseFloat(hours) || 8,
           notes: notes || null,
+          task_description: taskDescription || null,
           created_by: user?.id,
         }))
         // Batch-insert
@@ -16435,6 +16463,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
         project_id: projectId,
         date, hours: parseFloat(hours)||8,
         notes: notes||null,
+        task_description: taskDescription||null,
         linked_machine_id: (isEmployee && showMachinePicker && linkedMachineId) ? linkedMachineId : null,
         updated_at: new Date().toISOString()
       }
@@ -16617,6 +16646,14 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
               {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
             </select>
             {projectId&&<div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/><span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span></div>}
+          </div>
+
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>🔨 Oppgave</label>
+            <input type="text" value={taskDescription} onChange={e=>setTaskDescription(e.target.value)}
+              placeholder="F.eks. Montere vinduer, Støpe gulv, Utvendig kledning..."
+              style={{ ...rInp(), fontSize:'13px' }} />
+            <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>Hva skal gjøres denne dagen? Vises når noen holder musen over bookingen.</div>
           </div>
 
           <div>
@@ -29405,6 +29442,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         resource_id: empId, resource_type: 'employee', project_id: projId,
                         date: dateStr, hours: timerPerDag,
                         notes: `📐 ${bd.name} (fra kalkyle)`,
+                        task_description: bd.name || null,
                         created_by: user?.id
                       })
                     }
@@ -29420,6 +29458,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         project_id: projId,
                         date: dateStr, hours: timerPerDag,
                         notes: `📐 ${bd.name} (fra kalkyle) | Ressurs ${mannNr}`,
+                        task_description: bd.name || null,
                         created_by: user?.id
                       })
                     }
