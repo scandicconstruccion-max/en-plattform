@@ -15539,8 +15539,9 @@ function RessursPage() {
       )}
       {showLedigMaskiner&&(
         <LedigMaskinerModal
-          machines={machines} plans={plans} dates={dates}
+          machines={machines} plans={plans} projects={projects}
           onClose={()=>setShowLedigMaskiner(false)}
+          onOpenBooking={(modalData) => setShowBookingModal(modalData)}
         />
       )}
       {showOppgaveModal&&(
@@ -15954,6 +15955,20 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   const [showMachinePicker, setShowMachinePicker] = useState(!!editPlan?.linked_machine_id)
   const [saving, setSaving] = useState(false)
 
+  // Når booking-mode bytter, hold maskin-datoer innenfor ansattens periode
+  React.useEffect(() => {
+    if (bookingMode === 'period') {
+      // Hvis maskin-datoer er utenfor ny ansatt-periode, juster dem inn
+      if (machineFromDate < fromDate || machineFromDate > toDate) setMachineFromDate(fromDate)
+      if (machineToDate < fromDate || machineToDate > toDate) setMachineToDate(toDate)
+    } else {
+      // I enkeltdag-modus: maskin-datoer = dagen
+      if (machineFromDate !== date) setMachineFromDate(date)
+      if (machineToDate !== date) setMachineToDate(date)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingMode, fromDate, toDate])
+
   const totalBooked = existingPlans.reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
   const remaining = Math.max(0, 8 - totalBooked + (editPlan ? parseFloat(editPlan.hours)||0 : 0))
   const wouldDouble = (parseFloat(hours)||0) + totalBooked - (editPlan?parseFloat(editPlan.hours)||0:0) > 8
@@ -16035,9 +16050,11 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           const { error } = await supabase.from('resource_plans').insert(batch)
           if (error) throw error
         }
-        // Maskin-kobling (hvis aktuelt)
+        // Maskin-kobling (hvis aktuelt) — bruker maskin-datoer innenfor ansattens periode
         if (isEmployee && showMachinePicker && linkedMachineId) {
-          const machinePlans = finalDates.map(d => ({
+          // Filtrer finalDates til kun de som er innenfor maskinens eget tidsrom
+          const machineDates = finalDates.filter(d => d >= machineFromDate && d <= machineToDate)
+          const machinePlans = machineDates.map(d => ({
             resource_id: linkedMachineId,
             resource_type: 'machine',
             project_id: projectId,
@@ -16046,8 +16063,10 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             notes: `Koblet til ${resourceName}`,
             created_by: user?.id,
           }))
-          if (machinePlans.length > 0) await supabase.from('resource_plans').insert(machinePlans)
-          await updateMachineStatus(linkedMachineId, projectId, finalDates[0], finalDates[finalDates.length - 1])
+          if (machinePlans.length > 0) {
+            await supabase.from('resource_plans').insert(machinePlans)
+            await updateMachineStatus(linkedMachineId, projectId, machineDates[0], machineDates[machineDates.length - 1])
+          }
         }
         onSaved()
       } catch (e) { alert('Feil: ' + e.message) }
@@ -16298,13 +16317,25 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
                   <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px' }}>
                     <div>
                       <label style={{ display:'block',fontSize:'12px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Maskin fra dato</label>
-                      <input type="date" value={machineFromDate} onChange={e=>setMachineFromDate(e.target.value)} style={rInp()} />
+                      <input type="date" value={machineFromDate} onChange={e=>setMachineFromDate(e.target.value)}
+                        min={bookingMode === 'period' ? fromDate : date}
+                        max={bookingMode === 'period' ? toDate : date}
+                        style={rInp()} />
                     </div>
                     <div>
                       <label style={{ display:'block',fontSize:'12px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Maskin til dato</label>
-                      <input type="date" value={machineToDate} onChange={e=>setMachineToDate(e.target.value)} style={rInp()} />
+                      <input type="date" value={machineToDate} onChange={e=>setMachineToDate(e.target.value)}
+                        min={bookingMode === 'period' ? fromDate : date}
+                        max={bookingMode === 'period' ? toDate : date}
+                        style={rInp()} />
                     </div>
                   </div>
+
+                  {bookingMode === 'period' && (
+                    <div style={{ background:'#eff6ff', borderRadius:'8px', padding:'6px 10px', border:'1px solid #bfdbfe', fontSize:'11px', color:'#1e40af', marginTop:'6px' }}>
+                      💡 Maskin må være innenfor ansattperioden ({fromDate} – {toDate}). Eksempel: ansatt jobber 5 dager, maskin trengs bare 3 av dem.
+                    </div>
+                  )}
 
                   {machineFromDate&&machineToDate&&linkedMachineId&&(
                     <div style={{ background:'white',borderRadius:'8px',padding:'8px 12px',border:'1px solid #bbf7d0',fontSize:'12px',color:'#16a34a',fontWeight:'600' }}>
@@ -16644,45 +16675,293 @@ function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, on
   )
 }
 
-function LedigMaskinerModal({ machines, plans, dates, onClose }) {
-  const today=new Date().toISOString().split('T')[0]
-  const checkDate=dates.find(d=>d>=today)||today
-  const isBooked=(id)=>plans.some(p=>p.resource_id===id&&p.date===checkDate)
-  const available=machines.filter(m=>m.status!=='Utrangert'&&m.status!=='Service'&&!isBooked(m.id))
-  const bookedMachines=machines.filter(m=>m.status!=='Utrangert'&&isBooked(m.id))
-  const inService=machines.filter(m=>m.status==='Service')
-  return (
-    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <div><h2 style={{ margin:'0 0 2px',fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🚜 Ledig utstyr</h2><div style={{ fontSize:'12px',color:'#94a3b8' }}>Per {new Date(checkDate+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long'})}</div></div>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+function LedigMaskinerModal({ machines, plans, projects, onClose, onOpenBooking }) {
+  // ── State ──
+  const today = new Date().toISOString().split('T')[0]
+  const addDays = (dateStr, n) => { const d = new Date(dateStr+'T12:00:00'); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0] }
+
+  const [mode, setMode] = useState('period') // 'day' | 'period'
+  const [fromDate, setFromDate] = useState(today)
+  const [toDate, setToDate] = useState(addDays(today, 7))
+  const [filterCategory, setFilterCategory] = useState('')
+  const [sortBy, setSortBy] = useState('ledig') // 'ledig' | 'navn'
+
+  // ── Hjelpere ──
+  // Arbeidsdager (mandag-fredag) i valgt periode
+  const periodDates = React.useMemo(() => {
+    const list = []
+    const start = new Date(fromDate + 'T12:00:00')
+    const end = new Date((mode === 'day' ? fromDate : toDate) + 'T12:00:00')
+    const cur = new Date(start)
+    while (cur <= end) {
+      const wd = cur.getDay()
+      if (wd !== 0 && wd !== 6) list.push(cur.toISOString().split('T')[0])
+      cur.setDate(cur.getDate() + 1)
+    }
+    return list
+  }, [fromDate, toDate, mode])
+
+  const totalDays = periodDates.length
+
+  // Booket-map: for maskiner regner vi at >0 timer = booket den dagen
+  const bookedByMachineDate = React.useMemo(() => {
+    const map = {}
+    plans.forEach(p => {
+      if (!p.resource_id || !p.date) return
+      if (p.resource_type !== 'machine') return
+      const key = `${p.resource_id}|${p.date}`
+      map[key] = (map[key] || 0) + 1
+    })
+    return map
+  }, [plans])
+
+  const daysBookedInPeriod = (machId) => periodDates.filter(d => (bookedByMachineDate[`${machId}|${d}`] || 0) > 0).length
+  const daysFreeInPeriod = (machId) => periodDates.filter(d => (bookedByMachineDate[`${machId}|${d}`] || 0) === 0).length
+
+  // Unike kategorier
+  const uniqueCategories = React.useMemo(() => [...new Set(machines.map(m => m.category).filter(Boolean))].sort(), [machines])
+
+  // Filter: ekskluder utrangerte + kategorifilter
+  const filteredMachines = React.useMemo(() =>
+    machines
+      .filter(m => m.status !== 'Utrangert')
+      .filter(m => !filterCategory || m.category === filterCategory),
+    [machines, filterCategory])
+
+  // Kategorier basert på status og tilgjengelighet
+  const inService = filteredMachines.filter(m => m.status === 'Service')
+  const filteredNonService = filteredMachines.filter(m => m.status !== 'Service')
+
+  const helt_ledige = filteredNonService.filter(m => daysFreeInPeriod(m.id) === totalDays && totalDays > 0)
+  const delvis_ledige = filteredNonService.filter(m => {
+    const free = daysFreeInPeriod(m.id)
+    return free > 0 && free < totalDays
+  })
+  const opptatt = filteredNonService.filter(m => daysFreeInPeriod(m.id) === 0 && totalDays > 0)
+
+  // "Blir snart ledig" — opptatte maskiner som blir ledig innen 14 dager
+  const snart_ledige = React.useMemo(() => {
+    const scanStart = mode === 'day' ? fromDate : toDate
+    const scanEnd = addDays(scanStart, 14)
+    return opptatt.map(m => {
+      let d = scanStart
+      while (d <= scanEnd) {
+        const dt = new Date(d + 'T12:00:00')
+        if (dt.getDay() !== 0 && dt.getDay() !== 6) {
+          const booked = bookedByMachineDate[`${m.id}|${d}`] || 0
+          if (booked === 0) return { ...m, _availableFrom: d }
+        }
+        d = addDays(d, 1)
+      }
+      return null
+    }).filter(Boolean)
+  }, [opptatt, fromDate, toDate, mode, bookedByMachineDate])
+
+  // Hva jobber maskin på nå
+  const currentProjectForMachine = (machId) => {
+    const currentPlans = plans.filter(p => p.resource_id === machId && p.resource_type === 'machine' && p.date >= fromDate && p.date <= (mode === 'day' ? fromDate : toDate))
+    if (currentPlans.length === 0) return null
+    const byProj = {}
+    currentPlans.forEach(p => { if (p.project_id) byProj[p.project_id] = (byProj[p.project_id] || 0) + 1 })
+    const topProjId = Object.entries(byProj).sort((a, b) => b[1] - a[1])[0]?.[0]
+    const topProj = topProjId ? projects.find(p => p.id === topProjId) : null
+    const lastDate = currentPlans.map(p => p.date).sort().pop()
+    return { project: topProj, lastDate }
+  }
+
+  // Sortering
+  const sortFn = (a, b) => {
+    if (sortBy === 'navn') return (a.name || '').localeCompare(b.name || '')
+    return daysFreeInPeriod(b.id) - daysFreeInPeriod(a.id)
+  }
+  helt_ledige.sort(sortFn)
+  delvis_ledige.sort(sortFn)
+  opptatt.sort(sortFn)
+
+  // Book-handler
+  const handleBook = (mach, dateStr) => {
+    if (!onOpenBooking) return
+    onOpenBooking({
+      resourceId: mach.id,
+      resourceName: mach.name,
+      date: dateStr,
+      existingPlans: plans.filter(p => p.resource_id === mach.id && p.date === dateStr),
+    })
+  }
+
+  // Felles maskin-kort
+  const MachineCard = ({ mach, bg, border, badge, infoText, bookDate, bookLabel }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', background:bg, borderRadius:'12px', border:`1px solid ${border}`, marginBottom:'6px' }}>
+      <span style={{ fontSize:'22px', flexShrink:0 }}>🚜</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{mach.name}</div>
+        <div style={{ fontSize:'11px', color:'#64748b' }}>
+          {mach.category || ''}{mach.category && mach.status ? ' · ' : ''}{mach.status || ''}{infoText ? ` · ${infoText}` : ''}
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
-          <div style={{ fontSize:'12px',fontWeight:'700',color:'#16a34a',textTransform:'uppercase',marginBottom:'8px' }}>✅ Ledig ({available.length})</div>
-          {available.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen ledige maskiner</p>}
-          {available.map(m=>(<div key={m.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#f0fdf4',borderRadius:'12px',border:'1px solid #bbf7d0',marginBottom:'6px' }}>
-            <span style={{ fontSize:'22px' }}>🚜</span>
-            <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{m.name}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{m.category||''} · {m.status}</div></div>
-            <span style={{ background:'#f0fdf4',color:'#16a34a',fontSize:'12px',fontWeight:'700',padding:'3px 10px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>Ledig</span>
-          </div>))}
-          {bookedMachines.length>0&&(<>
-            <div style={{ fontSize:'12px',fontWeight:'700',color:'#d97706',textTransform:'uppercase',marginBottom:'8px',marginTop:'14px' }}>🟡 Booket ({bookedMachines.length})</div>
-            {bookedMachines.map(m=>(<div key={m.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#fffbeb',borderRadius:'12px',border:'1px solid #fde68a',marginBottom:'6px' }}>
-              <span style={{ fontSize:'22px' }}>🚜</span>
-              <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{m.name}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{m.category||''}</div></div>
-              <span style={{ fontSize:'12px',fontWeight:'700',color:'#d97706' }}>Booket</span>
-            </div>))}
-          </>)}
-          {inService.length>0&&(<>
-            <div style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626',textTransform:'uppercase',marginBottom:'8px',marginTop:'14px' }}>🔧 Service ({inService.length})</div>
-            {inService.map(m=>(<div key={m.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#fef2f2',borderRadius:'12px',border:'1px solid #fecaca',marginBottom:'6px' }}>
-              <span style={{ fontSize:'22px' }}>🔧</span>
-              <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{m.name}</div></div>
-              <span style={{ fontSize:'12px',color:'#dc2626',fontWeight:'700' }}>Service</span>
-            </div>))}
-          </>)}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'4px', flexShrink:0 }}>
+        {badge}
+        {bookDate && (
+          <button onClick={() => handleBook(mach, bookDate)}
+            style={{ padding:'5px 10px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
+            🏗️ {bookLabel || 'Book'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+
+        {/* Header */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div>
+            <h2 style={{ margin:'0 0 2px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🚜 Ledig utstyr</h2>
+            <div style={{ fontSize:'12px', color:'#94a3b8' }}>
+              {totalDays} arbeidsdag{totalDays !== 1 ? 'er' : ''} i valgt periode · {filteredNonService.length} maskiner
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
+        </div>
+
+        {/* Kontrollrad: dato + modus */}
+        <div style={{ padding:'14px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'10px', flexShrink:0 }}>
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden' }}>
+              <button onClick={() => setMode('day')}
+                style={{ padding:'6px 12px', border:'none', background: mode === 'day' ? '#0f172a' : 'white', color: mode === 'day' ? 'white' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>
+                📅 Én dag
+              </button>
+              <button onClick={() => setMode('period')}
+                style={{ padding:'6px 12px', border:'none', background: mode === 'period' ? '#0f172a' : 'white', color: mode === 'period' ? 'white' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                📆 Periode
+              </button>
+            </div>
+            <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+              style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none' }} />
+            {mode === 'period' && (
+              <>
+                <span style={{ fontSize:'12px', color:'#64748b' }}>til</span>
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} min={fromDate}
+                  style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none' }} />
+              </>
+            )}
+          </div>
+
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+              style={{ flex:1, minWidth:'160px', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none', background:'white' }}>
+              <option value="">🎯 Alle kategorier</option>
+              {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none', background:'white' }}>
+              <option value="ledig">⇅ Mest ledig</option>
+              <option value="navn">⇅ Navn</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Innhold */}
+        <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
+
+          {/* Helt ledige */}
+          <div style={{ fontSize:'12px', fontWeight:'700', color:'#16a34a', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>
+            ✅ HELT LEDIG ({helt_ledige.length})
+          </div>
+          {helt_ledige.length === 0 ? (
+            <p style={{ color:'#94a3b8', fontSize:'12px', fontStyle:'italic', marginBottom:'16px' }}>
+              Ingen helt ledige maskiner{filterCategory ? ` i kategorien "${filterCategory}"` : ''}
+            </p>
+          ) : (
+            helt_ledige.map(mach => (
+              <MachineCard key={mach.id} mach={mach} bg="#f0fdf4" border="#bbf7d0"
+                infoText={totalDays === 1 ? 'Ledig hele dagen' : `Ledig alle ${totalDays} dager`}
+                badge={<div style={{ fontSize:'11px', fontWeight:'700', color:'#16a34a', background:'#dcfce7', padding:'2px 8px', borderRadius:'999px' }}>Ledig</div>}
+                bookDate={fromDate} bookLabel="Book" />
+            ))
+          )}
+
+          {/* Delvis ledige */}
+          {delvis_ledige.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#ca8a04', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                ⚡ DELVIS LEDIG ({delvis_ledige.length})
+              </div>
+              {delvis_ledige.map(mach => {
+                const free = daysFreeInPeriod(mach.id)
+                const firstFreeDate = periodDates.find(d => (bookedByMachineDate[`${mach.id}|${d}`] || 0) === 0) || fromDate
+                return (
+                  <MachineCard key={mach.id} mach={mach} bg="#fefce8" border="#fde68a"
+                    infoText={`${free} av ${totalDays} dager ledig`}
+                    badge={<div style={{ fontSize:'11px', fontWeight:'700', color:'#ca8a04', background:'#fef3c7', padding:'2px 8px', borderRadius:'999px' }}>{free}/{totalDays} dg</div>}
+                    bookDate={firstFreeDate} bookLabel="Book" />
+                )
+              })}
+            </>
+          )}
+
+          {/* Blir snart ledig */}
+          {snart_ledige.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                🎯 BLIR SNART LEDIG ({snart_ledige.length})
+              </div>
+              {snart_ledige.map(mach => {
+                const when = new Date(mach._availableFrom + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })
+                return (
+                  <MachineCard key={mach.id} mach={mach} bg="#eff6ff" border="#bfdbfe"
+                    infoText={`Blir ledig ${when}`}
+                    badge={<div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'2px 8px', borderRadius:'999px' }}>{when}</div>}
+                    bookDate={mach._availableFrom} bookLabel={`Book ${when}`} />
+                )
+              })}
+            </>
+          )}
+
+          {/* Opptatt */}
+          {opptatt.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#dc2626', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                🔴 OPPTATT ({opptatt.length})
+              </div>
+              {opptatt.map(mach => {
+                const current = currentProjectForMachine(mach.id)
+                const lastDateStr = current?.lastDate ? new Date(current.lastDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' }) : null
+                const infoText = current?.project
+                  ? `På "${current.project.name}"${lastDateStr ? ` t.o.m. ${lastDateStr}` : ''}`
+                  : lastDateStr ? `Booket t.o.m. ${lastDateStr}` : 'Fullt booket i perioden'
+                return (
+                  <MachineCard key={mach.id} mach={mach} bg="#fef2f2" border="#fecaca"
+                    infoText={infoText}
+                    badge={<span style={{ fontSize:'11px', fontWeight:'700', color:'#dc2626' }}>Opptatt</span>} />
+                )
+              })}
+            </>
+          )}
+
+          {/* Service */}
+          {inService.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                🔧 PÅ SERVICE ({inService.length})
+              </div>
+              {inService.map(mach => (
+                <MachineCard key={mach.id} mach={mach} bg="#f8fafc" border="#e2e8f0"
+                  infoText="Ikke tilgjengelig"
+                  badge={<span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b' }}>Service</span>} />
+              ))}
+            </>
+          )}
+
+          {filteredNonService.length === 0 && (
+            <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'24px' }}>
+              Ingen maskiner å vise{filterCategory ? ` i kategorien "${filterCategory}"` : ''}
+            </p>
+          )}
         </div>
       </div>
     </div>
