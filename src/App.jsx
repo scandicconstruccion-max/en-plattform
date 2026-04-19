@@ -15529,9 +15529,10 @@ function RessursPage() {
 
       {showLedigMannskap&&(
         <LedigMannskapModal
-          employees={employees} plans={plans} dates={dates}
+          employees={employees} plans={plans} projects={projects}
           allSkills={allSkills}
           onClose={()=>setShowLedigMannskap(false)}
+          onOpenBooking={(modalData) => setShowBookingModal(modalData)}
         />
       )}
       {showLedigMaskiner&&(
@@ -16125,53 +16126,307 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
 
 
 // ── LEDIG MANNSKAP MODAL ──────────────────────────────────────────────────────
-function LedigMannskapModal({ employees, plans, dates, allSkills, onClose }) {
-  const [filterSkill, setFilterSkill] = useState('')
+function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, onOpenBooking }) {
+  // ── State ──
   const today = new Date().toISOString().split('T')[0]
-  const checkDate = dates.find(d=>d>=today)||today
-  const bookedHours = (empId) => plans.filter(p=>p.resource_id===empId&&p.date===checkDate).reduce((a,p)=>a+(parseFloat(p.hours)||0),0)
-  const skillsPerEmp = employees.reduce((acc,emp)=>{ acc[emp.id]=allSkills.filter(s=>s.employee_id===emp.id).map(s=>s.skill); return acc },{})
-  const uniqueSkills = [...new Set(allSkills.map(s=>s.skill))].sort()
-  const filteredEmps = employees.filter(emp=>!filterSkill||skillsPerEmp[emp.id]?.includes(filterSkill))
-  const available = filteredEmps.filter(e=>bookedHours(e.id)<8)
-  const busy = filteredEmps.filter(e=>bookedHours(e.id)>=8)
+  const addDays = (dateStr, n) => { const d = new Date(dateStr+'T12:00:00'); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0] }
+
+  const [mode, setMode] = useState('period') // 'day' | 'period'
+  const [fromDate, setFromDate] = useState(today)
+  const [toDate, setToDate] = useState(addDays(today, 7))
+  const [filterSkill, setFilterSkill] = useState('')
+  const [sortBy, setSortBy] = useState('ledig') // 'ledig' | 'navn'
+
+  // ── Hjelpere ──
+  // Liste over arbeidsdager (mandag-fredag) i valgt periode
+  const periodDates = useMemo(() => {
+    const list = []
+    const start = new Date(fromDate + 'T12:00:00')
+    const end = new Date((mode === 'day' ? fromDate : toDate) + 'T12:00:00')
+    const cur = new Date(start)
+    while (cur <= end) {
+      const wd = cur.getDay()
+      if (wd !== 0 && wd !== 6) list.push(cur.toISOString().split('T')[0]) // Kun hverdager
+      cur.setDate(cur.getDate() + 1)
+    }
+    return list
+  }, [fromDate, toDate, mode])
+
+  const totalDays = periodDates.length
+
+  // Book-timer per ansatt per dato
+  const bookedByEmpDate = useMemo(() => {
+    const map = {}
+    plans.forEach(p => {
+      if (!p.resource_id || !p.date) return
+      const key = `${p.resource_id}|${p.date}`
+      map[key] = (map[key] || 0) + (parseFloat(p.hours) || 0)
+    })
+    return map
+  }, [plans])
+
+  const daysBookedInPeriod = (empId) => periodDates.filter(d => (bookedByEmpDate[`${empId}|${d}`] || 0) >= 8).length
+  const daysPartialInPeriod = (empId) => periodDates.filter(d => {
+    const b = bookedByEmpDate[`${empId}|${d}`] || 0
+    return b > 0 && b < 8
+  }).length
+  const daysFreeInPeriod = (empId) => periodDates.filter(d => (bookedByEmpDate[`${empId}|${d}`] || 0) === 0).length
+  const totalHoursInPeriod = (empId) => periodDates.reduce((sum, d) => sum + (bookedByEmpDate[`${empId}|${d}`] || 0), 0)
+
+  // Kompetanse
+  const skillsPerEmp = useMemo(() => {
+    const acc = {}
+    employees.forEach(emp => { acc[emp.id] = allSkills.filter(s => s.employee_id === emp.id).map(s => s.skill) })
+    return acc
+  }, [employees, allSkills])
+  const uniqueSkills = useMemo(() => [...new Set(allSkills.map(s => s.skill))].sort(), [allSkills])
+
+  // Filter etter kompetanse
+  const filteredEmps = useMemo(() =>
+    employees.filter(emp => !filterSkill || skillsPerEmp[emp.id]?.includes(filterSkill)),
+    [employees, filterSkill, skillsPerEmp])
+
+  // Kategorier
+  const helt_ledige = filteredEmps.filter(e => daysFreeInPeriod(e.id) === totalDays && totalDays > 0)
+  const delvis_ledige = filteredEmps.filter(e => {
+    const free = daysFreeInPeriod(e.id)
+    return free > 0 && free < totalDays
+  })
+  const opptatt = filteredEmps.filter(e => daysFreeInPeriod(e.id) === 0 && totalDays > 0)
+
+  // "Blir snart ledig" — opptatte ansatte som blir ledig innen 7 dager etter periodeslutt
+  const snart_ledige = useMemo(() => {
+    const scanStart = mode === 'day' ? fromDate : toDate
+    const scanEnd = addDays(scanStart, 14)
+    return opptatt.map(emp => {
+      // Finn første dato etter periode hvor personen er ledig
+      let d = scanStart
+      while (d <= scanEnd) {
+        const dt = new Date(d + 'T12:00:00')
+        if (dt.getDay() !== 0 && dt.getDay() !== 6) { // kun hverdag
+          const booked = bookedByEmpDate[`${emp.id}|${d}`] || 0
+          if (booked === 0) return { ...emp, _availableFrom: d }
+        }
+        d = addDays(d, 1)
+      }
+      return null
+    }).filter(Boolean)
+  }, [opptatt, fromDate, toDate, mode, bookedByEmpDate])
+
+  // Hva jobber en ansatt med nå (for opptatt-listen)
+  const currentProject = (empId) => {
+    const currentPlans = plans.filter(p => p.resource_id === empId && p.date >= fromDate && p.date <= (mode === 'day' ? fromDate : toDate))
+    if (currentPlans.length === 0) return null
+    // Finn prosjekt som har flest bookinger i perioden
+    const byProj = {}
+    currentPlans.forEach(p => { if (p.project_id) byProj[p.project_id] = (byProj[p.project_id] || 0) + 1 })
+    const topProjId = Object.entries(byProj).sort((a, b) => b[1] - a[1])[0]?.[0]
+    const topProj = topProjId ? projects.find(p => p.id === topProjId) : null
+    // Finn siste dato de er booket
+    const lastDate = currentPlans.map(p => p.date).sort().pop()
+    return { project: topProj, lastDate }
+  }
+
+  // Sortering
+  const sortFn = (a, b) => {
+    if (sortBy === 'navn') return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+    // Default: mest ledig først
+    return daysFreeInPeriod(b.id) - daysFreeInPeriod(a.id)
+  }
+  helt_ledige.sort(sortFn)
+  delvis_ledige.sort(sortFn)
+  opptatt.sort(sortFn)
+
+  // Book-handler
+  const handleBook = (emp, dateStr) => {
+    if (!onOpenBooking) return
+    onOpenBooking({
+      resourceId: emp.id,
+      resourceName: `${emp.first_name} ${emp.last_name}`,
+      date: dateStr,
+      existingPlans: plans.filter(p => p.resource_id === emp.id && p.date === dateStr),
+    })
+  }
+
+  // ── Felles ansatt-kort ──
+  const EmpCard = ({ emp, bg, border, badge, infoText, bookDate, bookLabel }) => {
+    const empSkills = skillsPerEmp[emp.id] || []
+    return (
+      <div style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', background:bg, borderRadius:'12px', border:`1px solid ${border}`, marginBottom:'6px' }}>
+        <div style={{ width:'36px', height:'36px', borderRadius:'50%', background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'800', color:'#0f172a', flexShrink:0, border:`1px solid ${border}` }}>
+          {emp.first_name?.[0]}{emp.last_name?.[0]}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{emp.first_name} {emp.last_name}</div>
+          <div style={{ fontSize:'11px', color:'#64748b' }}>{emp.position || emp.department || ''}{infoText ? ` · ${infoText}` : ''}</div>
+          {empSkills.length > 0 && (
+            <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginTop:'4px' }}>
+              {empSkills.slice(0, 5).map(s => (
+                <span key={s} style={{ background:'white', color:'#475569', fontSize:'10px', fontWeight:'600', padding:'1px 6px', borderRadius:'999px', border:'1px solid #e2e8f0' }}>{s}</span>
+              ))}
+              {empSkills.length > 5 && <span style={{ fontSize:'10px', color:'#94a3b8' }}>+{empSkills.length - 5}</span>}
+            </div>
+          )}
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'4px', flexShrink:0 }}>
+          {badge}
+          {bookDate && (
+            <button onClick={() => handleBook(emp, bookDate)}
+              style={{ padding:'5px 10px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
+              🏗️ {bookLabel || 'Book'}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'580px',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <div><h2 style={{ margin:'0 0 2px',fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>👷 Ledig mannskap</h2><div style={{ fontSize:'12px',color:'#94a3b8' }}>Per {new Date(checkDate+'T12:00:00').toLocaleDateString('nb-NO',{weekday:'long',day:'numeric',month:'long'})}</div></div>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+
+        {/* Header */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div>
+            <h2 style={{ margin:'0 0 2px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>👷 Ledig mannskap</h2>
+            <div style={{ fontSize:'12px', color:'#94a3b8' }}>
+              {totalDays} arbeidsdag{totalDays !== 1 ? 'er' : ''} i valgt periode · {filteredEmps.length} ansatte
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
         </div>
-        <div style={{ padding:'12px 24px',borderBottom:'1px solid #f1f5f9',flexShrink:0 }}>
-          <select value={filterSkill} onChange={e=>setFilterSkill(e.target.value)} style={{ width:'100%',padding:'8px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white' }}>
-            <option value="">🎯 Alle kompetanser</option>
-            {uniqueSkills.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
+
+        {/* Kontrollrad: dato + modus */}
+        <div style={{ padding:'14px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'10px', flexShrink:0 }}>
+          {/* Modus-toggle */}
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden' }}>
+              <button onClick={() => setMode('day')}
+                style={{ padding:'6px 12px', border:'none', background: mode === 'day' ? '#0f172a' : 'white', color: mode === 'day' ? 'white' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>
+                📅 Én dag
+              </button>
+              <button onClick={() => setMode('period')}
+                style={{ padding:'6px 12px', border:'none', background: mode === 'period' ? '#0f172a' : 'white', color: mode === 'period' ? 'white' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                📆 Periode
+              </button>
+            </div>
+            <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+              style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none' }} />
+            {mode === 'period' && (
+              <>
+                <span style={{ fontSize:'12px', color:'#64748b' }}>til</span>
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} min={fromDate}
+                  style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none' }} />
+              </>
+            )}
+          </div>
+
+          {/* Filter + sortering */}
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+            <select value={filterSkill} onChange={e => setFilterSkill(e.target.value)}
+              style={{ flex:1, minWidth:'160px', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none', background:'white' }}>
+              <option value="">🎯 Alle kompetanser</option>
+              {uniqueSkills.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', outline:'none', background:'white' }}>
+              <option value="ledig">⇅ Mest ledig</option>
+              <option value="navn">⇅ Navn</option>
+            </select>
+          </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'16px 24px' }}>
-          <div style={{ fontSize:'12px',fontWeight:'700',color:'#16a34a',textTransform:'uppercase',marginBottom:'8px' }}>✅ Ledig ({available.length})</div>
-          {available.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic',marginBottom:'16px' }}>Ingen ledige{filterSkill?` med kompetanse i ${filterSkill}`:''}</p>}
-          {available.map(emp=>{
-            const booked=bookedHours(emp.id); const empSkills=skillsPerEmp[emp.id]||[]
-            return (<div key={emp.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#f0fdf4',borderRadius:'12px',border:'1px solid #bbf7d0',marginBottom:'6px' }}>
-              <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'800',color:'#16a34a',flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</div>
-                <div style={{ fontSize:'11px',color:'#64748b' }}>{emp.position||emp.department||''}{booked>0?` · ${booked}t booket`:' · Helt ledig'}</div>
-                {empSkills.length>0&&<div style={{ display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'4px' }}>{empSkills.slice(0,5).map(s=><span key={s} style={{ background:'#f0fdf4',color:'#059669',fontSize:'10px',fontWeight:'600',padding:'1px 6px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>{s}</span>)}</div>}
+
+        {/* Innhold */}
+        <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
+
+          {/* Helt ledige */}
+          <div style={{ fontSize:'12px', fontWeight:'700', color:'#16a34a', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>
+            ✅ HELT LEDIG ({helt_ledige.length})
+          </div>
+          {helt_ledige.length === 0 ? (
+            <p style={{ color:'#94a3b8', fontSize:'12px', fontStyle:'italic', marginBottom:'16px' }}>
+              Ingen helt ledige{filterSkill ? ` med kompetanse i ${filterSkill}` : ''} i perioden
+            </p>
+          ) : (
+            helt_ledige.map(emp => (
+              <EmpCard key={emp.id} emp={emp} bg="#f0fdf4" border="#bbf7d0"
+                infoText={totalDays === 1 ? 'Ledig hele dagen' : `Ledig alle ${totalDays} dager`}
+                badge={<div style={{ fontSize:'11px', fontWeight:'700', color:'#16a34a', background:'#dcfce7', padding:'2px 8px', borderRadius:'999px' }}>{totalDays * 8}t ledig</div>}
+                bookDate={fromDate} bookLabel="Book" />
+            ))
+          )}
+
+          {/* Delvis ledige */}
+          {delvis_ledige.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#ca8a04', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                ⚡ DELVIS LEDIG ({delvis_ledige.length})
               </div>
-              <div style={{ textAlign:'right' }}><div style={{ fontWeight:'800',fontSize:'14px',color:'#16a34a' }}>{8-booked}t</div><div style={{ fontSize:'10px',color:'#94a3b8' }}>ledig</div></div>
-            </div>)
-          })}
-          {busy.length>0&&(<>
-            <div style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626',textTransform:'uppercase',marginBottom:'8px',marginTop:'14px' }}>🔴 Fullt booket ({busy.length})</div>
-            {busy.map(emp=>(<div key={emp.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',background:'#fef2f2',borderRadius:'12px',border:'1px solid #fecaca',marginBottom:'6px',opacity:0.7 }}>
-              <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:'#fecaca',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:'800',color:'#dc2626',flexShrink:0 }}>{emp.first_name?.[0]}{emp.last_name?.[0]}</div>
-              <div style={{ flex:1 }}><div style={{ fontWeight:'700',fontSize:'13px',color:'#0f172a' }}>{emp.first_name} {emp.last_name}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{emp.position||''}</div></div>
-              <span style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626' }}>Opptatt</span>
-            </div>))}
-          </>)}
+              {delvis_ledige.map(emp => {
+                const free = daysFreeInPeriod(emp.id)
+                const partial = daysPartialInPeriod(emp.id)
+                const hoursBooked = totalHoursInPeriod(emp.id)
+                const totalHours = totalDays * 8
+                const hoursFree = Math.max(0, totalHours - hoursBooked)
+                // Finn første ledig dag i periode
+                const firstFreeDate = periodDates.find(d => (bookedByEmpDate[`${emp.id}|${d}`] || 0) === 0) || fromDate
+                return (
+                  <EmpCard key={emp.id} emp={emp} bg="#fefce8" border="#fde68a"
+                    infoText={totalDays === 1
+                      ? `${hoursFree}t ledig av ${totalHours}t`
+                      : `${free} av ${totalDays} dager ledig${partial > 0 ? ` (+ ${partial} delvis)` : ''}`}
+                    badge={<div style={{ fontSize:'11px', fontWeight:'700', color:'#ca8a04', background:'#fef3c7', padding:'2px 8px', borderRadius:'999px' }}>{hoursFree}t ledig</div>}
+                    bookDate={firstFreeDate} bookLabel="Book" />
+                )
+              })}
+            </>
+          )}
+
+          {/* Blir snart ledig */}
+          {snart_ledige.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                🎯 BLIR SNART LEDIG ({snart_ledige.length})
+              </div>
+              {snart_ledige.map(emp => {
+                const when = new Date(emp._availableFrom + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })
+                return (
+                  <EmpCard key={emp.id} emp={emp} bg="#eff6ff" border="#bfdbfe"
+                    infoText={`Blir ledig ${when}`}
+                    badge={<div style={{ fontSize:'11px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'2px 8px', borderRadius:'999px' }}>{when}</div>}
+                    bookDate={emp._availableFrom} bookLabel={`Book ${when}`} />
+                )
+              })}
+            </>
+          )}
+
+          {/* Opptatt */}
+          {opptatt.length > 0 && (
+            <>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#dc2626', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px', marginTop:'16px' }}>
+                🔴 OPPTATT ({opptatt.length})
+              </div>
+              {opptatt.map(emp => {
+                const current = currentProject(emp.id)
+                const lastDateStr = current?.lastDate ? new Date(current.lastDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' }) : null
+                const infoText = current?.project
+                  ? `På "${current.project.name}"${lastDateStr ? ` t.o.m. ${lastDateStr}` : ''}`
+                  : lastDateStr ? `Opptatt t.o.m. ${lastDateStr}` : 'Fullt booket i perioden'
+                return (
+                  <EmpCard key={emp.id} emp={emp} bg="#fef2f2" border="#fecaca"
+                    infoText={infoText}
+                    badge={<span style={{ fontSize:'11px', fontWeight:'700', color:'#dc2626' }}>Opptatt</span>} />
+                )
+              })}
+            </>
+          )}
+
+          {filteredEmps.length === 0 && (
+            <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'24px' }}>
+              Ingen ansatte å vise{filterSkill ? ` med kompetanse i ${filterSkill}` : ''}
+            </p>
+          )}
         </div>
       </div>
     </div>
