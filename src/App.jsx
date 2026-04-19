@@ -449,32 +449,181 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 }
 
 // ── Ansattvelger som setter navn/epost/telefon fra valgt ansatt ──
-function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style }) {
-  const [emps, setEmps] = useState([])
-  const [showDrop, setShowDrop] = useState(false)
+// Global cache av ansatte — hentes én gang per sesjon for å unngå N fetch-er
+const _employeeCache = { data: null, loading: null, subscribers: new Set() }
+
+function getCachedEmployees() {
+  if (_employeeCache.data) return Promise.resolve(_employeeCache.data)
+  if (_employeeCache.loading) return _employeeCache.loading
+  _employeeCache.loading = supabase.from('employees')
+    .select('id, first_name, last_name, email, phone, role, department')
+    .order('last_name')
+    .then(({ data }) => {
+      _employeeCache.data = data || []
+      _employeeCache.loading = null
+      _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
+      return _employeeCache.data
+    })
+  return _employeeCache.loading
+}
+
+function invalidateEmployeeCache() {
+  _employeeCache.data = null
+  _employeeCache.loading = null
+}
+
+function useEmployees() {
+  const [emps, setEmps] = useState(_employeeCache.data || [])
   useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, phone, role, department').order('last_name').then(({ data }) => setEmps(data || []))
+    let mounted = true
+    if (_employeeCache.data) {
+      setEmps(_employeeCache.data)
+      return
+    }
+    getCachedEmployees().then(data => { if (mounted) setEmps(data) })
+    const sub = (data) => { if (mounted) setEmps(data) }
+    _employeeCache.subscribers.add(sub)
+    return () => { mounted = false; _employeeCache.subscribers.delete(sub) }
   }, [])
+  return emps
+}
+
+// EmployeeNameSelect — søkbar nedtrekk for å velge ansatt
+// Props:
+//   value, onChange — tekstlig navn (free-text fallback)
+//   onSelect — kalles med hele ansatt-objektet når bruker velger (inkl. email, phone)
+//   placeholder, style — UI
+function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style }) {
+  const emps = useEmployees()
+  const [showDrop, setShowDrop] = useState(false)
   const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
+
+  const filtered = emps.filter(emp => {
+    if (!value) return true
+    const q = value.toLowerCase()
+    const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim().toLowerCase()
+    const email = (emp.email || '').toLowerCase()
+    const phone = (emp.phone || '').toLowerCase()
+    const role = (emp.role || '').toLowerCase()
+    return name.includes(q) || email.includes(q) || phone.includes(q) || role.includes(q)
+  })
+
   return (
     <div style={{ position:'relative' }}>
       <input value={value || ''} onChange={e => { onChange(e.target.value); setShowDrop(true) }} onFocus={() => setShowDrop(true)} placeholder={placeholder || 'Skriv eller velg ansatt...'} style={selStyle} />
       {showDrop && emps.length > 0 && (
         <>
           <div style={{ position:'fixed', inset:0, zIndex:49 }} onClick={() => setShowDrop(false)} />
-          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'180px', overflowY:'auto', marginTop:'2px' }}>
-            {emps.filter(emp => {
-              if (!value) return true
-              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim().toLowerCase()
-              return name.includes(value.toLowerCase())
-            }).map(emp => {
+          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'260px', overflowY:'auto', marginTop:'2px' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+                Ingen treff{value ? ` for "${value}"` : ''} — du kan skrive fritt navn
+              </div>
+            ) : filtered.map(emp => {
               const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
               return (
                 <div key={emp.id} onClick={() => { onChange(name); if (onSelect) onSelect(emp); setShowDrop(false) }}
-                  style={{ padding:'8px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
-                  onMouseEnter={e => e.target.style.background='#f0fdf4'} onMouseLeave={e => e.target.style.background='white'}>
-                  <div style={{ fontWeight:'600', color:'#0f172a' }}>{name}</div>
-                  {emp.role && <div style={{ fontSize:'11px', color:'#94a3b8' }}>{emp.role}{emp.department ? ` · ${emp.department}` : ''}</div>}
+                  style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
+                  onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+                  <div style={{ fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>{name || '(uten navn)'}</div>
+                  {(emp.role || emp.department) && (
+                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                      {emp.role}{emp.department ? ` · ${emp.department}` : ''}
+                    </div>
+                  )}
+                  {(emp.email || emp.phone) && (
+                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                      {emp.email && <span>✉️ {emp.email}</span>}
+                      {emp.phone && <span>📱 {emp.phone}</span>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// EmployeeChipPicker — for lister (deltakere, involverte, vitner)
+// Viser allerede-valgte som chips + søkefelt for å legge til nye
+function EmployeeChipPicker({ values, onChange, placeholder, style }) {
+  const emps = useEmployees()
+  const [searchInput, setSearchInput] = useState('')
+  const [showDrop, setShowDrop] = useState(false)
+
+  const valuesArr = Array.isArray(values) ? values : (values ? values.split(',').map(s => s.trim()).filter(Boolean) : [])
+
+  const filtered = emps.filter(emp => {
+    const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+    if (valuesArr.includes(name)) return false // skjul allerede lagt til
+    if (!searchInput) return true
+    const q = searchInput.toLowerCase()
+    return name.toLowerCase().includes(q) ||
+           (emp.email || '').toLowerCase().includes(q) ||
+           (emp.phone || '').toLowerCase().includes(q) ||
+           (emp.role || '').toLowerCase().includes(q)
+  })
+
+  const addPerson = (name) => {
+    if (!name || !name.trim()) return
+    const clean = name.trim()
+    if (valuesArr.includes(clean)) return
+    onChange([...valuesArr, clean])
+    setSearchInput('')
+    setShowDrop(false)
+  }
+
+  const removePerson = (idx) => onChange(valuesArr.filter((_, i) => i !== idx))
+
+  const inpStyle = { flex:1, padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
+
+  return (
+    <div style={{ position:'relative' }}>
+      <div style={{ display:'flex', gap:'8px', marginBottom:valuesArr.length>0?'6px':0 }}>
+        <input value={searchInput} onChange={e => { setSearchInput(e.target.value); setShowDrop(true) }}
+          onFocus={() => setShowDrop(true)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPerson(searchInput) } }}
+          placeholder={placeholder || 'Søk eller skriv navn...'}
+          style={inpStyle} />
+        <button type="button" onClick={() => addPerson(searchInput)} disabled={!searchInput.trim()}
+          style={{ padding:'9px 14px', background: searchInput.trim() ? '#f0fdf4' : '#f8fafc', color: searchInput.trim() ? '#059669' : '#cbd5e1', border:'none', borderRadius:'10px', cursor: searchInput.trim() ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'600' }}>+</button>
+      </div>
+
+      {valuesArr.length > 0 && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+          {valuesArr.map((p, i) => (
+            <span key={i} style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'3px 10px', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'5px' }}>
+              {p}
+              <button type="button" onClick={() => removePerson(i)} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', padding:0, fontSize:'13px' }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {showDrop && searchInput && emps.length > 0 && (
+        <>
+          <div style={{ position:'fixed', inset:0, zIndex:49 }} onClick={() => setShowDrop(false)} />
+          <div style={{ position:'absolute', top:'46px', left:0, right:'50px', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'220px', overflowY:'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+                Ingen treff — trykk + eller Enter for å legge til som fri tekst
+              </div>
+            ) : filtered.slice(0, 10).map(emp => {
+              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+              return (
+                <div key={emp.id} onClick={() => addPerson(name)}
+                  style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
+                  onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+                  <div style={{ fontWeight:'600', color:'#0f172a' }}>{name || '(uten navn)'}</div>
+                  {(emp.email || emp.phone) && (
+                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                      {emp.email && <span>✉️ {emp.email}</span>}
+                      {emp.phone && <span>📱 {emp.phone}</span>}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -5075,8 +5224,8 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Sted</label><input value={form.sted} onChange={e=>set('sted',e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
           <div><label style={lbl()}>Rapportert av</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansatt" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
-          <div><label style={lbl()}>Involverte</label><input value={form.involverte} onChange={e=>set('involverte',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
-          <div><label style={lbl()}>Vitner</label><input value={form.vitner} onChange={e=>set('vitner',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Involverte</label><EmployeeNameSelect value={form.involverte} onChange={v=>set('involverte',v)} onSelect={emp => set('involverte', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Navn" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
+          <div><label style={lbl()}>Vitner</label><EmployeeNameSelect value={form.vitner} onChange={v=>set('vitner',v)} onSelect={emp => set('vitner', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Navn" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Beskrivelse av hendelsen *</label><textarea value={form.hendelsesBeskrivelse} onChange={e=>set('hendelsesBeskrivelse',e.target.value)} rows={4} required style={{ ...hmsInp, resize:'none' }} placeholder="Hva skjedde?" /></div>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Årsak</label><textarea value={form.arsak} onChange={e=>set('arsak',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Hva var årsaken?" /></div>
           <div><label style={lbl()}>Skadeomfang</label><textarea value={form.skadeomfang} onChange={e=>set('skadeomfang',e.target.value)} rows={2} style={{ ...hmsInp, resize:'none' }} placeholder="Eventuelle skader..." /></div>
@@ -5287,7 +5436,7 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Leverandør</label><input value={form.leverandor} onChange={e=>set('leverandor',e.target.value)} placeholder="Firmanavn" style={hmsInp} /></div>
           <div><label style={lbl()}>Ordrenummer</label><input value={form.ordrenummer} onChange={e=>set('ordrenummer',e.target.value)} placeholder="Bestillingsnr." style={hmsInp} /></div>
-          <div><label style={lbl()}>Mottatt av</label><input value={form.mottattAv} onChange={e=>set('mottattAv',e.target.value)} placeholder="Navn" style={hmsInp} /></div>
+          <div><label style={lbl()}>Mottatt av</label><EmployeeNameSelect value={form.mottattAv} onChange={v=>set('mottattAv',v)} onSelect={emp => set('mottattAv', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Navn" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
           <div><label style={lbl()}>Sted</label><input value={form.sted} onChange={e=>set('sted',e.target.value)} placeholder="Mottakssted" style={hmsInp} /></div>
           <div><label style={lbl()}>Transportør</label><input value={form.transportor} onChange={e=>set('transportor',e.target.value)} placeholder="Fraktselskap" style={hmsInp} /></div>
           <div><label style={lbl()}>Fraktseddel nr.</label><input value={form.fraktseddel} onChange={e=>set('fraktseddel',e.target.value)} placeholder="Nummer" style={hmsInp} /></div>
@@ -12043,12 +12192,14 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
     const updates = { status, updated_at:new Date().toISOString() }
     if (status==='Reaktivert') updates.end_date = null
     await supabase.from('employees').update(updates).eq('id',emp.id)
+    invalidateEmployeeCache()
     setEmp(v=>({...v,...updates}))
   }
 
   const handleDelete = async () => {
     if (!(await confirm({ message: 'Slett denne ansatte?', subMessage: 'Den ansatte og all historikk slettes permanent. Dette kan ikke angres.', danger: true }))) return
     await supabase.from('employees').delete().eq('id',emp.id)
+    invalidateEmployeeCache()
     onBack()
   }
 
@@ -12299,6 +12450,7 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
       }
       if (isEdit) { const {error}=await supabase.from('employees').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('employees').insert({...payload,status:'Aktiv',created_by:user?.id}); if(error) throw error }
+      invalidateEmployeeCache()
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -12489,6 +12641,7 @@ function ImportCSVModal({ user, onClose, onSaved }) {
       })).filter(e=>e.first_name&&e.last_name)
       const { error } = await supabase.from('employees').insert(employees)
       if (error) throw error
+      invalidateEmployeeCache()
       setDone(true)
       setTimeout(()=>onSaved(), 1500)
     } catch(e) { alert('Feil: '+e.message) }
@@ -16423,11 +16576,19 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
             <div>
               <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Ansvarlig</label>
-              <select value={form.responsible_employee_id} onChange={e => set('responsible_employee_id', e.target.value)}
-                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}>
-                <option value="">Ingen ansvarlig</option>
-                {(employees || []).map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
-              </select>
+              <EmployeeNameSelect
+                value={(() => {
+                  const emp = (employees || []).find(e => e.id === form.responsible_employee_id)
+                  return emp ? `${emp.first_name || ''} ${emp.last_name || ''}`.trim() : ''
+                })()}
+                onChange={v => {
+                  // Hvis bruker skriver fritt som ikke matcher en ansatt → fjern id
+                  if (!v) set('responsible_employee_id', '')
+                }}
+                onSelect={emp => set('responsible_employee_id', emp.id)}
+                placeholder="Velg ansvarlig"
+                style={{ padding:'10px 12px', fontSize:'14px' }}
+              />
             </div>
             <div>
               <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Varsle (dager før)</label>
@@ -22048,13 +22209,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
-            <div style={{ display:'flex',gap:'8px',marginBottom:'6px' }}>
-              <input value={participantInput} onChange={e=>setParticipantInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addParticipant()} placeholder="Legg til deltaker" style={{ ...bInp,flex:1 }} />
-              <button onClick={addParticipant} style={{ padding:'9px 14px',background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>+</button>
-            </div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
-              {form.participants.map((p,i)=><span key={i} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'5px' }}>{p}<button onClick={()=>set('participants',form.participants.filter((_,j)=>j!==i))} style={{ background:'none',border:'none',cursor:'pointer',color:'#059669',padding:0,fontSize:'13px' }}>×</button></span>)}
-            </div>
+            <EmployeeChipPicker values={form.participants || []} onChange={list => set('participants', list)} placeholder="Søk ansatt eller skriv navn" style={{ padding:'9px 12px', fontSize:'14px' }} />
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notater</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...bInp,resize:'none' }} placeholder="Generelle notater fra befaringen..." /></div>
         </div>
