@@ -16070,6 +16070,7 @@ function RessursPage() {
   }, [])
   const [showSettings, setShowSettings] = useState(false)
   const [showDoubleBookings, setShowDoubleBookings] = useState(false)
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [conflictHighlight, setConflictHighlight] = useState(null) // { resourceId, date }
   
   // Auto-clear conflict highlight after 4 seconds
@@ -16371,29 +16372,144 @@ function RessursPage() {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'calc(100vh - 56px)', overflow:'hidden', maxWidth:'100%', minWidth:0 }}>
-      {/* Header — kompakt redesign (2 rader) */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'10px 16px', flexShrink:0, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
-        {/* Rad 1 — Hovedkontroller */}
-        <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+      {/* Header — modernisert (Float-inspirert, Fase 1) */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', flexShrink:0, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+        {/* Rad 1 — Hovedtoolbar (minimalistisk) */}
+        <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', padding:'10px 16px' }}>
           {/* Tittel */}
-          <h1 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0, whiteSpace:'nowrap' }}>📅 Ressursplan</h1>
+          <h1 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:'6px' }}>
+            <span>📅</span><span>Ressursplan</span>
+          </h1>
 
-          {/* Ansatte/Maskiner toggle — skjult på mobil */}
+          {/* Ansatte/Maskiner toggle — segmentert knappegruppe */}
           {!isMobRP && (
-          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', flexShrink:0 }}>
-            {[['ansatte','👷'],['maskiner','🚜']].map(([v,emoji])=>(
-              <button key={v} onClick={()=>setResourceType(v)} title={v==='ansatte'?'Ansatte':'Maskiner'}
-                style={{ padding:'6px 10px',border:'none',background:resourceType===v?'#059669':'white',color:resourceType===v?'white':'#64748b',fontWeight:resourceType===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:v==='ansatte'?'1px solid #e2e8f0':'none' }}>{emoji}</button>
+          <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'7px', padding:'2px', gap:'2px', flexShrink:0 }}>
+            {[['ansatte','👷','Ansatte'],['maskiner','🚜','Maskiner']].map(([v,emoji,label])=>(
+              <button key={v} onClick={()=>setResourceType(v)} title={label}
+                style={{ padding:'4px 10px', border:'none', background:resourceType===v?'white':'transparent', color:resourceType===v?'#0f172a':'#94a3b8', fontWeight:resourceType===v?'600':'500', fontSize:'12px', cursor:'pointer', borderRadius:'5px', boxShadow: resourceType===v?'0 1px 2px rgba(0,0,0,0.05)':'none', transition:'all 0.15s' }}>
+                {emoji}
+              </button>
             ))}
           </div>
           )}
 
-          {/* Visningsmodus toggle — fjernet 2026-04-18. Gantt er nå eneste visning, styres av ganttZoom-dropdown nedenfor */}
+          {/* Filter-knapp — samler prosjekt + ansatt-filter */}
+          {!isMobRP && (() => {
+            const activeFilterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
+            return (
+              <div style={{ position:'relative', flexShrink:0 }}>
+                <button onClick={()=>setShowFilterPanel(v=>!v)}
+                  style={{ padding:'6px 12px', border:`1px solid ${activeFilterCount>0?'#059669':'#e2e8f0'}`, borderRadius:'8px', fontSize:'12px', color:activeFilterCount>0?'#059669':'#374151', background: activeFilterCount>0?'#f0fdf4':'white', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', fontWeight: activeFilterCount>0?'600':'500' }}>
+                  <span style={{ fontSize:'11px' }}>🔍</span>
+                  <span>Filter</span>
+                  {activeFilterCount>0 && <span style={{ background:'#059669', color:'white', borderRadius:'999px', padding:'0 7px', fontSize:'10px', fontWeight:'700', lineHeight:'16px', minWidth:'16px', textAlign:'center' }}>{activeFilterCount}</span>}
+                </button>
+                {showFilterPanel && (
+                  <>
+                    <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowFilterPanel(false)} />
+                    <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'14px', minWidth:'280px' }}>
+                      <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Filter etter prosjekt</div>
+                      <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
+                        style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer' }}>
+                        <option value="alle">🏗️ Alle prosjekter ({projects.length})</option>
+                        {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      {resourceType==='ansatte' && (
+                        <>
+                          <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Filter etter ansatt</div>
+                          <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
+                            style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer' }}>
+                            <option value="alle">👤 Alle ansatte ({employees.length})</option>
+                            {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                          </select>
+                        </>
+                      )}
+                      {activeFilterCount>0 && (
+                        <button onClick={()=>{ setFilterProject('alle'); setFilterEmployee('alle') }}
+                          style={{ width:'100%', padding:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'12px', color:'#64748b', fontWeight:'500' }}>
+                          ✕ Fjern alle filtre
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          })()}
 
-          {/* Gantt zoom — eneste visningsvelger, skjult på mobil */}
+          {/* Mobile: Prosjekt- og ansatt-filter som i dag (kompakt) */}
+          {isMobRP && (
+            <>
+              <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
+                style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', background:'white', cursor:'pointer', color:'#374151', maxWidth:'130px', fontWeight:'500', flex:'1 1 auto' }}>
+                <option value="alle">🏗️ Alle</option>
+                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {resourceType==='ansatte' && (
+                <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
+                  style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', background:'white', cursor:'pointer', color:'#374151', maxWidth:'120px', fontWeight:'500', flex:'1 1 auto' }}>
+                  <option value="alle">👤 Alle</option>
+                  {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                </select>
+              )}
+            </>
+          )}
+
+          {/* Spacer — dytter resten til høyre */}
+          <div style={{ flex:1, minWidth:'10px' }} />
+
+          {/* Datonavigering — kompakt pil-gruppe */}
+          {!isMobRP && (
+          <div style={{ display:'flex', alignItems:'center', gap:'0', flexShrink:0 }}>
+            <button onClick={()=>navigate(-1)} style={{ width:'28px', height:'28px', borderRadius:'6px', border:'none', background:'transparent', cursor:'pointer', fontSize:'15px', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b' }} title="Forrige" onMouseEnter={e=>e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>‹</button>
+            <button onClick={()=>navigate(1)} style={{ width:'28px', height:'28px', borderRadius:'6px', border:'none', background:'transparent', cursor:'pointer', fontSize:'15px', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b' }} title="Neste" onMouseEnter={e=>e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>›</button>
+          </div>
+          )}
+
+          {/* "I dag" knapp */}
+          {!isMobRP && (
+          <button onClick={goToToday} style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'500', color:'#374151' }}>I dag</button>
+          )}
+
+          {/* Dato-picker pill (kompakt — viser periode) */}
+          {!isMobRP && (
+          <div style={{ position:'relative', flexShrink:0 }}>
+            <button onClick={()=>setShowDatePicker(v=>!v)}
+              style={{ padding:'6px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#0f172a', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span style={{ fontSize:'11px' }}>📅</span>
+              <span>{(() => {
+                const start = new Date(ganttAnchor+'T12:00:00')
+                const offsetBefore = ganttZoom==='days' ? 7 : ganttZoom==='weeks' ? 21 : ganttZoom==='months' ? 56 : 120
+                start.setDate(start.getDate() - offsetBefore)
+                const end = new Date(start)
+                end.setDate(end.getDate() + GANTT_VISIBLE_DAYS[ganttZoom] - 1)
+                const fmt = d => `${d.getDate()}. ${MONTH_NAMES[d.getMonth()].slice(0,3).toLowerCase()}`
+                return `${fmt(start)} — ${fmt(end)} ${end.getFullYear()}`
+              })()}</span>
+              <span style={{ color:'#94a3b8', fontSize:'9px' }}>▾</span>
+            </button>
+            {showDatePicker && (
+              <>
+                <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowDatePicker(false)} />
+                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'14px', minWidth:'240px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'8px' }}>GÅ TIL DATO</div>
+                  <input type="date" value={ganttAnchor}
+                    onChange={e=>{
+                      const d=e.target.value
+                      if (d) setGanttAnchor(startOfWeek(d))
+                      setShowDatePicker(false)
+                    }}
+                    style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', boxSizing:'border-box' }} />
+                </div>
+              </>
+            )}
+          </div>
+          )}
+
+          {/* Zoom-dropdown */}
           {!isMobRP && (
           <select value={ganttZoom} onChange={e=>setGanttZoom(e.target.value)}
-            style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',fontWeight:'500',minWidth:'90px' }}>
+            style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', background:'white', cursor:'pointer', color:'#374151', fontWeight:'500', minWidth:'90px' }}>
             <option value="days">Dager</option>
             <option value="weeks">Uker</option>
             <option value="months">Måneder</option>
@@ -16401,68 +16517,13 @@ function RessursPage() {
           </select>
           )}
 
-          {/* Prosjekt-filter */}
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
-            style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth: isMobRP ? '130px' : '160px',fontWeight:'500', flex: isMobRP ? '1 1 auto' : 'none' }}>
-            <option value="alle">🏗️ {isMobRP ? 'Alle' : 'Alle prosjekter'}</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-
-          {/* Ansatt-filter (kun ansatte) */}
-          {resourceType==='ansatte' && (
-            <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
-              style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth: isMobRP ? '120px' : '140px',fontWeight:'500', flex: isMobRP ? '1 1 auto' : 'none' }}>
-              <option value="alle">👷 {isMobRP ? 'Alle' : 'Alle ansatte'}</option>
-              {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
-            </select>
-          )}
-
-          {/* Spacer — dytter resten til høyre */}
-          <div style={{ flex:1, minWidth:'10px' }} />
-
-          {/* Datonavigering — én klikkbar pill som åpner datovelger. Skjult på mobil (MobilRessursView har egen) */}
-          {!isMobRP && (
-          <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
-            <button onClick={()=>navigate(-1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Forrige">‹</button>
-            <div style={{ position:'relative' }}>
-              <button onClick={()=>setShowDatePicker(v=>!v)}
-                style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#0f172a',minWidth:'180px' }}>
-                {(() => {
-                  const start = new Date(ganttAnchor+'T12:00:00')
-                  // Ganttens visningsvindu starter ~30% før anker (matches Gantt-kode)
-                  const offsetBefore = ganttZoom==='days' ? 7 : ganttZoom==='weeks' ? 21 : ganttZoom==='months' ? 56 : 120
-                  start.setDate(start.getDate() - offsetBefore)
-                  const end = new Date(start)
-                  end.setDate(end.getDate() + GANTT_VISIBLE_DAYS[ganttZoom] - 1)
-                  const fmt = d => `${d.getDate()}. ${MONTH_NAMES[d.getMonth()].slice(0,3).toLowerCase()} ${d.getFullYear()}`
-                  return `📅 ${fmt(start)} — ${fmt(end)}`
-                })()}
-              </button>
-              {showDatePicker && (
-                <>
-                  <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowDatePicker(false)} />
-                  <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,padding:'14px',minWidth:'240px' }}>
-                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'8px' }}>GÅ TIL DATO</div>
-                    <input type="date" value={ganttAnchor}
-                      onChange={e=>{
-                        const d=e.target.value
-                        if (d) setGanttAnchor(startOfWeek(d))
-                        setShowDatePicker(false)
-                      }}
-                      style={{ width:'100%',padding:'8px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',boxSizing:'border-box' }} />
-                  </div>
-                </>
-              )}
-            </div>
-            <button onClick={()=>navigate(1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Neste">›</button>
-            <button onClick={goToToday} style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:'#374151' }}>I dag</button>
-          </div>
-          )}
+          {/* Skille */}
+          {!isMobRP && <div style={{ height:'20px', width:'1px', background:'#e2e8f0' }} />}
 
           {/* Settings-tannhjul */}
           <div style={{ position:'relative', flexShrink:0 }}>
             <button onClick={()=>setShowSettings(v=>!v)}
-              style={{ width:'30px',height:'30px',borderRadius:'6px',border:`1px solid ${showSettings?'#059669':'#e2e8f0'}`,background:showSettings?'#f0fdf4':'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:showSettings?'#059669':'#64748b' }}
+              style={{ width:'30px', height:'30px', borderRadius:'8px', border:`1px solid ${showSettings?'#059669':'#e2e8f0'}`, background:showSettings?'#f0fdf4':'white', cursor:'pointer', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', color:showSettings?'#059669':'#64748b' }}
               title="Innstillinger">⚙️</button>
             {showSettings&&(
               <>
@@ -16538,7 +16599,7 @@ function RessursPage() {
           {/* Fullskjerm — skjult på mobil */}
           {!isMobRP && (
           <button onClick={()=>setFullscreen(v=>!v)}
-            style={{ width:'30px',height:'30px',borderRadius:'6px',border:`1px solid ${fullscreen?'#059669':'#e2e8f0'}`,background:fullscreen?'#f0fdf4':'white',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',justifyContent:'center',color:fullscreen?'#059669':'#64748b',flexShrink:0 }}
+            style={{ width:'30px', height:'30px', borderRadius:'8px', border:`1px solid ${fullscreen?'#059669':'#e2e8f0'}`, background:fullscreen?'#f0fdf4':'white', cursor:'pointer', fontSize:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:fullscreen?'#059669':'#64748b', flexShrink:0 }}
             title={fullscreen?'Avslutt fullskjerm (Esc)':'Fullskjerm'}>
             {fullscreen?'⊡':'⛶'}
           </button>
@@ -16547,22 +16608,24 @@ function RessursPage() {
           {/* + Ny-dropdown */}
           <div style={{ position:'relative', flexShrink:0 }}>
             <button onClick={()=>setShowNyMeny(v=>!v)}
-              style={{ padding:'6px 14px',background:'#059669',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'700',display:'flex',alignItems:'center',gap:'5px' }}>
-              ＋ Ny <span style={{ fontSize:'10px',opacity:0.85 }}>▾</span>
+              style={{ padding:'6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', gap:'5px' }}>
+              <span style={{ fontSize:'13px' }}>＋</span>
+              <span>Ny</span>
+              <span style={{ fontSize:'9px', opacity:0.85 }}>▾</span>
             </button>
             {showNyMeny && (
               <>
-                <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowNyMeny(false)} />
-                <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,minWidth:'200px',overflow:'hidden' }}>
+                <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowNyMeny(false)} />
+                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, minWidth:'200px', overflow:'hidden' }}>
                   <button onClick={()=>{ setShowOppgaveModal(true); setShowNyMeny(false) }}
-                    style={{ display:'flex',alignItems:'center',gap:'10px',width:'100%',padding:'10px 14px',border:'none',background:'white',cursor:'pointer',fontSize:'13px',color:'#0f172a',textAlign:'left',borderBottom:'1px solid #f1f5f9' }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 14px', border:'none', background:'white', cursor:'pointer', fontSize:'13px', color:'#0f172a', textAlign:'left', borderBottom:'1px solid #f1f5f9' }}
                     onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
                     onMouseLeave={e=>e.currentTarget.style.background='white'}>
                     <span style={{ fontSize:'16px' }}>➕</span>
                     <span style={{ fontWeight:'600' }}>Planlegg oppgave</span>
                   </button>
                   <button onClick={()=>{ setShowNewMilestone(new Date().toISOString().split('T')[0]); setShowNyMeny(false) }}
-                    style={{ display:'flex',alignItems:'center',gap:'10px',width:'100%',padding:'10px 14px',border:'none',background:'white',cursor:'pointer',fontSize:'13px',color:'#0f172a',textAlign:'left' }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 14px', border:'none', background:'white', cursor:'pointer', fontSize:'13px', color:'#0f172a', textAlign:'left' }}
                     onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
                     onMouseLeave={e=>e.currentTarget.style.background='white'}>
                     <span style={{ fontSize:'16px' }}>🏁</span>
@@ -16574,70 +16637,109 @@ function RessursPage() {
           </div>
         </div>
 
-        {/* Rad 2 — Filter-pills */}
-        <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'8px', flexWrap:'wrap' }}>
+        {/* Rad 2 — Kontekstrad (lysegrå, nøytrale knapper med aktive-state) */}
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 16px', flexWrap:'wrap', background:'#fafbfc', borderTop:'1px solid #f1f5f9' }}>
+          {/* Dobbeltbookinger — bare hvis >0, plassert først (rød) */}
           {doubleBookCount>0&&(
             <button onClick={()=>setShowDoubleBookings(true)}
-              style={{ padding:'4px 10px',background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',borderRadius:'999px',fontSize:'12px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}>
-              ⚠️ {doubleBookCount} dobbeltbooking{doubleBookCount>1?'er':''}
+              style={{ padding:'3px 9px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px' }}>
+              ⚠️ {doubleBookCount} konflikt{doubleBookCount>1?'er':''}
             </button>
           )}
+
+          {/* Ledig mannskap */}
           <button onClick={()=>setShowLedigMannskap(true)}
-            style={{ padding:'4px 10px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            style={{ padding:'3px 9px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'11px', fontWeight:'500', cursor:'pointer', transition:'all 0.15s' }}
+            onMouseEnter={e=>{ e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.color='#2563eb'; e.currentTarget.style.borderColor='#bfdbfe' }}
+            onMouseLeave={e=>{ e.currentTarget.style.background='white'; e.currentTarget.style.color='#64748b'; e.currentTarget.style.borderColor='#e2e8f0' }}>
             👷 Ledig mannskap
           </button>
+
+          {/* Ledig utstyr */}
           <button onClick={()=>setShowLedigMaskiner(true)}
-            style={{ padding:'4px 10px',background:'#f5f3ff',color:'#7c3aed',border:'1px solid #ddd6fe',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            style={{ padding:'3px 9px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'11px', fontWeight:'500', cursor:'pointer', transition:'all 0.15s' }}
+            onMouseEnter={e=>{ e.currentTarget.style.background='#f5f3ff'; e.currentTarget.style.color='#7c3aed'; e.currentTarget.style.borderColor='#ddd6fe' }}
+            onMouseLeave={e=>{ e.currentTarget.style.background='white'; e.currentTarget.style.color='#64748b'; e.currentTarget.style.borderColor='#e2e8f0' }}>
             🚜 Ledig utstyr
           </button>
+
+          {/* Milepæler toggle */}
           <button onClick={()=>setShowMilestones(v=>!v)}
-            style={{ padding:'4px 10px',background:showMilestones?'#7c3aed':'white',color:showMilestones?'white':'#7c3aed',border:'1px solid #7c3aed',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            style={{ padding:'3px 9px', background:showMilestones?'#f5f3ff':'white', color:showMilestones?'#7c3aed':'#64748b', border:`1px solid ${showMilestones?'#ddd6fe':'#e2e8f0'}`, borderRadius:'6px', fontSize:'11px', fontWeight: showMilestones?'600':'500', cursor:'pointer', transition:'all 0.15s' }}>
             🏁 Milepæler
           </button>
+
+          {/* Materiell toggle */}
           <button onClick={()=>setShowMateriell(v=>!v)}
-            style={{ padding:'4px 10px',background:showMateriell?'#059669':'white',color:showMateriell?'white':'#059669',border:'1px solid #059669',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer' }}>
+            style={{ padding:'3px 9px', background:showMateriell?'#f0fdf4':'white', color:showMateriell?'#059669':'#64748b', border:`1px solid ${showMateriell?'#bbf7d0':'#e2e8f0'}`, borderRadius:'6px', fontSize:'11px', fontWeight: showMateriell?'600':'500', cursor:'pointer', transition:'all 0.15s' }}>
             📦 Materiell
           </button>
 
-          {/* Aktive filter-pills */}
+          {/* Aktive filter-pills (vises som bekreftelse på valg) */}
           {filterProject!=='alle' && (
-            <span style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
+            <span style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'2px 8px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'5px' }}>
               🏗️ {projects.find(p=>p.id===filterProject)?.name}
-              <button onClick={()=>setFilterProject('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#059669',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
+              <button onClick={()=>setFilterProject('alle')} style={{ background:'none', border:'none', cursor:'pointer', color:'#059669', fontSize:'13px', lineHeight:1, padding:0 }}>×</button>
             </span>
           )}
           {filterEmployee!=='alle' && (
-            <span style={{ background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px' }}>
-              👷 {employees.find(e=>e.id===filterEmployee)?.first_name} {employees.find(e=>e.id===filterEmployee)?.last_name}
-              <button onClick={()=>setFilterEmployee('alle')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2563eb',fontSize:'14px',lineHeight:1,padding:0 }}>×</button>
+            <span style={{ background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'2px 8px', fontSize:'11px', fontWeight:'600', display:'flex', alignItems:'center', gap:'5px' }}>
+              👤 {employees.find(e=>e.id===filterEmployee)?.first_name} {employees.find(e=>e.id===filterEmployee)?.last_name}
+              <button onClick={()=>setFilterEmployee('alle')} style={{ background:'none', border:'none', cursor:'pointer', color:'#2563eb', fontSize:'13px', lineHeight:1, padding:0 }}>×</button>
             </span>
           )}
 
           {/* Spacer */}
           <div style={{ flex:1, minWidth:'10px' }} />
 
-          {/* Prosjektfarger info-popover */}
+          {/* Totalt-timer oppsummering (Float-inspirert) */}
+          {!isMobRP && (() => {
+            // Beregn totalt timer i visningsvinduet (alle filtrerte plans)
+            const offsetBefore = ganttZoom==='days' ? 7 : ganttZoom==='weeks' ? 21 : ganttZoom==='months' ? 56 : 120
+            const viewStart = new Date(ganttAnchor+'T12:00:00')
+            viewStart.setDate(viewStart.getDate() - offsetBefore)
+            const viewEnd = new Date(viewStart)
+            viewEnd.setDate(viewEnd.getDate() + GANTT_VISIBLE_DAYS[ganttZoom] - 1)
+            const startStr = viewStart.toISOString().split('T')[0]
+            const endStr = viewEnd.toISOString().split('T')[0]
+            const totalHours = plans.filter(p => {
+              if (!p.date || p.date < startStr || p.date > endStr) return false
+              if (filterProject !== 'alle' && p.project_id !== filterProject) return false
+              if (filterEmployee !== 'alle' && resourceType === 'ansatte' && p.resource_id !== filterEmployee) return false
+              if (resourceType === 'ansatte' && p.resource_type === 'machine') return false
+              if (resourceType === 'maskiner' && p.resource_type !== 'machine') return false
+              return true
+            }).reduce((sum, p) => sum + (parseFloat(p.hours) || 0), 0)
+            const zoomLabel = ganttZoom==='days' ? 'i perioden' : ganttZoom==='weeks' ? 'denne perioden' : ganttZoom==='months' ? 'i månedene' : 'i kvartalet'
+            return (
+              <span style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'500' }}>
+                Totalt {zoomLabel}: <strong style={{ color:'#0f172a', fontWeight:'700' }}>{Math.round(totalHours).toLocaleString('nb-NO')}t</strong>
+              </span>
+            )
+          })()}
+
+          {/* Prosjektfarger popover — beholdt, men diskretisert */}
           <div style={{ position:'relative' }}>
             <button onClick={()=>setShowProjectLegend(v=>!v)}
-              style={{ padding:'4px 10px',background:'white',color:'#64748b',border:'1px solid #e2e8f0',borderRadius:'999px',fontSize:'12px',fontWeight:'600',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}
+              style={{ padding:'3px 9px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'11px', fontWeight:'500', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px' }}
               title="Prosjektfarger">
-              <span style={{ display:'inline-flex',width:'14px',height:'14px',borderRadius:'50%',background:'#e2e8f0',color:'#64748b',fontSize:'9px',fontWeight:'800',alignItems:'center',justifyContent:'center' }}>i</span>
+              <span style={{ display:'inline-flex', width:'12px', height:'12px', borderRadius:'50%', background:'#e2e8f0', color:'#64748b', fontSize:'9px', fontWeight:'800', alignItems:'center', justifyContent:'center' }}>i</span>
               {projects.length} prosjekt{projects.length!==1?'er':''}
             </button>
             {showProjectLegend && (
               <>
-                <div style={{ position:'fixed',inset:0,zIndex:50 }} onClick={()=>setShowProjectLegend(false)} />
-                <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:51,padding:'12px',minWidth:'220px',maxHeight:'340px',overflowY:'auto' }}>
-                  <div style={{ fontSize:'11px',fontWeight:'700',color:'#64748b',marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.04em' }}>Prosjekter ({projects.length})</div>
+                <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowProjectLegend(false)} />
+                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'12px', minWidth:'220px', maxHeight:'340px', overflowY:'auto' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Prosjekter ({projects.length})</div>
                   {projects.length===0 ? (
-                    <div style={{ fontSize:'12px',color:'#94a3b8',fontStyle:'italic' }}>Ingen prosjekter</div>
+                    <div style={{ fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>Ingen prosjekter</div>
                   ) : (
-                    <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
                       {projects.map(p=>(
                         <div key={p.id} onClick={()=>{ setFilterProject(p.id===filterProject?'alle':p.id); setShowProjectLegend(false) }}
-                          style={{ display:'flex',alignItems:'center',gap:'8px',padding:'6px 8px',borderRadius:'6px',cursor:'pointer',background:p.id===filterProject?'#f0fdf4':'transparent' }}>
-                          <div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(p.id,projects),flexShrink:0 }}/>
-                          <span style={{ fontSize:'12px',color:'#0f172a',fontWeight:p.id===filterProject?'700':'500' }}>{p.name}</span>
+                          style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 8px', borderRadius:'6px', cursor:'pointer', background:p.id===filterProject?'#f0fdf4':'transparent' }}>
+                          <div style={{ width:'12px', height:'12px', borderRadius:'3px', background:getProjectColor(p.id,projects), flexShrink:0 }}/>
+                          <span style={{ fontSize:'12px', color:'#0f172a', fontWeight:p.id===filterProject?'700':'500' }}>{p.name}</span>
                         </div>
                       ))}
                     </div>
