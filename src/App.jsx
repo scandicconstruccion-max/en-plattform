@@ -15524,6 +15524,7 @@ function RessursPage() {
           machines={machines}
           defaultStartTime={settings.workdayStart}
           defaultEndTime={settings.workdayEnd}
+          settings={settings}
           zIndex={(showLedigMannskap || showLedigMaskiner) ? 120 : 100}
         />
       )}
@@ -15869,13 +15870,78 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
   )
 }
 
-function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30', zIndex=100 }) {
+function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30', zIndex=100, settings={ skipWeekends: true } }) {
   const confirm = useConfirm()
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
   const [startTime, setStartTime] = useState(editPlan?.start_time||defaultStartTime)
   const [endTime, setEndTime] = useState(editPlan?.end_time||defaultEndTime)
   const [notes, setNotes] = useState(editPlan?.notes||'')
+
+  // ── Periode-booking state ──
+  // Bare for nye bookinger (ikke ved redigering)
+  const [bookingMode, setBookingMode] = useState('single') // 'single' | 'period'
+  const [periodMode, setPeriodMode] = useState('toDate') // 'toDate' | 'count'
+  const [fromDate, setFromDate] = useState(date)
+  const [toDate, setToDate] = useState(date)
+  const [dayCount, setDayCount] = useState(1)
+
+  // Hjelper: regn ut arbeidsdager mellom to datoer (ikke-helger hvis skipWeekends)
+  const calcWorkdayList = (fromStr, toStr) => {
+    const list = []
+    if (!fromStr || !toStr || fromStr > toStr) return list
+    const start = new Date(fromStr + 'T12:00:00')
+    const end = new Date(toStr + 'T12:00:00')
+    const cur = new Date(start)
+    while (cur <= end) {
+      const dow = cur.getDay()
+      if (!settings.skipWeekends || (dow !== 0 && dow !== 6)) {
+        list.push(cur.toISOString().split('T')[0])
+      }
+      cur.setDate(cur.getDate() + 1)
+    }
+    return list
+  }
+
+  // Hjelper: gitt fra-dato + antall arbeidsdager, finn sluttdato
+  const calcEndDateFromCount = (fromStr, count) => {
+    if (!fromStr || count < 1) return fromStr
+    let added = 0
+    const cur = new Date(fromStr + 'T12:00:00')
+    // Første dag telles hvis den er arbeidsdag
+    while (true) {
+      const dow = cur.getDay()
+      const isWorkday = !settings.skipWeekends || (dow !== 0 && dow !== 6)
+      if (isWorkday) added++
+      if (added >= count) break
+      cur.setDate(cur.getDate() + 1)
+    }
+    return cur.toISOString().split('T')[0]
+  }
+
+  // Når periode-modus endres, oppdater avhengige felt
+  const handleFromDateChange = (newFrom) => {
+    setFromDate(newFrom)
+    if (periodMode === 'count') {
+      setToDate(calcEndDateFromCount(newFrom, dayCount))
+    } else if (newFrom > toDate) {
+      setToDate(newFrom)
+    }
+  }
+  const handleToDateChange = (newTo) => {
+    setToDate(newTo)
+    if (newTo >= fromDate) {
+      setDayCount(calcWorkdayList(fromDate, newTo).length)
+    }
+  }
+  const handleDayCountChange = (newCount) => {
+    const n = Math.max(1, parseInt(newCount) || 1)
+    setDayCount(n)
+    setToDate(calcEndDateFromCount(fromDate, n))
+  }
+
+  // Aktiv workday-liste for preview + lagring
+  const workdayList = bookingMode === 'period' ? calcWorkdayList(fromDate, toDate) : [date]
 
   const calcHoursFromTimes = (start, end) => {
     const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number)
@@ -15918,6 +15984,78 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   const handleSave = async () => {
     if (!projectId) return alert('Velg et prosjekt')
     if (showMachinePicker && linkedMachineId && machineFromDate > machineToDate) return alert('Fra-dato kan ikke være etter til-dato for maskin')
+
+    // ── Periode-modus: flerdagsbooking ──
+    if (bookingMode === 'period' && !editPlan) {
+      if (workdayList.length === 0) return alert('Perioden inneholder ingen gyldige arbeidsdager')
+      if (workdayList.length > 60) {
+        const ok = await confirm({
+          message: `Du er i ferd med å lage ${workdayList.length} bookinger`,
+          subMessage: 'Er du sikker på at perioden er riktig?',
+          confirmLabel: 'Ja, opprett alle',
+        })
+        if (!ok) return
+      }
+      setSaving(true)
+      try {
+        // Sjekk for konflikter (eksisterende bookinger for samme ressurs på samme datoer)
+        const { data: existing } = await supabase.from('resource_plans')
+          .select('date, hours, project_id, notes')
+          .eq('resource_id', resourceId)
+          .in('date', workdayList)
+        const conflicts = existing || []
+        if (conflicts.length > 0) {
+          const datesList = conflicts.map(c => new Date(c.date + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })).join(', ')
+          const ok = await confirm({
+            message: `⚠️ ${conflicts.length} dag${conflicts.length > 1 ? 'er' : ''} er allerede booket`,
+            subMessage: `${resourceName} har allerede bookinger på: ${datesList}. Vil du opprette bookinger på disse dagene i tillegg (dobbeltbooking) eller hoppe over?`,
+            confirmLabel: 'Hopp over konflikter',
+          })
+          if (!ok) { setSaving(false); return }
+          // Fjern konflikter fra lista
+          const conflictDates = new Set(conflicts.map(c => c.date))
+          var finalDates = workdayList.filter(d => !conflictDates.has(d))
+        } else {
+          var finalDates = workdayList
+        }
+        if (finalDates.length === 0) { alert('Ingen dager å booke etter å ha hoppet over konflikter'); setSaving(false); return }
+
+        const plans = finalDates.map(d => ({
+          resource_id: resourceId,
+          resource_type: isEmployee ? 'employee' : 'machine',
+          project_id: projectId,
+          date: d,
+          hours: parseFloat(hours) || 8,
+          notes: notes || null,
+          created_by: user?.id,
+        }))
+        // Batch-insert
+        for (let i = 0; i < plans.length; i += 200) {
+          const batch = plans.slice(i, i + 200)
+          const { error } = await supabase.from('resource_plans').insert(batch)
+          if (error) throw error
+        }
+        // Maskin-kobling (hvis aktuelt)
+        if (isEmployee && showMachinePicker && linkedMachineId) {
+          const machinePlans = finalDates.map(d => ({
+            resource_id: linkedMachineId,
+            resource_type: 'machine',
+            project_id: projectId,
+            date: d,
+            hours: parseFloat(hours) || 8,
+            notes: `Koblet til ${resourceName}`,
+            created_by: user?.id,
+          }))
+          if (machinePlans.length > 0) await supabase.from('resource_plans').insert(machinePlans)
+          await updateMachineStatus(linkedMachineId, projectId, finalDates[0], finalDates[finalDates.length - 1])
+        }
+        onSaved()
+      } catch (e) { alert('Feil: ' + e.message) }
+      finally { setSaving(false) }
+      return
+    }
+
+    // ── Enkelt-dag-booking (original logikk) ──
     setSaving(true)
     try {
       const payload = {
@@ -16029,6 +16167,78 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             </div>
           )}
 
+          {/* ── Periode-booking (kun for nye bookinger) ── */}
+          {!editPlan && (
+            <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', border:'1px solid #e2e8f0' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'10px' }}>
+                <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', background:'white' }}>
+                  <button type="button" onClick={() => setBookingMode('single')}
+                    style={{ padding:'6px 12px', border:'none', background: bookingMode === 'single' ? '#0f172a' : 'white', color: bookingMode === 'single' ? 'white' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>
+                    📅 Én dag
+                  </button>
+                  <button type="button" onClick={() => setBookingMode('period')}
+                    style={{ padding:'6px 12px', border:'none', background: bookingMode === 'period' ? '#0f172a' : 'white', color: bookingMode === 'period' ? 'white' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                    📆 Periode
+                  </button>
+                </div>
+              </div>
+
+              {bookingMode === 'period' && (
+                <>
+                  {/* Periode-modus-toggle */}
+                  <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+                    <button type="button" onClick={() => setPeriodMode('toDate')}
+                      style={{ flex:1, padding:'6px 10px', border:`1px solid ${periodMode === 'toDate' ? '#2563eb' : '#e2e8f0'}`, borderRadius:'6px', background: periodMode === 'toDate' ? '#eff6ff' : 'white', color: periodMode === 'toDate' ? '#2563eb' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                      Fra–Til
+                    </button>
+                    <button type="button" onClick={() => setPeriodMode('count')}
+                      style={{ flex:1, padding:'6px 10px', border:`1px solid ${periodMode === 'count' ? '#2563eb' : '#e2e8f0'}`, borderRadius:'6px', background: periodMode === 'count' ? '#eff6ff' : 'white', color: periodMode === 'count' ? '#2563eb' : '#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                      Fra + Antall dager
+                    </button>
+                  </div>
+
+                  {/* Dato-inputs */}
+                  <div style={{ display:'grid', gridTemplateColumns: '1fr 1fr', gap:'8px' }}>
+                    <div>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'4px' }}>FRA DATO</label>
+                      <input type="date" value={fromDate} onChange={e => handleFromDateChange(e.target.value)}
+                        style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none', boxSizing:'border-box', background:'white' }} />
+                    </div>
+                    {periodMode === 'toDate' ? (
+                      <div>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'4px' }}>TIL DATO</label>
+                        <input type="date" value={toDate} onChange={e => handleToDateChange(e.target.value)} min={fromDate}
+                          style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none', boxSizing:'border-box', background:'white' }} />
+                      </div>
+                    ) : (
+                      <div>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'4px' }}>ANTALL DAGER</label>
+                        <input type="number" min="1" max="365" value={dayCount} onChange={e => handleDayCountChange(e.target.value)}
+                          style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none', boxSizing:'border-box', background:'white' }} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview */}
+                  <div style={{ marginTop:'10px', padding:'8px 10px', background: workdayList.length > 0 ? '#f0fdf4' : '#fef2f2', borderRadius:'6px', border:`1px solid ${workdayList.length > 0 ? '#bbf7d0' : '#fecaca'}`, fontSize:'12px', color: workdayList.length > 0 ? '#059669' : '#dc2626' }}>
+                    {workdayList.length === 0 ? (
+                      <span>⚠️ Ingen gyldige arbeidsdager i perioden</span>
+                    ) : (
+                      <span>
+                        → <strong>{workdayList.length} arbeidsdag{workdayList.length > 1 ? 'er' : ''}</strong> {workdayList.length <= 14 && `(${new Date(fromDate+'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })} – ${new Date(toDate+'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })})`}
+                        {settings.skipWeekends && <span style={{ color:'#94a3b8', marginLeft:'6px' }}>· helger hoppes over</span>}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {bookingMode === 'single' && (
+                <div style={{ fontSize:'12px', color:'#64748b' }}>Booking kun for <strong>{dateFormatted}</strong></div>
+              )}
+            </div>
+          )}
+
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
             <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
@@ -16116,8 +16326,8 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
         <div style={{ padding:'14px 22px',borderTop:'1px solid #f1f5f9',display:'flex',gap:'8px',flexShrink:0 }}>
           {editPlan&&<button onClick={handleDelete} style={{ padding:'10px 14px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize:'13px',fontWeight:'600' }}>🗑️ Slett</button>}
           <button onClick={onClose} style={{ flex:1,padding:'10px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving||!projectId} style={{ flex:2,padding:'10px',background:saving||!projectId?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving||!projectId?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
-            {saving?'Lagrer...':editPlan?'Lagre endring':'Book'}
+          <button onClick={handleSave} disabled={saving||!projectId||(bookingMode==='period'&&!editPlan&&workdayList.length===0)} style={{ flex:2,padding:'10px',background:saving||!projectId||(bookingMode==='period'&&!editPlan&&workdayList.length===0)?'#94a3b8':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:(saving||!projectId||(bookingMode==='period'&&!editPlan&&workdayList.length===0))?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>
+            {saving ? 'Lagrer...' : editPlan ? 'Lagre endring' : (bookingMode === 'period' ? `Book ${workdayList.length} dag${workdayList.length !== 1 ? 'er' : ''}` : 'Book')}
           </button>
         </div>
       </div>
