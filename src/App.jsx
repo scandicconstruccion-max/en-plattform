@@ -1,5 +1,6 @@
 // Build: 2026-04-15T16:32:02.163830
 import React, { useState, useEffect, createContext, useContext } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@supabase/supabase-js'
 
 // ── Global responsive styles ──
@@ -505,12 +506,11 @@ function useEmployees() {
 //   placeholder, style — UI
 function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, valueAsId, employees: extEmps, allowFreeText = true }) {
   const cachedEmps = useEmployees()
-  const emps = extEmps || cachedEmps
+  const emps = extEmps && extEmps.length > 0 ? extEmps : cachedEmps
   const [showDrop, setShowDrop] = useState(false)
-  const [searchText, setSearchText] = useState(null) // null = bruk displayValue
-  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 })
-  const inputRef = React.useRef(null)
-  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
+  const [searchText, setSearchText] = useState('')
+  const [rect, setRect] = useState(null)
+  const wrapperRef = React.useRef(null)
 
   // I id-mode: finn navn fra id
   const displayValue = valueAsId
@@ -521,12 +521,11 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, val
       })()
     : (value || '')
 
-  // Søketekst er enten brukers skriving eller visningsverdien
-  const effectiveSearch = (searchText !== null && showDrop) ? searchText : displayValue
+  const inputVal = showDrop ? searchText : displayValue
 
   const filtered = emps.filter(emp => {
-    if (!effectiveSearch) return true
-    const q = effectiveSearch.toLowerCase()
+    const q = (searchText || '').toLowerCase().trim()
+    if (!q) return true
     const name = getEmployeeName(emp).toLowerCase()
     const email = (emp.email || '').toLowerCase()
     const phone = (emp.phone || '').toLowerCase()
@@ -543,81 +542,59 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, val
     }
     if (onSelect) onSelect(emp)
     setShowDrop(false)
-    setSearchText(null)
-  }
-
-  const handleInput = (e) => {
-    const v = e.target.value
-    setSearchText(v)
-    setShowDrop(true)
-    if (!valueAsId && allowFreeText) {
-      onChange(v)
-    } else if (valueAsId && !v) {
-      onChange('') // clear id
-    }
-  }
-
-  // Oppdater dropdown-posisjon basert på input-boks
-  const updateDropPos = () => {
-    if (!inputRef.current) return
-    const r = inputRef.current.getBoundingClientRect()
-    setDropPos({ top: r.bottom + 4, left: r.left, width: r.width })
+    setSearchText('')
   }
 
   const openDrop = () => {
-    updateDropPos()
+    if (wrapperRef.current) {
+      const r = wrapperRef.current.getBoundingClientRect()
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+    }
     setShowDrop(true)
     setSearchText('')
   }
 
-  const handleBlur = () => {
-    // Gi tid til at onMouseDown på dropdown-element skal trigge først
-    setTimeout(() => {
-      setShowDrop(false)
-      setSearchText(null)
-    }, 180)
-  }
-
-  // Oppdater posisjon ved scroll/resize mens dropdown er åpen
+  // Oppdater posisjon ved scroll/resize
   useEffect(() => {
     if (!showDrop) return
-    const handler = () => updateDropPos()
-    window.addEventListener('scroll', handler, true)
-    window.addEventListener('resize', handler)
+    const update = () => {
+      if (wrapperRef.current) {
+        const r = wrapperRef.current.getBoundingClientRect()
+        setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+      }
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
     return () => {
-      window.removeEventListener('scroll', handler, true)
-      window.removeEventListener('resize', handler)
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
     }
   }, [showDrop])
 
-  const inputValue = showDrop && searchText !== null ? searchText : displayValue
+  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
 
-  return (
-    <div style={{ position:'relative' }}>
-      <input
-        ref={inputRef}
-        value={inputValue}
-        onChange={handleInput}
-        onFocus={openDrop}
-        onBlur={handleBlur}
-        placeholder={placeholder || 'Skriv eller velg ansatt...'}
-        style={selStyle} />
-      {showDrop && emps.length > 0 && (
-        <div style={{
-          position:'fixed',
-          top: `${dropPos.top}px`,
-          left: `${dropPos.left}px`,
-          width: `${dropPos.width}px`,
-          background:'white',
-          border:'1px solid #e2e8f0',
-          borderRadius:'10px',
-          boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
-          zIndex: 9999,
-          maxHeight:'260px',
-          overflowY:'auto'
-        }}>
+  const dropdown = (showDrop && rect) && (
+    <div style={{
+      position:'fixed',
+      top: `${rect.top}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      background:'white',
+      border:'1px solid #e2e8f0',
+      borderRadius:'10px',
+      boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
+      zIndex: 99999,
+      maxHeight:'260px',
+      overflowY:'auto'
+    }}>
+      {emps.length === 0 ? (
+        <div style={{ padding:'14px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+          Laster ansatte...
+        </div>
+      ) : (
+        <>
           {valueAsId && displayValue && (
-            <div onMouseDown={(e) => { e.preventDefault(); onChange(''); setShowDrop(false); setSearchText(null) }}
+            <div onMouseDown={(e) => { e.preventDefault(); onChange(''); setShowDrop(false); setSearchText('') }}
               style={{ padding:'7px 12px', cursor:'pointer', fontSize:'12px', color:'#dc2626', borderBottom:'1px solid #f1f5f9', fontWeight:'600' }}
               onMouseEnter={e => e.currentTarget.style.background='#fef2f2'} onMouseLeave={e => e.currentTarget.style.background='white'}>
               ✕ Fjern valgt
@@ -625,7 +602,7 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, val
           )}
           {filtered.length === 0 ? (
             <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
-              Ingen treff{effectiveSearch ? ` for "${effectiveSearch}"` : ''}{allowFreeText && !valueAsId ? ' — du kan skrive fritt navn' : ''}
+              Ingen treff{searchText ? ` for "${searchText}"` : ''}{allowFreeText && !valueAsId ? ' — skriv fritt' : ''}
             </div>
           ) : filtered.map(emp => {
             const name = getEmployeeName(emp)
@@ -648,8 +625,26 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, val
               </div>
             )
           })}
-        </div>
+        </>
       )}
+    </div>
+  )
+
+  return (
+    <div ref={wrapperRef} style={{ position:'relative' }}>
+      <input
+        value={inputVal}
+        onChange={e => {
+          setSearchText(e.target.value)
+          if (!showDrop) openDrop()
+          if (!valueAsId && allowFreeText) onChange(e.target.value)
+          if (valueAsId && !e.target.value) onChange('')
+        }}
+        onFocus={openDrop}
+        onBlur={() => setTimeout(() => setShowDrop(false), 200)}
+        placeholder={placeholder || 'Skriv eller velg ansatt...'}
+        style={selStyle} />
+      {typeof document !== 'undefined' && dropdown ? createPortal(dropdown, document.body) : null}
     </div>
   )
 }
@@ -736,7 +731,7 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
         </div>
       )}
 
-      {showDrop && searchInput && emps.length > 0 && (
+      {showDrop && searchInput && emps.length > 0 && typeof document !== 'undefined' && createPortal(
         <div style={{
           position:'fixed',
           top: `${dropPos.top}px`,
@@ -746,7 +741,7 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
           border:'1px solid #e2e8f0',
           borderRadius:'10px',
           boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
-          zIndex: 9999,
+          zIndex: 99999,
           maxHeight:'220px',
           overflowY:'auto'
         }}>
@@ -770,7 +765,8 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
                 </div>
               )
             })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
