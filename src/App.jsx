@@ -23971,6 +23971,16 @@ function SuperAdminPage() {
   const [mrrSnapshots, setMrrSnapshots] = useState([])
   const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
+  const [isMobSA, setIsMobSA] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
+  useEffect(() => {
+    const onResize = () => setIsMobSA(window.innerWidth < 640)
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+    }
+  }, [])
 
   const savePayment = async (companyId, paymentDate) => {
     try {
@@ -23988,6 +23998,22 @@ function SuperAdminPage() {
       setPaymentModal(null)
       load()
     } catch(e) { alert('Feil: '+e.message) }
+  }
+
+  const sendEmail = async () => {
+    if (!emailModal) return
+    setSendingEmail(true)
+    try {
+      const mailto = `mailto:${encodeURIComponent(emailModal.to)}?subject=${encodeURIComponent(emailModal.subject||'')}&body=${encodeURIComponent(emailModal.body||'')}`
+      window.location.href = mailto
+      // Logg hendelsen
+      const compId = companies.find(c=>c.email===emailModal.to)?.id
+      if (compId) {
+        try { await addTimelineEvent(compId, { type:'note', label: `E-post sendt: ${emailModal.subject||'(uten emne)'}` }) } catch(e) {}
+      }
+      setEmailModal(null)
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setSendingEmail(false) }
   }
 
   const addTimelineEvent = async (companyId, event) => {
@@ -24153,8 +24179,7 @@ function SuperAdminPage() {
   }
 
 
-  const isMobSA = typeof window !== 'undefined' && window.innerWidth < 768
-  const saCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobSA ? '14px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+  const saCard = { background:'white', borderRadius: isMobSA ? '12px' : '16px', border:'1px solid #f1f5f9', padding: isMobSA ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
   const fmt = v => Math.round(v).toLocaleString('nb-NO')
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #7c3aed',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster kontrollpanel...</p></div></div>
@@ -24162,15 +24187,19 @@ function SuperAdminPage() {
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
-      <div style={{ background:'linear-gradient(135deg,#1e1b4b,#312e81)', padding: isMobSA ? '14px' : '20px 32px', color:'white' }}>
-        <h1 style={{ fontSize: isMobSA ? '18px' : '22px', fontWeight:'800', margin:0 }}>👑 Kontrollpanel</h1>
-        <p style={{ margin:'4px 0 0', fontSize:'13px', opacity:0.7 }}>Plattformadministrasjon — En Plattform</p>
+      <div style={{ background:'linear-gradient(135deg,#1e1b4b,#312e81)', padding: isMobSA ? '12px 14px' : '20px 32px', color:'white' }}>
+        <h1 style={{ fontSize: isMobSA ? '17px' : '22px', fontWeight:'800', margin:0, display:'flex', alignItems:'center', gap:'8px' }}>
+          <span>👑</span><span>Kontrollpanel</span>
+        </h1>
+        <p style={{ margin:'2px 0 0', fontSize: isMobSA ? '11px' : '13px', opacity:0.7 }}>Plattformadministrasjon — En Plattform</p>
       </div>
 
       {/* Tabs */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'0 24px', display:'flex', gap:'0', overflowX:'auto' }}>
-        {[['oversikt','📊 Oversikt'],['grafer','📈 Utvikling'],['churn',`⚠️ Churn${churnAlerts.filter(a=>a.severity==='high').length>0?' ('+churnAlerts.filter(a=>a.severity==='high').length+')':''}`],['kunder','🏢 Kunder'],['brukere','👤 Brukere'],['varsler','🔔 Hendelser']].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobSA ? '10px 12px' : '12px 18px', border:'none', borderBottom: tab===id ? '3px solid #7c3aed' : '3px solid transparent', background:'transparent', cursor:'pointer', fontSize: isMobSA ? '12px' : '13px', fontWeight: tab===id?'700':'500', color: tab===id?'#7c3aed':'#64748b', whiteSpace:'nowrap' }}>{label}</button>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobSA ? '0 8px' : '0 24px', display:'flex', gap:'0', overflowX:'auto', position: isMobSA ? 'sticky' : 'static', top: 0, zIndex: 10, WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+        {[['oversikt','📊','Oversikt'],['grafer','📈','Utvikling'],['churn','⚠️',`Churn${churnAlerts.filter(a=>a.severity==='high').length>0?' ('+churnAlerts.filter(a=>a.severity==='high').length+')':''}`],['kunder','🏢','Kunder'],['brukere','👤','Brukere'],['varsler','🔔','Hendelser']].map(([id,icon,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobSA ? '10px 14px' : '12px 18px', border:'none', borderBottom: tab===id ? '3px solid #7c3aed' : '3px solid transparent', background:'transparent', cursor:'pointer', fontSize: isMobSA ? '12px' : '13px', fontWeight: tab===id?'700':'500', color: tab===id?'#7c3aed':'#64748b', whiteSpace:'nowrap', minHeight: isMobSA ? '44px' : 'auto', display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            <span>{icon}</span><span>{label}</span>
+          </button>
         ))}
       </div>
 
@@ -24259,18 +24288,18 @@ function SuperAdminPage() {
             {/* Populære moduler */}
             <div style={saCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'15px', fontWeight:'700' }}>📦 Modulpopularitet (aktive kunder)</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap: isMobSA ? '10px' : '8px' }}>
                 {Object.entries(modulePop).sort((a,b)=>b[1]-a[1]).map(([modId,count])=>{
                   const mod = MODULE_CATALOG.find(m=>m.id===modId)
                   const pct = activeCompanies.length > 0 ? Math.round(count/activeCompanies.length*100) : 0
                   return (
-                    <div key={modId} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                      <span style={{ fontSize:'16px', width:'24px', textAlign:'center' }}>{mod?.emoji||'📦'}</span>
-                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', width:'140px' }}>{mod?.name||modId}</span>
-                      <div style={{ flex:1, height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
+                    <div key={modId} style={{ display:'flex', alignItems:'center', gap: isMobSA ? '8px' : '10px', flexWrap: isMobSA ? 'wrap' : 'nowrap' }}>
+                      <span style={{ fontSize:'16px', width:'24px', textAlign:'center', flexShrink:0 }}>{mod?.emoji||'📦'}</span>
+                      <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', width: isMobSA ? 'auto' : '140px', flex: isMobSA ? '1 1 auto' : '0 0 140px', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{mod?.name||modId}</span>
+                      <div style={{ flex:1, height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden', order: isMobSA ? 3 : 0, width: isMobSA ? '100%' : 'auto', minWidth: isMobSA ? '100%' : 0 }}>
                         <div style={{ height:'100%', borderRadius:'4px', background:'#7c3aed', width:`${pct}%`, transition:'width 0.3s' }}/>
                       </div>
-                      <span style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', width:'50px', textAlign:'right' }}>{count} ({pct}%)</span>
+                      <span style={{ fontSize:'12px', fontWeight:'700', color:'#7c3aed', width: isMobSA ? 'auto' : '50px', textAlign:'right', flexShrink:0 }}>{count} ({pct}%)</span>
                     </div>
                   )
                 })}
@@ -24435,7 +24464,7 @@ function SuperAdminPage() {
                 {/* MRR graf */}
                 <div style={saCard}>
                   <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700' }}>💰 MRR-utvikling</h3>
-                  <div style={{ position:'relative', height:'200px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
+                  <div style={{ position:'relative', height: isMobSA ? '160px' : '200px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
                     {(()=>{
                       const data = mrrSnapshots.slice(-90)
                       const maxMRR = Math.max(...data.map(d=>d.mrr||0), 1)
@@ -24455,9 +24484,9 @@ function SuperAdminPage() {
                       )
                     })()}
                   </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', fontSize:'11px', color:'#94a3b8' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', fontSize: isMobSA ? '10px' : '11px', color:'#94a3b8', flexWrap: isMobSA ? 'wrap' : 'nowrap', gap:'4px' }}>
                     <span>{mrrSnapshots[0]?.snapshot_date ? new Date(mrrSnapshots[0].snapshot_date).toLocaleDateString('nb-NO') : ''}</span>
-                    <span style={{ fontWeight:'700', color:'#059669' }}>Nå: {fmt(mrrSnapshots[mrrSnapshots.length-1]?.mrr||0)} kr/mnd</span>
+                    <span style={{ fontWeight:'700', color:'#059669', order: isMobSA ? -1 : 0, width: isMobSA ? '100%' : 'auto', textAlign:'center' }}>Nå: {fmt(mrrSnapshots[mrrSnapshots.length-1]?.mrr||0)} kr/mnd</span>
                     <span>{mrrSnapshots[mrrSnapshots.length-1]?.snapshot_date ? new Date(mrrSnapshots[mrrSnapshots.length-1].snapshot_date).toLocaleDateString('nb-NO') : ''}</span>
                   </div>
                 </div>
@@ -24465,7 +24494,7 @@ function SuperAdminPage() {
                 {/* Kundevekst graf */}
                 <div style={saCard}>
                   <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700' }}>👥 Kundevekst</h3>
-                  <div style={{ position:'relative', height:'160px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
+                  <div style={{ position:'relative', height: isMobSA ? '140px' : '160px', background:'#f8fafc', borderRadius:'12px', padding:'12px', overflow:'hidden' }}>
                     {(()=>{
                       const data = mrrSnapshots.slice(-90)
                       const maxC = Math.max(...data.map(d=>(d.active_customers||0)+(d.trial_customers||0)), 1)
@@ -24494,29 +24523,48 @@ function SuperAdminPage() {
                 {/* Datatabell */}
                 <div style={saCard}>
                   <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700' }}>📋 Historikk (siste 30 dager)</h3>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
-                      <thead>
-                        <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
-                          {['Dato','MRR','Aktive','Trial','Churned','Brukere'].map(h=>(
-                            <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#64748b', fontSize:'11px' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mrrSnapshots.slice(-30).reverse().map((s,i)=>(
-                          <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
-                            <td style={{ padding:'6px 10px', color:'#0f172a', fontWeight:'500' }}>{new Date(s.snapshot_date).toLocaleDateString('nb-NO')}</td>
-                            <td style={{ padding:'6px 10px', color:'#059669', fontWeight:'700' }}>{fmt(s.mrr||0)} kr</td>
-                            <td style={{ padding:'6px 10px', color:'#2563eb' }}>{s.active_customers||0}</td>
-                            <td style={{ padding:'6px 10px', color:'#d97706' }}>{s.trial_customers||0}</td>
-                            <td style={{ padding:'6px 10px', color:'#dc2626' }}>{s.churned_customers||0}</td>
-                            <td style={{ padding:'6px 10px', color:'#64748b' }}>{s.total_users||0}</td>
+                  {isMobSA ? (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                      {mrrSnapshots.slice(-30).reverse().map((s,i)=>(
+                        <div key={i} style={{ background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                            <span style={{ fontSize:'12px', fontWeight:'600', color:'#0f172a' }}>{new Date(s.snapshot_date).toLocaleDateString('nb-NO')}</span>
+                            <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669' }}>{fmt(s.mrr||0)} kr</span>
+                          </div>
+                          <div style={{ display:'flex', gap:'10px', fontSize:'10px', flexWrap:'wrap' }}>
+                            <span style={{ color:'#2563eb' }}>Aktive: <strong>{s.active_customers||0}</strong></span>
+                            <span style={{ color:'#d97706' }}>Trial: <strong>{s.trial_customers||0}</strong></span>
+                            <span style={{ color:'#dc2626' }}>Churned: <strong>{s.churned_customers||0}</strong></span>
+                            <span style={{ color:'#64748b' }}>Brukere: <strong>{s.total_users||0}</strong></span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ overflowX:'auto' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                        <thead>
+                          <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
+                            {['Dato','MRR','Aktive','Trial','Churned','Brukere'].map(h=>(
+                              <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#64748b', fontSize:'11px' }}>{h}</th>
+                            ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {mrrSnapshots.slice(-30).reverse().map((s,i)=>(
+                            <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
+                              <td style={{ padding:'6px 10px', color:'#0f172a', fontWeight:'500' }}>{new Date(s.snapshot_date).toLocaleDateString('nb-NO')}</td>
+                              <td style={{ padding:'6px 10px', color:'#059669', fontWeight:'700' }}>{fmt(s.mrr||0)} kr</td>
+                              <td style={{ padding:'6px 10px', color:'#2563eb' }}>{s.active_customers||0}</td>
+                              <td style={{ padding:'6px 10px', color:'#d97706' }}>{s.trial_customers||0}</td>
+                              <td style={{ padding:'6px 10px', color:'#dc2626' }}>{s.churned_customers||0}</td>
+                              <td style={{ padding:'6px 10px', color:'#64748b' }}>{s.total_users||0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -24556,17 +24604,17 @@ function SuperAdminPage() {
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {churnAlerts.map((alert,i)=>(
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px',
+                    <div key={i} style={{ display:'flex', alignItems: isMobSA ? 'flex-start' : 'center', gap: isMobSA ? '10px' : '12px', padding: isMobSA ? '10px 12px' : '12px 14px', borderRadius:'10px', flexWrap: isMobSA ? 'wrap' : 'nowrap',
                       background: alert.severity==='high'?'#fef2f2':'#fffbeb',
                       border: `1px solid ${alert.severity==='high'?'#fecaca':'#fde68a'}` }}>
                       <span style={{ fontSize:'20px', flexShrink:0 }}>
                         {alert.type==='inactive'?'😴':alert.type==='never_logged'?'👻':alert.type==='overdue'?'💳':alert.type==='cancelled'?'💔':'⚠️'}
                       </span>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{alert.title}</div>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{alert.title}</div>
                         <div style={{ fontSize:'11px', color: alert.severity==='high'?'#dc2626':'#d97706', marginTop:'2px' }}>{alert.sub}</div>
                       </div>
-                      <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                      <div style={{ display:'flex', gap:'6px', flexShrink:0, width: isMobSA ? '100%' : 'auto', marginLeft: isMobSA ? '30px' : '0' }}>
                         {alert.email && (
                           <button onClick={()=>setEmailModal({
                             to: alert.email,
@@ -24577,11 +24625,11 @@ function SuperAdminPage() {
                               : alert.type==='never_logged'
                               ? `Hei!\n\nVi ser at du nylig registrerte deg på En Plattform, men ikke har logget inn ennå. Trenger du hjelp med å komme i gang?\n\nVi tilbyr gjerne en kort gjennomgang av systemet.\n\nMvh\nEn Plattform`
                               : `Hei!\n\n\n\nMvh\nEn Plattform`
-                          })} style={{ padding:'6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#7c3aed' }}>✉️ Kontakt</button>
+                          })} style={{ padding: isMobSA ? '8px 12px' : '6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#7c3aed', flex: isMobSA ? 1 : 'none', minHeight: isMobSA ? '36px' : 'auto' }}>✉️ Kontakt</button>
                         )}
                         {alert.companyId && (
                           <button onClick={()=>{setTab('kunder');setSelectedCompany(companies.find(c=>c.id===alert.companyId))}}
-                            style={{ padding:'6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>Vis</button>
+                            style={{ padding: isMobSA ? '8px 12px' : '6px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569', flex: isMobSA ? 1 : 'none', minHeight: isMobSA ? '36px' : 'auto' }}>Vis</button>
                         )}
                       </div>
                     </div>
@@ -24607,13 +24655,13 @@ function SuperAdminPage() {
                       weeks.push({ date: last.snapshot_date, rate: Math.max(0, churnRate), active: last.active_customers })
                     }
                     return weeks.reverse().map((w,i)=>(
-                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 12px', background:'#f8fafc', borderRadius:'8px' }}>
-                        <span style={{ fontSize:'12px', color:'#64748b', width:'80px' }}>Uke {new Date(w.date).toLocaleDateString('nb-NO',{day:'2-digit',month:'short'})}</span>
-                        <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap: isMobSA ? '8px' : '12px', padding: isMobSA ? '8px 10px' : '8px 12px', background:'#f8fafc', borderRadius:'8px', flexWrap: isMobSA ? 'wrap' : 'nowrap' }}>
+                        <span style={{ fontSize: isMobSA ? '11px' : '12px', color:'#64748b', width: isMobSA ? 'auto' : '80px', fontWeight: isMobSA ? '600' : '400' }}>Uke {new Date(w.date).toLocaleDateString('nb-NO',{day:'2-digit',month:'short'})}</span>
+                        <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden', order: isMobSA ? 3 : 0, width: isMobSA ? '100%' : 'auto', minWidth: isMobSA ? '100%' : 0 }}>
                           <div style={{ height:'100%', borderRadius:'3px', background: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width:`${Math.min(100,w.rate*10)}%` }}/>
                         </div>
-                        <span style={{ fontSize:'12px', fontWeight:'700', color: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width:'40px', textAlign:'right' }}>{w.rate}%</span>
-                        <span style={{ fontSize:'11px', color:'#94a3b8', width:'50px', textAlign:'right' }}>{w.active} aktive</span>
+                        <span style={{ fontSize:'12px', fontWeight:'700', color: w.rate>5?'#dc2626':w.rate>0?'#d97706':'#059669', width: isMobSA ? 'auto' : '40px', textAlign:'right', marginLeft: isMobSA ? 'auto' : 0 }}>{w.rate}%</span>
+                        <span style={{ fontSize:'11px', color:'#94a3b8', width: isMobSA ? 'auto' : '50px', textAlign:'right' }}>{w.active} aktive</span>
                       </div>
                     ))
                   })()}
@@ -24628,15 +24676,15 @@ function SuperAdminPage() {
           <>
             {/* Search + filter + export */}
             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
-              <input value={saSearch} onChange={e=>setSaSearch(e.target.value)} placeholder="🔍 Søk bedrift, e-post, org.nr..." style={{ flex:'1 1 200px', padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', background:'white' }} />
-              <select value={saFilter} onChange={e=>setSaFilter(e.target.value)} style={{ padding:'9px 14px', border:`2px solid ${saFilter!=='alle'?'#7c3aed':'#e2e8f0'}`, borderRadius:'10px', fontSize:'13px', outline:'none', background:'white', color:saFilter!=='alle'?'#7c3aed':'#475569', fontWeight:saFilter!=='alle'?'700':'400', cursor:'pointer' }}>
+              <input value={saSearch} onChange={e=>setSaSearch(e.target.value)} placeholder="🔍 Søk bedrift, e-post, org.nr..." style={{ flex: isMobSA ? '1 1 100%' : '1 1 200px', padding: isMobSA ? '11px 14px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', background:'white', minHeight: isMobSA ? '44px' : 'auto' }} />
+              <select value={saFilter} onChange={e=>setSaFilter(e.target.value)} style={{ padding: isMobSA ? '11px 14px' : '9px 14px', border:`2px solid ${saFilter!=='alle'?'#7c3aed':'#e2e8f0'}`, borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', background:'white', color:saFilter!=='alle'?'#7c3aed':'#475569', fontWeight:saFilter!=='alle'?'700':'400', cursor:'pointer', flex: isMobSA ? '1 1 auto' : 'none', minHeight: isMobSA ? '44px' : 'auto' }}>
                 <option value="alle">Alle ({companies.length})</option>
                 <option value="trial">Prøveperiode ({trialCompanies.length})</option>
                 <option value="active">Aktive ({activeCompanies.length})</option>
                 <option value="expired">Utløpt ({expiredCompanies.length})</option>
               </select>
-              <button onClick={exportCSV} style={{ padding:'9px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', display:'flex', alignItems:'center', gap:'6px' }}>📥 Eksporter CSV</button>
-              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'auto' }}>
+              <button onClick={exportCSV} style={{ padding: isMobSA ? '11px 14px' : '9px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', display:'flex', alignItems:'center', gap:'6px', minHeight: isMobSA ? '44px' : 'auto', whiteSpace:'nowrap' }}>📥 {isMobSA ? 'CSV' : 'Eksporter CSV'}</button>
+              <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft: isMobSA ? '0' : 'auto', width: isMobSA ? '100%' : 'auto', textAlign: isMobSA ? 'center' : 'right' }}>
                 {companies.filter(c=>{
                   if (saFilter!=='alle'&&c.subscription_status!==saFilter) return false
                   if (saSearch&&![c.name,c.email,c.org_number,c.phone].some(v=>v?.toLowerCase().includes(saSearch.toLowerCase()))) return false
@@ -24661,15 +24709,21 @@ function SuperAdminPage() {
                 return (
                   <div key={c.id} style={{ ...saCard, cursor:'pointer' }}
                     onClick={()=>setSelectedCompany(selectedCompany?.id===c.id?null:c)}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap: isMobSA ? '8px' : '12px', flexWrap:'wrap' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
-                        <div style={{ width:'40px', height:'40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{c.name||'Uten navn'}</div>
-                          <div style={{ fontSize:'11px', color:'#94a3b8' }}>{c.email||''}{c.phone?' · '+c.phone:''} · {c.num_users||1} brukere · {mods.length} moduler</div>
+                        <div style={{ width: isMobSA ? '36px' : '40px', height: isMobSA ? '36px' : '40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobSA ? '14px' : '16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
+                        <div style={{ minWidth:0, flex:1 }}>
+                          <div style={{ fontWeight:'700', fontSize: isMobSA ? '13px' : '14px', color:'#0f172a', wordBreak:'break-word' }}>{c.name||'Uten navn'}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak:'break-word' }}>
+                            {isMobSA ? (
+                              <>{c.email || c.phone || '—'}<br/>{c.num_users||1} brukere · {mods.length} moduler</>
+                            ) : (
+                              <>{c.email||''}{c.phone?' · '+c.phone:''} · {c.num_users||1} brukere · {mods.length} moduler</>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', width: isMobSA ? '100%' : 'auto', justifyContent: isMobSA ? 'space-between' : 'flex-end' }}>
                         {c.subscription_status==='active' && <span style={{ fontWeight:'800', fontSize:'14px', color:'#059669' }}>{fmt(mrr)} kr/mnd</span>}
                         <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
                           background: c.subscription_status==='active'?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':'#fef2f2',
@@ -24695,13 +24749,13 @@ function SuperAdminPage() {
                           <div style={{ marginBottom:'12px' }}>
                             <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>BETALING</div>
                             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
-                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex:'1 1 140px' }}>
+                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex: isMobSA ? '1 1 100%' : '1 1 140px' }}>
                                 <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>SISTE BETALING</div>
                                 <div style={{ fontSize:'13px', fontWeight:'700', color: c.last_payment_date ? '#059669' : '#dc2626', marginTop:'2px' }}>
                                   {c.last_payment_date ? new Date(c.last_payment_date).toLocaleDateString('nb-NO') : 'Ingen registrert'}
                                 </div>
                               </div>
-                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex:'1 1 140px' }}>
+                              <div style={{ background: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#fef2f2' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', border: c.next_due_date && new Date(c.next_due_date) < new Date() ? '1px solid #fecaca' : '1px solid #f1f5f9', flex: isMobSA ? '1 1 100%' : '1 1 140px' }}>
                                 <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>NESTE FORFALL</div>
                                 <div style={{ fontSize:'13px', fontWeight:'700', color: c.next_due_date && new Date(c.next_due_date) < new Date() ? '#dc2626' : '#0f172a', marginTop:'2px' }}>
                                   {c.next_due_date ? new Date(c.next_due_date).toLocaleDateString('nb-NO') : '—'}
@@ -24709,7 +24763,7 @@ function SuperAdminPage() {
                                 </div>
                               </div>
                               <button onClick={(e)=>{e.stopPropagation();setPaymentModal({companyId:c.id, date: new Date().toISOString().split('T')[0]})}}
-                                style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>💳 Registrer betaling</button>
+                                style={{ padding: isMobSA ? '12px 14px' : '8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize: isMobSA ? '13px' : '12px', fontWeight:'700', whiteSpace:'nowrap', width: isMobSA ? '100%' : 'auto', minHeight: isMobSA ? '44px' : 'auto' }}>💳 Registrer betaling</button>
                             </div>
                           </div>
                         )}
@@ -24754,8 +24808,8 @@ function SuperAdminPage() {
                           <div style={{ marginBottom:'12px' }}>
                             <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>KONTAKT</div>
                             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                              {c.email && <a href={`mailto:${c.email}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#eff6ff', borderRadius:'8px', border:'1px solid #bfdbfe', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#2563eb' }}>✉️ {c.email}</a>}
-                              {c.phone && <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#059669' }}>📞 {c.phone}</a>}
+                              {c.email && <a href={`mailto:${c.email}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding: isMobSA ? '10px 14px' : '8px 14px', background:'#eff6ff', borderRadius:'8px', border:'1px solid #bfdbfe', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#2563eb', minHeight: isMobSA ? '44px' : 'auto', wordBreak:'break-all', flex: isMobSA ? '1 1 100%' : 'none' }}>✉️ {c.email}</a>}
+                              {c.phone && <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{ display:'flex', alignItems:'center', gap:'6px', padding: isMobSA ? '10px 14px' : '8px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', textDecoration:'none', fontSize:'12px', fontWeight:'600', color:'#059669', minHeight: isMobSA ? '44px' : 'auto', flex: isMobSA ? '1 1 auto' : 'none' }}>📞 {c.phone}</a>}
                               {c.email && <button onClick={(e)=>{e.stopPropagation();setEmailModal({
                                 to: c.email,
                                 companyName: c.name||'',
@@ -24763,7 +24817,7 @@ function SuperAdminPage() {
                                 body: c.subscription_status==='trial'
                                   ? `Hei ${c.name||''}!\n\nVi ser at du tester En Plattform. Prøveperioden din ${c.trial_ends_at ? 'utløper '+new Date(c.trial_ends_at).toLocaleDateString('nb-NO') : 'er aktiv'}.\n\nHar du spørsmål om systemet? Vi hjelper gjerne!\n\nMvh\nEn Plattform`
                                   : `Hei ${c.name||''}!\n\n\n\nMvh\nEn Plattform`
-                              })}} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', background:'#faf5ff', borderRadius:'8px', border:'1px solid #e9d5ff', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#7c3aed' }}>✍️ Send e-post</button>}
+                              })}} style={{ display:'flex', alignItems:'center', gap:'6px', padding: isMobSA ? '10px 14px' : '8px 14px', background:'#faf5ff', borderRadius:'8px', border:'1px solid #e9d5ff', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#7c3aed', minHeight: isMobSA ? '44px' : 'auto', flex: isMobSA ? '1 1 auto' : 'none', justifyContent: isMobSA ? 'center' : 'flex-start' }}>✍️ Send e-post</button>}
                             </div>
                           </div>
                         )}
@@ -24773,19 +24827,19 @@ function SuperAdminPage() {
                           <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>INTERNE NOTATER</div>
                           {editNote?.companyId===c.id ? (
                             <div onClick={e=>e.stopPropagation()}>
-                              <textarea value={editNote.note} onChange={e=>setEditNote({...editNote,note:e.target.value})} rows={3}
-                                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }}
+                              <textarea value={editNote.note} onChange={e=>setEditNote({...editNote,note:e.target.value})} rows={isMobSA ? 4 : 3}
+                                style={{ width:'100%', padding: isMobSA ? '12px 14px' : '10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }}
                                 placeholder="Skriv interne notater om denne kunden..." />
                               <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
                                 <button onClick={()=>saveCompanyNote(c.id,editNote.note)} disabled={savingNote}
-                                  style={{ padding:'6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>{savingNote?'Lagrer...':'Lagre'}</button>
+                                  style={{ padding: isMobSA ? '10px 14px' : '6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? 1 : 'none' }}>{savingNote?'Lagrer...':'Lagre'}</button>
                                 <button onClick={()=>setEditNote(null)}
-                                  style={{ padding:'6px 14px', background:'#f1f5f9', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#64748b' }}>Avbryt</button>
+                                  style={{ padding: isMobSA ? '10px 14px' : '6px 14px', background:'#f1f5f9', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#64748b', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? 1 : 'none' }}>Avbryt</button>
                               </div>
                             </div>
                           ) : (
                             <div onClick={e=>{e.stopPropagation();setEditNote({companyId:c.id,note:c.admin_notes||''})}}
-                              style={{ background:'#fefce8', borderRadius:'8px', padding:'10px 12px', border:'1px solid #fde68a', cursor:'pointer', minHeight:'40px' }}>
+                              style={{ background:'#fefce8', borderRadius:'8px', padding: isMobSA ? '12px 14px' : '10px 12px', border:'1px solid #fde68a', cursor:'pointer', minHeight: isMobSA ? '44px' : '40px' }}>
                               {c.admin_notes ? (
                                 <div style={{ fontSize:'12px', color:'#92400e', whiteSpace:'pre-wrap', lineHeight:1.5 }}>{c.admin_notes}</div>
                               ) : (
@@ -24798,16 +24852,16 @@ function SuperAdminPage() {
                         {/* Handlingsknapper */}
                         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
                           {c.subscription_status==='trial' && <>
-                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,7)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+7 dager</button>
-                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+15 dager</button>
-                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,7)}} style={{ padding: isMobSA ? '10px 14px' : '8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? '1 1 auto' : 'none' }}>+7 dager</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding: isMobSA ? '10px 14px' : '8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? '1 1 auto' : 'none' }}>+15 dager</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding: isMobSA ? '10px 14px' : '8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? '1 1 100%' : 'none' }}>✓ Aktiver</button>
                           </>}
                           {c.subscription_status==='expired' && <>
-                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding:'8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Ny prøveperiode</button>
-                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>✓ Aktiver</button>
+                            <button onClick={(e)=>{e.stopPropagation();extendTrial(c.id,15)}} style={{ padding: isMobSA ? '10px 14px' : '8px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? '1 1 auto' : 'none' }}>Ny prøveperiode</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'active')}} style={{ padding: isMobSA ? '10px 14px' : '8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? '1 1 auto' : 'none' }}>✓ Aktiver</button>
                           </>}
                           {c.subscription_status==='active' && <>
-                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'cancelled')}} style={{ padding:'8px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Kanseller</button>
+                            <button onClick={(e)=>{e.stopPropagation();setCompanyStatus(c.id,'cancelled')}} style={{ padding: isMobSA ? '10px 14px' : '8px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', minHeight: isMobSA ? '40px' : 'auto', flex: isMobSA ? '1 1 100%' : 'none' }}>Kanseller</button>
                           </>}
                         </div>
                       </div>
@@ -24824,13 +24878,13 @@ function SuperAdminPage() {
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>{allUsers.length} brukere totalt</div>
             {allUsers.map(u=>(
-              <div key={u.id} style={{ ...saCard, padding:'12px 16px', display:'flex', alignItems:'center', gap:'12px' }}>
+              <div key={u.id} style={{ ...saCard, padding: isMobSA ? '10px 12px' : '12px 16px', display:'flex', alignItems:'center', gap: isMobSA ? '10px' : '12px' }}>
                 <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.full_name||u.email}</div>
-                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>{u.email} · {u.role} · {u.status}</div>
+                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
                 </div>
-                <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0 }}>
+                <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right' }}>
                   {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
                 </div>
               </div>
@@ -24844,11 +24898,11 @@ function SuperAdminPage() {
             <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>Systemhendelser og varsler</div>
             {notifications.length===0 ? <p style={{ color:'#94a3b8', textAlign:'center', padding:'40px', fontSize:'14px' }}>Ingen hendelser ennå</p> :
               notifications.map(n=>(
-                <div key={n.id} style={{ ...saCard, padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+                <div key={n.id} style={{ ...saCard, padding: isMobSA ? '10px 12px' : '12px 16px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
                   <span style={{ fontSize:'18px', flexShrink:0, marginTop:'2px' }}>{n.title?.includes('registrert')?'🆕':n.title?.includes('kjøpt')?'💰':'🔔'}</span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{n.title}</div>
-                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{n.message}</div>
+                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak:'break-word' }}>{n.title}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px', wordBreak:'break-word' }}>{n.message}</div>
                     <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>{new Date(n.created_at).toLocaleString('nb-NO')}</div>
                   </div>
                 </div>
@@ -24857,6 +24911,88 @@ function SuperAdminPage() {
           </div>
         )}
       </div>
+
+      {/* EMAIL MODAL */}
+      {emailModal && (
+        <div onClick={()=>setEmailModal(null)} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', display:'flex', alignItems: isMobSA ? 'flex-end' : 'center', justifyContent:'center', zIndex:1000, padding: isMobSA ? 0 : '20px' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'white', borderRadius: isMobSA ? '16px 16px 0 0' : '16px', padding: isMobSA ? '16px' : '24px', width:'100%', maxWidth: isMobSA ? '100%' : '560px', maxHeight: isMobSA ? '90vh' : '85vh', overflowY:'auto', boxShadow:'0 20px 50px rgba(0,0,0,0.2)', boxSizing:'border-box' }}>
+            {isMobSA && <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'2px', margin:'0 auto 14px' }}/>}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+              <h3 style={{ margin:0, fontSize: isMobSA ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>✉️ Send e-post</h3>
+              <button onClick={()=>setEmailModal(null)} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'32px', height:'32px', cursor:'pointer', fontSize:'16px', color:'#64748b' }}>✕</button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              <div>
+                <label style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>Til</label>
+                <input value={emailModal.to} onChange={e=>setEmailModal({...emailModal,to:e.target.value})}
+                  style={{ width:'100%', padding: isMobSA ? '12px 14px' : '10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', boxSizing:'border-box', marginTop:'4px', minHeight: isMobSA ? '44px' : 'auto' }} />
+              </div>
+              <div>
+                <label style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>Emne</label>
+                <input value={emailModal.subject} onChange={e=>setEmailModal({...emailModal,subject:e.target.value})}
+                  style={{ width:'100%', padding: isMobSA ? '12px 14px' : '10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', boxSizing:'border-box', marginTop:'4px', minHeight: isMobSA ? '44px' : 'auto' }} />
+              </div>
+              <div>
+                <label style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>Melding</label>
+                <textarea value={emailModal.body} onChange={e=>setEmailModal({...emailModal,body:e.target.value})} rows={isMobSA ? 8 : 10}
+                  style={{ width:'100%', padding: isMobSA ? '12px 14px' : '10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', resize:'vertical', boxSizing:'border-box', marginTop:'4px', fontFamily:'system-ui,sans-serif', lineHeight:1.5 }} />
+              </div>
+              <div style={{ display:'flex', gap:'8px', marginTop:'6px', flexDirection: isMobSA ? 'column-reverse' : 'row' }}>
+                <button onClick={()=>setEmailModal(null)}
+                  style={{ padding: isMobSA ? '12px 16px' : '10px 16px', background:'#f1f5f9', color:'#64748b', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobSA ? '14px' : '13px', fontWeight:'600', minHeight: isMobSA ? '44px' : 'auto', flex: isMobSA ? 'none' : 'none' }}>Avbryt</button>
+                <button onClick={sendEmail} disabled={sendingEmail||!emailModal.to}
+                  style={{ padding: isMobSA ? '12px 16px' : '10px 16px', background: (sendingEmail||!emailModal.to) ? '#cbd5e1' : '#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor: (sendingEmail||!emailModal.to) ? 'not-allowed' : 'pointer', fontSize: isMobSA ? '14px' : '13px', fontWeight:'700', minHeight: isMobSA ? '44px' : 'auto', flex:1 }}>{sendingEmail?'Åpner...':'📧 Åpne i e-postklient'}</button>
+              </div>
+              <div style={{ fontSize:'11px', color:'#94a3b8', textAlign:'center', marginTop:'4px', lineHeight:1.5 }}>
+                Åpner din e-postklient med forhåndsutfylt melding. Send derfra.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT MODAL */}
+      {paymentModal && (
+        <div onClick={()=>setPaymentModal(null)} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', display:'flex', alignItems: isMobSA ? 'flex-end' : 'center', justifyContent:'center', zIndex:1000, padding: isMobSA ? 0 : '20px' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'white', borderRadius: isMobSA ? '16px 16px 0 0' : '16px', padding: isMobSA ? '16px' : '24px', width:'100%', maxWidth: isMobSA ? '100%' : '420px', boxShadow:'0 20px 50px rgba(0,0,0,0.2)', boxSizing:'border-box' }}>
+            {isMobSA && <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'2px', margin:'0 auto 14px' }}/>}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+              <h3 style={{ margin:0, fontSize: isMobSA ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>💳 Registrer betaling</h3>
+              <button onClick={()=>setPaymentModal(null)} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'32px', height:'32px', cursor:'pointer', fontSize:'16px', color:'#64748b' }}>✕</button>
+            </div>
+            {(() => {
+              const comp = companies.find(c=>c.id===paymentModal.companyId)
+              return (
+                <>
+                  {comp && (
+                    <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', marginBottom:'14px' }}>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>Kunde</div>
+                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginTop:'2px' }}>{comp.name||'Uten navn'}</div>
+                      {comp.email && <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', wordBreak:'break-all' }}>{comp.email}</div>}
+                    </div>
+                  )}
+                  <div style={{ marginBottom:'14px' }}>
+                    <label style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>Betalingsdato</label>
+                    <input type="date" value={paymentModal.date} onChange={e=>setPaymentModal({...paymentModal,date:e.target.value})}
+                      style={{ width:'100%', padding: isMobSA ? '12px 14px' : '10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobSA ? '14px' : '13px', outline:'none', boxSizing:'border-box', marginTop:'4px', minHeight: isMobSA ? '44px' : 'auto', fontFamily:'system-ui,sans-serif' }} />
+                    {paymentModal.date && (
+                      <div style={{ fontSize:'11px', color:'#64748b', marginTop:'6px' }}>
+                        Neste forfall blir: <strong style={{ color:'#0f172a' }}>{(() => { const d = new Date(paymentModal.date); d.setMonth(d.getMonth()+1); return d.toLocaleDateString('nb-NO') })()}</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display:'flex', gap:'8px', flexDirection: isMobSA ? 'column-reverse' : 'row' }}>
+                    <button onClick={()=>setPaymentModal(null)}
+                      style={{ padding: isMobSA ? '12px 16px' : '10px 16px', background:'#f1f5f9', color:'#64748b', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobSA ? '14px' : '13px', fontWeight:'600', minHeight: isMobSA ? '44px' : 'auto' }}>Avbryt</button>
+                    <button onClick={()=>savePayment(paymentModal.companyId, paymentModal.date)} disabled={!paymentModal.date}
+                      style={{ padding: isMobSA ? '12px 16px' : '10px 16px', background: !paymentModal.date ? '#cbd5e1' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: !paymentModal.date ? 'not-allowed' : 'pointer', fontSize: isMobSA ? '14px' : '13px', fontWeight:'700', minHeight: isMobSA ? '44px' : 'auto', flex:1 }}>✓ Lagre betaling</button>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
