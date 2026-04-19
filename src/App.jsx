@@ -15451,14 +15451,12 @@ function RessursGanttGrid({
                           }
                         }}
                         onMouseLeave={() => {
-                          // Vent litt før nullstilling; hvis ny bjelke hoveres i mellomtiden blir dette kansellert
                           if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
                           hoverTimeoutRef.current = setTimeout(() => { setHoveredBar(null); hoverTimeoutRef.current = null }, 100)
                         }}
                         onClick={(e)=>{
                           e.stopPropagation()
                           setHoveredBar(null)
-                          // Åpne fase-redigering. Hvis onOpenFase ikke er satt, fall tilbake til BookingModal
                           if (onOpenFase) {
                             onOpenFase({ bar, resourceName: name })
                           } else {
@@ -15476,31 +15474,32 @@ function RessursGanttGrid({
                           top:'8px', bottom:'8px',
                           left:`${left}px`, width:`${width}px`,
                           borderRadius:'6px',
-                          background: bar.isPlaceholder
-                            ? `repeating-linear-gradient(135deg, ${col}bb 0 6px, ${col}66 6px 12px)`
-                            : `linear-gradient(135deg, ${col}, ${col}dd)`,
+                          background: bar.hasConflict
+                            ? `repeating-linear-gradient(45deg, ${col} 0 6px, ${col}dd 6px 12px)`
+                            : bar.isPlaceholder
+                              ? `repeating-linear-gradient(135deg, ${col}bb 0 6px, ${col}66 6px 12px)`
+                              : col,
                           border: bar.hasConflict
                             ? '2px solid #dc2626'
                             : bar.isPlaceholder ? `2px dashed ${col}` : 'none',
                           cursor: dragging ? 'grabbing' : 'grab',
                           userSelect:'none',
-                          display:'flex', alignItems:'center',
-                          padding: '0 8px',
-                          gap:'4px',
+                          display:'flex', flexDirection:'column',
+                          padding: '6px 10px',
                           zIndex: isDraggingThis ? 1 : 3,
                           boxShadow: isDraggingThis
                             ? 'none'
                             : bar.hasConflict
-                              ? '0 0 0 2px rgba(220,38,38,0.15), 0 1px 4px rgba(0,0,0,0.15)'
-                              : '0 1px 4px rgba(0,0,0,0.15)',
+                              ? '0 0 0 2px rgba(220,38,38,0.2), 0 2px 6px rgba(0,0,0,0.15)'
+                              : '0 1px 3px rgba(0,0,0,0.15)',
                           opacity: isDraggingThis ? 0.35 : 1,
                           transform: isDraggingThis ? 'scale(0.95)' : 'scale(1)',
                           transition:'box-shadow 0.15s, opacity 0.15s, transform 0.15s',
                           overflow:'hidden',
                           color:'white',
                         }}
-                        onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)'}
-                        onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.15)'}
+                        onMouseOver={e => { if (!dragging && !resizing) e.currentTarget.style.boxShadow = bar.hasConflict ? '0 0 0 2px rgba(220,38,38,0.3), 0 4px 10px rgba(0,0,0,0.2)' : '0 4px 10px rgba(0,0,0,0.2)' }}
+                        onMouseOut={e => { if (!dragging && !resizing) e.currentTarget.style.boxShadow = bar.hasConflict ? '0 0 0 2px rgba(220,38,38,0.2), 0 2px 6px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.15)' }}
                       >
                         {/* Left resize handle */}
                         <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onResizePlan(firstPlan, 'left', e) }}
@@ -15517,67 +15516,85 @@ function RessursGanttGrid({
                           onMouseLeave={(e)=>{ e.currentTarget.style.background='transparent'; e.currentTarget.parentElement.setAttribute('draggable','true') }}
                         />
 
-                        {/* Content */}
-                        <div style={{ flex:1, minWidth:0, overflow:'hidden', padding: '0 6px' }}>
-                          {!isZoomedOut && showCode && (
-                            <div style={{
-                              fontSize: width > 120 ? '11px' : '10px',
-                              fontWeight:'800',
-                              lineHeight:1.2,
-                              textTransform:'uppercase',
-                              letterSpacing:'0.02em',
-                              opacity:0.9,
-                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                            }}>
-                              {proj?.project_number || (proj?.name || '').slice(0,3)}
-                            </div>
-                          )}
-                          {!isZoomedOut && showName && (
-                            <div style={{
-                              fontSize: width > 150 ? '12px' : '11px',
-                              fontWeight:'700',
-                              lineHeight:1.2,
-                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                            }}>
-                              {proj?.name || '—'}
-                            </div>
-                          )}
-                          {/* Oppgave-tekst — kun på brede bjelker (>140px) når ikke zoomet ut */}
-                          {!isZoomedOut && width > 140 && (() => {
-                            const task = bar.plans.find(p => p.task_description)?.task_description
-                            if (!task) return null
-                            return (
+                        {/* Content — Float-stil: kode øverst, navn under, timer nederst-høyre */}
+                        <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+                          {/* Topp: prosjektkode + navn */}
+                          <div style={{ minWidth:0, overflow:'hidden' }}>
+                            {!isZoomedOut && showCode && (
                               <div style={{
-                                fontSize: width > 200 ? '11px' : '10px',
-                                fontWeight:'500',
-                                opacity:0.92,
-                                lineHeight:1.2,
-                                marginTop:'2px',
+                                fontSize: width > 120 ? '13px' : '12px',
+                                fontWeight:'800',
+                                lineHeight:1.1,
+                                letterSpacing:'0.01em',
                                 overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                               }}>
-                                🔨 {task}
+                                {proj?.project_number || (proj?.name || '').slice(0,6)}
                               </div>
-                            )
-                          })()}
-                          {isZoomedOut && (
-                            <div style={{ fontSize:'9px', fontWeight:'800', opacity:0.9, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                              {proj?.project_number || proj?.name?.slice(0,6) || ''}
-                            </div>
-                          )}
-                          {showHours && (
+                            )}
+                            {!isZoomedOut && showName && (
+                              <div style={{
+                                fontSize: width > 150 ? '11px' : '10px',
+                                fontWeight:'500',
+                                lineHeight:1.2,
+                                marginTop:'2px',
+                                opacity:0.92,
+                                overflow:'hidden', textOverflow:'ellipsis',
+                                display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical',
+                                whiteSpace:'normal',
+                              }}>
+                                {proj?.name || '—'}
+                              </div>
+                            )}
+                            {/* Oppgave-tekst — kun på brede bjelker */}
+                            {!isZoomedOut && width > 140 && (() => {
+                              const task = bar.plans.find(p => p.task_description)?.task_description
+                              if (!task) return null
+                              return (
+                                <div style={{
+                                  fontSize: '10px',
+                                  fontWeight:'500',
+                                  opacity:0.85,
+                                  lineHeight:1.2,
+                                  marginTop:'3px',
+                                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                                }}>
+                                  🔨 {task}
+                                </div>
+                              )
+                            })()}
+                            {isZoomedOut && (
+                              <div style={{ fontSize:'9px', fontWeight:'800', opacity:0.9, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                {proj?.project_number || proj?.name?.slice(0,6) || ''}
+                              </div>
+                            )}
+                          </div>
+                          {/* Bunn: timer nederst til høyre */}
+                          {showHours && !isZoomedOut && (
                             <div style={{
-                              fontSize:'10px', opacity:0.85, marginTop:'2px',
+                              fontSize:'10px', opacity:0.85, fontWeight:'600',
+                              textAlign:'right',
                               overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                              marginTop:'2px',
                             }}>
-                              {bar.hours.toFixed(1)}t
-                              {bar.plans.length > 1 && ` · ${bar.plans.length}d`}
+                              {bar.hours.toFixed(1).replace('.', ',')}t{bar.plans.length > 1 && ` · ${bar.plans.length}d`}
                             </div>
                           )}
                         </div>
 
-                        {/* Corner icons */}
+                        {/* Corner icons — øverst til høyre */}
                         <div style={{ position:'absolute', top:'4px', right:'6px', display:'flex', gap:'3px', pointerEvents:'none' }}>
-                          {bar.hasConflict && <span title="Dobbeltbooking (>8t på én dag)" style={{ fontSize:'10px', background:'#dc2626', color:'white', borderRadius:'4px', padding:'0 4px', fontWeight:'800', pointerEvents:'auto' }}>⚠</span>}
+                          {bar.hasConflict && (
+                            <span title="Dobbeltbooking (>8t på én dag)" style={{
+                              display:'inline-flex', alignItems:'center', justifyContent:'center',
+                              width:'18px', height:'18px',
+                              background:'#dc2626', color:'white',
+                              borderRadius:'50%',
+                              fontSize:'11px', fontWeight:'800',
+                              boxShadow:'0 1px 3px rgba(0,0,0,0.3)',
+                              pointerEvents:'auto',
+                              border:'1.5px solid white',
+                            }}>!</span>
+                          )}
                           {bar.notes && <span style={{ fontSize:'9px', opacity:0.8 }}>💬</span>}
                           {bar.materials.length > 0 && (
                             <span title={bar.materials.join(', ')} style={{
