@@ -1396,21 +1396,46 @@ function ProjectSelect({ value, onChange, projects, required, placeholder, style
 // ─── PROSJEKTER PAGE ──────────────────────────────────────────────────────
 const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'},{value:'arkivert',label:'Arkivert'}]
 
-// Konverterer tomme strenger til null for UUID-kolonner før innsending til Supabase.
+// Konverterer tomme strenger til null for UUID- og DATE-kolonner før innsending til Supabase.
 // Postgres UUID-kolonner avviser '' med "invalid input syntax for type uuid".
-// Fanger alle felter som slutter på _id + eksplisitte UUID-felter (created_by, updated_by).
+// Postgres DATE-kolonner avviser '' med "invalid input syntax for type date".
+// Fanger:
+//   - UUID: alle felter som slutter på _id + eksplisitte UUID-felter
+//   - DATE: alle felter som slutter på _date eller er i DATE_FIELDS-lista
 // Beholder felter som ikke matcher uendret. Safe å kjøre flere ganger (idempotent).
 const UUID_FIELD_SUFFIX = /_id$/
 const EXPLICIT_UUID_FIELDS = new Set(['created_by', 'updated_by', 'user_id'])
+const DATE_FIELD_SUFFIX = /_date$|_until$|_from$|_to$/
+const EXPLICIT_DATE_FIELDS = new Set([
+  'deadline', 'valid_until', 'due_date', 'invoice_date', 'delivery_date',
+  'start_date', 'end_date', 'birth_date', 'last_service', 'next_service',
+  'neste_revisjon', 'dato', 'reminder_date',
+])
+
 function sanitizeUuidFields(obj) {
+  // Bakoverkompatibelt alias — kaller den nye generelle saniteringen.
+  return sanitizeDbPayload(obj)
+}
+
+function sanitizeDbPayload(obj) {
   if (!obj || typeof obj !== 'object') return obj
   const out = { ...obj }
   for (const key of Object.keys(out)) {
-    const isUuidField = UUID_FIELD_SUFFIX.test(key) || EXPLICIT_UUID_FIELDS.has(key)
-    if (!isUuidField) continue
     const v = out[key]
-    // Tom streng eller whitespace-only streng → null
-    if (typeof v === 'string' && v.trim() === '') out[key] = null
+    // Kun strenger kan være "", så hopp over alt annet
+    if (typeof v !== 'string') continue
+    const isEmpty = v.trim() === ''
+    if (!isEmpty) continue
+    // UUID-felter: slutter på _id eller er i eksplisitt liste
+    if (UUID_FIELD_SUFFIX.test(key) || EXPLICIT_UUID_FIELDS.has(key)) {
+      out[key] = null
+      continue
+    }
+    // DATE-felter: slutter på _date/_until/_from/_to eller er i eksplisitt liste
+    if (DATE_FIELD_SUFFIX.test(key) || EXPLICIT_DATE_FIELDS.has(key)) {
+      out[key] = null
+      continue
+    }
   }
   return out
 }
@@ -7832,7 +7857,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
         statusOnCreate: 'tilbud_sendt',
       })
 
-      const payload = { ...form, chapters, updated_at: new Date().toISOString(), project_id: form.project_id || null, customer_id: customerId }
+      const payload = sanitizeDbPayload({ ...form, chapters, updated_at: new Date().toISOString(), project_id: form.project_id || null, customer_id: customerId })
       if (isEdit) {
         const { error } = await supabase.from('quotes').update(payload).eq('id', initial.id)
         if (error) throw error
@@ -10759,7 +10784,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
         initialCustomerId: initial?.customer_id,
         statusOnCreate: 'ordre_bekreftet',
       })
-      const payload = { ...form, chapters, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() }
+      const payload = sanitizeDbPayload({ ...form, chapters, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() })
       if (isEdit) { const {error}=await supabase.from('orders').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('orders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
@@ -11899,7 +11924,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
         initialCustomerId: initial?.customer_id,
         statusOnCreate: 'faktura_sendt',
       })
-      const payload = { ...form, lines, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() }
+      const payload = sanitizeDbPayload({ ...form, lines, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() })
       if (isEdit) { const {error}=await supabase.from('invoices').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('invoices').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
