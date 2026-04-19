@@ -738,7 +738,7 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
         </div>
       )}
 
-      {showDrop && searchInput && emps.length > 0 && typeof document !== 'undefined' && createPortal(
+      {showDrop && emps.length > 0 && typeof document !== 'undefined' && createPortal(
         <div style={{
           position:'fixed',
           top: `${dropPos.top}px`,
