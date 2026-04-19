@@ -21175,10 +21175,27 @@ const CRM_STATUS = {
   inaktiv:       { label:'Inaktiv',       emoji:'💤', color:'#94a3b8', bg:'#f8fafc', border:'#e2e8f0' },
 }
 
+// CRM_TYPE brukes for LOOKUP (CRM_TYPE[c.type]) og må dekke alle verdier
+// som kan finnes i customers.type — inkl. legacy-verdier fra gamle crm_customers.
 const CRM_TYPE = {
-  firma:   { label:'Firma',   emoji:'🏢' },
-  privat:  { label:'Privat',  emoji:'👤' },
-  lead:    { label:'Lead',    emoji:'🎯' },
+  bedrift:    { label:'Bedrift',       emoji:'🏢' },
+  privat:     { label:'Privat',        emoji:'👤' },
+  offentlig:  { label:'Offentlig',     emoji:'🏛️' },
+  borettslag: { label:'Borettslag',    emoji:'🏘️' },
+  ue:         { label:'Underlev.',     emoji:'🤝' },
+  // Legacy — beholder for bakoverkompatibilitet med eldre data
+  firma:      { label:'Firma',         emoji:'🏢' },
+  lead:       { label:'Lead',          emoji:'🎯' },
+}
+
+// CRM_TYPE_CHOICES brukes for VISNING i filter/opprettelse — kun aktive valg.
+// Legacy-verdier (firma, lead) vises ikke som nye valg men forstås fortsatt i data.
+const CRM_TYPE_CHOICES = {
+  bedrift:    CRM_TYPE.bedrift,
+  privat:     CRM_TYPE.privat,
+  offentlig:  CRM_TYPE.offentlig,
+  borettslag: CRM_TYPE.borettslag,
+  ue:         CRM_TYPE.ue,
 }
 
 const ACTIVITY_TYPES = {
@@ -21337,7 +21354,7 @@ function CRMPage() {
           </select>
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...crmInp, maxWidth:'140px' }}>
             <option value="alle">Alle typer</option>
-            {Object.entries(CRM_TYPE).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+            {Object.entries(CRM_TYPE_CHOICES).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
           <select value={filterIndustry} onChange={e=>setFilterIndustry(e.target.value)} style={{ ...crmInp, maxWidth:'160px' }}>
             <option value="alle">Alle bransjer</option>
@@ -21366,8 +21383,8 @@ function CRMPage() {
                 const custContacts=contacts.filter(ct=>ct.customer_id===c.id)
                 const custActivities=activities.filter(a=>a.customer_id===c.id)
                 const openTasks=custActivities.filter(a=>a.type==='task'&&!a.completed)
-                const cfg=CRM_STATUS[c.status]
-                const typCfg=CRM_TYPE[c.type]
+                const cfg=CRM_STATUS[c.status]||CRM_STATUS.lead
+                const typCfg=CRM_TYPE[c.type]||CRM_TYPE.bedrift
                 return (
                   <div key={c.id} onClick={()=>setSelected(c)}
                     style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
@@ -21609,7 +21626,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [showNewActivity, setShowNewActivity] = useState(false)
   const [showQuotePicker, setShowQuotePicker] = useState(false)
   const fileInputRef = React.useRef(null)
-  const cfg = CRM_STATUS[c.status]
+  const cfg = CRM_STATUS[c.status] || CRM_STATUS.lead
 
   const loadDetails = async () => {
     const [ct, act, doc] = await Promise.all([
@@ -21986,7 +22003,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div style={{ gridColumn:'1/-1' }}>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type</label>
             <div style={{ display:'flex',gap:'8px' }}>
-              {Object.entries(CRM_TYPE).map(([k,v])=>(
+              {Object.entries(CRM_TYPE_CHOICES).map(([k,v])=>(
                 <button key={k} onClick={()=>set('type',k)} style={{ flex:1,padding:'8px',borderRadius:'10px',border:`2px solid ${form.type===k?'#059669':'#e2e8f0'}`,background:form.type===k?'#f0fdf4':'white',cursor:'pointer',fontWeight:form.type===k?'700':'500',fontSize:'13px',color:form.type===k?'#059669':'#64748b' }}>
                   {v.emoji} {v.label}
                 </button>
