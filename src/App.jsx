@@ -29874,6 +29874,11 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           const [leveringsdager, setLeveringsdager] = useState(2)
           const [showProjectPicker, setShowProjectPicker] = useState(null)
           const [tildelingsmodus, setTildelingsmodus] = useState('reserver') // 'ansatte' | 'reserver'
+          // ── Faseplanlegger (mellomsteg mellom oppsett og sending) ──
+          const [faseplanleggerMode, setFaseplanleggerMode] = useState(false)
+          const [editableFaser, setEditableFaser] = useState([])
+          const [splitDialogFor, setSplitDialogFor] = useState(null) // fase-id eller null
+          const [dragIndex, setDragIndex] = useState(null)
 
           useEffect(() => {
             supabase.from('company_settings').select('active_modules').limit(1).single()
@@ -30018,6 +30023,258 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // ── Prosjektvalg popup ──
           const getProjId = () => k.project_id || selectedProject || null
 
+          // ── Faseplanlegger-hjelpere ──
+          // Initialiser editableFaser fra bdPlan når vi går inn i faseplanlegger-modus
+          const initializeEditableFaser = () => {
+            const faser = bdPlan.map((bd, idx) => ({
+              id: `${idx}_${bd.name}_${Date.now()}`,
+              name: bd.name,
+              fag: bd.fag,
+              emoji: bd.emoji,
+              timer: bd.timer,
+              dager: bd.dager,
+              materialer: bd.materialer,
+              dbProsent: bd.dbProsent,
+              isSplit: false,
+            }))
+            setEditableFaser(faser)
+          }
+
+          // Omregn startDag/sluttDag for alle faser basert på rekkefølge
+          const recalcFaser = (faser) => {
+            let akkumulert = 0
+            return faser.map(f => {
+              const start = akkumulert
+              akkumulert += f.dager
+              return { ...f, startDag: start, sluttDag: akkumulert }
+            })
+          }
+
+          const faserWithDates = React.useMemo(() => recalcFaser(editableFaser), [editableFaser])
+
+          const moveFase = (fromIdx, toIdx) => {
+            if (fromIdx === toIdx || toIdx < 0 || toIdx >= editableFaser.length) return
+            const newFaser = [...editableFaser]
+            const [moved] = newFaser.splice(fromIdx, 1)
+            newFaser.splice(toIdx, 0, moved)
+            setEditableFaser(newFaser)
+          }
+
+          const renameFase = (idx, newName) => {
+            const newFaser = [...editableFaser]
+            newFaser[idx] = { ...newFaser[idx], name: newName }
+            setEditableFaser(newFaser)
+          }
+
+          // Split: del fase i to nye faser
+          const performSplit = (idx, { mode, value1, value2, name1, name2, matMode }) => {
+            const original = editableFaser[idx]
+            let timer1, timer2, dager1, dager2
+
+            if (mode === 'prosent') {
+              const pct1 = parseFloat(value1) / 100
+              timer1 = original.timer * pct1
+              timer2 = original.timer * (1 - pct1)
+              dager1 = original.dager * pct1
+              dager2 = original.dager * (1 - pct1)
+            } else if (mode === 'timer') {
+              timer1 = parseFloat(value1)
+              timer2 = parseFloat(value2)
+              const ratio = timer1 / (timer1 + timer2)
+              dager1 = original.dager * ratio
+              dager2 = original.dager * (1 - ratio)
+            } else { // 'deler' — like deler (2)
+              timer1 = original.timer / 2
+              timer2 = original.timer / 2
+              dager1 = original.dager / 2
+              dager2 = original.dager / 2
+            }
+
+            // Material-håndtering
+            let mat1 = [], mat2 = []
+            if (matMode === 'dubliser') {
+              mat1 = original.materialer.map(m => ({ ...m }))
+              mat2 = original.materialer.map(m => ({ ...m }))
+            } else if (matMode === 'del1') {
+              mat1 = original.materialer.map(m => ({ ...m }))
+              mat2 = []
+            } else { // 'proportional'
+              const ratio = timer1 / (timer1 + timer2)
+              mat1 = original.materialer.map(m => ({ ...m, totalMengde: m.totalMengde * ratio, mengde: m.mengde * ratio }))
+              mat2 = original.materialer.map(m => ({ ...m, totalMengde: m.totalMengde * (1 - ratio), mengde: m.mengde * (1 - ratio) }))
+            }
+
+            const del1 = {
+              ...original,
+              id: `${original.id}_a${Date.now()}`,
+              name: name1 || `${original.name} (del 1)`,
+              timer: timer1,
+              dager: dager1,
+              materialer: mat1,
+              isSplit: true,
+            }
+            const del2 = {
+              ...original,
+              id: `${original.id}_b${Date.now()}`,
+              name: name2 || `${original.name} (del 2)`,
+              timer: timer2,
+              dager: dager2,
+              materialer: mat2,
+              isSplit: true,
+            }
+
+            const newFaser = [...editableFaser]
+            newFaser.splice(idx, 1, del1, del2)
+            setEditableFaser(newFaser)
+            setSplitDialogFor(null)
+          }
+
+          // ── SplitDialog — popover for å konfigurere split ──
+          const SplitDialog = ({ fase, onCancel, onSplit }) => {
+            const [splitMode, setSplitMode] = useState('prosent') // 'prosent' | 'timer' | 'deler'
+            const [pct1, setPct1] = useState(50)
+            const [t1, setT1] = useState(Math.round(fase.timer / 2))
+            const [t2, setT2] = useState(Math.round(fase.timer / 2))
+            const [name1, setName1] = useState(`${fase.name} (del 1)`)
+            const [name2, setName2] = useState(`${fase.name} (del 2)`)
+            const [matMode, setMatMode] = useState('proportional')
+
+            const canSplit = () => {
+              if (splitMode === 'prosent') return pct1 > 0 && pct1 < 100
+              if (splitMode === 'timer') return t1 > 0 && t2 > 0 && (t1 + t2) <= fase.timer * 1.01
+              return true
+            }
+
+            const doSplit = () => {
+              onSplit({
+                mode: splitMode,
+                value1: splitMode === 'prosent' ? pct1 : t1,
+                value2: splitMode === 'timer' ? t2 : null,
+                name1: name1 || `${fase.name} (del 1)`,
+                name2: name2 || `${fase.name} (del 2)`,
+                matMode,
+              })
+            }
+
+            return (
+              <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onCancel} />
+                <div style={{ position:'relative', background:'white', borderRadius:'16px', width:'100%', maxWidth:'460px', maxHeight:'90vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'20px 22px', fontFamily:'system-ui,sans-serif' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'14px' }}>
+                    <div>
+                      <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>✂️ Split fase</h3>
+                      <div style={{ fontSize:'12px', color:'#64748b' }}>{fase.emoji} {fase.name} — {fase.timer.toFixed(0)}t, {fase.dager.toFixed(1)}d</div>
+                    </div>
+                    <button onClick={onCancel} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
+                  </div>
+
+                  {/* Split-mode */}
+                  <div style={{ marginBottom:'14px' }}>
+                    <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.05em' }}>Hvordan splitte?</label>
+                    <div style={{ display:'flex', gap:'6px' }}>
+                      {[
+                        { k:'prosent', l:'Prosent' },
+                        { k:'timer', l:'Timer' },
+                        { k:'deler', l:'Likt i to' },
+                      ].map(o => (
+                        <button key={o.k} onClick={() => setSplitMode(o.k)}
+                          style={{ flex:1, padding:'8px', border:splitMode===o.k?'2px solid #7c3aed':'1px solid #e2e8f0', borderRadius:'8px', background:splitMode===o.k?'#f5f3ff':'white', color:splitMode===o.k?'#7c3aed':'#475569', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Verdier */}
+                  {splitMode === 'prosent' && (
+                    <div style={{ marginBottom:'14px', padding:'12px', background:'#fafafa', borderRadius:'10px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                        <input type="range" min="10" max="90" value={pct1} onChange={e => setPct1(parseInt(e.target.value))}
+                          style={{ flex:1, cursor:'pointer' }} />
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', minWidth:'80px', textAlign:'right' }}>{pct1}% / {100-pct1}%</div>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#64748b', marginTop:'6px' }}>
+                        <span>Del 1: {(fase.timer * pct1/100).toFixed(0)}t · {(fase.dager * pct1/100).toFixed(1)}d</span>
+                        <span>Del 2: {(fase.timer * (100-pct1)/100).toFixed(0)}t · {(fase.dager * (100-pct1)/100).toFixed(1)}d</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {splitMode === 'timer' && (
+                    <div style={{ marginBottom:'14px', padding:'12px', background:'#fafafa', borderRadius:'10px' }}>
+                      <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                        <div style={{ flex:1 }}>
+                          <label style={{ fontSize:'10px', color:'#64748b', display:'block', marginBottom:'3px' }}>Del 1 timer</label>
+                          <input type="number" min="1" value={t1} onChange={e => setT1(parseFloat(e.target.value) || 0)}
+                            style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'13px', fontWeight:'700', boxSizing:'border-box' }} />
+                        </div>
+                        <div style={{ fontSize:'16px', color:'#94a3b8', marginTop:'18px' }}>+</div>
+                        <div style={{ flex:1 }}>
+                          <label style={{ fontSize:'10px', color:'#64748b', display:'block', marginBottom:'3px' }}>Del 2 timer</label>
+                          <input type="number" min="1" value={t2} onChange={e => setT2(parseFloat(e.target.value) || 0)}
+                            style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'13px', fontWeight:'700', boxSizing:'border-box' }} />
+                        </div>
+                      </div>
+                      <div style={{ fontSize:'11px', color:(t1+t2)>fase.timer*1.01?'#dc2626':'#64748b', marginTop:'8px', textAlign:'center' }}>
+                        Sum: {(t1+t2).toFixed(0)}t {(t1+t2) > fase.timer*1.01 ? `(overstiger ${fase.timer.toFixed(0)}t!)` : `av ${fase.timer.toFixed(0)}t`}
+                      </div>
+                    </div>
+                  )}
+
+                  {splitMode === 'deler' && (
+                    <div style={{ marginBottom:'14px', padding:'12px', background:'#fafafa', borderRadius:'10px', fontSize:'12px', color:'#64748b' }}>
+                      Fasen deles i to like deler: {(fase.timer/2).toFixed(0)}t · {(fase.dager/2).toFixed(1)}d hver.
+                    </div>
+                  )}
+
+                  {/* Navn */}
+                  <div style={{ display:'flex', gap:'8px', marginBottom:'14px' }}>
+                    <div style={{ flex:1 }}>
+                      <label style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'4px', textTransform:'uppercase' }}>Navn del 1</label>
+                      <input type="text" value={name1} onChange={e => setName1(e.target.value)}
+                        style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', boxSizing:'border-box' }} />
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <label style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'4px', textTransform:'uppercase' }}>Navn del 2</label>
+                      <input type="text" value={name2} onChange={e => setName2(e.target.value)}
+                        style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', boxSizing:'border-box' }} />
+                    </div>
+                  </div>
+
+                  {/* Materialvalg */}
+                  {fase.materialer.length > 0 && (
+                    <div style={{ marginBottom:'14px' }}>
+                      <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.05em' }}>Hva skal skje med materialene? ({fase.materialer.length} stk)</label>
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {[
+                          { k:'proportional', l:'Split proporsjonalt', h:'Del 1 får sin andel, del 2 får resten' },
+                          { k:'dubliser', l:'Dubliser på begge', h:'⚠️ Begge deler får full mengde (dobbelt forbruk)' },
+                          { k:'del1', l:'Kun på del 1', h:'Alle materialer leveres ved starten av del 1' },
+                        ].map(o => (
+                          <label key={o.k} style={{ display:'flex', gap:'10px', padding:'8px 10px', background:matMode===o.k?'#eff6ff':'#fafafa', borderRadius:'6px', cursor:'pointer', border:matMode===o.k?'1px solid #bfdbfe':'1px solid transparent' }}>
+                            <input type="radio" name="matMode" checked={matMode===o.k} onChange={() => setMatMode(o.k)} style={{ marginTop:'3px' }} />
+                            <div>
+                              <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{o.l}</div>
+                              <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>{o.h}</div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Knapper */}
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button onClick={onCancel}
+                      style={{ flex:1, padding:'10px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                    <button onClick={doSplit} disabled={!canSplit()}
+                      style={{ flex:2, padding:'10px', background:canSplit()?'#7c3aed':'#cbd5e1', color:'white', border:'none', borderRadius:'8px', cursor:canSplit()?'pointer':'not-allowed', fontSize:'13px', fontWeight:'700' }}>✂️ Split fasen</button>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
           const handleAction = (action) => {
             const projId = getProjId()
             if (!projId) { setShowProjectPicker(action); return }
@@ -30033,7 +30290,10 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               const useEmployees = tildelingsmodus === 'ansatte' && selectedEmployees.length > 0
               const placeholderIds = {} // Gjenbruk UUID per mann-nummer
 
-              for (const bd of bdPlan) {
+              // Bruk redigert fase-liste hvis brukeren har vært i faseplanleggeren, ellers original bdPlan
+              const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
+
+              for (const bd of faserToUse) {
                 // Bruk akkumulerte startposisjoner for å unngå overlapp mellom bygningsdeler
                 // når bd.dager er desimal. bd.startDag er eksakt, men vi må jobbe med hele dager.
                 const startDagRounded = Math.round(bd.startDag)
@@ -30090,7 +30350,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             setSending(true)
             try {
               const matPlans = []
-              for (const bd of bdPlan) {
+              const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
+              for (const bd of faserToUse) {
                 if (bd.materialer.length === 0) continue
                 const faseStart = addWorkdays(startDato, Math.floor(bd.startDag))
                 const leveringsDato = new Date(faseStart)
@@ -30188,6 +30449,157 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               </div>
             </div>
           )
+
+
+          // ── Faseplanlegger-render (mellomsteg mellom oppsett og sending) ──
+          if (faseplanleggerMode) {
+            const totalDagerRedigert = faserWithDates.reduce((s, f) => s + f.dager, 0)
+            const startDatoD = new Date(startDato + 'T12:00:00')
+            const sluttDatoD = addWorkdays(startDato, Math.ceil(totalDagerRedigert))
+            const startFmt = startDatoD.toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric' })
+            const sluttFmt = sluttDatoD.toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric' })
+            const splitDialog = splitDialogFor !== null ? editableFaser.find((_, idx) => idx === splitDialogFor) : null
+
+            return (
+              <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+                <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'760px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
+                  {/* Header */}
+                  <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <div>
+                        <h3 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Planlegg byggesekvens</h3>
+                        <p style={{ margin:'6px 0 0', fontSize:'13px', color:'#64748b' }}>
+                          Dra faser for å omorganisere, eller splitt dem i mindre faser før bookingene opprettes.
+                        </p>
+                      </div>
+                      <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                    </div>
+                  </div>
+
+                  {/* Fase-liste */}
+                  <div style={{ overflowY:'auto', flex:1, padding:'18px 24px', background:'#fafafa' }}>
+                    {faserWithDates.length === 0 ? (
+                      <div style={{ textAlign:'center', color:'#94a3b8', padding:'40px' }}>Ingen faser å planlegge</div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                        {faserWithDates.map((fase, idx) => {
+                          const startDatoFase = addWorkdays(startDato, Math.round(fase.startDag))
+                          const sluttDatoFase = addWorkdays(startDato, Math.round(fase.sluttDag))
+                          const startFaseFmt = startDatoFase.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })
+                          const sluttFaseFmt = sluttDatoFase.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })
+                          const isDragging = dragIndex === idx
+
+                          return (
+                            <div key={fase.id}
+                              draggable
+                              onDragStart={(e) => { setDragIndex(idx); e.dataTransfer.effectAllowed = 'move' }}
+                              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                              onDrop={(e) => {
+                                e.preventDefault()
+                                if (dragIndex !== null && dragIndex !== idx) moveFase(dragIndex, idx)
+                                setDragIndex(null)
+                              }}
+                              onDragEnd={() => setDragIndex(null)}
+                              style={{
+                                background:'white',
+                                border: isDragging ? '2px dashed #2563eb' : '1px solid #e2e8f0',
+                                borderRadius:'12px',
+                                padding:'12px 14px',
+                                opacity: isDragging ? 0.4 : 1,
+                                transition:'opacity 0.15s, border 0.15s',
+                                boxShadow: isDragging ? 'none' : '0 1px 3px rgba(0,0,0,0.04)',
+                                display:'flex',
+                                alignItems:'center',
+                                gap:'12px',
+                              }}>
+                              {/* Drag-håndtak */}
+                              <div style={{ cursor:'grab', color:'#94a3b8', fontSize:'18px', flexShrink:0, userSelect:'none', touchAction:'none' }}>⋮⋮</div>
+
+                              {/* Piler (fallback for mobil) */}
+                              <div style={{ display:'flex', flexDirection:'column', gap:'2px', flexShrink:0 }}>
+                                <button onClick={() => moveFase(idx, idx - 1)} disabled={idx === 0}
+                                  style={{ width:'22px', height:'18px', border:'1px solid #e2e8f0', borderRadius:'4px', background:idx===0?'#f8fafc':'white', cursor:idx===0?'not-allowed':'pointer', fontSize:'10px', color:idx===0?'#cbd5e1':'#475569', padding:0, lineHeight:1 }}>▲</button>
+                                <button onClick={() => moveFase(idx, idx + 1)} disabled={idx === faserWithDates.length - 1}
+                                  style={{ width:'22px', height:'18px', border:'1px solid #e2e8f0', borderRadius:'4px', background:idx===faserWithDates.length-1?'#f8fafc':'white', cursor:idx===faserWithDates.length-1?'not-allowed':'pointer', fontSize:'10px', color:idx===faserWithDates.length-1?'#cbd5e1':'#475569', padding:0, lineHeight:1 }}>▼</button>
+                              </div>
+
+                              {/* Fase-nummer */}
+                              <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#f1f5f9', color:'#64748b', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', flexShrink:0 }}>{idx + 1}</div>
+
+                              {/* Fase-info */}
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                                  <span style={{ fontSize:'15px' }}>{fase.emoji}</span>
+                                  <input type="text" value={fase.name}
+                                    onChange={e => renameFase(idx, e.target.value)}
+                                    onDragStart={e => e.stopPropagation()}
+                                    style={{
+                                      flex:1, border:'none', fontSize:'13px', fontWeight:'700', color:'#0f172a',
+                                      background:'transparent', outline:'none', padding:'2px 4px', borderRadius:'4px',
+                                      minWidth:0, width:'100%',
+                                    }}
+                                    onFocus={e => e.target.style.background = '#f1f5f9'}
+                                    onBlur={e => e.target.style.background = 'transparent'} />
+                                </div>
+                                <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#64748b', marginTop:'3px', flexWrap:'wrap' }}>
+                                  <span>⏱️ {fase.timer.toFixed(0)}t</span>
+                                  <span>📆 {fase.dager.toFixed(1)}d</span>
+                                  <span>📅 {startFaseFmt} – {sluttFaseFmt}</span>
+                                  {fase.materialer.length > 0 && <span>📦 {fase.materialer.length} matr.</span>}
+                                  {fase.isSplit && <span style={{ color:'#7c3aed', fontWeight:'600' }}>✂️ Splittet</span>}
+                                </div>
+                              </div>
+
+                              {/* Handlinger */}
+                              <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                                {fase.dager >= 0.5 && (
+                                  <button onClick={() => setSplitDialogFor(idx)}
+                                    style={{ padding:'6px 10px', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #e9d5ff', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>
+                                    ✂️ Split
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview & footer */}
+                  <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', flexWrap:'wrap', gap:'10px' }}>
+                      <div style={{ fontSize:'12px', color:'#64748b' }}>
+                        <span style={{ fontWeight:'700', color:'#0f172a' }}>{faserWithDates.length} faser</span>
+                        {' · '}
+                        <span style={{ fontWeight:'700', color:'#0f172a' }}>{totalDagerRedigert.toFixed(1)} arbeidsdager</span>
+                        {' · '}
+                        <span>{startFmt} → {sluttFmt}</span>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:'8px' }}>
+                      <button onClick={() => setFaseplanleggerMode(false)}
+                        style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>← Tilbake</button>
+                      <button onClick={() => { setFaseplanleggerMode(false); handleAction('ressurs') }} disabled={sending || faserWithDates.length === 0}
+                        style={{ flex:1, padding:'10px', background:(sending || faserWithDates.length === 0)?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:(sending || faserWithDates.length === 0)?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
+                        ✅ Send til ressursplan
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Split-dialog */}
+                {splitDialog && (
+                  <SplitDialog
+                    fase={splitDialog}
+                    onCancel={() => setSplitDialogFor(null)}
+                    onSplit={(config) => performSplit(splitDialogFor, config)}
+                  />
+                )}
+              </div>
+            )
+          }
 
           return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -30409,11 +30821,11 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
                     <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
                     <div style={{ flex:1 }} />
-                    <button onClick={() => handleAction('ressurs')} disabled={sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0)}
+                    <button onClick={() => { initializeEditableFaser(); setFaseplanleggerMode(true) }} disabled={sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0)}
                       style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px',
                         background: sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0) ? '#94a3b8' : '#2563eb',
                         color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
-                      {sending ? '⏳ Sender...' : tildelingsmodus === 'ansatte' ? `📅 Send til ressursplan (${selectedEmployees.length} ansatte)` : `📅 Reserver i ressursplan (${antallMann} mann)`}
+                      {sending ? '⏳ Sender...' : tildelingsmodus === 'ansatte' ? `📋 Planlegg & send (${selectedEmployees.length} ansatte)` : `📋 Planlegg & send (${antallMann} mann)`}
                     </button>
                     <button onClick={() => handleAction('levering')} disabled={sending}
                       style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px', background: sending ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
