@@ -1393,6 +1393,155 @@ function ProjectSelect({ value, onChange, projects, required, placeholder, style
   )
 }
 
+// SearchableProjectSelect — som ProjectSelect, men med søkefelt og React Portal.
+// Matcher mønsteret fra EmployeeNameSelect og CustomerSelect.
+// Søker på navn, prosjektnummer, kundenavn, adresse.
+// Props: value (project_id), onChange, projects, placeholder, style, allowEmpty
+function SearchableProjectSelect({ value, onChange, projects, placeholder, style, allowEmpty = true, emptyLabel, required }) {
+  const options = React.useMemo(() => projectOptions(projects || []), [projects])
+  const [showDrop, setShowDrop] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [rect, setRect] = useState(null)
+  const wrapperRef = React.useRef(null)
+
+  const selected = options.find(p => p.id === value)
+  const displayValue = selected
+    ? `${selected.name}${selected.project_number ? ` (${selected.project_number})` : ''}`
+    : ''
+
+  const inputVal = showDrop ? searchText : displayValue
+
+  const filtered = options.filter(p => {
+    const q = (searchText || '').toLowerCase().trim()
+    if (!q) return true
+    return (p.name || '').toLowerCase().includes(q) ||
+           (p.project_number || '').toLowerCase().includes(q) ||
+           (p.client_name || '').toLowerCase().includes(q) ||
+           (p.address || '').toLowerCase().includes(q) ||
+           (p.address_street || '').toLowerCase().includes(q)
+  })
+
+  const handleSelect = (p) => {
+    onChange(p.id)
+    setShowDrop(false)
+    setSearchText('')
+  }
+
+  const openDrop = () => {
+    if (wrapperRef.current) {
+      const r = wrapperRef.current.getBoundingClientRect()
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+    }
+    setShowDrop(true)
+    setSearchText('')
+  }
+
+  useEffect(() => {
+    if (!showDrop) return
+    const update = () => {
+      if (wrapperRef.current) {
+        const r = wrapperRef.current.getBoundingClientRect()
+        setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+      }
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [showDrop])
+
+  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif', ...style }
+
+  // Status-pill config (samme farger som resten av systemet)
+  const statusPill = (status) => {
+    const cfg = {
+      planlagt: { bg:'#eff6ff', color:'#2563eb', label:'Planlagt' },
+      aktiv:    { bg:'#f0fdf4', color:'#16a34a', label:'Aktiv' },
+      pause:    { bg:'#fffbeb', color:'#d97706', label:'På pause' },
+      fullfort: { bg:'#f8fafc', color:'#64748b', label:'Fullført' },
+      avbrutt:  { bg:'#fef2f2', color:'#dc2626', label:'Avbrutt' },
+      arkivert: { bg:'#f1f5f9', color:'#94a3b8', label:'Arkivert' },
+    }[status] || null
+    if (!cfg) return null
+    return <span style={{ background: cfg.bg, color: cfg.color, fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{cfg.label}</span>
+  }
+
+  const indent = (depth) => '\u00A0\u00A0\u00A0\u00A0'.repeat(depth)
+
+  const dropdown = (showDrop && rect) && (
+    <div style={{
+      position:'fixed',
+      top: `${rect.top}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      background:'white',
+      border:'1px solid #e2e8f0',
+      borderRadius:'10px',
+      boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
+      zIndex: 99999,
+      maxHeight:'320px',
+      overflowY:'auto'
+    }}>
+      {options.length === 0 ? (
+        <div style={{ padding:'14px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+          Ingen prosjekter tilgjengelig
+        </div>
+      ) : (
+        <>
+          {allowEmpty && value && (
+            <div onMouseDown={(e) => { e.preventDefault(); onChange(''); setShowDrop(false); setSearchText('') }}
+              style={{ padding:'7px 12px', cursor:'pointer', fontSize:'12px', color:'#dc2626', borderBottom:'1px solid #f1f5f9', fontWeight:'600' }}
+              onMouseEnter={e => e.currentTarget.style.background='#fef2f2'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+              ✕ Fjern valgt
+            </div>
+          )}
+          {filtered.length === 0 ? (
+            <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+              Ingen treff{searchText ? ` for "${searchText}"` : ''}
+            </div>
+          ) : filtered.map(p => (
+            <div key={p.id} onMouseDown={(e) => { e.preventDefault(); handleSelect(p) }}
+              style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a', display:'flex', flexDirection:'column', gap:'2px' }}
+              onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                {p.project_number && <span style={{ fontFamily:'ui-monospace, monospace', fontSize:'12px', color:'#64748b', fontWeight:'600' }}>{p.project_number}</span>}
+                <span style={{ fontWeight:'600' }}>{indent(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name || '(uten navn)'}</span>
+                {statusPill(p.status)}
+              </div>
+              {(p.client_name || p.address_street || p.address) && (
+                <div style={{ fontSize:'11px', color:'#94a3b8', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                  {p.client_name && <span>👤 {p.client_name}</span>}
+                  {(p.address_street || p.address) && <span>📍 {p.address_street || p.address}</span>}
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+
+  return (
+    <div ref={wrapperRef} style={{ position:'relative' }}>
+      <input
+        value={inputVal}
+        onChange={e => {
+          setSearchText(e.target.value)
+          if (!showDrop) openDrop()
+          if (!e.target.value && value) onChange('')
+        }}
+        onFocus={openDrop}
+        onBlur={() => setTimeout(() => setShowDrop(false), 200)}
+        placeholder={placeholder || emptyLabel || 'Søk etter prosjekt (navn, nummer, kunde, adresse)...'}
+        required={required && !value}
+        style={selStyle} />
+      {typeof document !== 'undefined' && dropdown ? createPortal(dropdown, document.body) : null}
+    </div>
+  )
+}
+
 // ─── PROSJEKTER PAGE ──────────────────────────────────────────────────────
 const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'},{value:'arkivert',label:'Arkivert'}]
 
@@ -18899,9 +19048,12 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'14px' }}>
           {step===1&&(<>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
-              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',background:'white' }}>
-                <option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-              </select>
+              <SearchableProjectSelect
+                value={projectId}
+                onChange={setProjectId}
+                projects={projects}
+                placeholder="Søk etter prosjekt (navn, nummer, kunde, adresse)..."
+              />
             </div>
             <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
               <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Fra dato</label><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} style={{ width:'100%',padding:'10px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box' }} /></div>
