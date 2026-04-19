@@ -6488,6 +6488,7 @@ function NotifBell({ onNavigate }) {
                     <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>{new Date(n.created_at).toLocaleString('nb-NO')}</div>
                   </div>
                   {!n.read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669', flexShrink: 0, marginTop: '4px' }} />}
+                  {n.link_page && <div style={{ fontSize: '14px', color: '#94a3b8', flexShrink: 0, marginTop: '2px' }}>›</div>}
                 </div>
               ))}
             </div>
@@ -24783,7 +24784,7 @@ function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
 
 // ─── VARSLER PAGE ─────────────────────────────────────────────────────────────
 
-function VarslerPage() {
+function VarslerPage({ onNavigate }) {
   const confirm = useConfirm()
   const { notifs, unread, markRead, markAllRead, load } = useNotif()
   const [filter, setFilter] = useState('alle')
@@ -24891,7 +24892,10 @@ function VarslerPage() {
                 <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
                   {items.map(n => (
                     <div key={n.id}
-                      onClick={() => markRead(n.id)}
+                      onClick={() => {
+                        markRead(n.id)
+                        if (n.link_page && onNavigate) onNavigate(n.link_page)
+                      }}
                       style={{ background:n.read?'white':'#f0fdf4', borderRadius:'12px', border:`1px solid ${n.read?'#f1f5f9':'#bbf7d0'}`, padding:'14px 16px', cursor:'pointer', display:'flex', alignItems:'flex-start', gap:'12px', transition:'background 0.15s' }}
                       onMouseEnter={e=>{ if(n.read) e.currentTarget.style.background='#f8fafc' }}
                       onMouseLeave={e=>{ e.currentTarget.style.background=n.read?'white':'#f0fdf4' }}>
@@ -24908,6 +24912,12 @@ function VarslerPage() {
                           {new Date(n.created_at).toLocaleTimeString('nb-NO',{hour:'2-digit',minute:'2-digit'})}
                           {' · '}
                           <span style={{ color:'#94a3b8' }}>{typeName(n.type)}</span>
+                          {n.link_page && (
+                            <>
+                              {' · '}
+                              <span style={{ color:'#2563eb', fontWeight:'600' }}>Klikk for å åpne →</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <button onClick={(e) => deleteNotif(n.id, e)}
@@ -32132,7 +32142,7 @@ function AppContent() {
         {page === 'minbedrift' && <MinBedriftPage />}
         {page === 'brukeradmin' && <BrukeradminPage />}
         {page === 'superadmin' && (isPlatformOwner ? <SuperAdminPage /> : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>🔒</div><h2 style={{ color:'#0f172a', margin:'0 0 8px' }}>Ingen tilgang</h2><p style={{ color:'#64748b', margin:'0 0 20px' }}>Denne siden er kun tilgjengelig for plattformeier.</p><button onClick={()=>navigate('dashboard')} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>← Til Dashboard</button></div></div>)}
-        {page === 'varsler' && <VarslerPage />}
+        {page === 'varsler' && <VarslerPage onNavigate={navigate} />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
         {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'varsler' && (
