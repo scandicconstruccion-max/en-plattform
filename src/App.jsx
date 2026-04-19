@@ -33119,7 +33119,7 @@ function AppContent() {
   const activePage = page === 'prosjekt_detaljer' ? 'prosjekter' : page === 'avvik_detaljer' ? 'avvik' : page
 
   // ── Kontormodul-melding ──
-  const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer'
+  const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer' && page !== 'superadmin'
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
