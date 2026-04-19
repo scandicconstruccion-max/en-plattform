@@ -1027,6 +1027,25 @@ function ProjectSelect({ value, onChange, projects, required, placeholder, style
 // ─── PROSJEKTER PAGE ──────────────────────────────────────────────────────
 const statusOpts = [{value:'planlagt',label:'Planlagt'},{value:'aktiv',label:'Aktiv'},{value:'pause',label:'På pause'},{value:'fullfort',label:'Fullført'},{value:'avbrutt',label:'Avbrutt'},{value:'arkivert',label:'Arkivert'}]
 
+// Konverterer tomme strenger til null for UUID-kolonner før innsending til Supabase.
+// Postgres UUID-kolonner avviser '' med "invalid input syntax for type uuid".
+// Fanger alle felter som slutter på _id + eksplisitte UUID-felter (created_by, updated_by).
+// Beholder felter som ikke matcher uendret. Safe å kjøre flere ganger (idempotent).
+const UUID_FIELD_SUFFIX = /_id$/
+const EXPLICIT_UUID_FIELDS = new Set(['created_by', 'updated_by', 'user_id'])
+function sanitizeUuidFields(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  const out = { ...obj }
+  for (const key of Object.keys(out)) {
+    const isUuidField = UUID_FIELD_SUFFIX.test(key) || EXPLICIT_UUID_FIELDS.has(key)
+    if (!isUuidField) continue
+    const v = out[key]
+    // Tom streng eller whitespace-only streng → null
+    if (typeof v === 'string' && v.trim() === '') out[key] = null
+  }
+  return out
+}
+
 const emptyProsjekt = {
   name:'', project_number:'', description:'', status:'planlagt',
   parent_id:'', depth: 0,
@@ -1247,7 +1266,7 @@ function ProsjekterPage({ onNavigateDetail }) {
         // Auto-generert nummer kolliderte — legg til tidsstempel
         projectNumber = projectNumber + 'B'
       }
-      await db.createProject({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      await db.createProject(sanitizeUuidFields({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
       setShowCreate(false)
       load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
@@ -1404,7 +1423,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         const parent = allProjects.find(p => p.id === form.parent_id)
         depth = (parent?.depth || 0) + 1
       }
-      await db.updateProject(projectId, { ...form, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', ') || form.address, budget: form.budget ? parseFloat(form.budget) : null })
+      await db.updateProject(projectId, sanitizeUuidFields({ ...form, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', ') || form.address, budget: form.budget ? parseFloat(form.budget) : null }))
       setShowEdit(false); load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
   }
@@ -1465,7 +1484,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       if (existing) {
         projectNumber = projectNumber + 'B'
       }
-      await db.createProject({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id })
+      await db.createProject(sanitizeUuidFields({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
       setShowCreateSub(false); load()
     } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
   }
