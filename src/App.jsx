@@ -2660,11 +2660,7 @@ function ProsjektfilerPage() {
 
       {/* Project selector */}
       <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMob ? '10px 16px' : '12px 32px' }}>
-        <select value={selectedProject} onChange={e => { setSelectedProject(e.target.value); setSelectedCategory(null); setSelectedSub(null) }}
-          style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }}>
-          <option value="all">Velg prosjekt</option>
-          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-        </select>
+        <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
       </div>
 
       {/* MOBIL: Stacked layout */}
@@ -3043,10 +3039,7 @@ function ProsjektfilerPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
-                  <select value={uploadForm.project_id} onChange={e => setUploadForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
-                    <option value="">Velg prosjekt</option>
-                    {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                  </select>
+                  <SearchableProjectSelect value={uploadForm.project_id} onChange={v => (e => setUploadForm(f => ({...f, project_id: e.target.value})))({ target: { value: v } })} projects={projects} style={{ ...inp, background: 'white' }} placeholder="Velg prosjekt" />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Kategori</label>
@@ -3657,10 +3650,7 @@ function SjekklistePage({ onNavigateDetail }) {
                 <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>🔍</span>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter sjekkliste..." style={{ ...inp, paddingLeft: '36px' }} />
               </div>
-              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '180px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
-                <option value="all">Alle prosjekter</option>
-                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-              </select>
+              <SearchableProjectSelect value={projectFilter} onChange={setProjectFilter} projects={projects} style={{ ...inp, width: isMob ? '100%' : '180px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }} placeholder="Alle prosjekter" emptyValue="all" />
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '160px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
                 {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -3790,10 +3780,7 @@ function SjekklistePage({ onNavigateDetail }) {
             <form onSubmit={handleCreate} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
-                <select value={newForm.project_id} onChange={e => setNewForm(f => ({...f, project_id: e.target.value}))} required style={{ ...inp, background: 'white' }}>
-                  <option value="">Velg prosjekt</option>
-                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                </select>
+                <SearchableProjectSelect value={newForm.project_id} onChange={v => (e => setNewForm(f => ({...f, project_id: e.target.value})))({ target: { value: v } })} projects={projects} style={{ ...inp, background: 'white' }} placeholder="Velg prosjekt" />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Mal (valgfritt)</label>
@@ -4613,10 +4600,7 @@ function AvvikPage() {
             <option value="Høy">Høy</option>
             <option value="Kritisk">Kritisk</option>
           </select>
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...inp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
-            <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-          </select>
+          <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...inp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }} placeholder="Alle prosjekter" emptyValue="alle" />
           {(filterStatus !== 'alle' || filterSeverity !== 'alle' || filterProject !== 'alle' || search) && (
             <button onClick={() => { setFilterStatus('alle'); setFilterSeverity('alle'); setFilterProject('alle'); setSearch('') }}
               style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '9px 14px', fontSize: '13px', cursor: 'pointer', color: '#64748b', fontWeight: '500' }}>
@@ -4777,10 +4761,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
           {/* Prosjekt */}
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
-            <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
-              <option value="">Velg prosjekt...</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-            </select>
+            <SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={inp} placeholder="Velg prosjekt..." required />
           </div>
 
           {/* Tittel */}
@@ -5381,10 +5362,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
         <form onSubmit={handleSave} style={{ overflowY: 'auto', flex: 1, padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Prosjekt *</label>
-            <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inp} required>
-              <option value="">Velg prosjekt...</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-            </select>
+            <SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={inp} placeholder="Velg prosjekt..." required />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Tittel *</label>
@@ -5611,10 +5589,7 @@ function HmsPage() {
         </div>
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMob ? '10px' : '14px 18px', display:'flex', gap: isMob ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Søk..." style={{ ...hmsInp, maxWidth: isMob ? '100%' : '200px', flex: isMob ? '1 1 100%' : '1' }} />
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
-            <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-          </select>
+          <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '220px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }} placeholder="Alle prosjekter" emptyValue="alle" />
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...hmsInp, maxWidth: isMob ? '100%' : '160px', flex: isMob ? '1 1 100%' : 'none', fontSize: isMob ? '13px' : '14px' }}>
             <option value="alle">Alle statuser</option>
             {Object.keys(HMS_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
@@ -7017,10 +6992,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
           {newStatus==='På prosjekt' && (
             <div>
               <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label>
-              <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ ...mInp, borderColor: !projectId ? '#fecaca' : '#e2e8f0' }}>
-                <option value="">Velg prosjekt...</option>
-                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-              </select>
+              <SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={{ ...mInp, borderColor: !projectId ? '#fecaca' : '#e2e8f0' }} placeholder="Velg prosjekt..." />
               {!projectId && <div style={{ fontSize:'11px', color:'#dc2626', marginTop:'4px' }}>Prosjekt er påkrevd</div>}
             </div>
           )}
@@ -9713,10 +9685,7 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
               </div>
               <div>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Knytt til prosjekt</label>
-                <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={tInp}>
-                  <option value="">Ingen</option>
-                  {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                </select>
+                <SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={tInp} placeholder="Ingen" />
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
                 <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
@@ -10222,7 +10191,7 @@ function EndringsmeldingPage() {
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
               <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
-              <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ ...inp, background:'white' }}><option value="">Velg prosjekt</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={{ ...inp, background:'white' }} placeholder="Velg prosjekt" /></div>
             </div>
 
             <div>{lbl('Årsak til endring')}<select value={form.reason} onChange={e=>set('reason',e.target.value)} style={{ ...inp, background:'white' }}>
@@ -10488,10 +10457,7 @@ function EndringsmeldingPage() {
           <option value="all">Alle statuser</option>
           {Object.keys(EM_STATUS).map(s => <option key={s} value={s}>{EM_STATUS[s].emoji} {s}</option>)}
         </select>
-        <select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{ ...inp, maxWidth: isMobEM ? '100%' : '200px', background:'white', flex: isMobEM ? '1 1 48%' : 'none', fontSize: isMobEM ? '13px' : '14px' }}>
-          <option value="all">Alle prosjekter</option>
-          {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-        </select>
+        <SearchableProjectSelect value={projectFilter} onChange={setProjectFilter} projects={projects} style={{ ...inp, maxWidth: isMobEM ? '100%' : '200px', background:'white', flex: isMobEM ? '1 1 48%' : 'none', fontSize: isMobEM ? '13px' : '14px' }} placeholder="Alle prosjekter" emptyValue="all" />
       </div>
 
       {/* Liste */}
@@ -14281,10 +14247,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label>
-                      <select value={entry?.project_id||''} onChange={e=>updateEntry(date,'project_id',e.target.value)} style={{ ...tsInp, fontSize:'13px' }}>
-                        <option value="">Velg...</option>
-                        {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-                      </select>
+                      <SearchableProjectSelect value={entry?.project_id||''} onChange={v => (e=>updateEntry(date,'project_id',e.target.value))({ target: { value: v } })} projects={projects} style={{ ...tsInp, fontSize:'13px' }} placeholder="Velg..." />
                     </div>
                     <div>
                       <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Aktivitet</label>
@@ -17434,11 +17397,13 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
             </div>
             <div>
               <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Prosjekt</label>
-              <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
-                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}>
-                <option value="">Ingen / Generell</option>
-                {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-              </select>
+              <SearchableProjectSelect
+                value={form.project_id}
+                onChange={v => set('project_id', v)}
+                projects={projects}
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}
+                placeholder="Ingen / Generell"
+              />
             </div>
           </div>
 
@@ -18277,10 +18242,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
 
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Prosjekt *</label>
-            <select value={projectId} onChange={e=>setProjectId(e.target.value)} style={rInp()}>
-              <option value="">Velg prosjekt...</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-            </select>
+            <SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={rInp()} placeholder="Velg prosjekt..." />
             {projectId&&<div style={{ display:'flex',alignItems:'center',gap:'6px',marginTop:'6px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:getProjectColor(projectId,projects) }}/><span style={{ fontSize:'12px',color:'#64748b' }}>{projects.find(p=>p.id===projectId)?.name}</span></div>}
           </div>
 
@@ -20434,10 +20396,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
           </div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Knytt til prosjekt</label>
-            <select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }}>
-              <option value="">Ingen (generell kanal)</option>
-              {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-            </select>
+            <SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'14px',outline:'none',boxSizing:'border-box',background:'white' }} placeholder="Ingen (generell kanal)" />
           </div>
           <label style={{ display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151' }}>
             <input type="checkbox" checked={form.is_private} onChange={e=>set('is_private',e.target.checked)} style={{ width:'16px',height:'16px',accentColor:'#059669' }} />
@@ -22509,10 +22468,7 @@ function BefaringPage() {
             <option value="alle">Alle statuser</option>
             {Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '180px', flex: isMobB ? '1 1 48%' : 'none' }}>
-            <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-          </select>
+          <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...bInp, maxWidth: isMobB ? '100%' : '180px', flex: isMobB ? '1 1 48%' : 'none' }} placeholder="Alle prosjekter" emptyValue="alle" />
           {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
         </div>
@@ -23449,7 +23405,7 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
             </div>
           </div>
           <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr',gap:'10px' }}>
-            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',background:'white',boxSizing:'border-box' }} placeholder="Ingen" /></div>
             <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Rom / område</label><input value={rom} onChange={e=>setRom(e.target.value)} placeholder="F.eks. Bad 2. etg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notat</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Valgfri beskrivelse" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',outline:'none',boxSizing:'border-box' }} /></div>
@@ -23575,10 +23531,7 @@ function FDVPage() {
             ))}
           </div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...fInp,maxWidth:'180px' }}>
-            <option value="alle">Alle prosjekter</option>
-            {projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}
-          </select>
+          <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...fInp,maxWidth:'180px' }} placeholder="Alle prosjekter" emptyValue="alle" />
           {view==='komponenter'&&<select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...fInp,maxWidth:'150px' }}>
             <option value="alle">Alle kategorier</option>
             {FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
