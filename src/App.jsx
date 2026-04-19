@@ -13834,6 +13834,7 @@ function RessursGanttGrid({
 
   // Custom tooltip state — styrer rik hover-popup for bookinger
   const [hoveredBar, setHoveredBar] = useState(null) // { bar, x, y } eller null
+  const hoverTimeoutRef = React.useRef(null)
 
   // Build date array centered on ganttAnchor
   // For weeks/months/quarters we start a bit before anchor so the current day is ~30% from left
@@ -14050,7 +14051,12 @@ function RessursGanttGrid({
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'system-ui,sans-serif', background:'white', minWidth:0 }}>
 
       {/* Grid container with synchronized horizontal scroll */}
-      <div ref={gridScrollRef} style={{ flex:1, overflow:'auto', position:'relative' }}>
+      <div ref={gridScrollRef}
+        onMouseLeave={() => {
+          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+          hoverTimeoutRef.current = setTimeout(() => { setHoveredBar(null); hoverTimeoutRef.current = null }, 100)
+        }}
+        style={{ flex:1, overflow:'auto', position:'relative' }}>
         <div style={{ position:'relative', minWidth: `${RESOURCE_COL + totalGridWidth}px` }}>
 
           {/* Sticky header */}
@@ -14361,17 +14367,23 @@ function RessursGanttGrid({
                         onDragEnd={()=>onDragEnd()}
                         onMouseEnter={(e) => {
                           if (dragging || resizing) return
+                          if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null }
                           const rect = e.currentTarget.getBoundingClientRect()
                           setHoveredBar({ bar, proj, rect })
                         }}
                         onMouseMove={(e) => {
                           if (dragging || resizing) return
                           if (!hoveredBar || hoveredBar.bar.id !== bar.id) {
+                            if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null }
                             const rect = e.currentTarget.getBoundingClientRect()
                             setHoveredBar({ bar, proj, rect })
                           }
                         }}
-                        onMouseLeave={() => setHoveredBar(null)}
+                        onMouseLeave={() => {
+                          // Vent litt før nullstilling; hvis ny bjelke hoveres i mellomtiden blir dette kansellert
+                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                          hoverTimeoutRef.current = setTimeout(() => { setHoveredBar(null); hoverTimeoutRef.current = null }, 100)
+                        }}
                         onClick={(e)=>{
                           e.stopPropagation()
                           setHoveredBar(null)
@@ -29632,9 +29644,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               const placeholderIds = {} // Gjenbruk UUID per mann-nummer
 
               for (const bd of bdPlan) {
-                const bdStartD = addWorkdays(startDato, Math.floor(bd.startDag))
+                // Bruk akkumulerte startposisjoner for å unngå overlapp mellom bygningsdeler
+                // når bd.dager er desimal. bd.startDag er eksakt, men vi må jobbe med hele dager.
+                const startDagRounded = Math.round(bd.startDag)
+                const sluttDagRounded = Math.round(bd.sluttDag)
+                const dager = Math.max(sluttDagRounded - startDagRounded, 1)
+                const bdStartD = addWorkdays(startDato, startDagRounded)
                 const bdStartStr = bdStartD.toISOString().split('T')[0]
-                const dager = Math.max(Math.ceil(bd.dager), 1)
                 const workDates = getWorkdayList(bdStartStr, dager)
 
                 if (useEmployees) {
