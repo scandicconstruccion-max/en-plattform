@@ -14479,6 +14479,320 @@ function RessursGanttGrid({
   )
 }
 
+// ── MobilRessursView — feltmodus for håndverkere ──
+// Erstatter Gantt-grida på mobil (<768px). Bruker kortbasert layout gruppert per uke per dag.
+function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenMilestone, getProjectColor, holidays, user }) {
+  // Start av inneværende måned
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+
+  const today = new Date().toISOString().split('T')[0]
+  const todayObj = new Date(today + 'T12:00:00')
+
+  // Lag liste over alle datoer i valgt måned, gruppert per uke (mandag–søndag)
+  const weeks = React.useMemo(() => {
+    const year = viewMonth.getFullYear()
+    const month = viewMonth.getMonth()
+    const firstOfMonth = new Date(year, month, 1)
+    const lastOfMonth = new Date(year, month + 1, 0)
+
+    // Finn første mandag som dekker dag 1 (kan være forrige måned)
+    const firstDay = new Date(firstOfMonth)
+    const day = firstDay.getDay() // 0=søn, 1=man, ..., 6=lør
+    const diffToMonday = day === 0 ? -6 : 1 - day
+    firstDay.setDate(firstDay.getDate() + diffToMonday)
+
+    const result = []
+    let current = new Date(firstDay)
+    let safety = 0
+    while (current <= lastOfMonth && safety < 10) {
+      const weekStart = new Date(current)
+      const week = []
+      for (let i = 0; i < 7; i++) {
+        week.push({
+          date: current.toISOString().split('T')[0],
+          inMonth: current.getMonth() === month,
+          dayName: ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'][current.getDay()],
+          dayNumber: current.getDate(),
+          isToday: current.toISOString().split('T')[0] === today,
+          isPast: current < todayObj && current.toISOString().split('T')[0] !== today,
+          isWeekend: current.getDay() === 0 || current.getDay() === 6,
+        })
+        current.setDate(current.getDate() + 1)
+      }
+      const weekNum = getWeekNumber(weekStart)
+      result.push({ weekNum, days: week, start: week[0].date, end: week[6].date })
+      safety++
+    }
+    return result
+  }, [viewMonth, today])
+
+  function getWeekNumber(d) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+    const dayNum = date.getUTCDay() || 7
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum)
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))
+    return Math.ceil(((date - yearStart) / 86400000 + 1) / 7)
+  }
+
+  // Filter-anvendelse: finn bookinger i visningen
+  const filteredPlans = React.useMemo(() => {
+    return plans.filter(p => {
+      if (filterProject !== 'alle' && p.project_id !== filterProject) return false
+      if (filterEmployee !== 'alle' && p.resource_id !== filterEmployee) return false
+      if (resourceType === 'ansatte' && p.resource_type !== 'employee' && p.resource_type !== 'placeholder') return false
+      if (resourceType === 'maskiner' && p.resource_type !== 'machine') return false
+      return true
+    })
+  }, [plans, filterProject, filterEmployee, resourceType])
+
+  // Bookinger per dato
+  const plansByDate = React.useMemo(() => {
+    const map = {}
+    filteredPlans.forEach(p => {
+      if (!p.date) return
+      if (!map[p.date]) map[p.date] = []
+      map[p.date].push(p)
+    })
+    return map
+  }, [filteredPlans])
+
+  // Milepæler per dato
+  const milestonesByDate = React.useMemo(() => {
+    const map = {}
+    milestones.forEach(m => {
+      if (!m.start_date) return
+      if (filterProject !== 'alle' && m.project_id !== filterProject) return
+      if (!map[m.start_date]) map[m.start_date] = []
+      map[m.start_date].push(m)
+    })
+    return map
+  }, [milestones, filterProject])
+
+  // Materiell (leveranser) per dato — identifiseres via notes som starter med 📦
+  const materiellByDate = React.useMemo(() => {
+    const map = {}
+    plans.forEach(p => {
+      if (!p.notes || !p.notes.startsWith('📦 Levering:')) return
+      if (filterProject !== 'alle' && p.project_id !== filterProject) return
+      if (!map[p.date]) map[p.date] = []
+      map[p.date].push(p)
+    })
+    return map
+  }, [plans, filterProject])
+
+  // Gjenoppslag
+  const getResource = (resId, resType) => {
+    if (resType === 'machine') return machines.find(m => m.id === resId)
+    return employees.find(e => e.id === resId)
+  }
+  const getProject = (projId) => projects.find(p => p.id === projId)
+  const isHoliday = (dateStr) => holidays.some(h => h.date === dateStr)
+  const getHoliday = (dateStr) => holidays.find(h => h.date === dateStr)
+
+  // Navigasjon
+  const prevMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
+  const nextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
+  const goToToday = () => setViewMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+
+  const monthName = viewMonth.toLocaleDateString('nb-NO', { month: 'long', year: 'numeric' })
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
+      {/* Måned-navigering */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', background:'white', borderBottom:'1px solid #e2e8f0', position:'sticky', top:0, zIndex:5 }}>
+        <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'600' }}>‹</button>
+        <div style={{ textAlign:'center', flex:1 }}>
+          <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', textTransform:'capitalize' }}>{monthName}</div>
+          <button onClick={goToToday} style={{ background:'none', border:'none', color:'#059669', fontSize:'11px', fontWeight:'600', cursor:'pointer', padding:'2px 0' }}>📅 Gå til i dag</button>
+        </div>
+        <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'600' }}>›</button>
+      </div>
+
+      {/* Uke-seksjoner */}
+      {weeks.map(week => {
+        // Tell bookinger i uka
+        const weekBookings = week.days.reduce((sum, d) => sum + (plansByDate[d.date]?.length || 0), 0)
+        const hasDaysInMonth = week.days.some(d => d.inMonth)
+        if (!hasDaysInMonth) return null
+
+        return (
+          <div key={week.weekNum + '-' + week.start}>
+            {/* Uke-header */}
+            <div style={{ padding:'10px 14px 6px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em' }}>
+                Uke {week.weekNum}
+              </div>
+              {weekBookings > 0 && (
+                <span style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>
+                  {weekBookings} booking{weekBookings !== 1 ? 'er' : ''}
+                </span>
+              )}
+            </div>
+
+            {/* Dag-kort */}
+            {week.days.map(d => {
+              const dayPlans = plansByDate[d.date] || []
+              const dayMilestones = milestonesByDate[d.date] || []
+              const dayMateriell = materiellByDate[d.date] || []
+              const hol = getHoliday(d.date)
+              const hasContent = dayPlans.length > 0 || dayMilestones.length > 0 || dayMateriell.length > 0
+
+              // Ekstra stil for i dag
+              const cardBorder = d.isToday ? '2px solid #059669' : '1px solid #e2e8f0'
+              const cardBg = d.inMonth ? 'white' : '#f8fafc'
+              const isDim = !d.inMonth || d.isPast
+
+              return (
+                <div key={d.date}
+                  onClick={() => onOpenBooking && resourceType === 'ansatte' && onOpenBooking({ date: d.date })}
+                  style={{
+                    background: cardBg,
+                    border: cardBorder,
+                    borderRadius:'10px',
+                    margin:'0 12px 8px',
+                    padding:'10px 12px',
+                    opacity: isDim && !hasContent ? 0.55 : 1,
+                    cursor: resourceType === 'ansatte' ? 'pointer' : 'default',
+                  }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: hasContent ? '8px' : 0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <div style={{
+                        width:'32px', height:'32px', borderRadius:'8px',
+                        background: d.isToday ? '#059669' : (d.isWeekend || hol ? '#fee2e2' : '#eff6ff'),
+                        color: d.isToday ? 'white' : (d.isWeekend || hol ? '#dc2626' : '#2563eb'),
+                        display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                        flexShrink:0,
+                      }}>
+                        <span style={{ fontSize:'9px', fontWeight:'600', lineHeight:1, textTransform:'uppercase' }}>{d.dayName}</span>
+                        <span style={{ fontSize:'13px', fontWeight:'800', lineHeight:1, marginTop:'2px' }}>{d.dayNumber}</span>
+                      </div>
+                      <div>
+                        {d.isToday && <span style={{ fontSize:'10px', background:'#059669', color:'white', padding:'2px 6px', borderRadius:'4px', fontWeight:'700', marginRight:'6px' }}>I DAG</span>}
+                        {hol && <span style={{ fontSize:'10px', color:'#dc2626', fontWeight:'600' }}>{hol.name}</span>}
+                        {d.isWeekend && !hol && <span style={{ fontSize:'10px', color:'#dc2626', fontWeight:'500' }}>{d.dayName === 'lør' ? 'Lørdag' : 'Søndag'}</span>}
+                      </div>
+                    </div>
+                    {!hasContent && !d.isPast && resourceType === 'ansatte' && (
+                      <span style={{ fontSize:'11px', color:'#cbd5e1', fontStyle:'italic' }}>+ Tapp for å booke</span>
+                    )}
+                  </div>
+
+                  {/* Milepæler */}
+                  {dayMilestones.map(ms => {
+                    const proj = getProject(ms.project_id)
+                    const color = ms.color || (proj ? getProjectColor(ms.project_id, projects) : '#7c3aed')
+                    return (
+                      <div key={ms.id}
+                        onClick={e => { e.stopPropagation(); onOpenMilestone && onOpenMilestone(ms) }}
+                        style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background: color + '15', borderRadius:'8px', marginBottom:'4px', border:`1px solid ${color}30` }}>
+                        <span style={{ fontSize:'14px' }}>🏁</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ms.title}</div>
+                          {proj && <div style={{ fontSize:'10px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {proj.name}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Materiell-leveranser */}
+                  {dayMateriell.map(m => {
+                    const proj = getProject(m.project_id)
+                    const title = (m.notes || '').split('\n')[0].replace('📦 Levering: ', '')
+                    return (
+                      <div key={m.id}
+                        style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background:'#f0fdf4', borderRadius:'8px', marginBottom:'4px', border:'1px solid #bbf7d0' }}>
+                        <span style={{ fontSize:'14px' }}>📦</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title}</div>
+                          {proj && <div style={{ fontSize:'10px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {proj.name}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Bookinger — grupper per prosjekt */}
+                  {(() => {
+                    const bookingsByProj = {}
+                    dayPlans.forEach(p => {
+                      if (p.notes && p.notes.startsWith('📦 Levering:')) return
+                      const key = p.project_id || '_none'
+                      if (!bookingsByProj[key]) bookingsByProj[key] = []
+                      bookingsByProj[key].push(p)
+                    })
+                    return Object.entries(bookingsByProj).map(([projKey, bookings]) => {
+                      const proj = projKey !== '_none' ? getProject(projKey) : null
+                      const color = proj ? getProjectColor(projKey, projects) : '#94a3b8'
+                      const resourceNames = bookings.map(b => {
+                        const r = getResource(b.resource_id, b.resource_type)
+                        if (b.resource_type === 'placeholder') {
+                          const raw = b.notes || ''
+                          return raw.replace(/^\[PLACEHOLDER:\s*/i, '').replace(/\]$/, '').split('|')[0].trim() || 'Ubesatt'
+                        }
+                        if (!r) return 'Ukjent'
+                        if (b.resource_type === 'machine') return r.name
+                        return `${r.first_name || ''} ${r.last_name || ''}`.trim()
+                      })
+                      const uniqueResources = [...new Set(resourceNames)]
+                      const totalHours = bookings.reduce((sum, b) => sum + (parseFloat(b.hours) || 0), 0)
+
+                      return (
+                        <div key={projKey}
+                          onClick={e => {
+                            e.stopPropagation()
+                            // Hvis bare én booking, la brukeren redigere den
+                            if (bookings.length === 1 && onOpenBooking) {
+                              onOpenBooking({
+                                resourceId: bookings[0].resource_id,
+                                resourceName: resourceNames[0],
+                                date: d.date,
+                                existingPlans: bookings,
+                                editPlan: bookings[0],
+                              })
+                            }
+                          }}
+                          style={{
+                            display:'flex', alignItems:'center', gap:'10px',
+                            padding:'10px 12px',
+                            background: color + '10',
+                            borderLeft: `4px solid ${color}`,
+                            borderRadius:'8px',
+                            marginBottom:'4px',
+                            cursor: bookings.length === 1 ? 'pointer' : 'default',
+                          }}>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                              🏗️ {proj ? proj.name : 'Uten prosjekt'}
+                            </div>
+                            <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                              {uniqueResources.length <= 2
+                                ? uniqueResources.join(', ')
+                                : `${uniqueResources.slice(0, 2).join(', ')} + ${uniqueResources.length - 2} til`}
+                            </div>
+                          </div>
+                          <div style={{ textAlign:'right', flexShrink:0 }}>
+                            <div style={{ fontSize:'13px', fontWeight:'800', color }}>{totalHours}t</div>
+                            <div style={{ fontSize:'10px', color:'#94a3b8' }}>{bookings.length} bk</div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+
+      {/* Bunn-padding */}
+      <div style={{ height:'40px' }} />
+    </div>
+  )
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function RessursPage() {
   const { user } = useAuth()
@@ -14514,6 +14828,13 @@ function RessursPage() {
   const [showOppgaveModal, setShowOppgaveModal] = useState(false)
   const [allSkills, setAllSkills] = useState([])
   const [fullscreen, setFullscreen] = useState(false)
+  // Mobil-detektering — brukes gjennom hele komponenten til å tilpasse UI for håndverkere i felt
+  const [isMobRP, setIsMobRP] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  React.useEffect(() => {
+    const handleResize = () => setIsMobRP(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
   const [showSettings, setShowSettings] = useState(false)
   const [showDoubleBookings, setShowDoubleBookings] = useState(false)
   const [conflictHighlight, setConflictHighlight] = useState(null) // { resourceId, date }
@@ -14824,17 +15145,20 @@ function RessursPage() {
           {/* Tittel */}
           <h1 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0, whiteSpace:'nowrap' }}>📅 Ressursplan</h1>
 
-          {/* Ansatte/Maskiner toggle */}
+          {/* Ansatte/Maskiner toggle — skjult på mobil */}
+          {!isMobRP && (
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', flexShrink:0 }}>
             {[['ansatte','👷'],['maskiner','🚜']].map(([v,emoji])=>(
               <button key={v} onClick={()=>setResourceType(v)} title={v==='ansatte'?'Ansatte':'Maskiner'}
                 style={{ padding:'6px 10px',border:'none',background:resourceType===v?'#059669':'white',color:resourceType===v?'white':'#64748b',fontWeight:resourceType===v?'700':'500',fontSize:'13px',cursor:'pointer',borderRight:v==='ansatte'?'1px solid #e2e8f0':'none' }}>{emoji}</button>
             ))}
           </div>
+          )}
 
           {/* Visningsmodus toggle — fjernet 2026-04-18. Gantt er nå eneste visning, styres av ganttZoom-dropdown nedenfor */}
 
-          {/* Gantt zoom — eneste visningsvelger */}
+          {/* Gantt zoom — eneste visningsvelger, skjult på mobil */}
+          {!isMobRP && (
           <select value={ganttZoom} onChange={e=>setGanttZoom(e.target.value)}
             style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',fontWeight:'500',minWidth:'90px' }}>
             <option value="days">Dager</option>
@@ -14842,19 +15166,20 @@ function RessursPage() {
             <option value="months">Måneder</option>
             <option value="quarters">Kvartaler</option>
           </select>
+          )}
 
           {/* Prosjekt-filter */}
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
-            style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth:'160px',fontWeight:'500' }}>
-            <option value="alle">🏗️ Alle prosjekter</option>
+            style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth: isMobRP ? '130px' : '160px',fontWeight:'500', flex: isMobRP ? '1 1 auto' : 'none' }}>
+            <option value="alle">🏗️ {isMobRP ? 'Alle' : 'Alle prosjekter'}</option>
             {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
 
           {/* Ansatt-filter (kun ansatte) */}
           {resourceType==='ansatte' && (
             <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
-              style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth:'140px',fontWeight:'500' }}>
-              <option value="alle">👷 Alle ansatte</option>
+              style={{ padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:'8px',fontSize:'13px',background:'white',cursor:'pointer',color:'#374151',maxWidth: isMobRP ? '120px' : '140px',fontWeight:'500', flex: isMobRP ? '1 1 auto' : 'none' }}>
+              <option value="alle">👷 {isMobRP ? 'Alle' : 'Alle ansatte'}</option>
               {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
             </select>
           )}
@@ -14862,7 +15187,8 @@ function RessursPage() {
           {/* Spacer — dytter resten til høyre */}
           <div style={{ flex:1, minWidth:'10px' }} />
 
-          {/* Datonavigering — én klikkbar pill som åpner datovelger */}
+          {/* Datonavigering — én klikkbar pill som åpner datovelger. Skjult på mobil (MobilRessursView har egen) */}
+          {!isMobRP && (
           <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
             <button onClick={()=>navigate(-1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Forrige">‹</button>
             <div style={{ position:'relative' }}>
@@ -14898,6 +15224,7 @@ function RessursPage() {
             <button onClick={()=>navigate(1)} style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b' }} title="Neste">›</button>
             <button onClick={goToToday} style={{ padding:'6px 12px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:'#374151' }}>I dag</button>
           </div>
+          )}
 
           {/* Settings-tannhjul */}
           <div style={{ position:'relative', flexShrink:0 }}>
@@ -14975,12 +15302,14 @@ function RessursPage() {
             )}
           </div>
 
-          {/* Fullskjerm */}
+          {/* Fullskjerm — skjult på mobil */}
+          {!isMobRP && (
           <button onClick={()=>setFullscreen(v=>!v)}
             style={{ width:'30px',height:'30px',borderRadius:'6px',border:`1px solid ${fullscreen?'#059669':'#e2e8f0'}`,background:fullscreen?'#f0fdf4':'white',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',justifyContent:'center',color:fullscreen?'#059669':'#64748b',flexShrink:0 }}
             title={fullscreen?'Avslutt fullskjerm (Esc)':'Fullskjerm'}>
             {fullscreen?'⊡':'⛶'}
           </button>
+          )}
 
           {/* + Ny-dropdown */}
           <div style={{ position:'relative', flexShrink:0 }}>
@@ -15176,6 +15505,26 @@ function RessursPage() {
           )}
         </div>
       )}
+
+      {/* ─── MOBIL-VISNING (feltmodus for håndverkere) ─── */}
+      {isMobRP ? (
+        <MobilRessursView
+          employees={employees}
+          machines={machines}
+          plans={plans}
+          projects={projects}
+          milestones={milestones}
+          resourceType={resourceType}
+          filterEmployee={filterEmployee}
+          filterProject={filterProject}
+          onOpenBooking={(data) => setShowBookingModal(data)}
+          onOpenMilestone={(ms) => setShowNewMilestone({ edit: ms })}
+          getProjectColor={getProjectColor}
+          holidays={holidays}
+          user={user}
+        />
+      ) : (
+      <>
 
       {/* ─── GANTT-VIEW (del 9, Float-inspirert) ─── */}
       {viewMode==='gantt' ? (
@@ -15402,6 +15751,9 @@ function RessursPage() {
         </div>
       </div>
       </>)}
+
+      </>
+      )}
 
       {/* Resize tip */}
       {resizing && (
