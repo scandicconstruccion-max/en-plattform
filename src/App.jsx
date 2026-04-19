@@ -15520,7 +15520,7 @@ function RessursPage() {
           onOpenBooking={(data) => setShowBookingModal(data)}
           onOpenMilestone={(ms) => setShowNewMilestone({ edit: ms })}
           getProjectColor={getProjectColor}
-          holidays={holidays}
+          holidays={ALL_HOLIDAYS}
           user={user}
         />
       ) : (
