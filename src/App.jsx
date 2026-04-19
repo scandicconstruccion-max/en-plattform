@@ -15018,16 +15018,18 @@ function RessursGanttGrid({
   const shouldShowSubLabel = (date, idx) => {
     const d = new Date(date + 'T12:00:00')
     if (ganttZoom === 'days') return true
-    if (ganttZoom === 'weeks') return d.getDay() === 1 // Mondays
-    if (ganttZoom === 'months') return d.getDate() === 1
-    return d.getDate() === 1 && (d.getMonth() % 3 === 0)
+    if (ganttZoom === 'weeks') return true // Vis alle dager i weeks-zoom også (Float-stil)
+    if (ganttZoom === 'months') return true // Vis alle i months også (bare tettere)
+    return d.getDate() === 1 // Quarters: vis kun månedsnavn på den 1.
   }
+  // Returner { dayName, dayNum } for days/weeks/months, { monthName } for quarters
   const subLabel = (date) => {
     const d = new Date(date + 'T12:00:00')
-    if (ganttZoom === 'days') return d.getDate()
-    if (ganttZoom === 'weeks') return `U${ganttWeekNumber(date)}`
-    if (ganttZoom === 'months') return MONTH_NAMES[d.getMonth()].slice(0,3)
-    return `Q${Math.floor(d.getMonth()/3)+1}`
+    const DAYS_NO = ['søn','man','tir','ons','tor','fre','lør']
+    if (ganttZoom === 'quarters') {
+      return { monthName: MONTH_NAMES[d.getMonth()] }
+    }
+    return { dayName: DAYS_NO[d.getDay()], dayNum: d.getDate() }
   }
 
   // Holiday lookup
@@ -15095,7 +15097,7 @@ function RessursGanttGrid({
               </div>
             </div>
             {/* Bottom row: day-level ticks */}
-            <div style={{ display:'flex', height:'26px' }}>
+            <div style={{ display:'flex', height: ganttZoom==='days' ? '44px' : ganttZoom==='weeks' ? '40px' : ganttZoom==='months' ? '32px' : '30px' }}>
               <div style={{ width:`${RESOURCE_COL}px`, flexShrink:0, padding:'4px 20px', fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', borderRight:'2px solid #e2e8f0', background:'white', display:'flex', alignItems:'center', position:'sticky', left:0, zIndex:2 }}>
                 {resourceType==='ansatte' ? '👷 Ansatt' : '🚜 Maskin'} / utnyttelse
               </div>
@@ -15104,19 +15106,44 @@ function RessursGanttGrid({
                   const we = isWeekend(d); const tod = isToday(d)
                   const hol = holidayForDate(d)
                   const showLbl = shouldShowSubLabel(d, i)
+                  const lbl = showLbl ? subLabel(d) : null
+                  // Font-størrelser justeres per zoom
+                  const dayNameSize = ganttZoom==='days' ? '9px' : ganttZoom==='weeks' ? '8px' : '8px'
+                  const dayNumSize = ganttZoom==='days' ? '14px' : ganttZoom==='weeks' ? '12px' : '10px'
                   return (
                     <div key={d} style={{
                       width:`${colW}px`, flexShrink:0,
-                      background: tod ? '#f0fdf4' : we ? '#fafafa' : 'white',
-                      borderRight: ganttZoom==='days' ? '1px solid #f1f5f9' : (i%7===6?'1px solid #e2e8f0':'none'),
+                      background: tod ? '#f0fdf4' : hol ? '#fffbeb' : we ? '#fafafa' : 'white',
+                      borderRight: ganttZoom==='days' ? '1px solid #f1f5f9' : (i%7===6?'1px solid #e2e8f0':'1px solid #f8fafc'),
                       borderBottom: tod ? '2px solid #059669' : 'none',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      fontSize: ganttZoom==='days' ? '11px' : '9px',
-                      fontWeight: tod?'800':'600',
+                      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'1px',
                       color: tod?'#059669': we?'#cbd5e1':'#64748b',
                       position:'relative',
+                      padding:'2px 0',
                     }} title={hol?.title || ''}>
-                      {showLbl ? subLabel(d) : ''}
+                      {lbl && lbl.monthName && (
+                        <span style={{ fontSize:'11px', fontWeight:'600', color: tod?'#059669':'#475569' }}>
+                          {lbl.monthName}
+                        </span>
+                      )}
+                      {lbl && lbl.dayName && (
+                        <>
+                          <span style={{
+                            fontSize: dayNameSize,
+                            fontWeight: tod?'700':'600',
+                            color: tod?'#059669': we?'#cbd5e1':'#94a3b8',
+                            textTransform:'uppercase',
+                            letterSpacing:'0.04em',
+                            lineHeight:1,
+                          }}>{lbl.dayName}</span>
+                          <span style={{
+                            fontSize: dayNumSize,
+                            fontWeight: tod?'800':'700',
+                            color: tod?'#059669': we?'#cbd5e1':'#475569',
+                            lineHeight:1,
+                          }}>{lbl.dayNum}</span>
+                        </>
+                      )}
                     </div>
                   )
                 })}
