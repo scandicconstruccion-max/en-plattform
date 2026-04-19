@@ -1267,6 +1267,73 @@ function nextSequenceNumber(existingItems, prefix, numberField, { withYear = tru
   }
 }
 
+// ─── FELLES KUNDE-OPPLØSNING FOR ØKONOMI-MODULER ────────────────────────
+// Bruker i TilbudEditorModal / OrdreEditorModal / FakturaEditorModal / EndringsmeldingModal.
+// Hvis bruker allerede har valgt kunde via CustomerSelect (form.customer_id satt), returnerer den id-en.
+// Ellers prøver den å matche på orgnr / email / navn. Finner den ingen match, oppretter den
+// en ny kunde i customers-tabellen med autogenerert K-NNNN nummer.
+// Returnerer { customerId, created } der created er true hvis en ny kunde ble opprettet.
+async function resolveCustomerFromForm({ form, user, initialCustomerId = null, statusOnCreate = null }) {
+  // 1. Hvis kunde allerede er valgt (dropdown eller tidligere lagret), bruk den
+  let customerId = form.customer_id || initialCustomerId || null
+  if (customerId) return { customerId, created: false }
+
+  // 2. Ingen kunde valgt — hvis heller ingen navn skrevet, returner null (ikke valgfritt å ha kunde)
+  if (!form.customer_name?.trim()) return { customerId: null, created: false }
+
+  // 3. Prøv å finne eksisterende kunde basert på orgnr → email → navn
+  try {
+    let existingCustomer = null
+    if (form.customer_orgnr?.trim()) {
+      const { data } = await supabase.from('customers').select('id').eq('orgnr', form.customer_orgnr.trim()).limit(1)
+      if (data?.length) existingCustomer = data[0]
+    }
+    if (!existingCustomer && form.customer_email?.trim()) {
+      const { data } = await supabase.from('customers').select('id').eq('email', form.customer_email.trim()).limit(1)
+      if (data?.length) existingCustomer = data[0]
+    }
+    if (!existingCustomer) {
+      const { data } = await supabase.from('customers').select('id').ilike('name', form.customer_name.trim()).limit(1)
+      if (data?.length) existingCustomer = data[0]
+    }
+    if (existingCustomer) {
+      // Oppdater eksisterende med ferskere kundeinfo
+      const updates = { updated_at: new Date().toISOString() }
+      if (form.customer_email?.trim()) updates.email = form.customer_email.trim()
+      if (form.customer_address?.trim()) updates.address = form.customer_address.trim()
+      if (form.customer_orgnr?.trim()) updates.orgnr = form.customer_orgnr.trim()
+      await supabase.from('customers').update(updates).eq('id', existingCustomer.id)
+      return { customerId: existingCustomer.id, created: false }
+    }
+
+    // 4. Ingen match — opprett ny kunde med autogenerert K-NNNN nummer
+    const { data: allCust } = await supabase.from('customers').select('customer_number')
+    const customer_number = nextSequenceNumber(allCust || [], 'K', 'customer_number', { withYear: false })
+    const insertPayload = {
+      customer_number,
+      name: form.customer_name.trim(),
+      email: form.customer_email?.trim() || null,
+      address: form.customer_address?.trim() || null,
+      orgnr: form.customer_orgnr?.trim() || null,
+      type: form.customer_orgnr?.trim() ? 'bedrift' : 'privat',
+      created_by: user?.id,
+      notes: 'Automatisk opprettet fra økonomimodul',
+    }
+    if (statusOnCreate) insertPayload.status = statusOnCreate
+    const { data: newCust, error: custErr } = await supabase.from('customers').insert(insertPayload).select('id').single()
+    if (custErr || !newCust) {
+      console.error('[resolveCustomerFromForm] Kunne ikke opprette kunde:', custErr)
+      return { customerId: null, created: false }
+    }
+    // Cache invalideres så CustomerSelect reflekterer nye kunder umiddelbart
+    invalidateCustomerCache()
+    return { customerId: newCust.id, created: true }
+  } catch (e) {
+    console.error('[resolveCustomerFromForm] Exception:', e)
+    return { customerId, created: false }
+  }
+}
+
 // ─── HIERARKISK PROSJEKTSTRUKTUR ─────────────────────────────────────────
 // Bygger tre-struktur fra flat prosjektliste og gir hierarkisk dropdown
 
@@ -7757,50 +7824,13 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      // Auto-create or find customer in crm_customers (kundeoversikt)
-      let customerId = initial?.customer_id || null
-      if (form.customer_name?.trim()) {
-        try {
-          let existingCustomer = null
-          // 1. Match on org.nr if available (most reliable)
-          if (form.customer_orgnr?.trim()) {
-            const { data } = await supabase.from('crm_customers').select('id,name').eq('orgnr', form.customer_orgnr.trim()).limit(1)
-            if (data?.length) existingCustomer = data[0]
-          }
-          // 2. Fallback: match on name + email
-          if (!existingCustomer && form.customer_email?.trim()) {
-            const { data } = await supabase.from('crm_customers').select('id,name').eq('email', form.customer_email.trim()).limit(1)
-            if (data?.length) existingCustomer = data[0]
-          }
-          // 3. Fallback: match on exact name
-          if (!existingCustomer) {
-            const { data } = await supabase.from('crm_customers').select('id,name').ilike('name', form.customer_name.trim()).limit(1)
-            if (data?.length) existingCustomer = data[0]
-          }
-          if (existingCustomer) {
-            customerId = existingCustomer.id
-            // Update existing customer with latest info from quote
-            const updates = { updated_at: new Date().toISOString() }
-            if (form.customer_email?.trim()) updates.email = form.customer_email.trim()
-            if (form.customer_address?.trim()) updates.address = form.customer_address.trim()
-            if (form.customer_orgnr?.trim()) updates.orgnr = form.customer_orgnr.trim()
-            await supabase.from('crm_customers').update(updates).eq('id', customerId)
-          } else {
-            // Create new customer
-            const { data: newCust, error: custErr } = await supabase.from('crm_customers').insert({
-              name: form.customer_name.trim(),
-              email: form.customer_email?.trim()||null,
-              address: form.customer_address?.trim()||null,
-              orgnr: form.customer_orgnr?.trim()||null,
-              type: form.customer_orgnr?.trim() ? 'bedrift' : 'privat',
-              status: 'tilbud_sendt',
-              created_by: user?.id,
-              notes: 'Automatisk opprettet fra tilbudsmodulen',
-            }).select('id').single()
-            if (!custErr && newCust) customerId = newCust.id
-          }
-        } catch(e) { console.error('Auto-customer error:', e) }
-      }
+      // Felles kunde-oppløsning: finner eller oppretter kunde i customers-tabellen
+      const { customerId } = await resolveCustomerFromForm({
+        form,
+        user,
+        initialCustomerId: initial?.customer_id,
+        statusOnCreate: 'tilbud_sendt',
+      })
 
       const payload = { ...form, chapters, updated_at: new Date().toISOString(), project_id: form.project_id || null, customer_id: customerId }
       if (isEdit) {
@@ -7850,6 +7880,25 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
               <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
+              <div style={{ gridColumn:'1/-1' }}>
+                {lbl('Velg eksisterende kunde')}
+                <CustomerSelect
+                  value={form.customer_id}
+                  valueAsId
+                  onChange={v => set('customer_id', v)}
+                  onSelect={c => {
+                    set('customer_id', c.id)
+                    set('customer_name', c.name || '')
+                    if (c.email) set('customer_email', c.email)
+                    if (c.address) set('customer_address', c.address)
+                    if (c.orgnr) set('customer_orgnr', c.orgnr)
+                  }}
+                  placeholder="Søk etter kunde — eller fyll ut feltene under for ny kunde"
+                />
+                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>
+                  Velger du en eksisterende kunde blir feltene under autofylt. Lar du være og skriver inn manuelt, opprettes en ny kunde automatisk i Kundeoversikt ved lagring.
+                </p>
+              </div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Firmanavn eller personnavn" style={qInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={qInp} /></div>
               <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Gateadresse, postnummer sted" style={qInp} /></div>
@@ -10674,6 +10723,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
     title: initial?.title||'', order_number: initial?.order_number||'',
     project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
+    customer_id: initial?.customer_id || null,
     delivery_date: initial?.delivery_date||'', payment_terms: initial?.payment_terms||'30 dager netto',
     intro_text: initial?.intro_text||'', outro_text: initial?.outro_text||'',
     global_markup: initial?.global_markup||0,
@@ -10703,7 +10753,13 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, chapters, project_id:form.project_id||null, updated_at:new Date().toISOString() }
+      const { customerId } = await resolveCustomerFromForm({
+        form,
+        user,
+        initialCustomerId: initial?.customer_id,
+        statusOnCreate: 'ordre_bekreftet',
+      })
+      const payload = { ...form, chapters, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('orders').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('orders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
@@ -10741,6 +10797,23 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
               <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
+              <div style={{ gridColumn:'1/-1' }}>
+                {lbl('Velg eksisterende kunde')}
+                <CustomerSelect
+                  value={form.customer_id}
+                  valueAsId
+                  onChange={v => set('customer_id', v)}
+                  onSelect={c => {
+                    set('customer_id', c.id)
+                    set('customer_name', c.name || '')
+                    if (c.email) set('customer_email', c.email)
+                    if (c.address) set('customer_address', c.address)
+                    if (c.orgnr) set('customer_orgnr', c.orgnr)
+                  }}
+                  placeholder="Søk etter kunde — eller fyll ut feltene under for ny kunde"
+                />
+                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>Velger du eksisterende kunde, autofylles feltene under. Manuell utfylling oppretter ny kunde automatisk.</p>
+              </div>
               <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={oInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
               <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Gateadresse" style={oInp} /></div>
@@ -11798,6 +11871,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
     project_id: initial?.project_id||'',
     customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
+    customer_id: initial?.customer_id || null,
     our_name: initial?.our_name||'', our_address: initial?.our_address||'', our_orgnr: initial?.our_orgnr||'',
     invoice_date: initial?.invoice_date||new Date().toISOString().split('T')[0],
     payment_terms: initial?.payment_terms||'30 dager netto',
@@ -11819,7 +11893,13 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, lines, project_id:form.project_id||null, updated_at:new Date().toISOString() }
+      const { customerId } = await resolveCustomerFromForm({
+        form,
+        user,
+        initialCustomerId: initial?.customer_id,
+        statusOnCreate: 'faktura_sendt',
+      })
+      const payload = { ...form, lines, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() }
       if (isEdit) { const {error}=await supabase.from('invoices').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('invoices').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
@@ -11859,6 +11939,22 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
           <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'20px' }}>
             <div>
               <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>👤 Fakturert til (kunde)</div>
+              <div style={{ marginBottom:'10px' }}>
+                {lbl('Velg eksisterende kunde')}
+                <CustomerSelect
+                  value={form.customer_id}
+                  valueAsId
+                  onChange={v => set('customer_id', v)}
+                  onSelect={c => {
+                    set('customer_id', c.id)
+                    set('customer_name', c.name || '')
+                    if (c.email) set('customer_email', c.email)
+                    if (c.address) set('customer_address', c.address)
+                    if (c.orgnr) set('customer_orgnr', c.orgnr)
+                  }}
+                  placeholder="Søk — eller fyll ut under for ny"
+                />
+              </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {[['customer_name','Kundenavn','Firma / personnavn'],['customer_email','E-post','kunde@epost.no'],['customer_address','Adresse','Gateadresse, postnr sted'],['customer_orgnr','Org.nr','123 456 789']].map(([k,l,ph])=>(
                   <div key={k}>{lbl(l)}<input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={iInp} /></div>
@@ -21128,7 +21224,7 @@ function CRMPage() {
     try {
       const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
       const [c, ct, act, proj, q, inv] = await Promise.all([
-        safeQuery('crm_customers',{order:'updated_at'}),
+        safeQuery('customers',{order:'updated_at'}),
         supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
         safeQuery('crm_activities'),
         supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
@@ -21399,7 +21495,7 @@ function CRMPage() {
             try {
               const latestQuote = c.quotes.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
               const proj = projects.find(p=>p.id===latestQuote?.project_id)
-              const { error } = await supabase.from('crm_customers').insert({
+              const { error } = await supabase.from('customers').insert({
                 name: c.name,
                 email: c.email||null,
                 phone: null,
@@ -21417,7 +21513,7 @@ function CRMPage() {
                 // Link all quotes for this customer to the new CRM record
                 // We need the new customer ID - fetch it
                 try {
-                  const { data: newCust } = await supabase.from('crm_customers').select('id').eq('name', c.name).order('created_at',{ascending:false}).limit(1)
+                  const { data: newCust } = await supabase.from('customers').select('id').eq('name', c.name).order('created_at',{ascending:false}).limit(1)
                   if (newCust?.[0]) {
                     for (const q of c.quotes) {
                       await supabase.from('quotes').update({ customer_id: newCust[0].id }).eq('id', q.id)
@@ -21525,16 +21621,18 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   }
   useEffect(()=>{ loadDetails() },[c.id])
 
-  const refresh = async () => { const {data}=await supabase.from('crm_customers').select('*').eq('id',c.id).single(); if(data) setC(data) }
+  const refresh = async () => { const {data}=await supabase.from('customers').select('*').eq('id',c.id).single(); if(data) setC(data) }
 
   const updateStatus = async (status) => {
-    await supabase.from('crm_customers').update({status,updated_at:new Date().toISOString()}).eq('id',c.id)
+    await supabase.from('customers').update({status,updated_at:new Date().toISOString()}).eq('id',c.id)
+    invalidateCustomerCache()
     setC(v=>({...v,status}))
   }
 
   const handleDelete = async () => {
     if (!(await confirm({ message: 'Slett denne kunden?', subMessage: 'Kunden og all historikk, aktiviteter og dokumenter slettes permanent.', danger: true }))) return
-    await supabase.from('crm_customers').delete().eq('id',c.id)
+    await supabase.from('customers').delete().eq('id',c.id)
+    invalidateCustomerCache()
     onBack()
   }
 
@@ -21639,7 +21737,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal&&c.city?`${c.postal} ${c.city}`:c.city||c.postal],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null]].filter(r=>r[1]).map(([k,v])=>(
+                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null]].filter(r=>r[1]).map(([k,v])=>(
                     <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                       <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
                       <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
@@ -21840,7 +21938,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 
 function CRMEditorModal({ user, initial, onClose, onSaved }) {
   const isEdit=!!initial
-  const [form, setForm] = useState({ name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal:initial?.postal||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'' })
+  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'' })
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
   const lbl=t=><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>{t}</label>
@@ -21850,8 +21948,16 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
     setSaving(true)
     try {
       const payload={...form,estimated_value:form.estimated_value?parseFloat(form.estimated_value):null,updated_at:new Date().toISOString()}
-      if (isEdit) { const {error}=await supabase.from('crm_customers').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('crm_customers').insert({...payload,created_by:user?.id}); if(error) throw error }
+      if (isEdit) { const {error}=await supabase.from('customers').update(payload).eq('id',initial.id); if(error) throw error }
+      else {
+        // Autogenerer K-NNNN for nye kunder opprettet via CRM
+        const { data: allCust } = await supabase.from('customers').select('customer_number')
+        const customer_number = payload.customer_number || nextSequenceNumber(allCust || [], 'K', 'customer_number', { withYear: false })
+        const {error}=await supabase.from('customers').insert({...payload, customer_number, created_by:user?.id})
+        if(error) throw error
+      }
+      // Invaliderer cache så CustomerSelect reflekterer endringen umiddelbart
+      invalidateCustomerCache()
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -21870,6 +21976,13 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           </div>
         </div>
         <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+          <div style={{ gridColumn:'1/-1', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 14px', display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'12px', fontWeight:'600', color:'#64748b' }}>Kundenummer:</span>
+            <span style={{ fontFamily:'ui-monospace, monospace', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
+              {form.customer_number || '—'}
+            </span>
+            {!isEdit && <span style={{ fontSize:'11px', color:'#94a3b8' }}>(tildeles automatisk ved opprettelse)</span>}
+          </div>
           <div style={{ gridColumn:'1/-1' }}>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Type</label>
             <div style={{ display:'flex',gap:'8px' }}>
@@ -21889,7 +22002,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div>{lbl('Telefon')}<input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Nettside')}<input value={form.website} onChange={e=>set('website',e.target.value)} placeholder="https://www.firma.no" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Adresse')}<input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Gateadresse" style={crmInp} /></div>
-          <div>{lbl('Postnr')}<input value={form.postal} onChange={e=>set('postal',e.target.value)} placeholder="0000" style={crmInp} /></div>
+          <div>{lbl('Postnr')}<input value={form.postal_code} onChange={e=>set('postal_code',e.target.value)} placeholder="0000" style={crmInp} /></div>
           <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
         </div>
