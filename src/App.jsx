@@ -623,22 +623,12 @@ function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, val
             </div>
           ) : filtered.map(emp => {
             const name = getEmployeeName(emp)
+            const role = emp.role || ''
             return (
               <div key={emp.id} onMouseDown={(e) => { e.preventDefault(); handleSelect(emp) }}
-                style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
+                style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a' }}
                 onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
-                <div style={{ fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>{name || '(uten navn)'}</div>
-                {(emp.role || emp.department) && (
-                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>
-                    {emp.role}{emp.department ? ` · ${emp.department}` : ''}
-                  </div>
-                )}
-                {(emp.email || emp.phone) && (
-                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                    {emp.email && <span>✉️ {emp.email}</span>}
-                    {emp.phone && <span>📱 {emp.phone}</span>}
-                  </div>
-                )}
+                {name || '(uten navn)'}{role ? ` – ${role}` : ''}
               </div>
             )
           })}
@@ -768,17 +758,12 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
             </div>
             ) : filtered.slice(0, 10).map(emp => {
               const name = getEmployeeName(emp)
+              const role = emp.role || ''
               return (
                 <div key={emp.id} onMouseDown={(e) => { e.preventDefault(); addPerson(name) }}
-                  style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
+                  style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a' }}
                   onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
-                  <div style={{ fontWeight:'600', color:'#0f172a' }}>{name || '(uten navn)'}</div>
-                  {(emp.email || emp.phone) && (
-                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                      {emp.email && <span>✉️ {emp.email}</span>}
-                      {emp.phone && <span>📱 {emp.phone}</span>}
-                    </div>
-                  )}
+                  {name || '(uten navn)'}{role ? ` – ${role}` : ''}
                 </div>
               )
             })}
@@ -4121,7 +4106,10 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
 
   // Hent ansatte for dropdown
   useEffect(() => {
-    supabase.from('employees').select('id, user_id, name, email, role').order('name').then(({ data }) => setEmployees(data || []))
+    supabase.from('employees').select('*').order('last_name', { nullsFirst: false }).then(({ data, error }) => {
+      if (error) console.error('[AvvikModal] Feil ved henting av ansatte:', error)
+      setEmployees(data || [])
+    })
   }, [])
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -4243,7 +4231,15 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
                   // Ved fri-tekst endring: fjern id-kobling
                   setForm(f => ({ ...f, assigned_to: v, assigned_to_user_id: v ? f.assigned_to_user_id : '', assigned_to_email: v ? f.assigned_to_email : '' }))
                 }}
-                onSelect={emp => handleAssigneeChange(emp.id)}
+                onSelect={emp => {
+                  const name = getEmployeeName(emp) || emp.name || ''
+                  setForm(f => ({
+                    ...f,
+                    assigned_to: name,
+                    assigned_to_user_id: emp.user_id || '',
+                    assigned_to_email: emp.email || ''
+                  }))
+                }}
                 placeholder="Velg ansvarlig..."
               />
             </div>
@@ -6329,21 +6325,24 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
   const requiredCerts = getRequiredCerts(maskin)
 
   useEffect(() => {
-    supabase.from('employees').select('id, user_id, name, role').order('name').then(({ data, error }) => {
+    supabase.from('employees').select('*').order('last_name', { nullsFirst: false }).then(({ data, error }) => {
       if (!error && data && data.length > 0) {
         setEmployees(data)
         setHasEmployeeAccess(true)
         setEmployeeMode('select')
       } else {
+        if (error) console.error('[StatusEndringsModal] Feil ved henting av ansatte:', error)
         setHasEmployeeAccess(false)
         setEmployeeMode('manual')
       }
     })
   }, [])
 
-  const handleEmployeeSelect = async (empId) => {
-    const emp = employees.find(e => e.id === empId)
-    setEmployeeName(emp?.name || '')
+  const handleEmployeeSelect = async (empOrId) => {
+    // Godta både et employee-objekt og en id
+    const emp = typeof empOrId === 'object' ? empOrId : employees.find(e => e.id === empOrId)
+    const name = getEmployeeName(emp) || emp?.name || ''
+    setEmployeeName(name)
     setCertWarning(null)
 
     // Sjekk sertifikater hvis maskinen har krav
@@ -6458,7 +6457,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
                 employees={employees}
                 value={employeeName}
                 onChange={v => { setEmployeeName(v); setCertWarning(null) }}
-                onSelect={emp => handleEmployeeSelect(emp.id)}
+                onSelect={emp => handleEmployeeSelect(emp)}
                 placeholder="Søk ansatt eller skriv navn..."
               />
             ) : (
@@ -31119,14 +31118,9 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         onChange={() => setSelectedEmployees(prev => isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
                                         style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669', flexShrink:0 }} />
                                       <div style={{ flex:1, minWidth:0 }}>
-                                        <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
-                                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{[emp.role, emp.department].filter(Boolean).join(' · ') || ''}</div>
-                                        {(emp.email || emp.phone) && (
-                                          <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                                            {emp.email && <span>✉️ {emp.email}</span>}
-                                            {emp.phone && <span>📱 {emp.phone}</span>}
-                                          </div>
-                                        )}
+                                        <div style={{ fontSize:'14px', color: isSelected ? '#059669' : '#0f172a' }}>
+                                          {empName}{emp.role ? ` – ${emp.role}` : ''}
+                                        </div>
                                       </div>
                                       {isSelected && <span style={{ color:'#059669', fontSize:'14px', flexShrink:0 }}>✓</span>}
                                     </label>
