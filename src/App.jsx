@@ -774,6 +774,308 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
   )
 }
 
+// ─── CUSTOMER SELECT ─────────────────────────────────────────────────────
+// Søkbar nedtrekk for å velge kunde. Bruker global cache + React Portal.
+// Følger samme mønster som EmployeeNameSelect.
+// ─────────────────────────────────────────────────────────────────────────
+
+const _customerCache = { data: null, loading: null, subscribers: new Set() }
+
+// Formaterer kunde til visningstekst: "K-0023 · Ola Nordmann"
+function formatCustomerLabel(c) {
+  if (!c) return ''
+  const nr = c.customer_number ? `${c.customer_number} · ` : ''
+  return `${nr}${c.name || '(uten navn)'}`
+}
+
+// Normaliserer navn for duplikatsjekk: trimmer, collapserer whitespace, lowercaser
+function normalizeCustomerName(name) {
+  if (!name) return ''
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+// Bygger et Set av normaliserte navn som har duplikater blant privatkunder.
+// Returnerer et Set for O(1) oppslag senere.
+function buildPrivateDuplicateNameSet(customers) {
+  const counts = {}
+  for (const c of customers) {
+    if (c.type !== 'privat') continue
+    const key = normalizeCustomerName(c.name)
+    if (!key) continue
+    counts[key] = (counts[key] || 0) + 1
+  }
+  const dups = new Set()
+  for (const [key, count] of Object.entries(counts)) {
+    if (count > 1) dups.add(key)
+  }
+  return dups
+}
+
+function getCachedCustomers() {
+  if (_customerCache.data) return Promise.resolve(_customerCache.data)
+  if (_customerCache.loading) return _customerCache.loading
+  _customerCache.loading = supabase.from('customers')
+    .select('*')
+    .order('name')
+    .then(({ data, error }) => {
+      if (error) {
+        console.error('[CustomerCache] Feil ved henting av kunder:', error)
+        _customerCache.data = []
+        _customerCache.loading = null
+        _customerCache.subscribers.forEach(fn => fn([]))
+        // Ikke cache tom liste permanent — prøv på nytt neste gang
+        setTimeout(() => { _customerCache.data = null }, 5000)
+        return []
+      }
+      _customerCache.data = data || []
+      _customerCache.loading = null
+      _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
+      console.log(`[CustomerCache] Lastet ${_customerCache.data.length} kunder`)
+      return _customerCache.data
+    })
+    .catch(err => {
+      console.error('[CustomerCache] Exception:', err)
+      _customerCache.data = []
+      _customerCache.loading = null
+      setTimeout(() => { _customerCache.data = null }, 5000)
+      return []
+    })
+  return _customerCache.loading
+}
+
+function invalidateCustomerCache() {
+  _customerCache.data = null
+  _customerCache.loading = null
+}
+
+function useCustomers() {
+  const [customers, setCustomers] = useState(_customerCache.data || [])
+  useEffect(() => {
+    let mounted = true
+    if (_customerCache.data) {
+      setCustomers(_customerCache.data)
+      return
+    }
+    getCachedCustomers().then(data => { if (mounted) setCustomers(data) })
+    const sub = (data) => { if (mounted) setCustomers(data) }
+    _customerCache.subscribers.add(sub)
+    return () => { mounted = false; _customerCache.subscribers.delete(sub) }
+  }, [])
+  return customers
+}
+
+// CustomerSelect — søkbar kundevelger med duplikatadvarsel for privatkunder
+// Props:
+//   value — customer_id (UUID) når valueAsId=true, ellers tekst (kundenavn)
+//   onChange(v) — kalles med ny verdi (id eller navn)
+//   onSelect(customer) — kalles med hele kundeobjektet når bruker velger noe
+//   valueAsId — om true: value tolkes som customer_id; om false: fritekst
+//   allowFreeText — om true: bruker kan skrive inn navn som ikke finnes (default true, kun i non-id modus)
+//   filterType — valgfri: vis kun kunder av denne typen (f.eks. 'privat' | 'bedrift' | ['ue','bedrift'])
+//   placeholder, style — UI
+function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAsId, allowFreeText = true, filterType }) {
+  const allCustomers = useCustomers()
+  const [showDrop, setShowDrop] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [rect, setRect] = useState(null)
+  const wrapperRef = React.useRef(null)
+
+  // Filtrer på type hvis angitt
+  const customers = React.useMemo(() => {
+    if (!filterType) return allCustomers
+    const types = Array.isArray(filterType) ? filterType : [filterType]
+    return allCustomers.filter(c => types.includes(c.type))
+  }, [allCustomers, filterType])
+
+  // Bygg duplikatnavn-set for privatkunder (for advarsel) — alltid basert på full liste
+  const duplicateNames = React.useMemo(
+    () => buildPrivateDuplicateNameSet(allCustomers),
+    [allCustomers]
+  )
+
+  // I id-modus: vis navn/nummer basert på id
+  const displayValue = valueAsId
+    ? (() => {
+        if (!value) return ''
+        const c = customers.find(x => x.id === value) || allCustomers.find(x => x.id === value)
+        return c ? formatCustomerLabel(c) : ''
+      })()
+    : (value || '')
+
+  const inputVal = showDrop ? searchText : displayValue
+
+  // Sjekk om valgt kunde er privat med duplikat — vis advarsel over feltet
+  const selectedDuplicateWarning = React.useMemo(() => {
+    if (!valueAsId || !value) return null
+    const c = allCustomers.find(x => x.id === value)
+    if (!c || c.type !== 'privat') return null
+    const key = normalizeCustomerName(c.name)
+    if (!duplicateNames.has(key)) return null
+    const siblings = allCustomers.filter(x => x.type === 'privat' && normalizeCustomerName(x.name) === key)
+    return {
+      count: siblings.length,
+      siblings: siblings.map(s => ({
+        customer_number: s.customer_number,
+        email: s.email,
+        phone: s.phone,
+        id: s.id,
+      }))
+    }
+  }, [value, valueAsId, allCustomers, duplicateNames])
+
+  const filtered = customers.filter(c => {
+    const q = (searchText || '').toLowerCase().trim()
+    if (!q) return true
+    return (c.name || '').toLowerCase().includes(q) ||
+           (c.customer_number || '').toLowerCase().includes(q) ||
+           (c.orgnr || '').toLowerCase().includes(q) ||
+           (c.email || '').toLowerCase().includes(q) ||
+           (c.phone || '').toLowerCase().includes(q)
+  })
+
+  const handleSelect = (c) => {
+    if (valueAsId) {
+      onChange(c.id)
+    } else {
+      onChange(c.name || '')
+    }
+    if (onSelect) onSelect(c)
+    setShowDrop(false)
+    setSearchText('')
+  }
+
+  const openDrop = () => {
+    if (wrapperRef.current) {
+      const r = wrapperRef.current.getBoundingClientRect()
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+    }
+    setShowDrop(true)
+    setSearchText('')
+  }
+
+  // Oppdater posisjon ved scroll/resize
+  useEffect(() => {
+    if (!showDrop) return
+    const update = () => {
+      if (wrapperRef.current) {
+        const r = wrapperRef.current.getBoundingClientRect()
+        setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+      }
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [showDrop])
+
+  const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
+
+  const KUNDE_TYPE_LOCAL = { // duplikat for isolasjon — ekte KUNDE_TYPE er definert senere i filen
+    bedrift:  { label: 'Bedrift',      emoji: '🏢' },
+    privat:   { label: 'Privat',       emoji: '👤' },
+    offentlig:{ label: 'Offentlig',    emoji: '🏛️' },
+    borettslag:{ label:'Borettslag',   emoji: '🏘️' },
+    ue:       { label: 'Underlev.',    emoji: '🤝' },
+  }
+
+  const dropdown = (showDrop && rect) && (
+    <div style={{
+      position:'fixed',
+      top: `${rect.top}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      background:'white',
+      border:'1px solid #e2e8f0',
+      borderRadius:'10px',
+      boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
+      zIndex: 99999,
+      maxHeight:'300px',
+      overflowY:'auto'
+    }}>
+      {customers.length === 0 ? (
+        <div style={{ padding:'14px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+          {_customerCache.loading ? 'Laster kunder...' : 'Ingen kunder funnet. Opprett kunder i Kundeoversikt.'}
+        </div>
+      ) : (
+        <>
+          {valueAsId && displayValue && (
+            <div onMouseDown={(e) => { e.preventDefault(); onChange(''); setShowDrop(false); setSearchText('') }}
+              style={{ padding:'7px 12px', cursor:'pointer', fontSize:'12px', color:'#dc2626', borderBottom:'1px solid #f1f5f9', fontWeight:'600' }}
+              onMouseEnter={e => e.currentTarget.style.background='#fef2f2'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+              ✕ Fjern valgt
+            </div>
+          )}
+          {filtered.length === 0 ? (
+            <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+              Ingen treff{searchText ? ` for "${searchText}"` : ''}{allowFreeText && !valueAsId ? ' — skriv fritt' : ''}
+            </div>
+          ) : filtered.map(c => {
+            const typeCfg = KUNDE_TYPE_LOCAL[c.type] || KUNDE_TYPE_LOCAL.bedrift
+            const isDup = c.type === 'privat' && duplicateNames.has(normalizeCustomerName(c.name))
+            return (
+              <div key={c.id} onMouseDown={(e) => { e.preventDefault(); handleSelect(c) }}
+                style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a', display:'flex', flexDirection:'column', gap:'2px' }}
+                onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                  {c.customer_number && <span style={{ fontFamily:'ui-monospace, monospace', fontSize:'12px', color:'#64748b', fontWeight:'600' }}>{c.customer_number}</span>}
+                  <span style={{ fontWeight:'600' }}>{c.name || '(uten navn)'}</span>
+                  <span style={{ fontSize:'11px', color:'#64748b' }}>{typeCfg.emoji} {typeCfg.label}</span>
+                  {isDup && (
+                    <span title="Flere privatkunder har dette navnet — sjekk kundenummer/e-post" style={{ fontSize:'11px', background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:'8px', fontWeight:'700' }}>
+                      ⚠ duplikatnavn
+                    </span>
+                  )}
+                </div>
+                {(c.email || c.phone || c.orgnr) && (
+                  <div style={{ fontSize:'11px', color:'#94a3b8', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                    {c.email && <span>✉️ {c.email}</span>}
+                    {c.phone && <span>📞 {c.phone}</span>}
+                    {c.orgnr && <span>🏛️ {c.orgnr}</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </>
+      )}
+    </div>
+  )
+
+  return (
+    <div ref={wrapperRef} style={{ position:'relative' }}>
+      <input
+        value={inputVal}
+        onChange={e => {
+          setSearchText(e.target.value)
+          if (!showDrop) openDrop()
+          if (!valueAsId && allowFreeText) onChange(e.target.value)
+          if (valueAsId && !e.target.value) onChange('')
+        }}
+        onFocus={openDrop}
+        onBlur={() => setTimeout(() => setShowDrop(false), 200)}
+        placeholder={placeholder || 'Søk etter kunde (navn, nr, orgnr, e-post)...'}
+        style={selStyle} />
+      {selectedDuplicateWarning && (
+        <div style={{ marginTop:'6px', padding:'8px 10px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:'8px', fontSize:'12px', color:'#92400e', lineHeight:1.4 }}>
+          <strong>⚠ OBS:</strong> {selectedDuplicateWarning.count} privatkunder har identisk navn. Sjekk at du har valgt riktig person:
+          <ul style={{ margin:'4px 0 0 18px', padding:0 }}>
+            {selectedDuplicateWarning.siblings.map(s => (
+              <li key={s.id} style={{ fontSize:'11px' }}>
+                <span style={{ fontFamily:'ui-monospace, monospace', fontWeight:'600' }}>{s.customer_number || '(uten nr)'}</span>
+                {s.email ? ` · ${s.email}` : ''}
+                {s.phone ? ` · ${s.phone}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {typeof document !== 'undefined' && dropdown ? createPortal(dropdown, document.body) : null}
+    </div>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <div>
@@ -1176,7 +1478,31 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
             </div>
             {sec('Kunde')}
             <div style={g2}>
-              <div style={{ gridColumn:'1/-1' }}><FLabel label="Kundenavn"><FInput value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Navn på kunde" /></FLabel></div>
+              <div style={{ gridColumn:'1/-1' }}>
+                <FLabel label="Velg kunde">
+                  <CustomerSelect
+                    value={form.customer_id}
+                    valueAsId
+                    onChange={v => {
+                      set('customer_id', v)
+                      // Når bruker "fjerner valgt": nullstill ikke client_name — la brukeren beholde det
+                      // de har skrevet tidligere (kan være manuelt inntastet)
+                    }}
+                    onSelect={c => {
+                      // Autofyll kundedata fra valgt kunde
+                      set('customer_id', c.id)
+                      set('client_name', c.name || '')
+                      if (c.email) set('client_email', c.email)
+                      if (c.phone) set('client_phone', c.phone)
+                    }}
+                    placeholder="Søk etter kunde — navn, kundenr, orgnr, e-post..."
+                  />
+                </FLabel>
+                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>
+                  Finner du ikke kunden? Opprett den først i Kundeoversikt — så vises den her.
+                </p>
+              </div>
+              <div style={{ gridColumn:'1/-1' }}><FLabel label="Kundenavn (kan overstyres manuelt)"><FInput value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Navn på kunde" /></FLabel></div>
               <FLabel label="Kontaktperson"><FInput value={form.client_contact} onChange={e => set('client_contact', e.target.value)} placeholder="Navn" /></FLabel>
               <FLabel label="Telefon"><FInput value={form.client_phone} onChange={e => set('client_phone', e.target.value)} placeholder="+47 000 00 000" /></FLabel>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="E-post"><FInput type="email" value={form.client_email} onChange={e => set('client_email', e.target.value)} placeholder="kunde@eksempel.no" /></FLabel></div>
@@ -19898,6 +20224,7 @@ function KunderPage() {
     if (!ok) return
     try {
       await supabase.from('customers').delete().eq('id', kunde.id)
+      invalidateCustomerCache()
       await load()
     } catch(e) { alert('Feil: ' + e.message) }
   }
@@ -20558,7 +20885,14 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
 
 function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
   const isEdit = !!initial
+  // Autogenerer kundenummer for nye kunder (K-0001, K-0002, ...)
+  const autoCustomerNumber = React.useMemo(() => {
+    if (isEdit) return initial?.customer_number || ''
+    return nextSequenceNumber(existingKunder, 'K', 'customer_number', { withYear: false })
+  }, [isEdit, existingKunder, initial])
+
   const [form, setForm] = useState({
+    customer_number: initial?.customer_number || autoCustomerNumber,
     name: initial?.name || '',
     type: initial?.type || 'bedrift',
     orgnr: initial?.orgnr || '',
@@ -20574,16 +20908,33 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
   const [dupWarning, setDupWarning] = useState(null)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  // Live duplikatsjekk
+  // Live duplikatsjekk — støtter ulik logikk for privat vs bedrift
   const checkDuplicate = (field, value) => {
     set(field, value)
     if (!value?.trim()) { setDupWarning(null); return }
     const trimmed = value.trim().toLowerCase()
     let dup = null
     if (field === 'name') {
-      dup = existingKunder.find(k => k.name?.toLowerCase() === trimmed && k.id !== initial?.id)
-      if (dup) setDupWarning(`Kunde med navn "${dup.name}" finnes allerede`)
-      else setDupWarning(null)
+      // For privatkunder: advarsel (ikke-blokkerende) ved identisk navn blant andre privatkunder
+      if (form.type === 'privat') {
+        const normKey = trimmed.replace(/\s+/g, ' ')
+        const siblings = existingKunder.filter(k =>
+          k.type === 'privat' &&
+          k.id !== initial?.id &&
+          (k.name || '').trim().toLowerCase().replace(/\s+/g, ' ') === normKey
+        )
+        if (siblings.length > 0) {
+          const ids = siblings.slice(0, 3).map(s => `${s.customer_number || '(uten nr)'}${s.email ? ' · ' + s.email : ''}`).join(', ')
+          setDupWarning(`⚠ ${siblings.length} annen privatkunde har samme navn: ${ids}${siblings.length > 3 ? ' …' : ''}. Du kan fortsatt lagre — men dobbeltsjekk at dette er riktig person.`)
+        } else {
+          setDupWarning(null)
+        }
+      } else {
+        // For bedrift/offentlig/borettslag/ue: behold eksisterende blokkerende logikk på eksakt match
+        dup = existingKunder.find(k => k.name?.toLowerCase() === trimmed && k.id !== initial?.id)
+        if (dup) setDupWarning(`Kunde med navn "${dup.name}" finnes allerede`)
+        else setDupWarning(null)
+      }
     } else if (field === 'orgnr' && value.trim()) {
       dup = existingKunder.find(k => k.orgnr === value.trim() && k.id !== initial?.id)
       if (dup) setDupWarning(`Org.nr ${value.trim()} tilhorer allerede "${dup.name}"`)
@@ -20600,9 +20951,16 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
         const { error } = await supabase.from('customers').update({ ...form, updated_at: new Date().toISOString() }).eq('id', initial.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('customers').insert({ ...form, created_by: user?.id })
+        // Siste forsvarslinje: hvis kundenummeret vårt har kollidert (race condition),
+        // prøv å legge til 'B'-suffix — samme mønster som for prosjektnummer
+        let customer_number = form.customer_number || nextSequenceNumber(existingKunder, 'K', 'customer_number', { withYear: false })
+        const exists = existingKunder.find(k => k.customer_number === customer_number)
+        if (exists) customer_number = customer_number + 'B'
+        const { error } = await supabase.from('customers').insert({ ...form, customer_number, created_by: user?.id })
         if (error) throw error
       }
+      // Invalider cache slik at dropdown-komponenter henter oppdatert liste
+      invalidateCustomerCache()
       onSaved()
     } catch(e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
@@ -20622,6 +20980,14 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
           </div>
         </div>
         <form onSubmit={handleSave} style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'14px', overflowY:'auto' }}>
+          {/* Kundenummer (alltid synlig, read-only for nye og eksisterende) */}
+          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 14px', display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'12px', fontWeight:'600', color:'#64748b' }}>Kundenummer:</span>
+            <span style={{ fontFamily:'ui-monospace, monospace', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
+              {form.customer_number || '—'}
+            </span>
+            {!isEdit && <span style={{ fontSize:'11px', color:'#94a3b8' }}>(tildeles automatisk ved opprettelse)</span>}
+          </div>
           {/* Kundetype */}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Type kunde</label>
@@ -20638,8 +21004,12 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
           </div>
           <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>
-              {lbl('Navn *')}<input value={form.name} onChange={e => checkDuplicate('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={{ ...kundeInp, borderColor: dupWarning && form.name ? '#f87171' : '#e2e8f0' }} />
-              {dupWarning && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#dc2626' }}>{dupWarning}</p>}
+              {lbl('Navn *')}<input value={form.name} onChange={e => checkDuplicate('name', e.target.value)} required placeholder="Bedriftsnavn eller fullt navn" style={{ ...kundeInp, borderColor: dupWarning && form.name ? (form.type === 'privat' ? '#fbbf24' : '#f87171') : '#e2e8f0' }} />
+              {dupWarning && (
+                <p style={{ margin:'4px 0 0', fontSize:'12px', color: form.type === 'privat' ? '#92400e' : '#dc2626', lineHeight:1.4 }}>
+                  {dupWarning}
+                </p>
+              )}
             </div>
             <div>{lbl('Organisasjonsnummer')}<input value={form.orgnr} onChange={e => checkDuplicate('orgnr', e.target.value)} placeholder="9 siffer" style={kundeInp} /></div>
             <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="kontakt@bedrift.no" style={kundeInp} /></div>
