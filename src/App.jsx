@@ -27746,14 +27746,14 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               {!isExpanded && (bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>📐 {(bd.flatetillegg||[]).length}</span>}
                               {!isExpanded && (bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#fef2f2', color:'#dc2626', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>🚪 {(bd.apningstillegg||[]).length}</span>}
                             </div>
-                            <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '6px' : '10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
-                              <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>
+                              {!isMobKV && <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>}
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
-                                <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>
-                                {kalkyler.length > 1 && <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })} title="Flytt til annen faggruppe" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>↗️</button>}
-                                <button onClick={() => saveBdToLibrary(kalk.id, bd)} title="Lagre til bibliotek" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>💾</button>
+                                {!isMobKV && <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>}
+                                {!isMobKV && kalkyler.length > 1 && <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })} title="Flytt til annen faggruppe" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>↗️</button>}
+                                {!isMobKV && <button onClick={() => saveBdToLibrary(kalk.id, bd)} title="Lagre til bibliotek" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>💾</button>}
                                 <button onClick={() => removeBd(kalk.id, bd.id)} title="Slett" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
                               </div>
                             </div>
@@ -27764,16 +27764,16 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                             <div style={{ padding:'12px 14px', borderTop:'1px solid #f1f5f9' }}>
 
                               {/* Bygningsdel navn + mengde */}
-                              <div style={{ display:'flex', gap:'8px', alignItems:'flex-end', marginBottom:'14px', background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
-                                <div style={{ flex:1 }}>
+                              <div style={{ display:'flex', gap:'8px', alignItems:'flex-end', marginBottom:'14px', background:'#f8fafc', borderRadius:'10px', padding:'12px', flexWrap: isMobKV ? 'wrap' : 'nowrap' }}>
+                                <div style={{ flex:1, minWidth: isMobKV ? '100%' : 'auto' }}>
                                   <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#94a3b8', marginBottom:'4px' }}>Bygningsdel</label>
                                   <input value={bd.name||''} onChange={e => updateBdField(kalk.id, bd.id, 'name', e.target.value)} placeholder="F.eks. Yttervegg stue" style={{ ...qInp, fontWeight:'600', fontSize:'13px' }} />
                                 </div>
-                                <div style={{ width:'100px' }}>
+                                <div style={{ width: isMobKV ? '55%' : '100px', flex: isMobKV ? '1 1 55%' : '0 0 auto' }}>
                                   <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#94a3b8', marginBottom:'4px' }}>Mengde</label>
                                   <input type="number" step="0.1" min="0" value={bd.mengde ?? 1} onChange={e => updateBdField(kalk.id, bd.id, 'mengde', e.target.value)} style={{ ...qInp, textAlign:'right', fontWeight:'700', fontSize:'14px', color:'#059669' }} />
                                 </div>
-                                <div style={{ width:'70px' }}>
+                                <div style={{ width: isMobKV ? '40%' : '70px', flex: isMobKV ? '1 1 40%' : '0 0 auto' }}>
                                   <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#94a3b8', marginBottom:'4px' }}>Enhet</label>
                                   <select value={bd.enhet || 'm²'} onChange={e => updateBdField(kalk.id, bd.id, 'enhet', e.target.value)} style={{ ...qInp, fontSize:'13px' }}>
                                     <option value="m²">m²</option>
@@ -27788,6 +27788,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                               {/* Arbeidsarter - editable */}
                               <div style={{ marginBottom:'12px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>⏱️ ARBEIDSARTER</div>
+                                <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
+                                <div style={{ minWidth: isMobKV ? '560px' : 'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
                                   <colgroup>
                                     <col style={{ width:'auto' }} />
@@ -27831,12 +27833,16 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     })}
                                   </tbody>
                                 </table>
+                                </div>
+                                </div>
                                 <button onClick={() => addArbeidsart(kalk.id, bd.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Arbeidsart</button>
 
                                 {/* ── Flatetillegg (del av arbeidsarter) ── */}
                                 {(bd.flatetillegg||[]).length > 0 && (
                                   <div style={{ marginTop:'10px', borderTop:'1px dashed #e2e8f0', paddingTop:'8px' }}>
                                     <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', marginBottom:'4px' }}>📐 FLATETILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid for hjørner, avslutninger og tilpasning)</span></div>
+                                    <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
+                                    <div style={{ minWidth: isMobKV ? '520px' : 'auto' }}>
                                     <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
                                       <colgroup>
                                         <col style={{ width:'auto' }} />
@@ -27879,6 +27885,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         })}
                                       </tbody>
                                     </table>
+                                    </div>
+                                    </div>
                                   </div>
                                 )}
 
@@ -27889,6 +27897,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'3px 6px', borderRadius:'4px' }}>
                                       Telleregel: 0,5–2,5 m² = 1 stk · 2,5–4,5 m² = 2 stk · 4,5–6,5 m² = 3 stk · &gt;6,5 m² = 4 stk · bærende +1
                                     </div>
+                                    <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
+                                    <div style={{ minWidth: isMobKV ? '560px' : 'auto' }}>
                                     <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
                                       <colgroup>
                                         <col style={{ width:'auto' }} />
@@ -27949,6 +27959,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         })}
                                       </tbody>
                                     </table>
+                                    </div>
+                                    </div>
                                   </div>
                                 )}
 
@@ -27979,6 +27991,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   </div>
                                 )}
                                 {(bd.materialer||[]).length > 0 && (
+                                  <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
+                                  <div style={{ minWidth: isMobKV ? '640px' : 'auto' }}>
                                   <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
                                     <colgroup>
                                       <col style={{ width:'85px' }} />
@@ -28041,6 +28055,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                       })}
                                     </tbody>
                                   </table>
+                                  </div>
+                                  </div>
                                 )}
                                 <button onClick={() => addMaterial(kalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
                               </div>
@@ -28119,8 +28135,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     {/* Tittel */}
                                     <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'12px', letterSpacing:'0.04em' }}>📊 OPPSUMMERING BYGNINGSDEL</div>
 
-                                    {/* Tre-kort layout: Kostnad → Pris → DB */}
-                                    <div style={{ display:'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap:'12px', marginBottom:'14px' }}>
+                                    {/* Tre-kort layout: Kostnad → Pris → DB — stables på mobil */}
+                                    <div style={{ display:'grid', gridTemplateColumns: isMobKV ? '1fr' : 'repeat(3, 1fr)', gap: isMobKV ? '8px' : '12px', marginBottom:'14px' }}>
                                       {/* Kort 1: Selvkost */}
                                       <div style={{ background:'white', borderRadius:'10px', padding:'12px 14px', border:'1px solid rgba(0,0,0,0.05)' }}>
                                         <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px', letterSpacing:'0.04em' }}>DINE KOSTNADER</div>
