@@ -13832,6 +13832,9 @@ function RessursGanttGrid({
   const colW = GANTT_COL_WIDTH[ganttZoom]
   const dayCount = GANTT_VISIBLE_DAYS[ganttZoom]
 
+  // Custom tooltip state — styrer rik hover-popup for bookinger
+  const [hoveredBar, setHoveredBar] = useState(null) // { bar, x, y } eller null
+
   // Build date array centered on ganttAnchor
   // For weeks/months/quarters we start a bit before anchor so the current day is ~30% from left
   const dates = React.useMemo(() => {
@@ -14345,27 +14348,25 @@ function RessursGanttGrid({
 
                     return (
                       <div key={bar.id}
-                        title={(() => {
-                          const projName = proj?.name || 'Ukjent prosjekt'
-                          const projNum = proj?.project_number ? ` (${proj.project_number})` : ''
-                          const task = bar.plans.find(p => p.task_description)?.task_description
-                          const totalHours = bar.plans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
-                          const startFmt = new Date(bar.startDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })
-                          const endFmt = new Date(bar.endDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })
-                          const dateRange = bar.startDate === bar.endDate ? startFmt : `${startFmt} – ${endFmt}`
-                          let tip = `${projName}${projNum}`
-                          if (task) tip += `\n🔨 ${task}`
-                          tip += `\n📅 ${dateRange} · ${totalHours}t`
-                          if (bar.isPlaceholder) tip += `\n⚠️ Ubesatt rolle (placeholder)`
-                          if (bar.hasConflict) tip += `\n⚠️ Konflikt — dobbeltbooket`
-                          tip += `\n\nKlikk for å redigere`
-                          return tip
-                        })()}
                         draggable
-                        onDragStart={(e)=>{ e.stopPropagation(); onDragStart(firstPlan, e) }}
+                        onDragStart={(e)=>{ e.stopPropagation(); onDragStart(firstPlan, e); setHoveredBar(null) }}
                         onDragEnd={()=>onDragEnd()}
+                        onMouseEnter={(e) => {
+                          if (dragging || resizing) return
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setHoveredBar({ bar, proj, rect })
+                        }}
+                        onMouseMove={(e) => {
+                          if (dragging || resizing) return
+                          if (!hoveredBar || hoveredBar.bar.id !== bar.id) {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setHoveredBar({ bar, proj, rect })
+                          }
+                        }}
+                        onMouseLeave={() => setHoveredBar(null)}
                         onClick={(e)=>{
                           e.stopPropagation()
+                          setHoveredBar(null)
                           onOpenBooking({
                             resourceId: res.id,
                             resourceName: name,
@@ -14445,6 +14446,23 @@ function RessursGanttGrid({
                               {proj?.name || '—'}
                             </div>
                           )}
+                          {/* Oppgave-tekst — kun på brede bjelker (>140px) når ikke zoomet ut */}
+                          {!isZoomedOut && width > 140 && (() => {
+                            const task = bar.plans.find(p => p.task_description)?.task_description
+                            if (!task) return null
+                            return (
+                              <div style={{
+                                fontSize: width > 200 ? '11px' : '10px',
+                                fontWeight:'500',
+                                opacity:0.92,
+                                lineHeight:1.2,
+                                marginTop:'2px',
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                              }}>
+                                🔨 {task}
+                              </div>
+                            )
+                          })()}
                           {isZoomedOut && (
                             <div style={{ fontSize:'9px', fontWeight:'800', opacity:0.9, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                               {proj?.project_number || proj?.name?.slice(0,6) || ''}
@@ -14491,6 +14509,120 @@ function RessursGanttGrid({
           )}
         </div>
       </div>
+
+      {/* Custom tooltip — rik hover-popup for bookinger */}
+      {hoveredBar && !dragging && !resizing && (() => {
+        const { bar, proj, rect } = hoveredBar
+        const task = bar.plans.find(p => p.task_description)?.task_description
+        const notes = bar.plans.find(p => p.notes && !p.notes.startsWith('📦'))?.notes
+        const totalHours = bar.plans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
+        const startFmt = new Date(bar.startDate + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })
+        const endFmt = new Date(bar.endDate + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })
+        const dateRange = bar.startDate === bar.endDate ? startFmt : `${startFmt} – ${endFmt}`
+        const projColor = proj ? getProjectColor(proj.id, projects) : '#64748b'
+
+        // Posisjoner tooltipen nær bjelken; juster hvis nær viewport-kant
+        const tooltipWidth = 280
+        const tooltipEstHeight = 180
+        let left = rect.left + rect.width / 2 - tooltipWidth / 2
+        let top = rect.bottom + 8
+        // Juster horisontalt for å holde i viewport
+        if (left < 10) left = 10
+        if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10
+        // Hvis ikke plass under, vis over
+        if (top + tooltipEstHeight > window.innerHeight - 10) {
+          top = rect.top - tooltipEstHeight - 8
+        }
+
+        return (
+          <div style={{
+            position:'fixed',
+            left: `${left}px`,
+            top: `${top}px`,
+            width: `${tooltipWidth}px`,
+            background:'white',
+            borderRadius:'12px',
+            boxShadow:'0 12px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)',
+            padding:'12px 14px',
+            fontFamily:'system-ui,sans-serif',
+            zIndex:400,
+            pointerEvents:'none',
+            fontSize:'13px',
+          }}>
+            {/* Prosjekt-header med fargestripe */}
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px', paddingBottom:'10px', borderBottom:'1px solid #f1f5f9' }}>
+              <div style={{ width:'4px', alignSelf:'stretch', background: projColor, borderRadius:'2px', minHeight:'28px' }} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:'800', fontSize:'14px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {proj?.name || 'Ukjent prosjekt'}
+                </div>
+                {proj?.project_number && (
+                  <div style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace', marginTop:'1px' }}>
+                    {proj.project_number}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Oppgave — prominent */}
+            {task ? (
+              <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', marginBottom:'8px', padding:'8px 10px', background:'#fafafa', borderRadius:'8px' }}>
+                <span style={{ fontSize:'16px', flexShrink:0, lineHeight:1 }}>🔨</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'2px' }}>OPPGAVE</div>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', lineHeight:1.3 }}>{task}</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'8px 10px', background:'#fffbeb', borderRadius:'8px', border:'1px dashed #fde68a' }}>
+                <span style={{ fontSize:'14px', lineHeight:1 }}>💡</span>
+                <span style={{ fontSize:'11px', color:'#92400e', fontWeight:'500' }}>Ingen oppgave spesifisert — klikk for å legge til</span>
+              </div>
+            )}
+
+            {/* Metadata */}
+            <div style={{ display:'flex', flexDirection:'column', gap:'5px', fontSize:'12px', color:'#475569' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                <span style={{ fontSize:'13px' }}>📅</span>
+                <span>{dateRange}</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                <span style={{ fontSize:'13px' }}>⏱️</span>
+                <span><strong>{totalHours}t</strong> · {bar.plans.length} dag{bar.plans.length !== 1 ? 'er' : ''}</span>
+              </div>
+              {bar.isPlaceholder && (
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', color:'#d97706' }}>
+                  <span style={{ fontSize:'13px' }}>⚠️</span>
+                  <span>Ubesatt rolle (placeholder)</span>
+                </div>
+              )}
+              {bar.hasConflict && (
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', color:'#dc2626' }}>
+                  <span style={{ fontSize:'13px' }}>⚠️</span>
+                  <span>Dobbeltbooking (over 8t/dag)</span>
+                </div>
+              )}
+              {bar.materials.length > 0 && (
+                <div style={{ display:'flex', alignItems:'flex-start', gap:'6px' }}>
+                  <span style={{ fontSize:'13px' }}>📦</span>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{bar.materials.slice(0,2).join(', ')}{bar.materials.length > 2 ? ` +${bar.materials.length - 2}` : ''}</span>
+                </div>
+              )}
+              {notes && (
+                <div style={{ display:'flex', alignItems:'flex-start', gap:'6px' }}>
+                  <span style={{ fontSize:'13px' }}>💬</span>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{notes.split('\n')[0]}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Hint */}
+            <div style={{ marginTop:'10px', paddingTop:'8px', borderTop:'1px solid #f1f5f9', fontSize:'10px', color:'#94a3b8', textAlign:'center' }}>
+              Klikk på bjelken for å redigere
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
