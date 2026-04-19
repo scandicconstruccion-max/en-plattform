@@ -30050,7 +30050,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             })
           }
 
-          const faserWithDates = React.useMemo(() => recalcFaser(editableFaser), [editableFaser])
+          const faserWithDates = recalcFaser(editableFaser)
 
           const moveFase = (fromIdx, toIdx) => {
             if (fromIdx === toIdx || toIdx < 0 || toIdx >= editableFaser.length) return
