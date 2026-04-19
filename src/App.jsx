@@ -9150,6 +9150,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
     title: initial?.title||'', tender_number: initial?.tender_number||'',
     project_id: initial?.project_id||'', customer_name: initial?.customer_name||'', customer_email: initial?.customer_email||'',
     customer_address: initial?.customer_address||'', customer_orgnr: initial?.customer_orgnr||'',
+    customer_id: initial?.customer_id || null,
     deadline: initial?.deadline||'', valid_until: initial?.valid_until||'',
     description: initial?.description||'', global_markup: initial?.global_markup||0,
   })
@@ -9178,7 +9179,15 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload = { ...form, type, chapters, project_id: form.project_id||null, updated_at: new Date().toISOString() }
+      // Kundeoppløsning: for innkommende anbud er "kunde" egentlig byggherre/oppdragsgiver
+      // — lagre i customers-tabellen på samme måte som for tilbud/ordre/faktura.
+      const { customerId } = await resolveCustomerFromForm({
+        form,
+        user,
+        initialCustomerId: initial?.customer_id,
+        statusOnCreate: isIncoming ? 'lead' : null,
+      })
+      const payload = sanitizeDbPayload({ ...form, type, chapters, project_id: form.project_id||null, customer_id: customerId, updated_at: new Date().toISOString() })
       if (isEdit) { const {error}=await supabase.from('tenders').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('tenders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
@@ -9216,6 +9225,24 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
               <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
               <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 {isIncoming?'Byggherre / Oppdragsgiver':'Kontakt / UE-koordinator'}</div></div>
+              <div style={{ gridColumn:'1/-1' }}>
+                {lbl(isIncoming ? 'Velg eksisterende byggherre' : 'Velg eksisterende kontakt')}
+                <CustomerSelect
+                  value={form.customer_id}
+                  valueAsId
+                  onChange={v => set('customer_id', v)}
+                  onSelect={c => {
+                    set('customer_id', c.id)
+                    set('customer_name', c.name || '')
+                    if (c.email) set('customer_email', c.email)
+                    if (c.address) set('customer_address', c.address)
+                    if (c.orgnr) set('customer_orgnr', c.orgnr)
+                  }}
+                  placeholder={isIncoming ? 'Søk etter byggherre — eller fyll ut under' : 'Søk etter kontakt — eller fyll ut under'}
+                  filterType={isIncoming ? undefined : ['ue','bedrift']}
+                />
+                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>Velger du eksisterende, autofylles feltene under. Manuell utfylling oppretter ny kontakt automatisk.</p>
+              </div>
               <div>{lbl(isIncoming?'Byggherre':'Kontaktnavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Navn / firma" style={tInp} /></div>
               <div>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="epost@firma.no" style={tInp} /></div>
               <div>{lbl('Adresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Gateadresse" style={tInp} /></div>
@@ -9341,23 +9368,42 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
   const sendInvitations = async (ueList) => {
     setSending(true)
     try {
+      let createdAny = false
       for (const ue of ueList) {
         let custId = ue.customer_id
         if (!custId) {
           const existingCust = ueKunder.find(k => k.email?.toLowerCase() === ue.email.trim().toLowerCase() || k.name?.toLowerCase() === ue.company_name.trim().toLowerCase())
           if (existingCust) { custId = existingCust.id }
           else {
-            const { data: newCust } = await supabase.from('customers').insert({ name: ue.company_name.trim(), email: ue.email.trim(), type: 'ue', created_by: user?.id }).select().single()
-            if (newCust) custId = newCust.id
+            // Autogenerer kundenummer for ny UE (samme mønster som Kundeoversikt)
+            const { data: allCust } = await supabase.from('customers').select('customer_number')
+            const customer_number = nextSequenceNumber(allCust || [], 'K', 'customer_number', { withYear: false })
+            const { data: newCust } = await supabase.from('customers').insert(sanitizeDbPayload({
+              customer_number,
+              name: ue.company_name.trim(),
+              email: ue.email.trim(),
+              type: 'ue',
+              created_by: user?.id,
+              notes: 'Automatisk opprettet fra anbudsmodulen (UE-invitasjon)',
+            })).select().single()
+            if (newCust) { custId = newCust.id; createdAny = true }
           }
         }
-        const { data, error } = await supabase.from('tender_ues').insert({ tender_id:tender.id, company_name:ue.company_name.trim(), contact_name:ue.contact_name.trim()||null, email:ue.email.trim(), status:'Invitert', customer_id: custId||null }).select().single()
+        const { data, error } = await supabase.from('tender_ues').insert(sanitizeDbPayload({
+          tender_id: tender.id,
+          company_name: ue.company_name.trim(),
+          contact_name: ue.contact_name.trim() || null,
+          email: ue.email.trim(),
+          status: 'Invitert',
+          customer_id: custId || null,
+        })).select().single()
         if (error) throw error
         const pricingUrl = `${window.location.origin}/anbud-pris?token=${data.token}`
         const html = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px"><h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Anbudsforespørsel: ${tender.title}</h1><p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>${tender.description?'<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">'+tender.description+'</p></div>':''}${tender.deadline?'<p style="color:#dc2626;font-weight:600;font-size:14px">Anbudsfrist: '+tender.deadline+'</p>':''}<p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for folggende poster.</p><div style="text-align:center;margin:32px 0"><a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Fyll inn priser</a></div><hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0"><p style="color:#94a3b8;font-size:12px">Sendt via En Plattform</p></div>`
         const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY }, body: JSON.stringify({ to: ue.email.trim(), subject:'Anbudsforespørsel: '+tender.title+' ('+tender.tender_number+')', html }) })
         if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
       }
+      if (createdAny) invalidateCustomerCache()
       setSent(true); setTimeout(()=>onSaved(), 1500)
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSending(false) }
@@ -17819,7 +17865,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
         }
         if (finalDates.length === 0) { alert('Ingen dager å booke etter å ha hoppet over konflikter'); setSaving(false); return }
 
-        const plans = finalDates.map(d => ({
+        const plans = finalDates.map(d => sanitizeDbPayload({
           resource_id: resourceId,
           resource_type: isEmployee ? 'employee' : 'machine',
           project_id: projectId,
@@ -17839,7 +17885,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
         if (isEmployee && showMachinePicker && linkedMachineId) {
           // Filtrer finalDates til kun de som er innenfor maskinens eget tidsrom
           const machineDates = finalDates.filter(d => d >= machineFromDate && d <= machineToDate)
-          const machinePlans = machineDates.map(d => ({
+          const machinePlans = machineDates.map(d => sanitizeDbPayload({
             resource_id: linkedMachineId,
             resource_type: 'machine',
             project_id: projectId,
@@ -17862,7 +17908,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
     // ── Enkelt-dag-booking (original logikk) ──
     setSaving(true)
     try {
-      const payload = {
+      const payload = sanitizeDbPayload({
         resource_id: resourceId,
         resource_type: isEmployee ? 'employee' : 'machine',
         project_id: projectId,
@@ -17871,7 +17917,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
         task_description: taskDescription||null,
         linked_machine_id: (isEmployee && showMachinePicker && linkedMachineId) ? linkedMachineId : null,
         updated_at: new Date().toISOString()
-      }
+      })
 
       let planId = editPlan?.id
       if (editPlan) {
@@ -17899,7 +17945,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
           const dateStr = d.toISOString().split('T')[0]
           const dow = d.getDay()
           if (dow===0||dow===6) continue // skip weekends
-          machinePlans.push({
+          machinePlans.push(sanitizeDbPayload({
             resource_id: linkedMachineId,
             resource_type: 'machine',
             project_id: projectId,
@@ -17908,7 +17954,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
             notes: `Koblet til ${resourceName}`,
             linked_resource_plan_id: planId,
             created_by: user?.id
-          })
+          }))
         }
         if (machinePlans.length > 0) {
           const {error} = await supabase.from('resource_plans').insert(machinePlans)
@@ -18791,8 +18837,8 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
     setSaving(true)
     try {
       const rangeDates=getDatesRange(); const inserts=[]
-      for (const empId of selectedEmployees) for (const date of rangeDates) inserts.push({ resource_id:empId,resource_type:'employee',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id })
-      for (const machId of selectedMachines) for (const date of rangeDates) inserts.push({ resource_id:machId,resource_type:'machine',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id })
+      for (const empId of selectedEmployees) for (const date of rangeDates) inserts.push(sanitizeDbPayload({ resource_id:empId,resource_type:'employee',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id }))
+      for (const machId of selectedMachines) for (const date of rangeDates) inserts.push(sanitizeDbPayload({ resource_id:machId,resource_type:'machine',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id }))
       if (inserts.length>0) { const {error}=await supabase.from('resource_plans').insert(inserts); if(error) throw error }
       onSaved()
     } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
@@ -28499,7 +28545,10 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
     title: initial?.title || '',
     kalk_number: initial?.kalk_number || '',
     customer_name: initial?.customer_name || '',
+    customer_email: initial?.customer_email || '',
     customer_address: initial?.customer_address || '',
+    customer_orgnr: initial?.customer_orgnr || '',
+    customer_id: initial?.customer_id || null,
     notes: initial?.notes || '',
   })
   // Generer sekvensielt nummer ved nyopprettelse
@@ -28562,7 +28611,14 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
       }
 
       const totals = beregnProsjektTotal(kalkyler, faktorer)
-      const payload = { ...form, kalkyler, faktorer, total_cost: totals.totSelvkost, total_ex_mva: totals.totMedFortjeneste, profit_percent: totals.fortjenesteProsent, updated_at: new Date().toISOString() }
+      // Felles kunde-oppløsning for kalkyle: finner/oppretter kunde i customers-tabellen
+      const { customerId } = await resolveCustomerFromForm({
+        form,
+        user,
+        initialCustomerId: initial?.customer_id,
+        statusOnCreate: 'lead', // Kalkyler er typisk tidlig i salgsløpet
+      })
+      const payload = sanitizeDbPayload({ ...form, kalkyler, faktorer, customer_id: customerId, total_cost: totals.totSelvkost, total_ex_mva: totals.totMedFortjeneste, profit_percent: totals.fortjenesteProsent, updated_at: new Date().toISOString() })
 
       if (isEdit) {
         await supabase.from('calculations').update(payload).eq('id', initial.id)
@@ -28595,7 +28651,26 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
           <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektnavn *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbygg Strandveien 12" style={qInp} /></div>
             <div>{lbl('Nummer')}<input value={form.kalk_number} onChange={e=>set('kalk_number',e.target.value)} style={qInp} /></div>
-            <div>{lbl('Kunde')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={qInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>
+              {lbl('Velg eksisterende kunde')}
+              <CustomerSelect
+                value={form.customer_id}
+                valueAsId
+                onChange={v => set('customer_id', v)}
+                onSelect={c => {
+                  set('customer_id', c.id)
+                  set('customer_name', c.name || '')
+                  if (c.email) set('customer_email', c.email)
+                  if (c.address) set('customer_address', c.address)
+                  if (c.orgnr) set('customer_orgnr', c.orgnr)
+                }}
+                placeholder="Søk etter kunde — eller fyll ut under for ny"
+              />
+              <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>Velger du eksisterende, autofylles feltene under.</p>
+            </div>
+            <div>{lbl('Kundenavn')}<input value={form.customer_name} onChange={e=>set('customer_name',e.target.value)} placeholder="Kundenavn" style={qInp} /></div>
+            <div>{lbl('Org.nr')}<input value={form.customer_orgnr} onChange={e=>set('customer_orgnr',e.target.value)} placeholder="123 456 789" style={qInp} /></div>
+            <div style={{ gridColumn:'1/-1' }}>{lbl('E-post')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@epost.no" style={qInp} /></div>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektadresse')}<input value={form.customer_address} onChange={e=>set('customer_address',e.target.value)} placeholder="Adresse" style={qInp} /></div>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Interne notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="Interne notater om prosjektet (vises ikke for kunde)" rows={3} style={{ ...qInp, resize:'vertical', fontFamily:'system-ui,sans-serif' }} /></div>
           </div>
@@ -31188,13 +31263,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 if (useEmployees) {
                   for (const dateStr of workDates) {
                     for (const empId of selectedEmployees) {
-                      plans.push({
+                      plans.push(sanitizeDbPayload({
                         resource_id: empId, resource_type: 'employee', project_id: projId,
                         date: dateStr, hours: timerPerDag,
                         notes: `📐 ${bd.name} (fra kalkyle)`,
                         task_description: bd.name || null,
                         created_by: user?.id
-                      })
+                      }))
                     }
                   }
                 } else {
@@ -31202,7 +31277,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                     // Gjenbruk samme placeholder-ID per mann på tvers av bygningsdeler
                     if (!placeholderIds[mannNr]) placeholderIds[mannNr] = crypto.randomUUID()
                     for (const dateStr of workDates) {
-                      plans.push({
+                      plans.push(sanitizeDbPayload({
                         resource_id: placeholderIds[mannNr],
                         resource_type: 'employee',
                         project_id: projId,
@@ -31210,7 +31285,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                         notes: `📐 ${bd.name} (fra kalkyle) | Ressurs ${mannNr}`,
                         task_description: bd.name || null,
                         created_by: user?.id
-                      })
+                      }))
                     }
                   }
                 }
@@ -31244,7 +31319,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   `${m.nobb ? m.nobb + ' ' : ''}${m.varenavn}: ${m.totalMengde.toFixed(1)} ${m.enhet}`
                 ).join('\n')
 
-                matPlans.push({
+                matPlans.push(sanitizeDbPayload({
                   resource_id: crypto.randomUUID(),
                   resource_type: 'employee',
                   project_id: projId,
@@ -31252,7 +31327,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                   hours: 0,
                   notes: `📦 Levering: ${bd.name}\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\n${matListe}`,
                   created_by: user?.id
-                })
+                }))
               }
 
               if (matPlans.length === 0) { alert('Ingen bygningsdeler med materialer'); setSending(false); return }
