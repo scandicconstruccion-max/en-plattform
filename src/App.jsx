@@ -1396,15 +1396,18 @@ function ProjectSelect({ value, onChange, projects, required, placeholder, style
 // SearchableProjectSelect — som ProjectSelect, men med søkefelt og React Portal.
 // Matcher mønsteret fra EmployeeNameSelect og CustomerSelect.
 // Søker på navn, prosjektnummer, kundenavn, adresse.
-// Props: value (project_id), onChange, projects, placeholder, style, allowEmpty
-function SearchableProjectSelect({ value, onChange, projects, placeholder, style, allowEmpty = true, emptyLabel, required }) {
+// Props:
+//   value (project_id eller emptyValue), onChange, projects, placeholder, style,
+//   allowEmpty, emptyValue (hva "ingen valgt" betyr — default '' men kan være f.eks. 'alle')
+function SearchableProjectSelect({ value, onChange, projects, placeholder, style, allowEmpty = true, emptyLabel, required, emptyValue = '' }) {
   const options = React.useMemo(() => projectOptions(projects || []), [projects])
   const [showDrop, setShowDrop] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [rect, setRect] = useState(null)
   const wrapperRef = React.useRef(null)
 
-  const selected = options.find(p => p.id === value)
+  const isEmpty = value === emptyValue || value == null || value === ''
+  const selected = !isEmpty ? options.find(p => p.id === value) : null
   const displayValue = selected
     ? `${selected.name}${selected.project_number ? ` (${selected.project_number})` : ''}`
     : ''
@@ -1490,8 +1493,8 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
         </div>
       ) : (
         <>
-          {allowEmpty && value && (
-            <div onMouseDown={(e) => { e.preventDefault(); onChange(''); setShowDrop(false); setSearchText('') }}
+          {allowEmpty && !isEmpty && (
+            <div onMouseDown={(e) => { e.preventDefault(); onChange(emptyValue); setShowDrop(false); setSearchText('') }}
               style={{ padding:'7px 12px', cursor:'pointer', fontSize:'12px', color:'#dc2626', borderBottom:'1px solid #f1f5f9', fontWeight:'600' }}
               onMouseEnter={e => e.currentTarget.style.background='#fef2f2'} onMouseLeave={e => e.currentTarget.style.background='white'}>
               ✕ Fjern valgt
@@ -1530,7 +1533,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
         onChange={e => {
           setSearchText(e.target.value)
           if (!showDrop) openDrop()
-          if (!e.target.value && value) onChange('')
+          if (!e.target.value && !isEmpty) onChange(emptyValue)
         }}
         onFocus={openDrop}
         onBlur={() => setTimeout(() => setShowDrop(false), 200)}
@@ -5799,7 +5802,7 @@ function SjaModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '24px', display:'flex', flexDirection:'column', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px' }}>
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel / Jobbtype *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Arbeid i høyde – takarbeid" style={hmsInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt *</label><SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={hmsInp} placeholder="Velg prosjekt..." required /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Dato</label><input type="date" value={dato} onChange={e=>setDato(e.target.value)} style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sted</label><input value={sted} onChange={e=>setSted(e.target.value)} placeholder="Lokasjon" style={hmsInp} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ansvarlig leder</label><EmployeeNameSelect value={ansvarlig} onChange={v=>setAnsvarlig(v)} onSelect={emp => setAnsvarlig(`${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
@@ -5959,7 +5962,7 @@ function RuhModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="Kort beskrivelse av hendelsen" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={hmsInp} placeholder="Velg prosjekt..." required /></div>
           <div><label style={lbl()}>Hendelsestype</label><select value={form.hendelsestype} onChange={e=>set('hendelsestype',e.target.value)} style={hmsInp}>{TYPER.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Tidspunkt</label><input type="time" value={form.tidspunkt} onChange={e=>set('tidspunkt',e.target.value)} style={hmsInp} /></div>
@@ -6048,7 +6051,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={hmsInp} placeholder="Navn på risikoanalysen" /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={hmsInp} placeholder="Velg prosjekt..." required /></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Område / Aktivitet</label><input value={form.omrade} onChange={e=>set('omrade',e.target.value)} placeholder="F.eks. Gravearbeider" style={hmsInp} /></div>
           <div><label style={lbl()}>Ansvarlig</label><EmployeeNameSelect value={form.ansvarlig} onChange={v=>set('ansvarlig',v)} onSelect={emp => set('ansvarlig', `${emp.first_name||''} ${emp.last_name||''}`.trim())} placeholder="Velg ansvarlig" style={{ padding:'8px 10px', fontSize:'13px' }} /></div>
@@ -6173,7 +6176,7 @@ function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
       <form onSubmit={handleSave} style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'18px' }}>
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}><label style={lbl()}>Tittel *</label><input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="F.eks. Mottak stål – leveranse 14" style={hmsInp} /></div>
-          <div><label style={lbl()}>Prosjekt *</label><select value={projectId} onChange={e=>setProjectId(e.target.value)} style={hmsInp} required><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={lbl()}>Prosjekt *</label><SearchableProjectSelect value={projectId} onChange={setProjectId} projects={projects} style={hmsInp} placeholder="Velg prosjekt..." required /></div>
           <div><label style={lbl()}>Dato</label><input type="date" value={form.dato} onChange={e=>set('dato',e.target.value)} style={hmsInp} /></div>
           <div><label style={lbl()}>Leverandør</label><input value={form.leverandor} onChange={e=>set('leverandor',e.target.value)} placeholder="Firmanavn" style={hmsInp} /></div>
           <div><label style={lbl()}>Ordrenummer</label><input value={form.ordrenummer} onChange={e=>set('ordrenummer',e.target.value)} placeholder="Bestillingsnr." style={hmsInp} /></div>
@@ -7187,7 +7190,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 
             <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={mInp}>{Object.keys(MASKIN_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
             {form.status==='På prosjekt' && (
-              <div>{lbl('Tilordnet prosjekt')}<select value={form.current_project_id} onChange={e=>set('current_project_id',e.target.value)} style={mInp}><option value="">Velg prosjekt...</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Tilordnet prosjekt')}<SearchableProjectSelect value={form.current_project_id} onChange={v => set('current_project_id', v)} projects={projects} style={mInp} placeholder="Velg prosjekt..." /></div>
             )}
             <div>{lbl('Merke')}<input value={form.brand} onChange={e=>set('brand',e.target.value)} placeholder="F.eks. Makita, Hilti, Layher..." style={mInp} /></div>
             <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={mInp} /></div>
@@ -8085,7 +8088,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'16px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tilbudstittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbud betongarbeider Blokk B" style={qInp} /></div>
               <div>{lbl('Tilbudsnummer')}<input value={form.quote_number} onChange={e=>set('quote_number',e.target.value)} style={qInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={qInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={qInp} placeholder="Ingen" /></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'16px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div style={{ gridColumn:'1/-1' }}>
                 {lbl('Velg eksisterende kunde')}
@@ -9405,7 +9408,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder={isIncoming?'F.eks. Anbudsforespørsel nybygg Storgata 12':'F.eks. Grunnarbeid – UE anbud'} style={tInp} /></div>
               <div>{lbl('Anbudsnummer')}<input value={form.tender_number} onChange={e=>set('tender_number',e.target.value)} style={tInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={tInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={tInp} placeholder="Ingen" /></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 {isIncoming?'Byggherre / Oppdragsgiver':'Kontakt / UE-koordinator'}</div></div>
               <div style={{ gridColumn:'1/-1' }}>
                 {lbl(isIncoming ? 'Velg eksisterende byggherre' : 'Velg eksisterende kontakt')}
@@ -11048,7 +11051,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'14px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Orden betongarbeider Blokk B" style={oInp} /></div>
               <div>{lbl('Ordrenummer')}<input value={form.order_number} onChange={e=>set('order_number',e.target.value)} style={oInp} /></div>
-              <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={oInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+              <div>{lbl('Knytt til prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={oInp} placeholder="Ingen" /></div>
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>👤 Kundeinformasjon</div></div>
               <div style={{ gridColumn:'1/-1' }}>
                 {lbl('Velg eksisterende kunde')}
@@ -12187,7 +12190,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
             <div>{lbl('Forfallsdato')}<input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={iInp} /></div>
             <div>{lbl('KID-nummer')}<input value={form.kid} onChange={e=>set('kid',e.target.value)} placeholder="KID / betalingsreferanse" style={iInp} /></div>
             <div>{lbl('Bankkonto')}<input value={form.bank_account} onChange={e=>set('bank_account',e.target.value)} placeholder="1234.56.78901" style={iInp} /></div>
-            <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={iInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+            <div>{lbl('Knytt til prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={iInp} placeholder="Ingen" /></div>
           </div>
           <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'20px' }}>
             <div>
@@ -19685,7 +19688,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
           </div>
 
           <div>{lbl('Sted / Lokasjon')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Møterom A, Byggeplass..." style={cInp} /></div>
-          <div>{lbl('Knytt til prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={cInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div>{lbl('Knytt til prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={cInp} placeholder="Ingen" /></div>
           <div>{lbl('Beskrivelse')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...cInp,resize:'none' }} placeholder="Valgfri beskrivelse..." /></div>
 
           {/* Visibility */}
@@ -23154,7 +23157,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           {[['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
           ))}
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={bInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={bInp} placeholder="Ingen" /></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
@@ -23278,7 +23281,7 @@ function BildedokPage() {
           ))}
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          <div style={{ position:'relative' }}><select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={selStyle}><option value="alle">Alle prosjekter</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
+          <div style={{ position:'relative' }}><SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={selStyle} placeholder="Alle prosjekter" emptyValue="alle" /><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterFase} onChange={e=>setFilterFase(e.target.value)} style={selStyle}><option value="alle">Alle faser</option>{BYGGEFASER.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterRom} onChange={e=>setFilterRom(e.target.value)} style={selStyle}><option value="alle">Alle rom</option>{allRooms.map(r=><option key={r} value={r}>{r}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
           <div style={{ position:'relative' }}><select value={filterAnsatt} onChange={e=>setFilterAnsatt(e.target.value)} style={selStyle}><option value="alle">Alle ansatte</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><span style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94a3b8',fontSize:'11px' }}>▼</span></div>
@@ -23717,7 +23720,7 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
           <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
           <div>{lbl('Kategori')}<select value={form.category} onChange={e=>set('category',e.target.value)} style={fInp}><option value="">Velg...</option>{FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
           <div>{lbl('Plassering')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Kjeller / Rom 101" style={fInp} /></div>
-          <div>{lbl('Prosjekt')}<select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div>{lbl('Prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={fInp} placeholder="Ingen" /></div>
           <div>{lbl('Produsent')}<input value={form.manufacturer} onChange={e=>set('manufacturer',e.target.value)} placeholder="F.eks. Nibe" style={fInp} /></div>
           <div>{lbl('Modell')}<input value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Modellnummer" style={fInp} /></div>
           <div>{lbl('Serienummer')}<input value={form.serial_number} onChange={e=>set('serial_number',e.target.value)} style={fInp} /></div>
@@ -23782,7 +23785,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
               ))}
             </div>
           </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><select value={form.project_id} onChange={e=>set('project_id',e.target.value)} style={fInp}><option value="">Ingen</option>{projectOptions(projects).map(p => <option key={p.id} value={p.id}>{'    '.repeat(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name}{p.project_number ? ` (${p.project_number})` : ''}</option>)}</select></div>
+          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={fInp} placeholder="Ingen" /></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Koble til komponent (valgfritt)</label><select value={form.component_id} onChange={e=>set('component_id',e.target.value)} style={fInp}><option value="">Ingen</option>{filteredComponents.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mappe</label><input value={form.folder_path} onChange={e=>set('folder_path',e.target.value)} placeholder="/Ventilasjon" style={fInp} /></div>
           <div>
