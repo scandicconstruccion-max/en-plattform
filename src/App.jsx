@@ -13824,7 +13824,7 @@ function RessursGanttGrid({
   filterProject, filterEmployee,
   settings, isWeekend, isToday,
   getProjectColor, holidays,
-  onOpenBooking, onMovePlan, onDragStart, onDragEnd, onResizePlan,
+  onOpenBooking, onOpenFase, onMovePlan, onDragStart, onDragEnd, onResizePlan,
   dragging, resizing,
   setShowOppgaveModal,
   conflictHighlight,
@@ -14387,13 +14387,18 @@ function RessursGanttGrid({
                         onClick={(e)=>{
                           e.stopPropagation()
                           setHoveredBar(null)
-                          onOpenBooking({
-                            resourceId: res.id,
-                            resourceName: name,
-                            date: bar.startDate,
-                            existingPlans: bar.plans,
-                            editPlan: firstPlan,
-                          })
+                          // Åpne fase-redigering. Hvis onOpenFase ikke er satt, fall tilbake til BookingModal
+                          if (onOpenFase) {
+                            onOpenFase({ bar, resourceName: name })
+                          } else {
+                            onOpenBooking({
+                              resourceId: res.id,
+                              resourceName: name,
+                              date: bar.startDate,
+                              existingPlans: bar.plans,
+                              editPlan: firstPlan,
+                            })
+                          }
                         }}
                         style={{
                           position:'absolute',
@@ -15050,6 +15055,7 @@ function RessursPage() {
   const [resourceType, setResourceType] = useState('ansatte')
   const [currentDate, setCurrentDate] = useState(startOfWeek(new Date().toISOString().split('T')[0]))
   const [showBookingModal, setShowBookingModal] = useState(null)
+  const [showFaseModal, setShowFaseModal] = useState(null) // { bar, resourceName } — null hvis ikke åpen
   const [dragging, setDragging] = useState(null)
   const [dragOver, setDragOver] = useState(null)
   const [resizing, setResizing] = useState(null) // { planId, direction: 'left'|'right', startX, origDate, resourceId }
@@ -15814,6 +15820,7 @@ function RessursPage() {
           getProjectColor={getProjectColor}
           holidays={ALL_HOLIDAYS}
           onOpenBooking={(modalData) => setShowBookingModal(modalData)}
+          onOpenFase={(faseData) => setShowFaseModal(faseData)}
           onMovePlan={async (plan, newResourceId, newDate, isCopy) => {
             const { id, resource_id, date, created_at, updated_at, ...rest } = plan
             if (isCopy) {
@@ -16118,6 +16125,29 @@ function RessursPage() {
           defaultEndTime={settings.workdayEnd}
           settings={settings}
           zIndex={(showLedigMannskap || showLedigMaskiner) ? 120 : 100}
+        />
+      )}
+
+      {showFaseModal && (
+        <FaseRedigeringsModal
+          bar={showFaseModal.bar}
+          resourceName={showFaseModal.resourceName}
+          allPlans={plans}
+          projects={projects}
+          user={user}
+          settings={settings}
+          onClose={() => setShowFaseModal(null)}
+          onSaved={() => { setShowFaseModal(null); load() }}
+          onEditSingleDay={(bar) => {
+            // Fallback til BookingModal for første dag i fasen
+            setShowBookingModal({
+              resourceId: bar.resourceId,
+              resourceName: showFaseModal.resourceName,
+              date: bar.startDate,
+              existingPlans: bar.plans,
+              editPlan: bar.plans[0],
+            })
+          }}
         />
       )}
 
@@ -16457,6 +16487,366 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
             style={{ flex:2, padding:'10px', background: saving ? '#c4b5fd' : autoColor, color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
             {saving ? 'Lagrer...' : isEdit ? 'Lagre endringer' : 'Opprett milepæl'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── FaseRedigeringsModal — åpnes når bruker klikker en Gantt-bjelke ──
+// En "fase" = alle bookinger i bar.plans (samme prosjekt + oppgave + ressurs + tilstøtende dager)
+// Operasjoner: Flytt, Split, Slett, Rediger enkeltdag (fallback til BookingModal)
+function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onClose, onSaved, onEditSingleDay, settings = { skipWeekends: true } }) {
+  const confirm = useConfirm()
+  const [mode, setMode] = useState('overview') // 'overview' | 'move' | 'split'
+  const [moveDays, setMoveDays] = useState(0)
+  const [moveFollowing, setMoveFollowing] = useState(false)
+  const [splitDate, setSplitDate] = useState(bar.startDate)
+  const [saving, setSaving] = useState(false)
+
+  const proj = projects.find(p => p.id === bar.projectId)
+  const task = bar.taskDescription
+  const startFmt = new Date(bar.startDate + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short', year:'numeric' })
+  const endFmt = new Date(bar.endDate + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short', year:'numeric' })
+  const totalHours = bar.plans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
+  const dayCount = bar.plans.length
+
+  // Finn etterfølgende faser for samme ressurs og prosjekt
+  const laterPlans = React.useMemo(() => {
+    return allPlans.filter(p =>
+      p.resource_id === bar.resourceId &&
+      p.project_id === bar.projectId &&
+      p.date > bar.endDate &&
+      !bar.plans.find(bp => bp.id === p.id)
+    ).sort((a, b) => a.date.localeCompare(b.date))
+  }, [allPlans, bar])
+
+  // Hjelper: legg til arbeidsdager til dato
+  const addWorkdays = (dateStr, days) => {
+    const d = new Date(dateStr + 'T12:00:00')
+    if (!settings.skipWeekends) {
+      d.setDate(d.getDate() + days)
+      return d.toISOString().split('T')[0]
+    }
+    let added = 0
+    const step = days > 0 ? 1 : -1
+    const target = Math.abs(days)
+    while (added < target) {
+      d.setDate(d.getDate() + step)
+      const dow = d.getDay()
+      if (dow !== 0 && dow !== 6) added++
+    }
+    return d.toISOString().split('T')[0]
+  }
+
+  // Hjelper: sjekk om flytting vil forårsake overlap med etterfølgende faser
+  const wouldOverlap = (offsetDays) => {
+    if (offsetDays <= 0) return { overlap: false }
+    const newEndDate = addWorkdays(bar.endDate, offsetDays)
+    const overlappingPlans = laterPlans.filter(p => p.date <= newEndDate)
+    if (overlappingPlans.length === 0) return { overlap: false }
+    // Grupper overlappende plans per fase
+    const tasks = new Set(overlappingPlans.map(p => p.task_description || '(uten oppgave)'))
+    return {
+      overlap: true,
+      count: overlappingPlans.length,
+      tasks: Array.from(tasks),
+      firstDate: overlappingPlans[0].date,
+      plans: overlappingPlans
+    }
+  }
+
+  // ── SLETT HELE FASEN ──
+  const handleDelete = async () => {
+    const msg = `Slette hele fasen? ${dayCount} bookinger blir fjernet.`
+    const sub = task ? `Fase: ${task}` : `Prosjekt: ${proj?.name || 'Ukjent'}`
+    if (!(await confirm({ message: msg, subMessage: sub, confirmLabel: 'Slett fase', danger: true }))) return
+    setSaving(true)
+    try {
+      const ids = bar.plans.map(p => p.id)
+      // Også slett evt. linkede maskin-bookinger
+      const linkedIds = allPlans.filter(p => p.linked_resource_plan_id && ids.includes(p.linked_resource_plan_id)).map(p => p.id)
+      const allIds = [...ids, ...linkedIds]
+      const { error } = await supabase.from('resource_plans').delete().in('id', allIds)
+      if (error) throw error
+      onSaved()
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  // ── FLYTT FASEN ──
+  const handleMove = async () => {
+    if (moveDays === 0) return alert('Velg antall dager å flytte')
+    // Sjekk overlap hvis flytter fremover
+    const overlap = wouldOverlap(moveDays)
+    let alsoShiftFollowing = moveFollowing
+    if (overlap.overlap && !alsoShiftFollowing) {
+      const ok = await confirm({
+        message: `⚠️ Overlap med etterfølgende faser`,
+        subMessage: `Flyttingen vil overlappe med ${overlap.count} booking${overlap.count === 1 ? '' : 'er'} (${overlap.tasks.join(', ')}). Vil du også forskyve disse tilsvarende?`,
+        confirmLabel: 'Ja, forskyv også etterfølgende',
+      })
+      if (ok) alsoShiftFollowing = true
+      // Hvis ikke ok → fortsett likevel, skaper dobbeltbooking (brukerens valg)
+    }
+
+    setSaving(true)
+    try {
+      // Oppdater datoene på alle bookinger i denne fasen
+      const updates = bar.plans.map(p => ({
+        id: p.id,
+        newDate: addWorkdays(p.date, moveDays)
+      }))
+
+      // Hvis vi også skal skyve etterfølgende, legg til dem
+      if (alsoShiftFollowing) {
+        laterPlans.forEach(p => {
+          updates.push({ id: p.id, newDate: addWorkdays(p.date, moveDays) })
+        })
+      }
+
+      // Batch-oppdater (Supabase støtter ikke egentlig bulk UPDATE med forskjellige verdier,
+      // så vi gjør det sekvensielt men parallelt via Promise.all)
+      const results = await Promise.all(updates.map(u =>
+        supabase.from('resource_plans').update({ date: u.newDate, updated_at: new Date().toISOString() }).eq('id', u.id)
+      ))
+      const firstError = results.find(r => r.error)
+      if (firstError?.error) throw firstError.error
+      onSaved()
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  // ── SPLIT FASEN ──
+  const handleSplit = async () => {
+    if (!splitDate || splitDate <= bar.startDate || splitDate > bar.endDate) {
+      return alert('Velg en dato mellom første og siste dag i fasen')
+    }
+    setSaving(true)
+    try {
+      // Plans på splitDate og etter flyttes til "del 2"
+      // Plans før splitDate forblir "del 1"
+      const firstPartPlans = bar.plans.filter(p => p.date < splitDate)
+      const secondPartPlans = bar.plans.filter(p => p.date >= splitDate)
+
+      if (firstPartPlans.length === 0 || secondPartPlans.length === 0) {
+        alert('Split-dato må gi bookinger på begge sider')
+        setSaving(false)
+        return
+      }
+
+      // Oppdater task_description på begge deler
+      const baseTask = task || proj?.name || 'Fase'
+      const firstTask = `${baseTask} (del 1)`
+      const secondTask = `${baseTask} (del 2)`
+
+      // Oppdater alle rader
+      const updates = [
+        ...firstPartPlans.map(p => ({ id: p.id, task: firstTask })),
+        ...secondPartPlans.map(p => ({ id: p.id, task: secondTask })),
+      ]
+      const results = await Promise.all(updates.map(u =>
+        supabase.from('resource_plans').update({ task_description: u.task, updated_at: new Date().toISOString() }).eq('id', u.id)
+      ))
+      const firstError = results.find(r => r.error)
+      if (firstError?.error) throw firstError.error
+      onSaved()
+    } catch (e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  // ── RENDER ──
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding:'18px 22px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexShrink:0 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <h2 style={{ margin:'0 0 4px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🔨 Rediger fase</h2>
+            <div style={{ fontSize:'13px', color:'#64748b' }}>
+              <span style={{ fontWeight:'600', color:'#0f172a' }}>{resourceName}</span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>×</button>
+        </div>
+
+        {/* Fase-info */}
+        <div style={{ padding:'16px 22px', borderBottom:'1px solid #f1f5f9', background:'#f8fafc', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
+            <div style={{ width:'4px', alignSelf:'stretch', background: proj ? (proj.color || '#64748b') : '#64748b', borderRadius:'2px', minHeight:'36px' }} />
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {proj?.name || 'Uten prosjekt'}
+              </div>
+              {task && (
+                <div style={{ fontSize:'12px', color:'#475569', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  🔨 {task}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'14px', fontSize:'12px', color:'#64748b', flexWrap:'wrap' }}>
+            <div>📅 {startFmt.split(' ').slice(1).join(' ')} – {endFmt.split(' ').slice(1).join(' ')}</div>
+            <div>⏱️ {totalHours}t · {dayCount} dag{dayCount !== 1 ? 'er' : ''}</div>
+          </div>
+        </div>
+
+        {/* Innhold — dynamisk basert på modus */}
+        <div style={{ overflowY:'auto', flex:1, padding:'18px 22px' }}>
+
+          {mode === 'overview' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'4px' }}>Handlinger</div>
+
+              {/* Flytt fasen */}
+              <button onClick={() => setMode('move')} disabled={saving}
+                style={{ display:'flex', alignItems:'center', gap:'12px', padding:'14px 16px', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', textAlign:'left', width:'100%' }}>
+                <span style={{ fontSize:'22px', flexShrink:0 }}>🗓️</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Flytt fasen</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>Forskyv alle bookinger i fasen et antall dager</div>
+                </div>
+                <span style={{ fontSize:'16px', color:'#94a3b8' }}>›</span>
+              </button>
+
+              {/* Split fasen */}
+              {dayCount >= 2 && (
+                <button onClick={() => setMode('split')} disabled={saving}
+                  style={{ display:'flex', alignItems:'center', gap:'12px', padding:'14px 16px', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', textAlign:'left', width:'100%' }}>
+                  <span style={{ fontSize:'22px', flexShrink:0 }}>✂️</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Split fasen</div>
+                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>Del fasen i to på en valgt dato</div>
+                  </div>
+                  <span style={{ fontSize:'16px', color:'#94a3b8' }}>›</span>
+                </button>
+              )}
+
+              {/* Rediger enkeltdag */}
+              <button onClick={() => { onEditSingleDay(bar); onClose() }} disabled={saving}
+                style={{ display:'flex', alignItems:'center', gap:'12px', padding:'14px 16px', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', textAlign:'left', width:'100%' }}>
+                <span style={{ fontSize:'22px', flexShrink:0 }}>✏️</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Rediger enkeltdag</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>Åpne første dag i fasen for finjustering (timer, oppgave, notat)</div>
+                </div>
+                <span style={{ fontSize:'16px', color:'#94a3b8' }}>›</span>
+              </button>
+
+              {/* Slett fasen */}
+              <button onClick={handleDelete} disabled={saving}
+                style={{ display:'flex', alignItems:'center', gap:'12px', padding:'14px 16px', background:'white', border:'1px solid #fecaca', borderRadius:'10px', cursor:'pointer', textAlign:'left', width:'100%', marginTop:'6px' }}>
+                <span style={{ fontSize:'22px', flexShrink:0 }}>🗑️</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#dc2626' }}>Slett hele fasen</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>Fjerner alle {dayCount} bookinger{bar.plans.some(p => p.linked_machine_id) ? ' + koblede maskiner' : ''}</div>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {mode === 'move' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                <button onClick={() => setMode('overview')} style={{ background:'#f1f5f9', border:'none', borderRadius:'6px', padding:'4px 10px', cursor:'pointer', fontSize:'12px', color:'#64748b' }}>← Tilbake</button>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>🗓️ Flytt fasen</div>
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Antall arbeidsdager å flytte</label>
+                <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                  <button onClick={() => setMoveDays(d => d - 1)}
+                    style={{ width:'36px', height:'36px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'16px', fontWeight:'700' }}>−</button>
+                  <input type="number" value={moveDays} onChange={e => setMoveDays(parseInt(e.target.value) || 0)}
+                    style={{ flex:1, padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'16px', fontWeight:'700', textAlign:'center', outline:'none' }} />
+                  <button onClick={() => setMoveDays(d => d + 1)}
+                    style={{ width:'36px', height:'36px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'16px', fontWeight:'700' }}>+</button>
+                </div>
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px' }}>
+                  Positivt tall = fremover, negativt = bakover. {settings.skipWeekends ? 'Helger hoppes over.' : 'Helger telles med.'}
+                </div>
+              </div>
+
+              {moveDays !== 0 && (
+                <div style={{ background:'#eff6ff', borderRadius:'10px', padding:'10px 14px', border:'1px solid #bfdbfe', fontSize:'12px', color:'#1e40af' }}>
+                  <div>📅 Ny periode: {addWorkdays(bar.startDate, moveDays)} – {addWorkdays(bar.endDate, moveDays)}</div>
+                </div>
+              )}
+
+              {/* Overlap-varsel */}
+              {moveDays > 0 && wouldOverlap(moveDays).overlap && !moveFollowing && (
+                <div style={{ background:'#fef3c7', borderRadius:'10px', padding:'10px 14px', border:'1px solid #fde68a', fontSize:'12px', color:'#92400e' }}>
+                  ⚠️ Vil overlappe med {wouldOverlap(moveDays).count} etterfølgende booking{wouldOverlap(moveDays).count === 1 ? '' : 'er'} ({wouldOverlap(moveDays).tasks.join(', ')}). Kryss av nedenfor for å forskyve dem også.
+                </div>
+              )}
+
+              {laterPlans.length > 0 && moveDays !== 0 && (
+                <label style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px', cursor:'pointer', border:'1px solid #e2e8f0' }}>
+                  <input type="checkbox" checked={moveFollowing} onChange={e => setMoveFollowing(e.target.checked)} style={{ cursor:'pointer' }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>Forskyv også etterfølgende faser</div>
+                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>{laterPlans.length} etterfølgende bookinger på samme ressurs + prosjekt</div>
+                  </div>
+                </label>
+              )}
+
+              <div style={{ display:'flex', gap:'8px', marginTop:'6px' }}>
+                <button onClick={() => setMode('overview')}
+                  style={{ flex:1, padding:'10px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleMove} disabled={saving || moveDays === 0}
+                  style={{ flex:2, padding:'10px', background:(saving || moveDays === 0)?'#94a3b8':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:(saving || moveDays === 0)?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
+                  {saving ? 'Flytter...' : `Flytt ${moveDays > 0 ? '+' : ''}${moveDays} dag${Math.abs(moveDays) !== 1 ? 'er' : ''}`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'split' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                <button onClick={() => setMode('overview')} style={{ background:'#f1f5f9', border:'none', borderRadius:'6px', padding:'4px 10px', cursor:'pointer', fontSize:'12px', color:'#64748b' }}>← Tilbake</button>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>✂️ Split fasen</div>
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.04em' }}>Split på dato</label>
+                <select value={splitDate} onChange={e => setSplitDate(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'14px', outline:'none', background:'white', boxSizing:'border-box' }}>
+                  <option value="">Velg dato...</option>
+                  {bar.plans.slice(1).map(p => (
+                    <option key={p.id} value={p.date}>
+                      {new Date(p.date + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'long', day:'numeric', month:'long' })}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px' }}>Dagen blir starten på del 2. Dager før blir del 1.</div>
+              </div>
+
+              {splitDate && splitDate > bar.startDate && splitDate <= bar.endDate && (
+                <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 14px', border:'1px solid #bbf7d0' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#059669', marginBottom:'6px', textTransform:'uppercase' }}>Resultat</div>
+                  <div style={{ fontSize:'12px', color:'#0f172a', marginBottom:'4px' }}>
+                    <strong>Del 1:</strong> {bar.plans.filter(p => p.date < splitDate).length} dag{bar.plans.filter(p => p.date < splitDate).length !== 1 ? 'er' : ''} ({bar.startDate} – {[...bar.plans.filter(p => p.date < splitDate)].pop()?.date})
+                  </div>
+                  <div style={{ fontSize:'12px', color:'#0f172a' }}>
+                    <strong>Del 2:</strong> {bar.plans.filter(p => p.date >= splitDate).length} dag{bar.plans.filter(p => p.date >= splitDate).length !== 1 ? 'er' : ''} ({splitDate} – {bar.endDate})
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display:'flex', gap:'8px', marginTop:'6px' }}>
+                <button onClick={() => setMode('overview')}
+                  style={{ flex:1, padding:'10px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSplit} disabled={saving || !splitDate || splitDate <= bar.startDate || splitDate > bar.endDate}
+                  style={{ flex:2, padding:'10px', background:(saving || !splitDate || splitDate <= bar.startDate || splitDate > bar.endDate)?'#94a3b8':'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:(saving || !splitDate)?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
+                  {saving ? 'Splitter...' : 'Split fasen'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
