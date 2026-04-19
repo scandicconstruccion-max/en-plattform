@@ -7128,7 +7128,9 @@ const ConfirmContext = React.createContext(null)
 function ConfirmProvider({ children }) {
   // Keep ALL state in a single ref to avoid stale closure issues
   const [dialog, setDialog] = React.useState(null)
-  // dialog = { message, subMessage, confirmLabel, danger } | null
+  // dialog = { message, subMessage, confirmLabel, danger, alertOnly, kind } | null
+  //   alertOnly: true  → vis kun OK-knapp (ingen Avbryt), for "info"/"obs"-meldinger
+  //   kind: 'info' | 'warn' | 'success' | 'error' — styrer ikon og farge på toppen
   const cbRef = React.useRef(null) // holds { resolve }
 
   // confirm() opens the dialog and returns a Promise
@@ -7147,6 +7149,23 @@ function ConfirmProvider({ children }) {
     if (cb) cb(value)
   }
 
+  // Hent ikon og bakgrunnsfarge fra kind (eller danger-flagget)
+  const visual = (() => {
+    if (!dialog) return null
+    if (dialog.alertOnly) {
+      switch (dialog.kind) {
+        case 'success': return { emoji: '✅', bg: '#f0fdf4' }
+        case 'warn':    return { emoji: '⚠️',  bg: '#fffbeb' }
+        case 'error':   return { emoji: '❌', bg: '#fef2f2' }
+        case 'info':
+        default:        return { emoji: 'ℹ️',  bg: '#eff6ff' }
+      }
+    }
+    return dialog.danger
+      ? { emoji: '⚠️', bg: '#fef2f2' }
+      : { emoji: '❓', bg: '#f0fdf4' }
+  })()
+
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
@@ -7155,20 +7174,23 @@ function ConfirmProvider({ children }) {
           <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => respond(false)} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'24px 24px 0' }}>
-              <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: dialog.danger ? '#fef2f2' : '#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
-                {dialog.danger ? '⚠️' : '❓'}
+              <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: visual.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
+                {visual.emoji}
               </div>
               <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{dialog.message}</h3>
               {dialog.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{dialog.subMessage}</p>}
             </div>
             <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end' }}>
-              <button onClick={() => respond(false)}
-                style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
-                Avbryt
-              </button>
+              {!dialog.alertOnly && (
+                <button onClick={() => respond(false)}
+                  style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
+                  Avbryt
+                </button>
+              )}
               <button onClick={() => respond(true)}
-                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: dialog.danger ? '#dc2626' : '#059669' }}>
-                {dialog.confirmLabel || (dialog.danger ? 'Slett' : 'Bekreft')}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: dialog.alertOnly ? '#059669' : (dialog.danger ? '#dc2626' : '#059669') }}
+                autoFocus>
+                {dialog.confirmLabel || (dialog.alertOnly ? 'OK' : (dialog.danger ? 'Slett' : 'Bekreft'))}
               </button>
             </div>
           </div>
@@ -7179,6 +7201,17 @@ function ConfirmProvider({ children }) {
 }
 
 const useConfirm = () => React.useContext(ConfirmContext)
+
+// useAppAlert — erstatter window.alert() med en stilren popup som matcher resten av systemet.
+// Bruk: const alert = useAppAlert(); await alert('Velg prosjekt') eller
+//       await alert({ message: 'Feil', subMessage: 'Noe gikk galt', kind: 'error' })
+const useAppAlert = () => {
+  const confirm = React.useContext(ConfirmContext)
+  return React.useCallback((opts) => {
+    const options = typeof opts === 'string' ? { message: opts } : opts
+    return confirm({ ...options, alertOnly: true })
+  }, [confirm])
+}
 // ─── END CONFIRM DIALOG ───────────────────────────────────────────────────────
 
 // Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
@@ -18809,6 +18842,7 @@ function LedigMaskinerModal({ machines, plans, projects, onClose, onOpenBooking 
 }
 
 function OppgavePlanleggingModal({ employees, machines, projects, allSkills, plans, dates, user, onClose, onSaved, workdayStart='07:00', workdayEnd='15:30' }) {
+  const appAlert = useAppAlert()
   const [step, setStep] = useState(1)
   const [projectId, setProjectId] = useState('')
   const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0])
@@ -18832,8 +18866,8 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
     return result
   }
   const handleSave = async () => {
-    if (!projectId) return alert('Velg prosjekt')
-    if (selectedEmployees.length===0&&selectedMachines.length===0) return alert('Velg minst én ressurs')
+    if (!projectId) return appAlert({ message: 'Velg prosjekt', subMessage: 'Du må velge et prosjekt før du kan planlegge ressurser.', kind: 'warn' })
+    if (selectedEmployees.length===0&&selectedMachines.length===0) return appAlert({ message: 'Velg minst én ressurs', subMessage: 'Legg til minst én ansatt eller maskin før du planlegger.', kind: 'warn' })
     setSaving(true)
     try {
       const rangeDates=getDatesRange(); const inserts=[]
@@ -18841,7 +18875,7 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
       for (const machId of selectedMachines) for (const date of rangeDates) inserts.push(sanitizeDbPayload({ resource_id:machId,resource_type:'machine',project_id:projectId,date,hours:parseFloat(hours)||8,notes:notes||null,created_by:user?.id }))
       if (inserts.length>0) { const {error}=await supabase.from('resource_plans').insert(inserts); if(error) throw error }
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+    } catch(e) { appAlert({ message: 'Feil ved lagring', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
@@ -18939,7 +18973,7 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
           <div>{step>1&&<button onClick={()=>setStep(s=>s-1)} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>← Tilbake</button>}</div>
           <div style={{ display:'flex',gap:'10px' }}>
             <button onClick={onClose} style={{ padding:'10px 20px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
-            {step<3&&<button onClick={()=>{ if(step===1&&!projectId) return alert('Velg prosjekt'); setStep(s=>s+1) }} style={{ padding:'10px 24px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>Neste →</button>}
+            {step<3&&<button onClick={()=>{ if(step===1&&!projectId) return appAlert({ message: 'Velg prosjekt', subMessage: 'Du må velge et prosjekt før du kan gå videre.', kind: 'warn' }); setStep(s=>s+1) }} style={{ padding:'10px 24px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'700' }}>Neste →</button>}
             {step===3&&<button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px',background:saving?'#6ee7b7':'#059669',color:'white',border:'none',borderRadius:'10px',cursor:saving?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700' }}>{saving?'Planlegger...':'✅ Bekreft og planlegg'}</button>}
           </div>
         </div>
