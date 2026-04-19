@@ -16139,7 +16139,7 @@ function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, on
 
   // ── Hjelpere ──
   // Liste over arbeidsdager (mandag-fredag) i valgt periode
-  const periodDates = useMemo(() => {
+  const periodDates = React.useMemo(() => {
     const list = []
     const start = new Date(fromDate + 'T12:00:00')
     const end = new Date((mode === 'day' ? fromDate : toDate) + 'T12:00:00')
@@ -16155,7 +16155,7 @@ function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, on
   const totalDays = periodDates.length
 
   // Book-timer per ansatt per dato
-  const bookedByEmpDate = useMemo(() => {
+  const bookedByEmpDate = React.useMemo(() => {
     const map = {}
     plans.forEach(p => {
       if (!p.resource_id || !p.date) return
@@ -16174,15 +16174,15 @@ function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, on
   const totalHoursInPeriod = (empId) => periodDates.reduce((sum, d) => sum + (bookedByEmpDate[`${empId}|${d}`] || 0), 0)
 
   // Kompetanse
-  const skillsPerEmp = useMemo(() => {
+  const skillsPerEmp = React.useMemo(() => {
     const acc = {}
     employees.forEach(emp => { acc[emp.id] = allSkills.filter(s => s.employee_id === emp.id).map(s => s.skill) })
     return acc
   }, [employees, allSkills])
-  const uniqueSkills = useMemo(() => [...new Set(allSkills.map(s => s.skill))].sort(), [allSkills])
+  const uniqueSkills = React.useMemo(() => [...new Set(allSkills.map(s => s.skill))].sort(), [allSkills])
 
   // Filter etter kompetanse
-  const filteredEmps = useMemo(() =>
+  const filteredEmps = React.useMemo(() =>
     employees.filter(emp => !filterSkill || skillsPerEmp[emp.id]?.includes(filterSkill)),
     [employees, filterSkill, skillsPerEmp])
 
@@ -16195,7 +16195,7 @@ function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, on
   const opptatt = filteredEmps.filter(e => daysFreeInPeriod(e.id) === 0 && totalDays > 0)
 
   // "Blir snart ledig" — opptatte ansatte som blir ledig innen 7 dager etter periodeslutt
-  const snart_ledige = useMemo(() => {
+  const snart_ledige = React.useMemo(() => {
     const scanStart = mode === 'day' ? fromDate : toDate
     const scanEnd = addDays(scanStart, 14)
     return opptatt.map(emp => {
