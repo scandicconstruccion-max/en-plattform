@@ -15524,6 +15524,7 @@ function RessursPage() {
           machines={machines}
           defaultStartTime={settings.workdayStart}
           defaultEndTime={settings.workdayEnd}
+          zIndex={(showLedigMannskap || showLedigMaskiner) ? 120 : 100}
         />
       )}
 
@@ -15868,7 +15869,7 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
   )
 }
 
-function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30' }) {
+function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30', zIndex=100 }) {
   const confirm = useConfirm()
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
@@ -16000,7 +16001,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   const selectedMachine = availableMachines.find(m=>m.id===linkedMachineId)
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div style={{ position:'fixed',inset:0,zIndex:zIndex,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexShrink:0 }}>
