@@ -441,7 +441,7 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
     <select value={value || ''} onChange={e => onChange(e.target.value, emps.find(emp => emp.id === e.target.value))} required={required} style={selStyle}>
       <option value="">{placeholder || 'Velg ansatt...'}</option>
       {emps.map(emp => {
-        const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email || 'Uten navn'
+        const name = getEmployeeName(emp) || emp.email || 'Uten navn'
         return <option key={emp.id} value={emp.id}>{name}{emp.role ? ` (${emp.role})` : ''}</option>
       })}
     </select>
@@ -451,6 +451,14 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 // ── Ansattvelger som setter navn/epost/telefon fra valgt ansatt ──
 // Global cache av ansatte — hentes én gang per sesjon for å unngå N fetch-er
 const _employeeCache = { data: null, loading: null, subscribers: new Set() }
+
+// Returnerer visningsnavn uansett om ansatt har first_name+last_name eller kombinert name-felt
+function getEmployeeName(emp) {
+  if (!emp) return ''
+  if (emp.first_name || emp.last_name) return `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+  if (emp.name) return emp.name
+  return ''
+}
 
 function getCachedEmployees() {
   if (_employeeCache.data) return Promise.resolve(_employeeCache.data)
@@ -492,56 +500,114 @@ function useEmployees() {
 // Props:
 //   value, onChange — tekstlig navn (free-text fallback)
 //   onSelect — kalles med hele ansatt-objektet når bruker velger (inkl. email, phone)
+//   valueAsId — hvis true: value tolkes som ansatt-id (UUID) og vises som navn i feltet
+//   employees — valgfri liste (ellers bruker intern cache)
+//   useIdValue — alias for valueAsId
 //   placeholder, style — UI
-function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style }) {
-  const emps = useEmployees()
+function EmployeeNameSelect({ value, onChange, onSelect, placeholder, style, valueAsId, employees: extEmps, allowFreeText = true }) {
+  const cachedEmps = useEmployees()
+  const emps = extEmps || cachedEmps
   const [showDrop, setShowDrop] = useState(false)
+  const [searchText, setSearchText] = useState('')
   const selStyle = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', ...style }
 
+  // I id-mode: finn navn fra id
+  const displayValue = valueAsId
+    ? (() => {
+        if (!value) return ''
+        const emp = emps.find(e => e.id === value || e.user_id === value)
+        return emp ? getEmployeeName(emp) : ''
+      })()
+    : (value || '')
+
+  // Søketekst er enten brukers skriving eller visningsverdien
+  const effectiveSearch = searchText !== null && searchText !== undefined && showDrop ? searchText : displayValue
+
   const filtered = emps.filter(emp => {
-    if (!value) return true
-    const q = value.toLowerCase()
-    const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim().toLowerCase()
+    if (!effectiveSearch) return true
+    const q = effectiveSearch.toLowerCase()
+    const name = getEmployeeName(emp).toLowerCase()
     const email = (emp.email || '').toLowerCase()
     const phone = (emp.phone || '').toLowerCase()
     const role = (emp.role || '').toLowerCase()
     return name.includes(q) || email.includes(q) || phone.includes(q) || role.includes(q)
   })
 
+  const handleSelect = (emp) => {
+    const name = getEmployeeName(emp)
+    if (valueAsId) {
+      onChange(emp.id)
+    } else {
+      onChange(name)
+    }
+    if (onSelect) onSelect(emp)
+    setShowDrop(false)
+    setSearchText('')
+  }
+
+  const handleInput = (e) => {
+    const v = e.target.value
+    setSearchText(v)
+    setShowDrop(true)
+    if (!valueAsId && allowFreeText) {
+      onChange(v)
+    } else if (valueAsId && !v) {
+      onChange('') // clear id
+    }
+  }
+
+  const handleBlur = () => {
+    // Gi tid til at onClick på dropdown-element skal trigge først
+    setTimeout(() => {
+      setShowDrop(false)
+      setSearchText('')
+    }, 180)
+  }
+
   return (
     <div style={{ position:'relative' }}>
-      <input value={value || ''} onChange={e => { onChange(e.target.value); setShowDrop(true) }} onFocus={() => setShowDrop(true)} placeholder={placeholder || 'Skriv eller velg ansatt...'} style={selStyle} />
+      <input
+        value={showDrop ? (searchText !== null && searchText !== undefined ? searchText : displayValue) : displayValue}
+        onChange={handleInput}
+        onFocus={() => { setShowDrop(true); setSearchText('') }}
+        onBlur={handleBlur}
+        placeholder={placeholder || 'Skriv eller velg ansatt...'}
+        style={selStyle} />
       {showDrop && emps.length > 0 && (
-        <>
-          <div style={{ position:'fixed', inset:0, zIndex:49 }} onClick={() => setShowDrop(false)} />
-          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'260px', overflowY:'auto', marginTop:'2px' }}>
-            {filtered.length === 0 ? (
-              <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
-                Ingen treff{value ? ` for "${value}"` : ''} — du kan skrive fritt navn
+        <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:'260px', overflowY:'auto', marginTop:'2px' }}>
+          {valueAsId && displayValue && (
+            <div onMouseDown={(e) => { e.preventDefault(); onChange(''); setShowDrop(false); setSearchText('') }}
+              style={{ padding:'7px 12px', cursor:'pointer', fontSize:'12px', color:'#dc2626', borderBottom:'1px solid #f1f5f9', fontWeight:'600' }}
+              onMouseEnter={e => e.currentTarget.style.background='#fef2f2'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+              ✕ Fjern valgt
+            </div>
+          )}
+          {filtered.length === 0 ? (
+            <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
+              Ingen treff{effectiveSearch ? ` for "${effectiveSearch}"` : ''}{allowFreeText && !valueAsId ? ' — du kan skrive fritt navn' : ''}
+            </div>
+          ) : filtered.map(emp => {
+            const name = getEmployeeName(emp)
+            return (
+              <div key={emp.id} onMouseDown={(e) => { e.preventDefault(); handleSelect(emp) }}
+                style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
+                onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+                <div style={{ fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>{name || '(uten navn)'}</div>
+                {(emp.role || emp.department) && (
+                  <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                    {emp.role}{emp.department ? ` · ${emp.department}` : ''}
+                  </div>
+                )}
+                {(emp.email || emp.phone) && (
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                    {emp.email && <span>✉️ {emp.email}</span>}
+                    {emp.phone && <span>📱 {emp.phone}</span>}
+                  </div>
+                )}
               </div>
-            ) : filtered.map(emp => {
-              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
-              return (
-                <div key={emp.id} onClick={() => { onChange(name); if (onSelect) onSelect(emp); setShowDrop(false) }}
-                  style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
-                  onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
-                  <div style={{ fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>{name || '(uten navn)'}</div>
-                  {(emp.role || emp.department) && (
-                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
-                      {emp.role}{emp.department ? ` · ${emp.department}` : ''}
-                    </div>
-                  )}
-                  {(emp.email || emp.phone) && (
-                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                      {emp.email && <span>✉️ {emp.email}</span>}
-                      {emp.phone && <span>📱 {emp.phone}</span>}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -557,7 +623,7 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
   const valuesArr = Array.isArray(values) ? values : (values ? values.split(',').map(s => s.trim()).filter(Boolean) : [])
 
   const filtered = emps.filter(emp => {
-    const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+    const name = getEmployeeName(emp)
     if (valuesArr.includes(name)) return false // skjul allerede lagt til
     if (!searchInput) return true
     const q = searchInput.toLowerCase()
@@ -612,7 +678,7 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
                 Ingen treff — trykk + eller Enter for å legge til som fri tekst
               </div>
             ) : filtered.slice(0, 10).map(emp => {
-              const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+              const name = getEmployeeName(emp)
               return (
                 <div key={emp.id} onClick={() => addPerson(name)}
                   style={{ padding:'9px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f8fafc' }}
@@ -4082,11 +4148,15 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Ansvarlig person</label>
-              <select value={employees.find(e => e.user_id === form.assigned_to_user_id)?.id || ''} onChange={e => handleAssigneeChange(e.target.value)}
-                style={inp}>
-                <option value="">Velg ansvarlig...</option>
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
-              </select>
+              <EmployeeNameSelect
+                value={form.assigned_to || ''}
+                onChange={v => {
+                  // Ved fri-tekst endring: fjern id-kobling
+                  setForm(f => ({ ...f, assigned_to: v, assigned_to_user_id: v ? f.assigned_to_user_id : '', assigned_to_email: v ? f.assigned_to_email : '' }))
+                }}
+                onSelect={emp => handleAssigneeChange(emp.id)}
+                placeholder="Velg ansvarlig..."
+              />
             </div>
           </div>
 
@@ -6291,17 +6361,17 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
               <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>👤 Ansatt (henter/leverer)</label>
               {hasEmployeeAccess && (
-                <button type="button" onClick={() => setEmployeeMode(m => m === 'select' ? 'manual' : 'select')}
-                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#2563eb', fontWeight:'500' }}>
-                  {employeeMode === 'select' ? 'Skriv inn manuelt' : 'Velg fra liste'}
-                </button>
+                <span style={{ fontSize:'11px', color:'#94a3b8' }}>Søk eller skriv navn</span>
               )}
             </div>
-            {employeeMode === 'select' && hasEmployeeAccess ? (
-              <select value={employees.find(e => e.name === employeeName)?.id || ''} onChange={e => handleEmployeeSelect(e.target.value)} style={mInp}>
-                <option value="">Velg ansatt...</option>
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.role ? ` (${emp.role})` : ''}</option>)}
-              </select>
+            {hasEmployeeAccess ? (
+              <EmployeeNameSelect
+                employees={employees}
+                value={employeeName}
+                onChange={v => { setEmployeeName(v); setCertWarning(null) }}
+                onSelect={emp => handleEmployeeSelect(emp.id)}
+                placeholder="Søk ansatt eller skriv navn..."
+              />
             ) : (
               <input value={employeeName} onChange={e => { setEmployeeName(e.target.value); setCertWarning(null) }} placeholder="Skriv inn navn på ansatt..." style={mInp} />
             )}
@@ -12924,9 +12994,17 @@ function TimelistePage() {
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
             {/* Employee selector + week nav */}
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px' : '16px 20px', display:'flex', gap: isMobTL ? '8px' : '12px', alignItems:'center', flexWrap:'wrap' }}>
-              <select value={selectedEmployee||employees[0]?.id||''} onChange={e=>setSelectedEmployee(e.target.value)} style={{ ...tsInp, maxWidth: isMobTL ? '100%' : '200px', flex: isMobTL ? '1 1 100%' : '1', fontSize: isMobTL ? '13px' : '14px' }}>
-                {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-              </select>
+              <div style={{ maxWidth: isMobTL ? '100%' : '260px', flex: isMobTL ? '1 1 100%' : '1', minWidth:'180px' }}>
+                <EmployeeNameSelect
+                  valueAsId
+                  employees={employees}
+                  value={selectedEmployee || employees[0]?.id || ''}
+                  onChange={v => setSelectedEmployee(v)}
+                  placeholder="Velg ansatt..."
+                  allowFreeText={false}
+                  style={{ fontSize: isMobTL ? '13px' : '14px' }}
+                />
+              </div>
               <div style={{ display:'flex', alignItems:'center', gap: isMobTL ? '8px' : '10px', marginLeft: isMobTL ? '0' : 'auto', width: isMobTL ? '100%' : 'auto', justifyContent: isMobTL ? 'center' : 'flex-end' }}>
                 <button onClick={()=>{ let w=selectedWeek-1,y=selectedYear; if(w<1){w=52;y--}; setSelectedWeek(w);setSelectedYear(y) }} style={{ width:'36px',height:'36px',borderRadius:'50%',border:'1px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center' }}>‹</button>
                 <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px', whiteSpace:'nowrap' }}>Uke {selectedWeek}, {selectedYear}</span>
@@ -12958,10 +13036,17 @@ function TimelistePage() {
                   <button key={v} onClick={()=>setStatsView(v)} style={{ padding: isMobTL ? '7px 12px' : '8px 16px', border:'none', background:statsView===v?'#059669':'white', color:statsView===v?'white':'#64748b', fontWeight:statsView===v?'700':'400', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', borderRight:'1px solid #e2e8f0' }}>{l}</button>
                 ))}
               </div>
-              <select value={selectedEmployee||''} onChange={e=>setSelectedEmployee(e.target.value||null)} style={{ ...tsInp, maxWidth: isMobTL ? '100%' : '200px', flex: isMobTL ? '1 1 100%' : 'none', fontSize: isMobTL ? '13px' : '14px' }}>
-                <option value="">Alle ansatte</option>
-                {employees.map(e=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-              </select>
+              <div style={{ maxWidth: isMobTL ? '100%' : '260px', flex: isMobTL ? '1 1 100%' : 'none', minWidth:'180px' }}>
+                <EmployeeNameSelect
+                  valueAsId
+                  employees={employees}
+                  value={selectedEmployee || ''}
+                  onChange={v => setSelectedEmployee(v || null)}
+                  placeholder="Alle ansatte"
+                  allowFreeText={false}
+                  style={{ fontSize: isMobTL ? '13px' : '14px' }}
+                />
+              </div>
             </div>
             <TimesheetStats entries={entries} timesheets={timesheets} employees={employees} projects={projects} selectedEmployee={selectedEmployee} statsView={statsView} />
           </div>
@@ -30946,7 +31031,13 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                         style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669', flexShrink:0 }} />
                                       <div style={{ flex:1, minWidth:0 }}>
                                         <div style={{ fontSize:'13px', fontWeight:'600', color: isSelected ? '#059669' : '#0f172a' }}>{empName}</div>
-                                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{[emp.role, emp.department].filter(Boolean).join(' · ') || emp.email || ''}</div>
+                                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{[emp.role, emp.department].filter(Boolean).join(' · ') || ''}</div>
+                                        {(emp.email || emp.phone) && (
+                                          <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px', display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                                            {emp.email && <span>✉️ {emp.email}</span>}
+                                            {emp.phone && <span>📱 {emp.phone}</span>}
+                                          </div>
+                                        )}
                                       </div>
                                       {isSelected && <span style={{ color:'#059669', fontSize:'14px', flexShrink:0 }}>✓</span>}
                                     </label>
