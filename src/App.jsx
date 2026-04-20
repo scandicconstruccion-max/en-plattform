@@ -3564,6 +3564,7 @@ function SjekklistePage({ onNavigateDetail }) {
   const [newForm, setNewForm] = useState({ project_id: '', template_id: '', title: '' })
   const [saving, setSaving] = useState(false)
   const [expandedMalKat, setExpandedMalKat] = useState({})
+  const [expandedTemplates, setExpandedTemplates] = useState({})
   const [previewTemplate, setPreviewTemplate] = useState(null)
   const { user } = useAuth()
   const f = { fontFamily: 'system-ui, sans-serif' }
@@ -3786,25 +3787,58 @@ function SjekklistePage({ onNavigateDetail }) {
                     </button>
                     {expandedMalKat[group.cat] && (
                     <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
-                      {group.templates.map(tmpl => (
+                      {group.templates.map(tmpl => {
+                        const isExpanded = expandedTemplates[tmpl.id]
+                        const totalItems = tmpl.items?.length || tmpl.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0
+                        return (
                         <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
-                            <div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{tmpl.name}</h3>
                               {tmpl.description && <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{tmpl.description}</p>}
                             </div>
                           </div>
-                          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px' }}>
-                            {tmpl.items?.length || tmpl.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0} kontrollpunkter
-                          </div>
+                          <button onClick={() => setExpandedTemplates(p => ({ ...p, [tmpl.id]: !p[tmpl.id] }))}
+                            style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', background:'transparent', border:'none', padding:'4px 0', fontSize:'12px', color:'#64748b', cursor:'pointer', marginBottom:'12px' }}>
+                            <span style={{ fontSize: '11px', color:'#059669', transition:'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                            <span>{totalItems} kontrollpunkter {isExpanded ? '— klikk for å skjule' : '— klikk for å se innhold'}</span>
+                          </button>
+                          {isExpanded && (
+                            <div style={{ marginBottom:'12px', padding:'12px', background:'#f8fafc', borderRadius:'10px', maxHeight:'340px', overflowY:'auto' }}>
+                              {(tmpl.sections || []).length > 0 ? (
+                                (tmpl.sections || []).map((sec, si) => (
+                                  <div key={si} style={{ marginBottom: si < (tmpl.sections.length - 1) ? '12px' : 0 }}>
+                                    <div style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', marginBottom:'6px', padding:'4px 8px', background:'white', borderRadius:'6px', borderLeft:'3px solid #059669' }}>{sec.title}</div>
+                                    {(sec.items || []).map((item, ii) => (
+                                      <div key={ii} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'4px 8px', fontSize:'12px', color:'#374151' }}>
+                                        <span style={{ width:'14px', height:'14px', borderRadius:'3px', border:'1.5px solid #cbd5e1', flexShrink:0 }} />
+                                        <span>{typeof item === 'string' ? item : (item.title || item.text || '')}</span>
+                                      </div>
+                                    ))}
+                                    {(!sec.items || sec.items.length === 0) && (
+                                      <div style={{ padding:'4px 8px', fontSize:'11px', color:'#94a3b8', fontStyle:'italic' }}>Ingen kontrollpunkter i denne seksjonen</div>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (tmpl.items || []).length > 0 ? (
+                                (tmpl.items || []).map((item, ii) => (
+                                  <div key={ii} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'4px 8px', fontSize:'12px', color:'#374151' }}>
+                                    <span style={{ width:'14px', height:'14px', borderRadius:'3px', border:'1.5px solid #cbd5e1', flexShrink:0 }} />
+                                    <span>{typeof item === 'string' ? item : (item.title || item.text || '')}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div style={{ fontSize:'12px', color:'#94a3b8', fontStyle:'italic', textAlign:'center', padding:'8px' }}>Denne malen har ingen kontrollpunkter enda</div>
+                              )}
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button onClick={() => { setNewForm(f => ({ ...f, template_id: tmpl.id })); setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
-                            <button onClick={() => setPreviewTemplate(tmpl)} title="Forhåndsvisning" style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>👁️</button>
                             <button onClick={() => { setEditTemplate(tmpl); setShowNewTemplate(true) }} style={{ background: '#f8fafc', color: '#475569', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', cursor: 'pointer' }}>✏️</button>
                             <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
                           </div>
                         </div>
-                      ))}
+                      )})}
                     </div>
                     )}
                   </div>
