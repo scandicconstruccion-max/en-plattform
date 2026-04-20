@@ -16153,8 +16153,76 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
         </div>
       </div>
 
-      {/* Uke-seksjoner */}
-      {weeks.map(week => {
+      {/* Månedsinnhold — enten tomstate eller liste over uker */}
+      {(() => {
+        const monthHasContent = weeks.some(week =>
+          week.days.some(d => {
+            if (!d.inMonth) return false
+            return (plansByDate[d.date]?.length > 0) ||
+                   (milestonesByDate[d.date]?.length > 0) ||
+                   (materiellByDate[d.date]?.length > 0)
+          })
+        )
+
+        if (monthHasContent) return null
+
+        const activeFilters = (filterProject !== 'alle' ? 1 : 0) + (filterEmployee !== 'alle' ? 1 : 0)
+        const isCurrMonth = viewMonth.getFullYear() === todayObj.getFullYear() && viewMonth.getMonth() === todayObj.getMonth()
+
+        return (
+          <div style={{ padding:'60px 20px 40px', textAlign:'center' }}>
+            <div style={{ fontSize:'48px', marginBottom:'14px', opacity:0.7 }}>
+              {activeFilters > 0 ? '🔍' : resourceType === 'ansatte' ? '👷' : '🚜'}
+            </div>
+            <div style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', marginBottom:'6px' }}>
+              {activeFilters > 0
+                ? 'Ingen treff med valgte filter'
+                : isCurrMonth
+                  ? 'Ingen bookinger denne måneden'
+                  : 'Tom måned'}
+            </div>
+            <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'20px', lineHeight:1.5, maxWidth:'280px', margin:'0 auto 20px' }}>
+              {activeFilters > 0
+                ? 'Prøv å endre eller fjerne filter for å se flere resultater.'
+                : resourceType === 'ansatte'
+                  ? 'Ingen planlagte bookinger, milepæler eller leveranser i denne måneden.'
+                  : 'Ingen maskiner er booket i denne måneden.'}
+            </div>
+            {activeFilters > 0 ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px', maxWidth:'240px', margin:'0 auto' }}>
+                {filterProject !== 'alle' && (
+                  <div style={{ fontSize:'12px', color:'#64748b', background:'#f0fdf4', border:'1px solid #bbf7d0', padding:'8px 12px', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {projects.find(p=>p.id===filterProject)?.name}</span>
+                  </div>
+                )}
+                {filterEmployee !== 'alle' && (
+                  <div style={{ fontSize:'12px', color:'#64748b', background:'#eff6ff', border:'1px solid #bfdbfe', padding:'8px 12px', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>👤 {(() => { const e = employees.find(e=>e.id===filterEmployee); return e ? `${e.first_name} ${e.last_name}` : 'Ansatt' })()}</span>
+                  </div>
+                )}
+              </div>
+            ) : isCurrMonth && resourceType === 'ansatte' && onOpenBooking ? (
+              <button onClick={() => onOpenBooking({ date: today })}
+                style={{ padding:'12px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', minHeight:'44px', display:'inline-flex', alignItems:'center', gap:'6px' }}>
+                <span>＋</span><span>Opprett første booking</span>
+              </button>
+            ) : null}
+          </div>
+        )
+      })()}
+
+      {/* Uke-seksjoner — vises kun hvis måneden har innhold */}
+      {(() => {
+        const monthHasContent = weeks.some(week =>
+          week.days.some(d => {
+            if (!d.inMonth) return false
+            return (plansByDate[d.date]?.length > 0) ||
+                   (milestonesByDate[d.date]?.length > 0) ||
+                   (materiellByDate[d.date]?.length > 0)
+          })
+        )
+        if (!monthHasContent) return null
+        return weeks.map(week => {
         // Tell bookinger og timer i uka (kun filtrert innhold)
         const weekPlans = week.days.flatMap(d => plansByDate[d.date] || [])
         const weekBookings = weekPlans.length
@@ -16458,7 +16526,8 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
             })}
           </div>
         )
-      })}
+      })
+      })()}
 
       {/* Bunn-padding */}
       <div style={{ height:'40px' }} />
