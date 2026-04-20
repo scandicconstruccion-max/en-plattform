@@ -16335,13 +16335,20 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                           onClick={e => {
                             e.stopPropagation()
                             if (onOpenBooking && bookings.length > 0) {
+                              const firstBooking = bookings[0]
                               const firstName = uniqueResources[0]?.name || 'Ukjent'
+                              // Finn ALLE bookinger for denne ressursen den dagen (fra ALLE prosjekter, ikke bare dette)
+                              // — BookingModal trenger dette for å beregne dagens totale timer (dobbeltbooking-sjekk)
+                              const resourceExistingPlans = dayPlans.filter(p =>
+                                p.resource_id === firstBooking.resource_id &&
+                                (!p.notes || !p.notes.startsWith('📦 Levering:'))
+                              )
                               onOpenBooking({
-                                resourceId: bookings[0].resource_id,
+                                resourceId: firstBooking.resource_id,
                                 resourceName: firstName,
                                 date: d.date,
-                                existingPlans: bookings,
-                                editPlan: bookings[0],
+                                existingPlans: resourceExistingPlans,
+                                editPlan: firstBooking,
                               })
                             }
                           }}
