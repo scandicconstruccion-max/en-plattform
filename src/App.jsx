@@ -1408,6 +1408,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
   const [isTyping, setIsTyping] = useState(false)
   const [rect, setRect] = useState(null)
   const wrapperRef = React.useRef(null)
+  const inputRef = React.useRef(null)
 
   const isEmpty = value === emptyValue || value == null || value === ''
   const selected = !isEmpty ? options.find(p => p.id === value) : null
@@ -1447,6 +1448,13 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     setShowDrop(true)
     setSearchText('')
     setIsTyping(false)
+    // Marker hele teksten slik at første tastetrykk overskriver valgt prosjektnavn.
+    // requestAnimationFrame sikrer at select() kjører etter at input har fått fokus.
+    if (inputRef.current) {
+      requestAnimationFrame(() => {
+        try { inputRef.current && inputRef.current.select() } catch (e) {}
+      })
+    }
   }
 
   useEffect(() => {
@@ -1532,6 +1540,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
   return (
     <div ref={wrapperRef} style={{ position:'relative' }}>
       <input
+        ref={inputRef}
         value={inputVal}
         onChange={e => {
           // Første tastetrykk → bytt til "skrive-modus". Valgt displayValue erstattes av søketekst.
