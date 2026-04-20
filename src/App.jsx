@@ -16203,13 +16203,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
               const hol = getHoliday(d.date)
               const hasContent = dayPlans.length > 0 || dayMilestones.length > 0 || dayMateriell.length > 0
 
-              // Skjul tomme dager som er langt fra nå: utenfor måneden, eller mer enn 3 dager tilbake i tid
-              // Men: alltid vis dagens dato, dager i inneværende uke, og dager i kommende 14 dager
-              const dateObj = new Date(d.date + 'T12:00:00')
-              const daysDiff = Math.round((dateObj - todayObj) / (24 * 60 * 60 * 1000))
-              const isInCurrentWeek = week.days.some(w => w.isToday)
-              const shouldShowEmpty = d.isToday || isInCurrentWeek || (daysDiff >= 0 && daysDiff <= 14)
-              if (!hasContent && !shouldShowEmpty) return null
+              // Skjul kun dager utenfor måneden uten innhold (for å redusere visuell støy ved månedsoverganger)
               if (!hasContent && !d.inMonth) return null
 
               // Ekstra stil for i dag — løftet med skygge og grønn kant
@@ -16340,10 +16334,11 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                         <div key={projKey}
                           onClick={e => {
                             e.stopPropagation()
-                            if (bookings.length === 1 && onOpenBooking) {
+                            if (onOpenBooking && bookings.length > 0) {
+                              const firstName = uniqueResources[0]?.name || 'Ukjent'
                               onOpenBooking({
                                 resourceId: bookings[0].resource_id,
-                                resourceName: uniqueResources[0]?.name || 'Ukjent',
+                                resourceName: firstName,
                                 date: d.date,
                                 existingPlans: bookings,
                                 editPlan: bookings[0],
@@ -16357,7 +16352,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                             borderLeft: `4px solid ${color}`,
                             borderRadius:'8px',
                             marginBottom:'4px',
-                            cursor: bookings.length === 1 ? 'pointer' : 'default',
+                            cursor:'pointer',
                           }}>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
