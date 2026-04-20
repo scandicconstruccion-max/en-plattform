@@ -2714,17 +2714,20 @@ function ProsjektfilerPage() {
           </div>
         </div>
       )}
-      {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
-        <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer' }}>
-          ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
-        </button>
-      </div>
+      {/* Sticky header + prosjektvelger — st\u00e5r i ro n\u00e5r man scroller i filpanelet */}
+      <div style={{ position: 'sticky', top: isMob ? '52px' : '56px', zIndex: 20, background: 'white', flexShrink: 0 }}>
+        {/* Header */}
+        <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+          <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer' }}>
+            ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
+          </button>
+        </div>
 
-      {/* Project selector */}
-      <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMob ? '10px 16px' : '12px 32px' }}>
-        <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+        {/* Project selector */}
+        <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMob ? '10px 16px' : '12px 32px' }}>
+          <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+        </div>
       </div>
 
       {/* MOBIL: Stacked layout */}
