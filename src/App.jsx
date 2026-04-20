@@ -16094,36 +16094,93 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
 
   const monthName = viewMonth.toLocaleDateString('nb-NO', { month: 'long', year: 'numeric' })
 
+  // Sjekk om vi ser på inneværende måned
+  const todayDate = new Date()
+  const isCurrentMonth = viewMonth.getFullYear() === todayDate.getFullYear() && viewMonth.getMonth() === todayDate.getMonth()
+
   return (
     <div style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
-      {/* Måned-navigering */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', background:'white', borderBottom:'1px solid #e2e8f0', position:'sticky', top:0, zIndex:5 }}>
-        <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'600' }}>‹</button>
-        <div style={{ textAlign:'center', flex:1 }}>
-          <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', textTransform:'capitalize' }}>{monthName}</div>
-          <button onClick={goToToday} style={{ background:'none', border:'none', color:'#059669', fontSize:'11px', fontWeight:'600', cursor:'pointer', padding:'2px 0' }}>📅 Gå til i dag</button>
+      {/* Måned-navigering — sticky header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', position:'sticky', top:0, zIndex:5 }}>
+        {/* Rad 1: Navigering med store touch-targets */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', gap:'8px' }}>
+          <button onClick={prevMonth}
+            style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', minWidth:'44px', height:'44px', cursor:'pointer', fontSize:'20px', color:'#475569', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+            aria-label="Forrige måned">‹</button>
+          <div style={{ textAlign:'center', flex:1, minWidth:0 }}>
+            <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', textTransform:'capitalize', lineHeight:1.2 }}>{monthName}</div>
+            {isCurrentMonth ? (
+              <div style={{ fontSize:'11px', color:'#059669', fontWeight:'600', marginTop:'2px' }}>
+                Denne måneden
+              </div>
+            ) : (
+              <button onClick={goToToday}
+                style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', color:'#059669', fontSize:'11px', fontWeight:'700', cursor:'pointer', padding:'3px 10px', borderRadius:'999px', marginTop:'3px' }}>
+                📅 Gå til i dag
+              </button>
+            )}
+          </div>
+          <button onClick={nextMonth}
+            style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', minWidth:'44px', height:'44px', cursor:'pointer', fontSize:'20px', color:'#475569', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+            aria-label="Neste måned">›</button>
         </div>
-        <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', fontSize:'14px', color:'#64748b', fontWeight:'600' }}>›</button>
       </div>
 
       {/* Uke-seksjoner */}
       {weeks.map(week => {
-        // Tell bookinger i uka
-        const weekBookings = week.days.reduce((sum, d) => sum + (plansByDate[d.date]?.length || 0), 0)
+        // Tell bookinger og timer i uka (kun filtrert innhold)
+        const weekPlans = week.days.flatMap(d => plansByDate[d.date] || [])
+        const weekBookings = weekPlans.length
+        const weekHours = weekPlans.reduce((sum, p) => sum + (parseFloat(p.hours) || 0), 0)
+        // Kapasitet: antall ukedager (man-fre) i uka × 8t
+        const weekdaysInWeek = week.days.filter(d => !d.isWeekend).length
+        const weekCapacity = weekdaysInWeek * 8
+        // Sjekk om uka inneholder i dag
+        const weekContainsToday = week.days.some(d => d.isToday)
+
         const hasDaysInMonth = week.days.some(d => d.inMonth)
         if (!hasDaysInMonth) return null
 
         return (
           <div key={week.weekNum + '-' + week.start}>
-            {/* Uke-header */}
-            <div style={{ padding:'10px 14px 6px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em' }}>
-                Uke {week.weekNum}
+            {/* Uke-header — Float-inspirert med timer-sammendrag */}
+            <div style={{
+              padding:'12px 14px 6px',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              gap:'8px',
+            }}>
+              <div style={{ display:'flex', alignItems:'baseline', gap:'8px', minWidth:0 }}>
+                <span style={{
+                  fontSize:'12px', fontWeight:'800',
+                  color: weekContainsToday ? '#059669' : '#475569',
+                  textTransform:'uppercase', letterSpacing:'0.04em',
+                }}>
+                  Uke {week.weekNum}
+                </span>
+                {weekContainsToday && (
+                  <span style={{ fontSize:'10px', background:'#059669', color:'white', padding:'1px 6px', borderRadius:'999px', fontWeight:'700' }}>
+                    NÅ
+                  </span>
+                )}
               </div>
               {weekBookings > 0 && (
-                <span style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>
-                  {weekBookings} booking{weekBookings !== 1 ? 'er' : ''}
-                </span>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+                  <span style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'500' }}>
+                    {weekBookings} booking{weekBookings !== 1 ? 'er' : ''}
+                  </span>
+                  <span style={{ fontSize:'9px', color:'#cbd5e1' }}>·</span>
+                  <span style={{
+                    fontSize:'12px', fontWeight:'700',
+                    color: weekHours > weekCapacity ? '#dc2626' : weekHours > weekCapacity * 0.8 ? '#d97706' : '#059669',
+                  }}>
+                    {Math.round(weekHours)}t
+                    {weekCapacity > 0 && (
+                      <span style={{ fontSize:'10px', fontWeight:'500', color:'#94a3b8', marginLeft:'2px' }}>
+                        /{weekCapacity}t
+                      </span>
+                    )}
+                  </span>
+                </div>
               )}
             </div>
 
