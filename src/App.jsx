@@ -16639,7 +16639,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                   </div>
 
                   {/* Pil */}
-                  <span style={{ color:'#cbd5e1', fontSize:'18px', flexShrink:0 }}>›</span>
+                  <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600', flexShrink:0 }}>›</span>
                 </button>
               ))}
             </div>
@@ -17437,7 +17437,7 @@ function RessursPage() {
                     <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#eff6ff', color:'#2563eb', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>🔍</span>
                     <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Filter</span>
                     {activeFilterCount > 0 && <span style={{ background:'#059669', color:'white', fontSize:'11px', fontWeight:'700', padding:'1px 8px', borderRadius:'999px' }}>{activeFilterCount}</span>}
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
 
                   {/* Seksjon: Informasjon */}
@@ -17447,14 +17447,14 @@ function RessursPage() {
                     <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f5f3ff', color:'#7c3aed', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>🏁</span>
                     <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Milepæler</span>
                     {upcomingMilestones > 0 && <span style={{ fontSize:'12px', color:'#64748b' }}>{upcomingMilestones} kommende</span>}
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
                   <button onClick={()=>{ setShowMobilMenu(false); setShowMateriell(true) }}
                     style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
                     <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f0fdf4', color:'#059669', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>📦</span>
                     <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Materiell-leveranser</span>
                     {weekMateriell > 0 && <span style={{ fontSize:'12px', color:'#64748b' }}>{weekMateriell} denne uken</span>}
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
 
                   {/* Seksjon: Planlegging */}
@@ -17463,13 +17463,13 @@ function RessursPage() {
                     style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
                     <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#eff6ff', color:'#2563eb', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>👷</span>
                     <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Ledig mannskap</span>
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
                   <button onClick={()=>{ setShowMobilMenu(false); setShowLedigMaskiner(true) }}
                     style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
                     <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f5f3ff', color:'#7c3aed', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>🚜</span>
                     <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Ledig utstyr</span>
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
 
                   {/* Seksjon: Annet */}
@@ -17478,7 +17478,7 @@ function RessursPage() {
                     style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
                     <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f1f5f9', color:'#64748b', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>⚙️</span>
                     <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Innstillinger</span>
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
 
                 </div>
@@ -17582,7 +17582,7 @@ function RessursPage() {
                       </div>
                       {proj && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {proj.name}</div>}
                     </div>
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
                 )
               })}
@@ -17684,7 +17684,7 @@ function RessursPage() {
                       </div>
                       {proj && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {proj.name}</div>}
                     </div>
-                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                    <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
                 )
               })}
