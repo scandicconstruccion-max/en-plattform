@@ -15958,6 +15958,28 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
   const today = new Date().toISOString().split('T')[0]
   const todayObj = new Date(today + 'T12:00:00')
 
+  // Avatar-farge (samme hash-logikk som i RessursGanttGrid) for konsistent visuell identitet på tvers av desktop/mobil
+  const avatarGradient = (id) => {
+    const palettes = [
+      ['#fb7185', '#f43f5e'], ['#d946ef', '#c026d3'], ['#60a5fa', '#2563eb'],
+      ['#34d399', '#059669'], ['#fbbf24', '#d97706'], ['#a78bfa', '#7c3aed'],
+      ['#22d3ee', '#0891b2'], ['#f472b6', '#db2777'], ['#818cf8', '#4f46e5'],
+      ['#4ade80', '#16a34a'],
+    ]
+    const str = String(id || '')
+    let hash = 0
+    for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0
+    const idx = Math.abs(hash) % palettes.length
+    return `linear-gradient(135deg, ${palettes[idx][0]}, ${palettes[idx][1]})`
+  }
+
+  const getInitials = (resource, resType) => {
+    if (!resource) return '?'
+    if (resType === 'machine') return (resource.name || '?').slice(0, 2).toUpperCase()
+    if (resource.first_name) return (resource.first_name[0] + (resource.last_name?.[0] || '')).toUpperCase()
+    return (resource.name?.[0] || '?').toUpperCase()
+  }
+
   // Lag liste over alle datoer i valgt måned, gruppert per uke (mandag–søndag)
   const weeks = React.useMemo(() => {
     const year = viewMonth.getFullYear()
@@ -16181,10 +16203,20 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
               const hol = getHoliday(d.date)
               const hasContent = dayPlans.length > 0 || dayMilestones.length > 0 || dayMateriell.length > 0
 
-              // Ekstra stil for i dag
+              // Skjul tomme dager som er langt fra nå: utenfor måneden, eller mer enn 3 dager tilbake i tid
+              // Men: alltid vis dagens dato, dager i inneværende uke, og dager i kommende 14 dager
+              const dateObj = new Date(d.date + 'T12:00:00')
+              const daysDiff = Math.round((dateObj - todayObj) / (24 * 60 * 60 * 1000))
+              const isInCurrentWeek = week.days.some(w => w.isToday)
+              const shouldShowEmpty = d.isToday || isInCurrentWeek || (daysDiff >= 0 && daysDiff <= 14)
+              if (!hasContent && !shouldShowEmpty) return null
+              if (!hasContent && !d.inMonth) return null
+
+              // Ekstra stil for i dag — løftet med skygge og grønn kant
               const cardBorder = d.isToday ? '2px solid #059669' : '1px solid #e2e8f0'
-              const cardBg = d.inMonth ? 'white' : '#f8fafc'
-              const isDim = !d.inMonth || d.isPast
+              const cardBg = d.isToday ? '#f0fdf4' : d.inMonth ? 'white' : '#f8fafc'
+              const cardShadow = d.isToday ? '0 4px 12px rgba(5, 150, 105, 0.15)' : 'none'
+              const isDim = !d.inMonth || (d.isPast && !d.isToday)
 
               return (
                 <div key={d.date}
@@ -16196,30 +16228,48 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                     borderRadius:'10px',
                     margin:'0 12px 8px',
                     padding:'10px 12px',
-                    opacity: isDim && !hasContent ? 0.55 : 1,
+                    opacity: isDim && !hasContent ? 0.6 : 1,
                     cursor: resourceType === 'ansatte' ? 'pointer' : 'default',
                     scrollMarginTop: '80px',
+                    boxShadow: cardShadow,
+                    transition: 'box-shadow 0.2s',
                   }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: hasContent ? '8px' : 0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: hasContent ? '8px' : 0, gap:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
                       <div style={{
-                        width:'32px', height:'32px', borderRadius:'8px',
+                        width:'36px', height:'36px', borderRadius:'8px',
                         background: d.isToday ? '#059669' : (d.isWeekend || hol ? '#fee2e2' : '#eff6ff'),
                         color: d.isToday ? 'white' : (d.isWeekend || hol ? '#dc2626' : '#2563eb'),
                         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
                         flexShrink:0,
                       }}>
-                        <span style={{ fontSize:'9px', fontWeight:'600', lineHeight:1, textTransform:'uppercase' }}>{d.dayName}</span>
-                        <span style={{ fontSize:'13px', fontWeight:'800', lineHeight:1, marginTop:'2px' }}>{d.dayNumber}</span>
+                        <span style={{ fontSize:'9px', fontWeight:'700', lineHeight:1, textTransform:'uppercase' }}>{d.dayName}</span>
+                        <span style={{ fontSize:'14px', fontWeight:'800', lineHeight:1, marginTop:'2px' }}>{d.dayNumber}</span>
                       </div>
-                      <div>
-                        {d.isToday && <span style={{ fontSize:'10px', background:'#059669', color:'white', padding:'2px 6px', borderRadius:'4px', fontWeight:'700', marginRight:'6px' }}>I DAG</span>}
-                        {hol && <span style={{ fontSize:'10px', color:'#dc2626', fontWeight:'600' }}>{hol.name}</span>}
-                        {d.isWeekend && !hol && <span style={{ fontSize:'10px', color:'#dc2626', fontWeight:'500' }}>{d.dayName === 'lør' ? 'Lørdag' : 'Søndag'}</span>}
+                      <div style={{ flex:1, minWidth:0 }}>
+                        {d.isToday && (
+                          <div style={{ fontSize:'11px', color:'#059669', fontWeight:'800', textTransform:'uppercase', letterSpacing:'0.05em' }}>I dag</div>
+                        )}
+                        {hol && <div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{hol.name}</div>}
+                        {d.isWeekend && !hol && <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'500' }}>{d.dayName === 'lør' ? 'Lørdag' : 'Søndag'}</div>}
+                        {!d.isToday && !hol && !d.isWeekend && hasContent && (
+                          <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'500' }}>
+                            {(() => {
+                              const totalH = dayPlans
+                                .filter(p => !p.notes || !p.notes.startsWith('📦 Levering:'))
+                                .reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
+                              return totalH > 0 ? `${Math.round(totalH)}t booket` : ''
+                            })()}
+                          </div>
+                        )}
                       </div>
                     </div>
                     {!hasContent && !d.isPast && resourceType === 'ansatte' && (
-                      <span style={{ fontSize:'11px', color:'#cbd5e1', fontStyle:'italic' }}>+ Tapp for å booke</span>
+                      <button onClick={e => { e.stopPropagation(); onOpenBooking && onOpenBooking({ date: d.date }) }}
+                        style={{ padding:'6px 12px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', flexShrink:0, minHeight:'36px', display:'flex', alignItems:'center', gap:'4px' }}>
+                        <span>＋</span>
+                        <span>Book</span>
+                      </button>
                     )}
                   </div>
 
@@ -16256,7 +16306,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                     )
                   })}
 
-                  {/* Bookinger — grupper per prosjekt */}
+                  {/* Bookinger — grupper per prosjekt med avatar-badger */}
                   {(() => {
                     const bookingsByProj = {}
                     dayPlans.forEach(p => {
@@ -16268,28 +16318,32 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                     return Object.entries(bookingsByProj).map(([projKey, bookings]) => {
                       const proj = projKey !== '_none' ? getProject(projKey) : null
                       const color = proj ? getProjectColor(projKey, projects) : '#94a3b8'
-                      const resourceNames = bookings.map(b => {
-                        const r = getResource(b.resource_id, b.resource_type)
+                      // Ressurs-info for avatar-rad
+                      const resourceInfos = bookings.map(b => {
                         if (b.resource_type === 'placeholder') {
                           const raw = b.notes || ''
-                          return raw.replace(/^\[PLACEHOLDER:\s*/i, '').replace(/\]$/, '').split('|')[0].trim() || 'Ubesatt'
+                          const name = raw.replace(/^\[PLACEHOLDER:\s*/i, '').replace(/\]$/, '').split('|')[0].trim() || 'Ubesatt'
+                          return { id: b.resource_id, name, initials: '?', isPlaceholder: true, type: 'placeholder' }
                         }
-                        if (!r) return 'Ukjent'
-                        if (b.resource_type === 'machine') return r.name
-                        return `${r.first_name || ''} ${r.last_name || ''}`.trim()
+                        const r = getResource(b.resource_id, b.resource_type)
+                        if (!r) return { id: b.resource_id, name: 'Ukjent', initials: '?', type: b.resource_type }
+                        const name = b.resource_type === 'machine' ? r.name : `${r.first_name || ''} ${r.last_name || ''}`.trim()
+                        return { id: r.id, name, initials: getInitials(r, b.resource_type), type: b.resource_type, resource: r }
                       })
-                      const uniqueResources = [...new Set(resourceNames)]
+                      // Deduplicate ressurser (flere bookinger per person per prosjekt per dag = samme person)
+                      const uniqueMap = new Map()
+                      resourceInfos.forEach(ri => { if (!uniqueMap.has(ri.id)) uniqueMap.set(ri.id, ri) })
+                      const uniqueResources = Array.from(uniqueMap.values())
                       const totalHours = bookings.reduce((sum, b) => sum + (parseFloat(b.hours) || 0), 0)
 
                       return (
                         <div key={projKey}
                           onClick={e => {
                             e.stopPropagation()
-                            // Hvis bare én booking, la brukeren redigere den
                             if (bookings.length === 1 && onOpenBooking) {
                               onOpenBooking({
                                 resourceId: bookings[0].resource_id,
-                                resourceName: resourceNames[0],
+                                resourceName: uniqueResources[0]?.name || 'Ukjent',
                                 date: d.date,
                                 existingPlans: bookings,
                                 editPlan: bookings[0],
@@ -16319,14 +16373,43 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                                 </div>
                               )
                             })()}
-                            <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                              {uniqueResources.length <= 2
-                                ? uniqueResources.join(', ')
-                                : `${uniqueResources.slice(0, 2).join(', ')} + ${uniqueResources.length - 2} til`}
+                            {/* Avatar-rad med navn */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'5px' }}>
+                              <div style={{ display:'flex', alignItems:'center' }}>
+                                {uniqueResources.slice(0, 3).map((ri, idx) => (
+                                  <div key={ri.id} style={{
+                                    width:'22px', height:'22px', borderRadius:'50%',
+                                    background: ri.isPlaceholder ? 'linear-gradient(135deg,#fef3c7,#fde68a)' : avatarGradient(ri.id),
+                                    color: ri.isPlaceholder ? '#92400e' : 'white',
+                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                    fontSize:'9px', fontWeight:'700',
+                                    border: '2px solid white',
+                                    marginLeft: idx === 0 ? 0 : '-6px',
+                                    flexShrink:0,
+                                  }}>{ri.initials}</div>
+                                ))}
+                                {uniqueResources.length > 3 && (
+                                  <div style={{
+                                    width:'22px', height:'22px', borderRadius:'50%',
+                                    background:'#e2e8f0', color:'#475569',
+                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                    fontSize:'9px', fontWeight:'700',
+                                    border: '2px solid white', marginLeft:'-6px',
+                                    flexShrink:0,
+                                  }}>+{uniqueResources.length - 3}</div>
+                                )}
+                              </div>
+                              <div style={{ fontSize:'11px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>
+                                {uniqueResources.length === 1
+                                  ? uniqueResources[0].name
+                                  : uniqueResources.length === 2
+                                    ? uniqueResources.map(r => r.name.split(' ')[0]).join(', ')
+                                    : `${uniqueResources[0].name.split(' ')[0]} + ${uniqueResources.length - 1} til`}
+                              </div>
                             </div>
                           </div>
                           <div style={{ textAlign:'right', flexShrink:0 }}>
-                            <div style={{ fontSize:'13px', fontWeight:'800', color }}>{totalHours}t</div>
+                            <div style={{ fontSize:'14px', fontWeight:'800', color }}>{totalHours}t</div>
                             <div style={{ fontSize:'10px', color:'#94a3b8' }}>{bookings.length} bk</div>
                           </div>
                         </div>
