@@ -22,6 +22,7 @@ const MobileStyles = () => (
     @keyframes spin { to { transform: rotate(360deg) } }
 @keyframes conflictPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4) } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0) } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(2px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
   `}</style>
 )
 const EP_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAeAB4AAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAEJAQADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9U6KKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKgvb62020murueK1tYVLyTTOERFHUkngCvkj4yft2W2nSTaX8P7ZL6ZSUfWLxD5QOf+WUfBb/ebA9jTtc8nMc1wmV0/aYqduy6v0X9I+tdR1Oz0i0e6v7uCytk+9NcSCNF+rEgCvLvEP7Vnws8NyPFP4ttruVf4NPikuQfo0alf1r84fGHxA8SeP743fiLWrzVps5H2iUlE/3U+6o9gBXP1XKfmWL47rNtYSiku8tX9ytb72fojP8At1/DOI4X+2ZvdLID+biof+G8fhr/AM8Nd/8AANP/AI5X56UU+VHjvjXNf7v3f8E/Qv8A4bx+Gv8Azw13/wAA0/8AjlH/AA3j8Nf+eGu/+Aaf/HK/PSiiyF/rrmv937v+CfoX/wAN4/DX/nhrv/gGn/xyj/hvH4a/88Nd/wDANP8A45X56UUWQf665r/d+7/gn6F/8N4/DX/nhrv/AIBp/wDHKP8AhvH4a/8APDXf/ANP/jlfnpRRZB/rrmv937v+CfoX/wAN4/DX/nhrv/gGn/xyj/hvH4a/88Nd/wDANP8A45X56UUWQf665r/d+7/gn6F/8N4/DX/nhrv/AIBp/wDHKP8AhvH4a/8APDXf/ANP/jlfnpRRZB/rrmv937v+CfoX/wAN4/DX/nhrv/gGn/xyj/hvH4a/88Nd/wDANP8A45X56UUWQf665r/d+7/gn6F/8N4/DX/nhrv/AIBp/wDHKfF+3d8NJGwya3GPVrJcfo5r88aKOVD/ANdc1/u/d/wT9MdD/bA+FWuOkf8Awkh0+VjgJfWksQ/F9pUfia9U0HxPo/im0+1aNqtlq1vx+9srhJlGemSpOK/HqtDQ/EOqeGb9L7SNRutMvEOVntJmicfipFLlPTwvHeJi7YmipL+7dP8AG/6H7EUV8LfCT9u3WNGaDT/HVp/bNkMJ/adqoS5QcDLrwr/htP1r7O8G+NNF+IHh+21vQL+PUdOuB8ssfVT3VgeVYdweRUtWP0vLM7wWbR/2efvdYvRr5fqro26KKKR7oUUUUAFFFFABWfr+v6d4W0a81bVruKw060jMs9xMcKij+Z7ADkkgDk1oV+fn7Z/xyl8b+LpPB+lXJ/sDR5ds5jb5bm6HDE46hOVA9dx9KaVzwM7zank+EdeSvJ6RXd/5LdnM/tGftM6n8aNRbTtPEumeE7d8w2hbD3JHSSbHGfReQvuea8Qor6C/Zs/ZWv8A4uvDr+uGTTfCEchCsvE1+ynBWP0QEEF/UEDJyV02PwGMcdn+N0vOpL7kv0S/rU8i8C/DfxL8S9V/s/w3pFxqdwMF2jGI4h6u5wqj6mvo3wZ/wT812/RZvE/iO00kEZ+zWERuZPoWJVR+G6vtDwx4U0fwZpEWl6HptvpdhF92C2QKM+p7k+55Na1RzH6vl/BOCoRUsY3Ul90fw1/H5HyzZ/8ABPrwakZF14j12aTHDQmGMZ+hjb+dZOs/8E89JkhkOk+MLy3lx8gvbRJVz6EqV/OvryildnvS4YyiUeV0F97/AMz80viJ+yF8RPh9az3v2CLXtOi5a40lzKyr6tGQH+uAQPWvFCCpIIwR1Br9mK8E/aD/AGVNF+LFhNqWiQ22ieK0y4uFTZFdn+7MAOvo4GR3yKpS7nxObcEqEHVy6TbX2X+j/R/efnFRWl4k8N6n4P1690XWbOTT9TspDFPby4yrD3HBBGCGBIIIIJBBrNqj8nlGUJOMlZoKKKKCQooooAKKKKACiiigAooooAKKKKACu9+D/wAZ/EHwY8SR6lo8xltHYC702ViIblO4Po3ow5B9RkHgqKDehXq4apGtRlyyWzR+tfwx+J+hfFrwrb65oNz5sL/LNbvgS20mOY5F7EfkRggkGutr8tv2e/jPefBfx5b6gGZ9GuysGpW3UPFn74H95Mkj8R3r9Q7O7hv7SC6tpVmt50WSORDlXUjII9iDWbVj+huHs7jnOGvPSpHSS/Jryf4MmooopH1YUUUUAeaftE/Ew/Cn4UaxrMDbdRkAtLH/AK7yZAb/AICAzf8AAa/LSSR5pGd2LuxLMzHJJPUk19ef8FCfFrS634V8MxvhILeTUZkHcu3lpn6COT/vqvkGtFsfgXGWOlisydBP3aat83q/8vkes/s1fBf/AIXT8Qo7G781NCsU+06hLEcEpnCxg9i549QAx7V+m2maba6Np1rYWNvHaWVrEsMMES7UjRRhVA7AAV4p+xr4Bj8GfBbTr2SER6hrjHUJn7lDxCPpsAP/AAM17pUNn6XwtlcMvwEajX7yok2/J7L5L8bhRRRSPsgooooAKKKKAPnn9r/4FW3xF8F3HiXTbX/ip9HhMgaMfNc268vG3qQMsvvkd6/O2v2XIBGDyK/LP9o/wInw7+MniPSreEQWDzfa7RF+6IpRvAHspJX/AIDVxZ+Ocb5XClKGYUlbmdpevR/o/keaUUUVR+VBRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABX6BfsNfFB/Fvw8uPDF7JvvvD7KsJY8vbPkp/3yQy/TbX5+17j+xp4tbwx8dtIgaRkttWilsJQDwSV3Jkf76KPxpPY+q4Zx0sDmdJ392b5X89vudmfpPRRRWZ/RwUUUUAfm7+2xqD3v7QGrwscraWtrCo9AYlk/m5rwkAkgAZJ7Cvbf2zbYwftD+I3IIE0VpIM9x9mjX/ANlrxWCZreeOVcbkYMM9Mg5rVbH8w5028zxPN/PL82fsNoGmLouhabp6KES0to4FVRgAKoUAflV+obO6S9tILiPmOZFkX6EZFTVkf05FJRSjsFFFFBQUUUUAFFFFABXwv/wUK0tYfGvhTUQgDXGnyQF8cny5N2Pw839a+6K+JP8AgofqAk13wVY8boba6mPr87Rj/wBp1S3PjOL1F5PVv3jb/wACX6HyFRRRVn89BRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABXVfCjUH0r4o+ELyM7Wh1e0f8BMuR+VcrXQ/Dq2N58QfDFuoJaXVLVAB1yZVFB04ZtV4OO91+Z+u9FFFZH9XhRRRQB8Ff8FAPDT2HxJ0LW1XEGo6d5JOOskTnd/47JH+VfLlfo7+2f8ADp/HHwfuL+1iMuoaDJ9vQKMsYsYmA/4Dhv8AgFfnFWi2P564twbwuaTnbSdpL8n+KZ+pf7NnjUePPgr4Y1BpPMuobYWVznr5kP7sk+7BQ3/Aq9Nr4B/Yi+MkfgzxfP4S1W6WHSNaYNbvK2EiuwMAe28fL9Qtff1Q1Y/YOHcxjmWX05396K5Zeq/z3CiiikfShRRRQAUUUUAFfmx+2V41/wCEv+OOp28b7rXRok02P03LlpPx3u4/4CK+5Pjv8VrX4P8Aw61HWnkj/tFkMGn27kZlnYYXjuF+8fZTX5YXl5PqN5PdXMrTXM8jSyyucs7Mckn3JNXFH5TxzmMVThgIPVvml6dF89/kQ0UUVR+OhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABXq37LPht/E/x58JQhcx2tz9vkY9FEKmQH/vpVH1IrymvtD/AIJ//Dp4odd8bXUOBKP7OsmYdQCGlYfiEGfZqT2PoeH8G8bmdGmlonzP0Wv/AAPmfZFFFFZn9LhRRRQBHPBHdQSQzIssMilHRxkMpGCCPSvy6/aJ+EE/wc+I17pqRv8A2NdE3OmzNyGhJ+5nuyH5T+B71+pNcF8Z/hBpPxo8HS6JqR+z3CHzbO+RAz20uMBh6qehXIyPQgENOx8nxHkv9sYW1P8AiQ1j5918/wA7H5SAlSCCQRyCK+7P2XP2srPxJYWXhLxpfC212MCGz1O4bCXo6Kjt2l7ZP3/Xcefjz4kfDTX/AIU+J7jQ/ENmba5jJaKZfmhuI88SRt/Ep/MdCAQQOWq7XPxLLsyxeQ4pyirNaSi+vk/Ps+nofsxRX50fB/8AbK8XfDsQafrRPinQ0AUR3MmLmFeANkvOQAOjZ9iK+pPBv7Znwz8Voq3OqTeHrojJh1WEqM98SLuT8yD7VFmftuX8T5bj4q9RQl2lp+Oz+/5HudFcZZ/Gj4f38ZeDxv4edQMnOpwgge4LZFZOs/tIfDHQoZJbjxrpMwQZK2U/2lj9BHuJ/Cke9LHYSEeaVWKX+Jf5npNcn8Svif4e+E/hyTWvEV59ntxlYoYxumuHxkJGvc/kB1JA5r5v+I37fumW1tPbeCtGnvLo/Kl/qgEcK8feEYJZvxK18j+PPiN4j+JmsHU/EmqzancjIjEhwkSk52og4UewFUkfE5txjhMLB08E/aT7/ZXz6/L7zc+Nnxl1f41+MZNY1AG2s4gYrHT1fclrFnp7serNjk+gAA8/ooqz8Sr16mKqyrVpXlLVsKKKKDAKKKKACiiigAooooAKKKKACiiigAooq5oui33iLVbXTNMtZb6/upBFDbwrud2PQAUDScmoxV2zS8CeCtT+IfizTfD+kQNNe3sojGBkRr/E7eiqMkn0Ffq34D8GWHw98H6V4d01cWenwCJWIwXPVnPuzEsfc15h+zT+zjZ/BXRWv78peeK76IC6nXlLdevkx+2cZb+Ij0Ar26obufvvCuRSyug6+IX72f4Lt69X8uwUUUVJ90FFFFABRRRQBxvxT+E3h74v+G20jX7XzApL291F8s1s5H3kb8sg8HHIr4B+Mf7KnjH4UTT3cVs2v+H1JK6jZIWMa/8ATVByn15X3r9MKKadj5fOOHsJnC5qi5an8y3+fdfj5n4z0V+nvxB/ZY+HXxFkluLvRRpeoSHLXuksLdyfUqAUY+5UmvDfEH/BPE+Y76H4y+T+GDULLkfWRG5/75q7o/KsXwbmeHb9ilUXk0n9zt+Fz40or6en/wCCfvjxT+513w7IP9uadf5Qmov+Hf8A8Q/+gz4Z/wDAq4/+MUXR474czZf8w8vwPmaivpn/AId//EP/AKDPhn/wKuP/AIxR/wAO/wD4h/8AQZ8M/wDgVcf/ABii6F/q7m3/AEDyPmaivpn/AId//EP/AKDPhn/wKuP/AIxR/wAO/wD4h/8AQZ8M/wDgVcf/ABii6D/V3Nv+geR8zUV9M/8ADv8A+If/AEGfDP8A4FXH/wAYo/4d/wDxD/6DPhn/AMCrj/4xRdB/q7m3/QPI+ZqK+mf+Hf8A8Q/+gz4Z/wDAq4/+MUf8O/8A4h/9Bnwz/wCBVx/8Youg/wBXc2/6B5HzNRX0z/w7/wDiH/0GfDP/AIFXH/xij/h3/wDEP/oM+Gf/AAKuP/jFF0H+rubf9A8j5mor6Z/4d/8AxD/6DPhn/wACrj/4xR/w7/8AiH/0GfDP/gVcf/GKLoP9Xc2/6B5HzNRX0z/w7/8AiH/0GfDP/gVcf/GKfF/wT+8flv3mt+G1X1W4uGP/AKJFF0P/AFdzb/oHkfMdFfX2h/8ABPLUpHRtZ8Y2tugPzJY2bSkj0DMy4/I17H4G/Yw+G/g6RJ7qxn8SXS/x6tIHjB9o1AU/8CBouj08LwfmuIfvwUF3bX5K7Ph74W/Arxh8XrxU0LTHFiGxJqd0DHbR+vz4+Y+y5PtX318CP2bvD/wTsFuIwuqeJJY9txqkqYIz1SIfwL+p7nsPWbW0gsbaO3toY7eCNdqRRKFVR6ADgCpahu5+oZNwxhMqaqy9+p3fT0XT11YUUUUj7IKKKKACiiigAooooAKKKKACivJPiD+1P8Ovh1JLb3etDVNQjOGstJUXDg+hYEIp9iwNeG+IP+Chx8x00Pwb8n8M+oXvJ+saLx/31Tsz57F8QZZgm41qyv2V2/wvb5n2bRXwLP8A8FAvHjH9zoXh2Mf7cM7fymFRf8PAPiH/ANAbwz/4C3H/AMfp2Z474zyn+aX/AICz7/or4A/4eAfEP/oDeGf/AAFuP/j9H/DwD4h/9Abwz/4C3H/x+izF/rnlP80v/AT7/or4A/4eAfEP/oDeGf8AwFuP/j9H/DwD4h/9Abwz/wCAtx/8fosw/wBc8p/ml/4Cff8ARXwB/wAPAPiH/wBAbwz/AOAtx/8AH6P+HgHxD/6A3hn/AMBbj/4/RZh/rnlP80v/AAE+/wCivgD/AIeAfEP/AKA3hn/wFuP/AI/R/wAPAPiH/wBAbwz/AOAtx/8AH6LMP9c8p/ml/wCAn3/RXwB/w8A+If8A0BvDP/gLcf8Ax+j/AIeAfEP/AKA3hn/wFuP/AI/RZh/rnlP80v8AwE+/6K+AP+HgHxD/AOgN4Z/8Bbj/AOP0f8PAPiH/ANAbwz/4C3H/AMfosw/1zyn+aX/gJ9/0V8Af8PAPiH/0BvDP/gLcf/H6fF/wUB8fhv3mieG2X0W3uFP/AKONFmP/AFzyn+aX/gJ9+UV8S6H/AMFDdSjdF1nwda3CE/M9jeNEQPUKytn8xXsfgb9s/wCG/jGRILq+n8N3TfwatGEjJ9pFJUf8CIpWZ6eF4kyrFvlhWSfneP52R7vRUVrdwX1tHcW00dxBIu5JYmDKw9QRwRUtI+lTvqgooooGFFFFABRRRQAUUVwHxr+MGl/BfwXPrd+BcXTnyrKxD7WuJccD2UdSew9yAQwr16eGpSrVnaMVdsufFP4teHfhB4dbVtfuvL3ZW3tIsNNcv/dRf5k8Dua+AvjH+1X4x+K809pFctoHh9iQunWTlTIv/TVxy/04X2rzv4gfEPXfid4ludc8QXrXd5McKvSOBO0ca/wqPT6k5JJPN1olY/Bs84oxOZydLDtwpdur9f8ALb1CiiimfDhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRWhoPh/U/FGqwaZpFhcalfznbHb20Zd2/AdvU9BX1Z8L/ANge81G1jvfHOqvpm7DDTdNKvKB3DyEFQfZQ31ovY9fL8pxmaS5cLTvbd7JfN6fLc+Q6K/UDw3+yx8L/AAzbJFF4UtL9x96bUibl3Pqd5IH0AA9q6d/g34BktxA3gjw6YR0T+yoMD6fJU8x9tT4ExjjepWin83/kfkxRX6c+KP2Tfhf4otyjeGYtLl/hn0t2t2X8Adp/FTXzj8Vf2D9a0C3kvvBWoHxBboMtYXW2O6A5+6wwr/T5T6A07o8nHcIZng4ucEqiX8u/3Oz+654p8Lfjr4w+EN4r6FqbmxLZk0y6JktpPX5M/KfdcH3r76+BH7SPh7412C26FdL8SRR7rjS5XyWx1eI/xr+o7jufzN1LTbvR7+eyv7aazvIHKS286FHjYdQVPINO0nVr3QtSttQ066lsr62cSw3EDlXjYdCCOlDVzlyfiLF5PNQbcqfWL6enZ/gfsdRXh37Mn7Rlt8aNCOn6kUtvFlhEDdRABVuU6ecg+uNy9ifQivcazP37B4yjj6EcRh5XjL+rPzQUUUUHaFFFFAEdxcRWlvLPNIsUMSl3dzgKoGSSfTFfl1+0R8X5/jH8Rr3Ukkf+xrUm202FsgLCD9/HZnPzH8B2r7L/AG1PiG/gr4Py6dazGK/16YWKleohxulP0IAX/gdfnLVxR+O8b5nKVSOXU3ovel69F8t/muwUUUVR+UhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABW14N8Hat4+8SWOhaJaNeajePsjReijuzHsoGST2ArFr9D/wBjD4OL4C+H6+I9Qtgmu66glBdcPDa9Y056bvvn6r6Um7H0WRZTLOMWqF7RWsn5f5vZff0O7+BnwF0L4I+HxBZot7rU6D7bqki/PK391f7qA9F/E5NenUUVmf0bh8NSwlKNGhHlitkgooooOkKKKKAPFP2h/wBmfSPjTpst/aeXpni2CLFvfAYSfA4imA6r2DDlevIG0/nBruhah4Y1i80rVbSSx1G0kMU9vKMMjDt7+xHBHIr9iq+T/wBur4PLrXh638d6Zbj7dpuIdR8teZLcnCucDko3H+63+zVJ9D8z4tyCnXoyzDDxtOOskvtLv6rfzR8a+BPGup/DzxZpviDSJ2hvbKUSDBwJF/iRvVWGQR6Gv1b8BeNLD4h+D9K8RaY2bO/hEqqTkxt0ZD7qwIP0r8hq+zv+Cf3xDdxr/gu6myqAajZIzdBkLKo/ExnH+8ackfMcGZnLDYv6lN+5U28pL/NafcfZVFFFQfuYUUUUAfBP7f8A4lfUPiXoeihswadpvnYz0klc7v8Ax2OOvl2vbf2zbkz/ALQ/iNCSRDFaIM9h9mjb/wBmrxKtVsfzNn9V1s1xEn/M192n6BRRRQeAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAdR8LvB7eP/iJ4d8PKCUv72OKXHURZzIfwQMfwr9bYYUt4UiiQRxooVUUYCgcACvza/Yv08Xv7QegyHGLWG6mwf8Arg6f+z1+lFRI/beBaEY4KrX6ylb5JL9WwoooqT9LCiiigAooooAKzvEeh23ifw/qWj3i7rS/tpLWUEZ+V1Kn9DWjRQTKKmnGWzPx21/Rbjw3rupaTeLtu7C5ktZl9HRirfqDXo37LniSTwx8ePCM6ttS6uvsMi9mEwMYH/fTKfqBVT9pPTxpvx38bQjGG1F5uP8ApoA//s1ct8Ork2fxB8MXCkhotUtXBHXIlU1qfzBBPAZklH/l3P8AKR+u9FFFZH9QhRRRQB+b37bOnPZfH/VZmGBeWlrOvuBEI/5xmvCK+vv+ChPhJotb8K+Jo0yk9vJp0zjoCjeYmfqJJP8AvmvkGtFsfzVxFQeHzXERfWV//Atf1CiiimfOBRRRQAUUUUAFFFFABRRRQAUUUUAFFFFAHsn7IOqLpf7QnhYu4SOc3FuxJxktBIFH/fW2v00r8ePDeu3HhfxDpmsWhxdafcx3UXOPmRgw/lX66eGfENl4t8PadrOnSrNZX0CXETqc/Kwzj6jofcVEj9n4ExUZYatheqlzfJpL8LfiadFFFSfqIUUUUAFFFFABRRXJ/FXxxb/Dj4ea74hnlSNrO1doA+PnmIxGgz1y5UUGVWrCjTlVm7KKbfoj80Pj7qi6x8avG1yjiRP7WuIldTkEI5QEH0wtZvwm059W+KXhCzQZafV7RPoDMuT+Wa5aaZ7iZ5ZXLyOxZmY5JJ5JNe3/ALGnhJvE/wAdtInaNnttJilv5SBwCF2pk/77qfwrXY/mXCxlmGZwstZzT+93Z+k9FFFZH9PhRRRQB5p+0T8Mz8VvhRrGjQLu1GMC7sf+u8eSF/4ECy/8Cr8tJI3hkaORSjqSrKwwQR1BFfstXwH+2j8CX8GeJn8aaRb/APEj1aXN3HEnFtcnkk46K/Jz/eyO4qos/LONcplWhHMKS1jpL06P5dfXyPmOiiirPxoKKKKACiiigAooooAKKKKACiiigAooooAK+vP2I/j1Bo8q/D3XJzHFdTF9JnkI2rI33oD6bjyv+0SOpFfIdKjtG6srFWU5DA4INDVz1crzGrlWKjiaXTdd11X9ddT9l6K+Tf2bv2xrTXre18NePLtLPVUAjt9ZmYLFcjsJT0V/9ro3fB6/WEciTRpJG6vG4DKynIIPQg1nax/R+XZlhs0oqthpX7rqn2a/ryHUUUUj1AooqG7vINPtpbm6njtreJd0k0zhEQepJ4AoE2lqyavgH9tD47Q+PfEEXhHRLkTaJpMpa5nibKXNyOOOxVBkA9yW9Aa6n9pn9sMahFdeFfAN3/o0itFe63H1cHgpAewx1frz8uOp+PKtLqfjvFfEcMRF5fg5Xj9qS2fkv1fyCv0C/Ya+F7+Evh5ceJ72PZfeIGVoQw5S2TIT/volm+m2vlL9nT4J3fxo8dQWrxsmgWLLNqdyDjEeeI1P958YHoMntX6fWlrDY2sNtbxrDbwosccaDCooGAAPQAUSfQXBWUynUeY1VorqPm+r+S09W+xLRRRUH7IFFFFABVDXdDsPE2j3mlapaR32n3cZint5RlXU9v8A645B5FX6KCZRUk4yV0z81/2jP2ZdU+DOotqOnebqfhO4c+Td7cvbE9I5sfo3RvY8V4fX7JXdpBf20tvcwx3FvKpSSKVQyOp6gg8EV8mfGr9hi01aWbVfh/LFp1wxLSaPdORAxz/yyfnZ/unj3FWn3PxzPODqlOUsRlqvH+TqvTuvLf1PiCiug8YfD/xJ4AvjaeItFvNJmzgfaIiEf/df7rD3BNc/VH5hUpzpScKiaa6PRhRRRQZhRRRQAUUUUAFFFFABRRRQAUUUUAFelfDb9onx58K4Ra6LrLPpwORYXqieAf7oPKf8BIrzWig6KGJrYWftKE3GXdOx9ieG/wDgobdJCqa/4Phnl/in027Ma/hG6t/6FXWyf8FBvBwtA0fhzXGuu8bCEJ/31vJ/8dr4OopWR9TT4uzenHl9qn6xX+R9eeJ/+Chep3ELR+H/AAja2UnQT6jdNP8A+OIE/wDQjXgHxJ+OfjT4sOq+IdZkntFOUsYAIrdT67F4Y+7ZPvXBVoaH4e1TxNfpY6Rp11qd45wsFpC0rn8FBoskeZi86zLMv3daq5J9Fon8la5n13vwf+C/iD4zeI49O0iAxWaMPtepSoTDbJ3JPdsdFHJ9hkj3T4QfsJ6tq8kGo+PLn+yLHh/7LtXDXMnQ4dhlUH0yfpX2h4U8JaP4H0SDSNC0+HTNOg+5BAuBk9ST1JPcnJNJs+oyXhDEYuSrY5clPt9p/wCS9dfLqZnwz+GuifCjwna6BoVv5dvEN0sz8y3Eh+9I57sfyAwAAABXVUUVB+20qUKMFTpq0VokugUUUUGoUUUUAFFFFABRRRQBW1HTLPV7R7W/tIL22f70NxGJEb6qQQa8u8Q/sp/CzxJI8s/hK2tJW/j0+WS2A+ixsF/SvWqKDkr4TD4pWr04y9Un+Z88T/sKfDOU5X+2YfZL0H+aGof+GDvhr/z313/wMT/43X0bRTuzy3kGVP8A5h4/cfOX/DB3w1/5767/AOBif/G6P+GDvhr/AM99d/8AAxP/AI3X0bRRdi/sDKv+geP3Hzl/wwd8Nf8Anvrv/gYn/wAbo/4YO+Gv/PfXf/AxP/jdfRtFF2H9gZV/0Dx+4+cv+GDvhr/z313/AMDE/wDjdH/DB3w1/wCe+u/+Bif/ABuvo2ii7D+wMq/6B4/cfOX/AAwd8Nf+e+u/+Bif/G6P+GDvhr/z313/AMDE/wDjdfRtFF2H9gZV/wBA8fuPnL/hg74a/wDPfXf/AAMT/wCN0f8ADB3w1/5767/4GJ/8br6Noouw/sDKv+geP3Hzl/wwd8Nf+e+u/wDgYn/xuj/hg74a/wDPfXf/AAMT/wCN19G0UXYf2BlX/QPH7j5y/wCGDvhr/wA99d/8DE/+N0+L9hH4aRtln1uQejXq4/RBX0VRRdj/ALAyr/oHj9x4xof7H/wq0N0k/wCEbOoSqch767llH4puCn8RXqmg+GNH8LWn2XRtKstJt+P3VlbpCpx0yFAzWnRSPRw+BwuE/wB3pRj6JIKKKKDuCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP//Z";
@@ -15955,6 +15956,10 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
 
+  // Velger for å redigere booking når flere ressurser er på samme prosjekt samme dag
+  // Bottom-sheet som viser hver ansatt som egen knapp — brukeren velger hvem de vil redigere
+  const [resourcePicker, setResourcePicker] = useState(null) // { date, projectName, projectColor, bookingsByResource } | null
+
   const today = new Date().toISOString().split('T')[0]
   const todayObj = new Date(today + 'T12:00:00')
 
@@ -16334,23 +16339,53 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                         <div key={projKey}
                           onClick={e => {
                             e.stopPropagation()
-                            if (onOpenBooking && bookings.length > 0) {
-                              const firstBooking = bookings[0]
-                              const firstName = uniqueResources[0]?.name || 'Ukjent'
-                              // Finn ALLE bookinger for denne ressursen den dagen (fra ALLE prosjekter, ikke bare dette)
-                              // — BookingModal trenger dette for å beregne dagens totale timer (dobbeltbooking-sjekk)
-                              const resourceExistingPlans = dayPlans.filter(p =>
-                                p.resource_id === firstBooking.resource_id &&
-                                (!p.notes || !p.notes.startsWith('📦 Levering:'))
-                              )
-                              onOpenBooking({
-                                resourceId: firstBooking.resource_id,
-                                resourceName: firstName,
+                            if (!onOpenBooking || bookings.length === 0) return
+
+                            // Grupper bookinger per ressurs (unik person/maskin)
+                            const byResource = new Map()
+                            bookings.forEach(b => {
+                              if (!byResource.has(b.resource_id)) byResource.set(b.resource_id, [])
+                              byResource.get(b.resource_id).push(b)
+                            })
+
+                            // Hvis flere ressurser — vis velger-modal
+                            if (byResource.size > 1) {
+                              setResourcePicker({
                                 date: d.date,
-                                existingPlans: resourceExistingPlans,
-                                editPlan: firstBooking,
+                                projectName: proj ? proj.name : 'Uten prosjekt',
+                                projectColor: color,
+                                bookingsByResource: Array.from(byResource.entries()).map(([resId, resBookings]) => {
+                                  const info = uniqueResources.find(ri => ri.id === resId)
+                                  const totalH = resBookings.reduce((s, b) => s + (parseFloat(b.hours) || 0), 0)
+                                  return {
+                                    resourceId: resId,
+                                    resourceName: info?.name || 'Ukjent',
+                                    initials: info?.initials || '?',
+                                    isPlaceholder: info?.isPlaceholder,
+                                    resourceType: info?.type,
+                                    resource: info?.resource,
+                                    bookings: resBookings,
+                                    totalHours: totalH,
+                                  }
+                                }),
                               })
+                              return
                             }
+
+                            // Én ressurs — åpne booking direkte med filtrerte bookinger
+                            const firstBooking = bookings[0]
+                            const firstName = uniqueResources[0]?.name || 'Ukjent'
+                            const resourceExistingPlans = dayPlans.filter(p =>
+                              p.resource_id === firstBooking.resource_id &&
+                              (!p.notes || !p.notes.startsWith('📦 Levering:'))
+                            )
+                            onOpenBooking({
+                              resourceId: firstBooking.resource_id,
+                              resourceName: firstName,
+                              date: d.date,
+                              existingPlans: resourceExistingPlans,
+                              editPlan: firstBooking,
+                            })
                           }}
                           style={{
                             display:'flex', alignItems:'center', gap:'10px',
@@ -16427,6 +16462,121 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
 
       {/* Bunn-padding */}
       <div style={{ height:'40px' }} />
+
+      {/* Ressursvelger — bottom-sheet når flere ansatte er på samme prosjekt samme dag */}
+      {resourcePicker && (
+        <div style={{
+          position:'fixed', inset:0, zIndex:200,
+          display:'flex', alignItems:'flex-end', justifyContent:'center',
+        }}>
+          {/* Backdrop */}
+          <div onClick={() => setResourcePicker(null)}
+            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
+
+          {/* Sheet */}
+          <div style={{
+            position:'relative',
+            background:'white',
+            width:'100%', maxWidth:'640px',
+            borderTopLeftRadius:'16px', borderTopRightRadius:'16px',
+            boxShadow:'0 -4px 20px rgba(0,0,0,0.15)',
+            animation:'slideUp 0.25s ease',
+            display:'flex', flexDirection:'column',
+            maxHeight:'75vh',
+          }}>
+            {/* Drag-indikator */}
+            <div style={{ padding:'10px 0 0', display:'flex', justifyContent:'center' }}>
+              <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'999px' }}/>
+            </div>
+
+            {/* Header */}
+            <div style={{ padding:'12px 16px 8px' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                    Velg ansatt å redigere
+                  </div>
+                  <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    🏗️ {resourcePicker.projectName}
+                  </div>
+                  <div style={{ fontSize:'12px', color:'#64748b', marginTop:'1px' }}>
+                    {new Date(resourcePicker.date + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'long', day:'numeric', month:'long' })}
+                  </div>
+                </div>
+                <button onClick={() => setResourcePicker(null)}
+                  style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'36px', height:'36px', fontSize:'18px', color:'#64748b', cursor:'pointer', flexShrink:0 }}
+                  aria-label="Lukk">×</button>
+              </div>
+            </div>
+
+            {/* Liste med ansatte */}
+            <div style={{ overflowY:'auto', padding:'4px 12px 20px', flex:1 }}>
+              {resourcePicker.bookingsByResource.map(rb => (
+                <button key={rb.resourceId}
+                  onClick={() => {
+                    // Hent ALLE bookinger for denne ressursen den dagen (også fra andre prosjekter)
+                    const resourceExistingPlans = (plansByDate[resourcePicker.date] || []).filter(p =>
+                      p.resource_id === rb.resourceId &&
+                      (!p.notes || !p.notes.startsWith('📦 Levering:'))
+                    )
+                    const picker = resourcePicker
+                    setResourcePicker(null)
+                    onOpenBooking({
+                      resourceId: rb.resourceId,
+                      resourceName: rb.resourceName,
+                      date: picker.date,
+                      existingPlans: resourceExistingPlans,
+                      editPlan: rb.bookings[0],
+                    })
+                  }}
+                  style={{
+                    display:'flex', alignItems:'center', gap:'12px',
+                    width:'100%', padding:'12px 14px',
+                    background:'white',
+                    border:'1px solid #e2e8f0',
+                    borderRadius:'12px',
+                    marginBottom:'6px',
+                    cursor:'pointer',
+                    textAlign:'left',
+                    minHeight:'60px',
+                    transition:'all 0.15s',
+                  }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width:'40px', height:'40px', borderRadius:'50%',
+                    background: rb.isPlaceholder ? 'linear-gradient(135deg,#fef3c7,#fde68a)' : avatarGradient(rb.resourceId),
+                    color: rb.isPlaceholder ? '#92400e' : 'white',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:'14px', fontWeight:'700',
+                    flexShrink:0,
+                    border: rb.isPlaceholder ? '2px dashed #d97706' : 'none',
+                  }}>{rb.initials}</div>
+
+                  {/* Navn + booking-info */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {rb.resourceName}
+                    </div>
+                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'1px' }}>
+                      {rb.bookings.length} booking{rb.bookings.length !== 1 ? 'er' : ''} på prosjektet
+                    </div>
+                  </div>
+
+                  {/* Timer */}
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:'15px', fontWeight:'800', color: resourcePicker.projectColor }}>
+                      {rb.totalHours}t
+                    </div>
+                  </div>
+
+                  {/* Pil */}
+                  <span style={{ color:'#cbd5e1', fontSize:'18px', flexShrink:0 }}>›</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
