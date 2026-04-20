@@ -16631,6 +16631,7 @@ function RessursPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [showDoubleBookings, setShowDoubleBookings] = useState(false)
   const [showFilterPanel, setShowFilterPanel] = useState(false)
+  const [showMobilMenu, setShowMobilMenu] = useState(false)
   const [conflictHighlight, setConflictHighlight] = useState(null) // { resourceId, date }
   
   // Auto-clear conflict highlight after 4 seconds
@@ -16951,8 +16952,8 @@ function RessursPage() {
             ))}
           </div>
 
-          {/* Filter-knapp — samler prosjekt + ansatt-filter (både mobil og desktop) */}
-          {(() => {
+          {/* Filter-knapp — samler prosjekt + ansatt-filter (bare desktop; mobil har den i ☰-menyen) */}
+          {!isMobRP && (() => {
             const activeFilterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
             return (
               <div style={{ position:'relative', flexShrink:0 }}>
@@ -17175,6 +17176,20 @@ function RessursPage() {
               </>
             )}
           </div>
+
+          {/* ☰ Meny-knapp — kun mobil */}
+          {isMobRP && (
+            <button onClick={()=>setShowMobilMenu(true)}
+              style={{ width:'36px', height:'36px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'16px', color:'#64748b', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}
+              aria-label="Meny">
+              <span>☰</span>
+              {(() => {
+                const filterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
+                if (filterCount === 0 && doubleBookCount === 0) return null
+                return <span style={{ position:'absolute', top:'6px', right:'6px', width:'8px', height:'8px', borderRadius:'50%', background: doubleBookCount > 0 ? '#dc2626' : '#059669', border:'2px solid white' }}/>
+              })()}
+            </button>
+          )}
         </div>
 
         {/* Rad 2 — Kontekstrad (lysegrå, nøytrale knapper med aktive-state) */}
@@ -17301,10 +17316,111 @@ function RessursPage() {
             </button>
           </div>
         )}
+
+        {/* Mobil ☰-meny (bottom-sheet) */}
+        {isMobRP && showMobilMenu && (() => {
+          // Beregn kontekst-tall for menyen
+          const activeFilterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
+          const todayStr = new Date().toISOString().split('T')[0]
+          const in30DaysStr = (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().split('T')[0] })()
+          const upcomingMilestones = (milestones || []).filter(m => m.start_date >= todayStr && m.start_date <= in30DaysStr).length
+          const weekStart = (() => { const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); return d.toISOString().split('T')[0] })()
+          const weekEnd = (() => { const d = new Date(weekStart + 'T12:00:00'); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0] })()
+          const weekMateriell = plans.filter(p => p.notes?.startsWith('📦 Levering:') && p.date >= weekStart && p.date <= weekEnd).length
+
+          return (
+            <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+              {/* Backdrop */}
+              <div onClick={()=>setShowMobilMenu(false)}
+                style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
+
+              {/* Sheet */}
+              <div style={{
+                position:'relative',
+                background:'white',
+                width:'100%', maxWidth:'640px',
+                borderTopLeftRadius:'16px', borderTopRightRadius:'16px',
+                boxShadow:'0 -4px 20px rgba(0,0,0,0.15)',
+                animation:'slideUp 0.25s ease',
+                display:'flex', flexDirection:'column',
+                maxHeight:'85vh',
+              }}>
+                {/* Drag-indikator */}
+                <div style={{ padding:'10px 0 0', display:'flex', justifyContent:'center' }}>
+                  <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'999px' }}/>
+                </div>
+
+                {/* Header */}
+                <div style={{ padding:'10px 16px 4px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Meny</h2>
+                  <button onClick={()=>setShowMobilMenu(false)}
+                    style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'32px', height:'32px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}
+                    aria-label="Lukk">×</button>
+                </div>
+
+                {/* Liste */}
+                <div style={{ overflowY:'auto', padding:'4px 12px 20px', flex:1 }}>
+
+                  {/* Seksjon: Filter og visning */}
+                  <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', margin:'10px 8px 4px' }}>Filter og visning</div>
+                  <button onClick={()=>{ setShowMobilMenu(false); setShowFilterPanel(true) }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
+                    <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#eff6ff', color:'#2563eb', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>🔍</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Filter</span>
+                    {activeFilterCount > 0 && <span style={{ background:'#059669', color:'white', fontSize:'11px', fontWeight:'700', padding:'1px 8px', borderRadius:'999px' }}>{activeFilterCount}</span>}
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+
+                  {/* Seksjon: Informasjon */}
+                  <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', margin:'14px 8px 4px' }}>Informasjon</div>
+                  <button onClick={()=>{ setShowMobilMenu(false); setShowMilestones(true) }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
+                    <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f5f3ff', color:'#7c3aed', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>🏁</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Milepæler</span>
+                    {upcomingMilestones > 0 && <span style={{ fontSize:'12px', color:'#64748b' }}>{upcomingMilestones} kommende</span>}
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+                  <button onClick={()=>{ setShowMobilMenu(false); setShowMateriell(true) }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
+                    <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f0fdf4', color:'#059669', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>📦</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Materiell-leveranser</span>
+                    {weekMateriell > 0 && <span style={{ fontSize:'12px', color:'#64748b' }}>{weekMateriell} denne uken</span>}
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+
+                  {/* Seksjon: Planlegging */}
+                  <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', margin:'14px 8px 4px' }}>Planlegging</div>
+                  <button onClick={()=>{ setShowMobilMenu(false); setShowLedigMannskap(true) }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
+                    <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#eff6ff', color:'#2563eb', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>👷</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Ledig mannskap</span>
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+                  <button onClick={()=>{ setShowMobilMenu(false); setShowLedigMaskiner(true) }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
+                    <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f5f3ff', color:'#7c3aed', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>🚜</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Ledig utstyr</span>
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+
+                  {/* Seksjon: Annet */}
+                  <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', margin:'14px 8px 4px' }}>Annet</div>
+                  <button onClick={()=>{ setShowMobilMenu(false); setShowSettings(true) }}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', marginBottom:'2px', textAlign:'left', cursor:'pointer', minHeight:'52px' }}>
+                    <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f1f5f9', color:'#64748b', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'14px', flexShrink:0 }}>⚙️</span>
+                    <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Innstillinger</span>
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
-      {/* Milestone panel */}
-      {showMilestones && (
+      {/* Milestone panel — desktop (horisontal scroll-visning) */}
+      {!isMobRP && showMilestones && (
         <div style={{ background:'#f5f3ff', borderBottom:'2px solid #ddd6fe', padding:'12px 20px', flexShrink:0, maxHeight:'220px', overflowY:'auto' }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px', flexWrap:'wrap', gap:'8px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
@@ -17347,8 +17463,67 @@ function RessursPage() {
         </div>
       )}
 
-      {/* Materiell panel */}
-      {showMateriell && (
+      {/* Milestone bottom-sheet — mobil */}
+      {isMobRP && showMilestones && (
+        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+          <div onClick={()=>setShowMilestones(false)} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
+          <div style={{ position:'relative', background:'white', width:'100%', maxWidth:'640px', borderTopLeftRadius:'16px', borderTopRightRadius:'16px', boxShadow:'0 -4px 20px rgba(0,0,0,0.15)', animation:'slideUp 0.25s ease', display:'flex', flexDirection:'column', maxHeight:'85vh' }}>
+            <div style={{ padding:'10px 0 0', display:'flex', justifyContent:'center' }}>
+              <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'999px' }}/>
+            </div>
+            <div style={{ padding:'10px 16px 8px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', flex:1, minWidth:0 }}>
+                <span style={{ fontSize:'18px' }}>🏁</span>
+                <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Milepæler</h2>
+              </div>
+              <button onClick={()=>setShowMilestones(false)}
+                style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'32px', height:'32px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}
+                aria-label="Lukk">×</button>
+            </div>
+            <div style={{ padding:'0 16px 8px', display:'flex', alignItems:'center', gap:'8px' }}>
+              <select value={milestoneRange} onChange={e=>setMilestoneRange(+e.target.value)}
+                style={{ flex:1, padding:'10px 12px', border:'1px solid #ddd6fe', borderRadius:'8px', fontSize:'14px', color:'#7c3aed', fontWeight:'600', background:'white', outline:'none', minHeight:'44px' }}>
+                {[30,60,90,180,365].map(d=><option key={d} value={d}>Neste {d} dager</option>)}
+              </select>
+              <button onClick={()=>{ setShowMilestones(false); setShowNewMilestone(new Date().toISOString().split('T')[0]) }}
+                style={{ padding:'10px 14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'700', minHeight:'44px', whiteSpace:'nowrap' }}>+ Ny</button>
+            </div>
+            <div style={{ overflowY:'auto', padding:'4px 12px 20px', flex:1 }}>
+              {milestonesInRange.length === 0 ? (
+                <div style={{ padding:'28px 14px', textAlign:'center' }}>
+                  <div style={{ fontSize:'32px', marginBottom:'8px' }}>🏁</div>
+                  <div style={{ color:'#94a3b8', fontSize:'13px' }}>Ingen milepæler de neste {milestoneRange} dagene</div>
+                </div>
+              ) : milestonesInRange.map(ms => {
+                const proj = projects.find(p => p.id === ms.project_id)
+                const daysLeft = Math.ceil((new Date(ms.start_date) - new Date()) / (1000*60*60*24))
+                const isPast = daysLeft < 0
+                const isUrgent = daysLeft >= 0 && daysLeft <= 7
+                const borderColor = isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#ddd6fe'
+                const textColor = isPast ? '#dc2626' : isUrgent ? '#d97706' : '#7c3aed'
+                return (
+                  <button key={ms.id}
+                    onClick={()=>{ setShowMilestones(false); setShowNewMilestone({ edit: ms }) }}
+                    style={{ display:'flex', alignItems:'center', gap:'12px', width:'100%', padding:'12px 14px', background:'white', border:`1px solid ${borderColor}`, borderRadius:'10px', marginBottom:'6px', textAlign:'left', cursor:'pointer', minHeight:'60px' }}>
+                    <span style={{ fontSize:'20px', flexShrink:0 }}>🏁</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:'2px' }}>{ms.title}</div>
+                      <div style={{ fontSize:'12px', color: textColor, fontWeight:'600' }}>
+                        {isPast ? `Passert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'I dag!' : daysLeft === 1 ? 'I morgen' : `Om ${daysLeft} dager`}
+                      </div>
+                      {proj && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {proj.name}</div>}
+                    </div>
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Materiell panel — desktop */}
+      {!isMobRP && showMateriell && (
         <div style={{ background:'#f0fdf4', borderBottom:'2px solid #bbf7d0', padding:'12px 20px', flexShrink:0, maxHeight:'260px', overflowY:'auto' }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
             <span style={{ fontSize:'14px', fontWeight:'700', color:'#059669' }}>📦 Materialleveranser</span>
@@ -17390,6 +17565,62 @@ function RessursPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Materiell bottom-sheet — mobil */}
+      {isMobRP && showMateriell && (
+        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+          <div onClick={()=>setShowMateriell(false)} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
+          <div style={{ position:'relative', background:'white', width:'100%', maxWidth:'640px', borderTopLeftRadius:'16px', borderTopRightRadius:'16px', boxShadow:'0 -4px 20px rgba(0,0,0,0.15)', animation:'slideUp 0.25s ease', display:'flex', flexDirection:'column', maxHeight:'85vh' }}>
+            <div style={{ padding:'10px 0 0', display:'flex', justifyContent:'center' }}>
+              <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'999px' }}/>
+            </div>
+            <div style={{ padding:'10px 16px 10px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', flex:1, minWidth:0 }}>
+                <span style={{ fontSize:'18px' }}>📦</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Materialleveranser</h2>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'1px' }}>{materiellPlans.length} leveranse{materiellPlans.length !== 1 ? 'r' : ''} planlagt</div>
+                </div>
+              </div>
+              <button onClick={()=>setShowMateriell(false)}
+                style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'32px', height:'32px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}
+                aria-label="Lukk">×</button>
+            </div>
+            <div style={{ overflowY:'auto', padding:'4px 12px 20px', flex:1 }}>
+              {materiellPlans.length === 0 ? (
+                <div style={{ padding:'28px 14px', textAlign:'center' }}>
+                  <div style={{ fontSize:'32px', marginBottom:'8px' }}>📦</div>
+                  <div style={{ color:'#94a3b8', fontSize:'13px', lineHeight:1.5 }}>Ingen materialleveranser planlagt.<br/>Bruk «Generer leveringsplan» i kalkulasjonsmodulen.</div>
+                </div>
+              ) : materiellPlans.sort((a,b) => a.date.localeCompare(b.date)).map(mp => {
+                const proj = projects.find(p => p.id === mp.project_id)
+                const daysLeft = Math.ceil((new Date(mp.date) - new Date()) / (1000*60*60*24))
+                const isPast = daysLeft < 0
+                const isUrgent = daysLeft >= 0 && daysLeft <= 3
+                const lines = (mp.notes || '').split('\n')
+                const title = (lines[0] || 'Materialleveranse').replace('📦 Levering: ', '').replace('📦 ', '')
+                const borderColor = isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'
+                const textColor = isPast ? '#dc2626' : isUrgent ? '#d97706' : '#059669'
+                return (
+                  <button key={mp.id}
+                    onClick={() => { setShowMateriell(false); setMateriellDetail({ id: mp.id, title, notes: mp.notes || '', date: mp.date, project: proj?.name }) }}
+                    style={{ display:'flex', alignItems:'center', gap:'12px', width:'100%', padding:'12px 14px', background:'white', border:`1px solid ${borderColor}`, borderRadius:'10px', marginBottom:'6px', textAlign:'left', cursor:'pointer', minHeight:'60px' }}>
+                    <span style={{ fontSize:'20px', flexShrink:0 }}>📦</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:'2px' }}>{title}</div>
+                      <div style={{ fontSize:'12px', color: textColor, fontWeight:'600' }}>
+                        {isPast ? `Skulle vært levert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'Levering i dag!' : daysLeft === 1 ? 'Levering i morgen' : `Levering om ${daysLeft} dager`}
+                      </div>
+                      {proj && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>🏗️ {proj.name}</div>}
+                    </div>
+                    <span style={{ color:'#cbd5e1', fontSize:'16px' }}>›</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 
