@@ -16307,11 +16307,15 @@ function RessursPage() {
   const [allSkills, setAllSkills] = useState([])
   const [fullscreen, setFullscreen] = useState(false)
   // Mobil-detektering — brukes gjennom hele komponenten til å tilpasse UI for håndverkere i felt
-  const [isMobRP, setIsMobRP] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  const [isMobRP, setIsMobRP] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   React.useEffect(() => {
-    const handleResize = () => setIsMobRP(window.innerWidth < 768)
+    const handleResize = () => setIsMobRP(window.innerWidth < 640)
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    window.addEventListener('orientationchange', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('orientationchange', handleResize)
+    }
   }, [])
   const [showSettings, setShowSettings] = useState(false)
   const [showDoubleBookings, setShowDoubleBookings] = useState(false)
@@ -16627,35 +16631,33 @@ function RessursPage() {
           </h1>
 
           {/* Ansatte/Maskiner toggle — segmentert knappegruppe */}
-          {!isMobRP && (
           <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'7px', padding:'2px', gap:'2px', flexShrink:0 }}>
             {[['ansatte','👷','Ansatte'],['maskiner','🚜','Maskiner']].map(([v,emoji,label])=>(
               <button key={v} onClick={()=>setResourceType(v)} title={label}
-                style={{ padding:'4px 10px', border:'none', background:resourceType===v?'white':'transparent', color:resourceType===v?'#0f172a':'#94a3b8', fontWeight:resourceType===v?'600':'500', fontSize:'12px', cursor:'pointer', borderRadius:'5px', boxShadow: resourceType===v?'0 1px 2px rgba(0,0,0,0.05)':'none', transition:'all 0.15s' }}>
+                style={{ padding: isMobRP ? '6px 12px' : '4px 10px', border:'none', background:resourceType===v?'white':'transparent', color:resourceType===v?'#0f172a':'#94a3b8', fontWeight:resourceType===v?'600':'500', fontSize:'12px', cursor:'pointer', borderRadius:'5px', boxShadow: resourceType===v?'0 1px 2px rgba(0,0,0,0.05)':'none', transition:'all 0.15s', minHeight: isMobRP ? '36px' : 'auto' }}>
                 {emoji}
               </button>
             ))}
           </div>
-          )}
 
-          {/* Filter-knapp — samler prosjekt + ansatt-filter */}
-          {!isMobRP && (() => {
+          {/* Filter-knapp — samler prosjekt + ansatt-filter (både mobil og desktop) */}
+          {(() => {
             const activeFilterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
             return (
               <div style={{ position:'relative', flexShrink:0 }}>
                 <button onClick={()=>setShowFilterPanel(v=>!v)}
                   style={{ padding:'6px 12px', border:`1px solid ${activeFilterCount>0?'#059669':'#e2e8f0'}`, borderRadius:'8px', fontSize:'12px', color:activeFilterCount>0?'#059669':'#374151', background: activeFilterCount>0?'#f0fdf4':'white', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', fontWeight: activeFilterCount>0?'600':'500' }}>
                   <span style={{ fontSize:'11px' }}>🔍</span>
-                  <span>Filter</span>
+                  <span>{isMobRP ? (activeFilterCount > 0 ? '' : 'Filter') : 'Filter'}</span>
                   {activeFilterCount>0 && <span style={{ background:'#059669', color:'white', borderRadius:'999px', padding:'0 7px', fontSize:'10px', fontWeight:'700', lineHeight:'16px', minWidth:'16px', textAlign:'center' }}>{activeFilterCount}</span>}
                 </button>
                 {showFilterPanel && (
                   <>
                     <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowFilterPanel(false)} />
-                    <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'14px', minWidth:'280px' }}>
+                    <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'14px', minWidth: isMobRP ? 'calc(100vw - 32px)' : '280px', maxWidth: isMobRP ? 'calc(100vw - 32px)' : '340px' }}>
                       <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Filter etter prosjekt</div>
                       <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
-                        style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer' }}>
+                        style={{ width:'100%', padding: isMobRP ? '10px 12px' : '8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize: isMobRP ? '14px' : '13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer', minHeight: isMobRP ? '44px' : 'auto' }}>
                         <option value="alle">🏗️ Alle prosjekter ({projects.length})</option>
                         {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
@@ -16663,7 +16665,7 @@ function RessursPage() {
                         <>
                           <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Filter etter ansatt</div>
                           <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
-                            style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer' }}>
+                            style={{ width:'100%', padding: isMobRP ? '10px 12px' : '8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize: isMobRP ? '14px' : '13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer', minHeight: isMobRP ? '44px' : 'auto' }}>
                             <option value="alle">👤 Alle ansatte ({employees.length})</option>
                             {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
                           </select>
@@ -16671,7 +16673,7 @@ function RessursPage() {
                       )}
                       {activeFilterCount>0 && (
                         <button onClick={()=>{ setFilterProject('alle'); setFilterEmployee('alle') }}
-                          style={{ width:'100%', padding:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'12px', color:'#64748b', fontWeight:'500' }}>
+                          style={{ width:'100%', padding: isMobRP ? '12px' : '8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'12px', color:'#64748b', fontWeight:'500', minHeight: isMobRP ? '44px' : 'auto' }}>
                           ✕ Fjern alle filtre
                         </button>
                       )}
@@ -16681,24 +16683,6 @@ function RessursPage() {
               </div>
             )
           })()}
-
-          {/* Mobile: Prosjekt- og ansatt-filter som i dag (kompakt) */}
-          {isMobRP && (
-            <>
-              <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
-                style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', background:'white', cursor:'pointer', color:'#374151', maxWidth:'130px', fontWeight:'500', flex:'1 1 auto' }}>
-                <option value="alle">🏗️ Alle</option>
-                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {resourceType==='ansatte' && (
-                <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}
-                  style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', background:'white', cursor:'pointer', color:'#374151', maxWidth:'120px', fontWeight:'500', flex:'1 1 auto' }}>
-                  <option value="alle">👤 Alle</option>
-                  {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
-                </select>
-              )}
-            </>
-          )}
 
           {/* Spacer — dytter resten til høyre */}
           <div style={{ flex:1, minWidth:'10px' }} />
@@ -16883,6 +16867,7 @@ function RessursPage() {
         </div>
 
         {/* Rad 2 — Kontekstrad (lysegrå, nøytrale knapper med aktive-state) */}
+        {!isMobRP && (
         <div style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 16px', flexWrap:'wrap', background:'#fafbfc', borderTop:'1px solid #f1f5f9' }}>
           {/* Dobbeltbookinger — bare hvis >0, plassert først (rød) */}
           {doubleBookCount>0&&(
@@ -16994,6 +16979,17 @@ function RessursPage() {
             )}
           </div>
         </div>
+        )}
+
+        {/* Mobil kontekstrad — kompakt, bare kritisk informasjon */}
+        {isMobRP && doubleBookCount > 0 && (
+          <div style={{ padding:'8px 14px', background:'#fef2f2', borderTop:'1px solid #fecaca' }}>
+            <button onClick={()=>setShowDoubleBookings(true)}
+              style={{ width:'100%', padding:'10px 12px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', fontSize:'13px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', minHeight:'44px' }}>
+              ⚠️ {doubleBookCount} konflikt{doubleBookCount>1?'er':''} — trykk for å se
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Milestone panel */}
