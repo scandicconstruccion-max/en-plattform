@@ -16132,9 +16132,6 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
         const weekPlans = week.days.flatMap(d => plansByDate[d.date] || [])
         const weekBookings = weekPlans.length
         const weekHours = weekPlans.reduce((sum, p) => sum + (parseFloat(p.hours) || 0), 0)
-        // Kapasitet: antall ukedager (man-fre) i uka × 8t
-        const weekdaysInWeek = week.days.filter(d => !d.isWeekend).length
-        const weekCapacity = weekdaysInWeek * 8
         // Sjekk om uka inneholder i dag
         const weekContainsToday = week.days.some(d => d.isToday)
 
@@ -16143,7 +16140,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
 
         return (
           <div key={week.weekNum + '-' + week.start}>
-            {/* Uke-header — Float-inspirert med timer-sammendrag */}
+            {/* Uke-header — Float-inspirert med totalt timer-sammendrag */}
             <div style={{
               padding:'12px 14px 6px',
               display:'flex', alignItems:'center', justifyContent:'space-between',
@@ -16169,16 +16166,8 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                     {weekBookings} booking{weekBookings !== 1 ? 'er' : ''}
                   </span>
                   <span style={{ fontSize:'9px', color:'#cbd5e1' }}>·</span>
-                  <span style={{
-                    fontSize:'12px', fontWeight:'700',
-                    color: weekHours > weekCapacity ? '#dc2626' : weekHours > weekCapacity * 0.8 ? '#d97706' : '#059669',
-                  }}>
-                    {Math.round(weekHours)}t
-                    {weekCapacity > 0 && (
-                      <span style={{ fontSize:'10px', fontWeight:'500', color:'#94a3b8', marginLeft:'2px' }}>
-                        /{weekCapacity}t
-                      </span>
-                    )}
+                  <span style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>
+                    {Math.round(weekHours).toLocaleString('nb-NO')}t
                   </span>
                 </div>
               )}
