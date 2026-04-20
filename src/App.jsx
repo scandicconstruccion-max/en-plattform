@@ -1406,9 +1406,11 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
   const [showDrop, setShowDrop] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
   const [rect, setRect] = useState(null)
   const wrapperRef = React.useRef(null)
   const inputRef = React.useRef(null)
+  const dropdownRef = React.useRef(null)
 
   const isEmpty = value === emptyValue || value == null || value === ''
   const selected = !isEmpty ? options.find(p => p.id === value) : null
@@ -1438,6 +1440,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     setShowDrop(false)
     setSearchText('')
     setIsTyping(false)
+    setHighlightedIndex(0)
   }
 
   const openDrop = () => {
@@ -1448,12 +1451,42 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     setShowDrop(true)
     setSearchText('')
     setIsTyping(false)
+    setHighlightedIndex(0)
     // Marker hele teksten slik at første tastetrykk overskriver valgt prosjektnavn.
     // requestAnimationFrame sikrer at select() kjører etter at input har fått fokus.
     if (inputRef.current) {
       requestAnimationFrame(() => {
         try { inputRef.current && inputRef.current.select() } catch (e) {}
       })
+    }
+  }
+
+  // Keyboard-navigasjon: ArrowDown/Up bytter uthevet treff, Enter velger, Escape lukker.
+  const handleKeyDown = (e) => {
+    if (!showDrop) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        e.preventDefault()
+        openDrop()
+      }
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightedIndex(i => Math.min(i + 1, Math.max(filtered.length - 1, 0)))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightedIndex(i => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const p = filtered[highlightedIndex]
+      if (p) handleSelect(p)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setShowDrop(false)
+      setSearchText('')
+      setIsTyping(false)
+      setHighlightedIndex(0)
+      if (inputRef.current) inputRef.current.blur()
     }
   }
 
@@ -1492,7 +1525,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
   const indent = (depth) => '\u00A0\u00A0\u00A0\u00A0'.repeat(depth)
 
   const dropdown = (showDrop && rect) && (
-    <div style={{
+    <div ref={dropdownRef} style={{
       position:'fixed',
       top: `${rect.top}px`,
       left: `${rect.left}px`,
@@ -1515,10 +1548,21 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
             <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
               Ingen treff{searchText ? ` for "${searchText}"` : ''}
             </div>
-          ) : filtered.map(p => (
-            <div key={p.id} onMouseDown={(e) => { e.preventDefault(); handleSelect(p) }}
-              style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a', display:'flex', flexDirection:'column', gap:'2px' }}
-              onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+          ) : filtered.map((p, idx) => {
+            const isHighlighted = idx === highlightedIndex
+            return (
+            <div key={p.id}
+              ref={el => { if (isHighlighted && el && dropdownRef.current) {
+                const parent = dropdownRef.current
+                const elTop = el.offsetTop
+                const elBottom = elTop + el.offsetHeight
+                if (elTop < parent.scrollTop) parent.scrollTop = elTop
+                else if (elBottom > parent.scrollTop + parent.clientHeight) parent.scrollTop = elBottom - parent.clientHeight
+              } }}
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(p) }}
+              onMouseEnter={e => { setHighlightedIndex(idx); e.currentTarget.style.background='#f0fdf4' }}
+              onMouseLeave={e => { e.currentTarget.style.background = isHighlighted ? '#f0fdf4' : 'white' }}
+              style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a', display:'flex', flexDirection:'column', gap:'2px', background: isHighlighted ? '#f0fdf4' : 'white' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
                 {p.project_number && <span style={{ fontFamily:'ui-monospace, monospace', fontSize:'12px', color:'#64748b', fontWeight:'600' }}>{p.project_number}</span>}
                 <span style={{ fontWeight:'600' }}>{indent(p._depth)}{p._depth > 0 ? '└ ' : ''}{p.name || '(uten navn)'}</span>
@@ -1531,7 +1575,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
                 </div>
               )}
             </div>
-          ))}
+          )})}
         </>
       )}
     </div>
@@ -1546,11 +1590,13 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
           // Første tastetrykk → bytt til "skrive-modus". Valgt displayValue erstattes av søketekst.
           setIsTyping(true)
           setSearchText(e.target.value)
+          setHighlightedIndex(0)
           if (!showDrop) openDrop()
         }}
         onFocus={openDrop}
         onClick={() => { if (!showDrop) openDrop() }}
-        onBlur={() => setTimeout(() => { setShowDrop(false); setSearchText(''); setIsTyping(false) }, 200)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setTimeout(() => { setShowDrop(false); setSearchText(''); setIsTyping(false); setHighlightedIndex(0) }, 200)}
         placeholder={placeholder || emptyLabel || 'Søk etter prosjekt (navn, nummer, kunde, adresse)...'}
         required={required && !value}
         style={selStyle} />
