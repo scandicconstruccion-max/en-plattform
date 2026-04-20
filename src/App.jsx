@@ -1405,6 +1405,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
   const options = React.useMemo(() => projectOptions(projects || []), [projects])
   const [showDrop, setShowDrop] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
   const [rect, setRect] = useState(null)
   const wrapperRef = React.useRef(null)
 
@@ -1414,9 +1415,14 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     ? `${selected.name}${selected.project_number ? ` (${selected.project_number})` : ''}`
     : ''
 
-  const inputVal = showDrop ? searchText : displayValue
+  // Når dropdown er åpen og brukeren aktivt skriver → vis søketekst.
+  // Når dropdown nettopp ble åpnet (isTyping=false) → vis valgt prosjekt.
+  // Når dropdown er lukket → vis valgt prosjekt.
+  const inputVal = showDrop && isTyping ? searchText : displayValue
 
   const filtered = options.filter(p => {
+    // Filtrer kun når brukeren faktisk skriver — ellers vis hele lista.
+    if (!isTyping) return true
     const q = (searchText || '').toLowerCase().trim()
     if (!q) return true
     return (p.name || '').toLowerCase().includes(q) ||
@@ -1430,6 +1436,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     onChange(p.id)
     setShowDrop(false)
     setSearchText('')
+    setIsTyping(false)
   }
 
   const openDrop = () => {
@@ -1439,6 +1446,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     }
     setShowDrop(true)
     setSearchText('')
+    setIsTyping(false)
   }
 
   useEffect(() => {
@@ -1495,13 +1503,6 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
         </div>
       ) : (
         <>
-          {allowEmpty && !isEmpty && (
-            <div onMouseDown={(e) => { e.preventDefault(); onChange(emptyValue); setShowDrop(false); setSearchText('') }}
-              style={{ padding:'7px 12px', cursor:'pointer', fontSize:'12px', color:'#dc2626', borderBottom:'1px solid #f1f5f9', fontWeight:'600' }}
-              onMouseEnter={e => e.currentTarget.style.background='#fef2f2'} onMouseLeave={e => e.currentTarget.style.background='white'}>
-              ✕ Fjern valgt
-            </div>
-          )}
           {filtered.length === 0 ? (
             <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
               Ingen treff{searchText ? ` for "${searchText}"` : ''}
@@ -1533,12 +1534,14 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
       <input
         value={inputVal}
         onChange={e => {
+          // Første tastetrykk → bytt til "skrive-modus". Valgt displayValue erstattes av søketekst.
+          setIsTyping(true)
           setSearchText(e.target.value)
           if (!showDrop) openDrop()
-          if (!e.target.value && !isEmpty) onChange(emptyValue)
         }}
         onFocus={openDrop}
-        onBlur={() => setTimeout(() => setShowDrop(false), 200)}
+        onClick={() => { if (!showDrop) openDrop() }}
+        onBlur={() => setTimeout(() => { setShowDrop(false); setSearchText(''); setIsTyping(false) }, 200)}
         placeholder={placeholder || emptyLabel || 'Søk etter prosjekt (navn, nummer, kunde, adresse)...'}
         required={required && !value}
         style={selStyle} />
