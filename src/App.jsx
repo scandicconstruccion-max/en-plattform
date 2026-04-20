@@ -16004,6 +16004,18 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
     return Math.ceil(((date - yearStart) / 86400000 + 1) / 7)
   }
 
+  // Auto-scroll til i dag når mobil-visningen åpnes eller brukeren navigerer til inneværende måned
+  React.useEffect(() => {
+    const todayDate = new Date()
+    if (viewMonth.getFullYear() === todayDate.getFullYear() && viewMonth.getMonth() === todayDate.getMonth()) {
+      const t = setTimeout(() => {
+        const el = document.getElementById('mobil-today-card')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 150)
+      return () => clearTimeout(t)
+    }
+  }, [viewMonth])
+
   // Filter-anvendelse: finn bookinger i visningen
   const filteredPlans = React.useMemo(() => {
     return plans.filter(p => {
@@ -16062,7 +16074,23 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
   // Navigasjon
   const prevMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
   const nextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
-  const goToToday = () => setViewMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+  const goToToday = () => {
+    const todayDate = new Date()
+    const targetMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
+    // Hvis vi allerede er i riktig måned, scroll direkte. Ellers bytt måned først.
+    if (viewMonth.getFullYear() === targetMonth.getFullYear() && viewMonth.getMonth() === targetMonth.getMonth()) {
+      // Samme måned — scroll med en gang
+      const el = document.getElementById('mobil-today-card')
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else {
+      // Bytt måned, og scroll etter React har rendret
+      setViewMonth(targetMonth)
+      setTimeout(() => {
+        const el = document.getElementById('mobil-today-card')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
+    }
+  }
 
   const monthName = viewMonth.toLocaleDateString('nb-NO', { month: 'long', year: 'numeric' })
 
@@ -16114,6 +16142,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
 
               return (
                 <div key={d.date}
+                  id={d.isToday ? 'mobil-today-card' : undefined}
                   onClick={() => onOpenBooking && resourceType === 'ansatte' && onOpenBooking({ date: d.date })}
                   style={{
                     background: cardBg,
@@ -16123,6 +16152,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                     padding:'10px 12px',
                     opacity: isDim && !hasContent ? 0.55 : 1,
                     cursor: resourceType === 'ansatte' ? 'pointer' : 'default',
+                    scrollMarginTop: '80px',
                   }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: hasContent ? '8px' : 0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
@@ -16654,7 +16684,7 @@ function RessursPage() {
                 {showFilterPanel && (
                   <>
                     <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowFilterPanel(false)} />
-                    <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'14px', minWidth: isMobRP ? 'calc(100vw - 32px)' : '280px', maxWidth: isMobRP ? 'calc(100vw - 32px)' : '340px' }}>
+                    <div style={{ position: isMobRP ? 'fixed' : 'absolute', top: isMobRP ? '56px' : 'calc(100% + 6px)', left: isMobRP ? '12px' : 0, right: isMobRP ? '12px' : 'auto', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, padding:'14px', minWidth: isMobRP ? 'auto' : '280px', maxWidth: isMobRP ? 'none' : '340px' }}>
                       <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'8px' }}>Filter etter prosjekt</div>
                       <select value={filterProject} onChange={e=>setFilterProject(e.target.value)}
                         style={{ width:'100%', padding: isMobRP ? '10px 12px' : '8px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize: isMobRP ? '14px' : '13px', color:'#374151', background:'white', marginBottom:'12px', outline:'none', boxSizing:'border-box', cursor:'pointer', minHeight: isMobRP ? '44px' : 'auto' }}>
@@ -16845,7 +16875,7 @@ function RessursPage() {
             {showNyMeny && (
               <>
                 <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setShowNyMeny(false)} />
-                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, minWidth:'200px', overflow:'hidden' }}>
+                <div style={{ position: isMobRP ? 'fixed' : 'absolute', top: isMobRP ? '56px' : 'calc(100% + 6px)', left: isMobRP ? '12px' : 'auto', right: isMobRP ? '12px' : 0, background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:51, minWidth: isMobRP ? 'auto' : '200px', overflow:'hidden' }}>
                   <button onClick={()=>{ setShowOppgaveModal(true); setShowNyMeny(false) }}
                     style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 14px', border:'none', background:'white', cursor:'pointer', fontSize:'13px', color:'#0f172a', textAlign:'left', borderBottom:'1px solid #f1f5f9' }}
                     onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
@@ -33311,7 +33341,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator','ressursplan']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
