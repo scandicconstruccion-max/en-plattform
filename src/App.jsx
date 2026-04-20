@@ -3789,7 +3789,11 @@ function SjekklistePage({ onNavigateDetail }) {
                     <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
                       {group.templates.map(tmpl => {
                         const isExpanded = expandedTemplates[tmpl.id]
-                        const totalItems = tmpl.items?.length || tmpl.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0
+                        const topItemsCount = Array.isArray(tmpl.items) ? tmpl.items.length : 0
+                        const sectionItemsCount = Array.isArray(tmpl.sections)
+                          ? tmpl.sections.reduce((s, sec) => s + (Array.isArray(sec.items) ? sec.items.length : 0), 0)
+                          : 0
+                        const totalItems = topItemsCount + sectionItemsCount
                         return (
                         <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -3805,31 +3809,43 @@ function SjekklistePage({ onNavigateDetail }) {
                           </button>
                           {isExpanded && (
                             <div style={{ marginBottom:'12px', padding:'12px', background:'#f8fafc', borderRadius:'10px', maxHeight:'340px', overflowY:'auto' }}>
-                              {(tmpl.sections || []).length > 0 ? (
-                                (tmpl.sections || []).map((sec, si) => (
-                                  <div key={si} style={{ marginBottom: si < (tmpl.sections.length - 1) ? '12px' : 0 }}>
-                                    <div style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', marginBottom:'6px', padding:'4px 8px', background:'white', borderRadius:'6px', borderLeft:'3px solid #059669' }}>{sec.title}</div>
-                                    {(sec.items || []).map((item, ii) => (
-                                      <div key={ii} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'4px 8px', fontSize:'12px', color:'#374151' }}>
-                                        <span style={{ width:'14px', height:'14px', borderRadius:'3px', border:'1.5px solid #cbd5e1', flexShrink:0 }} />
-                                        <span>{typeof item === 'string' ? item : (item.title || item.text || '')}</span>
-                                      </div>
-                                    ))}
-                                    {(!sec.items || sec.items.length === 0) && (
-                                      <div style={{ padding:'4px 8px', fontSize:'11px', color:'#94a3b8', fontStyle:'italic' }}>Ingen kontrollpunkter i denne seksjonen</div>
-                                    )}
-                                  </div>
-                                ))
-                              ) : (tmpl.items || []).length > 0 ? (
-                                (tmpl.items || []).map((item, ii) => (
+                              {(() => {
+                                const topItems = Array.isArray(tmpl.items) ? tmpl.items : []
+                                const sections = Array.isArray(tmpl.sections) ? tmpl.sections : []
+                                const sectionsWithItems = sections.filter(sec => Array.isArray(sec.items) && sec.items.length > 0)
+                                const emptySections = sections.filter(sec => !Array.isArray(sec.items) || sec.items.length === 0)
+                                const hasAnyContent = topItems.length > 0 || sectionsWithItems.length > 0 || emptySections.length > 0
+                                if (!hasAnyContent) {
+                                  return <div style={{ fontSize:'12px', color:'#94a3b8', fontStyle:'italic', textAlign:'center', padding:'8px' }}>Denne malen har ingen kontrollpunkter enda</div>
+                                }
+                                const renderItem = (item, ii) => (
                                   <div key={ii} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'4px 8px', fontSize:'12px', color:'#374151' }}>
                                     <span style={{ width:'14px', height:'14px', borderRadius:'3px', border:'1.5px solid #cbd5e1', flexShrink:0 }} />
-                                    <span>{typeof item === 'string' ? item : (item.title || item.text || '')}</span>
+                                    <span>{typeof item === 'string' ? item : (item.title || item.text || item.name || item.label || '')}</span>
                                   </div>
-                                ))
-                              ) : (
-                                <div style={{ fontSize:'12px', color:'#94a3b8', fontStyle:'italic', textAlign:'center', padding:'8px' }}>Denne malen har ingen kontrollpunkter enda</div>
-                              )}
+                                )
+                                return (
+                                  <>
+                                    {topItems.length > 0 && (
+                                      <div style={{ marginBottom: (sectionsWithItems.length + emptySections.length) > 0 ? '12px' : 0 }}>
+                                        {topItems.map(renderItem)}
+                                      </div>
+                                    )}
+                                    {sectionsWithItems.map((sec, si) => (
+                                      <div key={`s-${si}`} style={{ marginBottom:'12px' }}>
+                                        <div style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', marginBottom:'6px', padding:'4px 8px', background:'white', borderRadius:'6px', borderLeft:'3px solid #059669' }}>{sec.title}</div>
+                                        {sec.items.map(renderItem)}
+                                      </div>
+                                    ))}
+                                    {emptySections.length > 0 && topItems.length === 0 && sectionsWithItems.length === 0 && emptySections.map((sec, si) => (
+                                      <div key={`e-${si}`} style={{ marginBottom:'12px' }}>
+                                        <div style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', marginBottom:'6px', padding:'4px 8px', background:'white', borderRadius:'6px', borderLeft:'3px solid #059669' }}>{sec.title}</div>
+                                        <div style={{ padding:'4px 8px', fontSize:'11px', color:'#94a3b8', fontStyle:'italic' }}>Ingen kontrollpunkter i denne seksjonen</div>
+                                      </div>
+                                    ))}
+                                  </>
+                                )
+                              })()}
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: '8px' }}>
