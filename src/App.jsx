@@ -1846,7 +1846,7 @@ function ProsjekterPage({ onNavigateDetail }) {
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw' }
+  const f = { fontFamily:'system-ui, sans-serif', overflowX:'clip', maxWidth:'100vw' }
   const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
 
   const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
@@ -1904,42 +1904,46 @@ function ProsjekterPage({ onNavigateDetail }) {
 
   return (
     <div style={f}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
-          <div>
-            <h1 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
+      <div style={{ position:'sticky', top: isMobProj ? '52px' : '56px', zIndex:20, background:'#f8fafc' }}>
+        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '16px' : '20px 32px' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+            <div>
+              <h1 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
+              <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
+            </div>
+            <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '9px 14px' : '10px 18px', fontSize:'13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Nytt prosjekt</button>
           </div>
-          <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '9px 14px' : '10px 18px', fontSize:'13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Nytt prosjekt</button>
+        </div>
+        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px 32px', background:'white', borderBottom:'1px solid #e2e8f0' }}>
+          <div style={{ display:'flex', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '12px', flexWrap:'wrap', alignItems:'center' }}>
+            <div style={{ position:'relative', flex:1, minWidth:'200px' }}>
+              <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }}>🔍</span>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter prosjekt..." style={{ ...inp, paddingLeft:'36px' }} />
+            </div>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width:'160px', background:'white' }}>
+              <option value="all">Alle statuser</option>
+              {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', background:'white', cursor:'pointer', color:'#374151', fontWeight:'500' }}>
+              <option value="name_asc">A → Å</option>
+              <option value="name_desc">Å → A</option>
+              <option value="created_desc">Nyeste først</option>
+              <option value="created_asc">Eldste først</option>
+            </select>
+            {archivedCount > 0 && (
+              <button onClick={() => setShowArchived(!showArchived)}
+                style={{ padding:'8px 14px', borderRadius:'10px', border: showArchived ? '1px solid #7c3aed' : '1px solid #e2e8f0', background: showArchived ? '#f5f3ff' : 'white', cursor:'pointer', fontSize:'13px', fontWeight:'500', color: showArchived ? '#7c3aed' : '#64748b', display:'flex', alignItems:'center', gap:'6px' }}>
+                📦 {showArchived ? 'Skjul arkiverte' : `Vis arkiverte (${archivedCount})`}
+              </button>
+            )}
+            <div style={{ display:'flex', gap:'4px' }}>
+              {['grid','list'].map(v => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }}>{v==='grid'?'⊞':'☰'}</button>)}
+            </div>
+          </div>
         </div>
       </div>
       <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '24px 32px' }}>
-        <div style={{ display:'flex', gap: typeof window !== 'undefined' && window.innerWidth < 768 ? '8px' : '12px', marginBottom: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px', flexWrap:'wrap', alignItems:'center' }}>
-          <div style={{ position:'relative', flex:1, minWidth:'200px' }}>
-            <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }}>🔍</span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter prosjekt..." style={{ ...inp, paddingLeft:'36px' }} />
-          </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width:'160px', background:'white' }}>
-            <option value="all">Alle statuser</option>
-            {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            style={{ padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', outline:'none', background:'white', cursor:'pointer', color:'#374151', fontWeight:'500' }}>
-            <option value="name_asc">A → Å</option>
-            <option value="name_desc">Å → A</option>
-            <option value="created_desc">Nyeste først</option>
-            <option value="created_asc">Eldste først</option>
-          </select>
-          {archivedCount > 0 && (
-            <button onClick={() => setShowArchived(!showArchived)}
-              style={{ padding:'8px 14px', borderRadius:'10px', border: showArchived ? '1px solid #7c3aed' : '1px solid #e2e8f0', background: showArchived ? '#f5f3ff' : 'white', cursor:'pointer', fontSize:'13px', fontWeight:'500', color: showArchived ? '#7c3aed' : '#64748b', display:'flex', alignItems:'center', gap:'6px' }}>
-              📦 {showArchived ? 'Skjul arkiverte' : `Vis arkiverte (${archivedCount})`}
-            </button>
-          )}
-          <div style={{ display:'flex', gap:'4px' }}>
-            {['grid','list'].map(v => <button key={v} onClick={() => setViewMode(v)} style={{ padding:'8px 10px', borderRadius:'8px', border:'none', cursor:'pointer', background: viewMode===v ? '#ecfdf5':'transparent', color: viewMode===v ? '#059669':'#94a3b8', fontSize:'16px' }}>{v==='grid'?'⊞':'☰'}</button>)}
-          </div>
-        </div>
         {loading ? (
           <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekter...</div>
         ) : filtered.length === 0 ? (
@@ -24204,15 +24208,41 @@ function BildedokPage() {
     if (!files.length) return
     setUploading(true)
     try {
+      let successCount = 0
       for (const file of files) {
-        const path=`bildedok/${Date.now()}_${file.name}`
-        const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
-        if(upErr) throw upErr
-        const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
-        await supabase.from('photos').insert({ file_url:publicUrl, file_name:file.name, fase:fase||'under_arbeid', project_id:projectId||null, room:rom||null, description:note||null, created_by:user?.id, upload_method:'manuell' })
+        // Rens filnavn: fjern mellomrom, æ/ø/å, spesialtegn → forhindrer storage-path-feil
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
+        const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
+        const path = `bildedok/${safeName}`
+        const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+        if (upErr) { console.error('[bildedok] storage upload feilet:', upErr); throw upErr }
+        const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+        const payload = sanitizeDbPayload({
+          file_url: publicUrl,
+          file_name: file.name,
+          fase: fase || 'under_arbeid',
+          project_id: projectId || null,
+          room: rom || null,
+          description: note || null,
+          created_by: user?.id || null,
+          upload_method: 'manuell',
+        })
+        const { error: dbErr } = await supabase.from('photos').insert(payload)
+        if (dbErr) {
+          console.error('[bildedok] insert i photos-tabellen feilet:', dbErr, 'payload:', payload)
+          // Rydd opp: slett filen fra storage siden DB-raden ikke ble opprettet
+          try { await supabase.storage.from('plattform-files').remove([path]) } catch(_) {}
+          throw dbErr
+        }
+        successCount++
       }
-      load()
-    } catch(e) { alert('Opplasting feilet: '+e.message) }
+      if (successCount > 0) {
+        await load()
+      }
+    } catch(e) {
+      console.error('[bildedok] uploadPhotos feilet:', e)
+      alert('Opplasting feilet: ' + (e.message || e.toString()) + '\n\nSjekk Console (F12) for detaljer.')
+    }
     finally { setUploading(false) }
   }
 
@@ -34252,7 +34282,7 @@ function AppContent() {
       </div>
       )}
 
-      <main style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh', minWidth: 0, overflowX: 'hidden' }}>
+      <main style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh', minWidth: 0, overflowX: 'clip' }}>
         {/* Global top bar */}
         <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMobile ? '0 12px' : '0 28px', height: isMobile ? '52px' : '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           {/* Mobil: Hamburger + Logo */}
