@@ -3565,7 +3565,6 @@ function SjekklistePage({ onNavigateDetail }) {
   const [saving, setSaving] = useState(false)
   const [expandedMalKat, setExpandedMalKat] = useState({})
   const [expandedTemplates, setExpandedTemplates] = useState({})
-  const [previewTemplate, setPreviewTemplate] = useState(null)
   const { user } = useAuth()
   const f = { fontFamily: 'system-ui, sans-serif' }
   const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
@@ -3928,49 +3927,6 @@ function SjekklistePage({ onNavigateDetail }) {
       )}
 
       {/* New/Edit Template Modal */}
-      {/* Forhåndsvisning av mal */}
-      {previewTemplate && (
-        <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setPreviewTemplate(null)} />
-          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'550px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <div>
-                <h3 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>👁️ {previewTemplate.name}</h3>
-                {previewTemplate.description && <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{previewTemplate.description}</p>}
-              </div>
-              <button onClick={() => setPreviewTemplate(null)} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-            </div>
-            <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
-              {(previewTemplate.sections || []).map((sec, si) => (
-                <div key={si} style={{ marginBottom:'16px' }}>
-                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'8px', padding:'6px 10px', background:'#f8fafc', borderRadius:'8px' }}>{sec.title}</div>
-                  {(sec.items || []).map((item, ii) => (
-                    <div key={ii} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 10px', borderBottom:'1px solid #f8fafc' }}>
-                      <span style={{ width:'18px', height:'18px', borderRadius:'4px', border:'2px solid #e2e8f0', flexShrink:0 }} />
-                      <span style={{ fontSize:'13px', color:'#374151' }}>{typeof item === 'string' ? item : item.title || item}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              {(!previewTemplate.sections || previewTemplate.sections.length === 0) && previewTemplate.items && (
-                <div>
-                  {previewTemplate.items.map((item, ii) => (
-                    <div key={ii} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 10px', borderBottom:'1px solid #f8fafc' }}>
-                      <span style={{ width:'18px', height:'18px', borderRadius:'4px', border:'2px solid #e2e8f0', flexShrink:0 }} />
-                      <span style={{ fontSize:'13px', color:'#374151' }}>{item.title || item}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', justifyContent:'flex-end', flexShrink:0 }}>
-              <button onClick={() => { setNewForm(f => ({ ...f, template_id: previewTemplate.id })); setShowNew(true); setPreviewTemplate(null) }}
-                style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Bruk denne malen</button>
-              <button onClick={() => setPreviewTemplate(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Lukk</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showNewTemplate && (
         <TemplateEditorModal
