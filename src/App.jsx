@@ -6306,11 +6306,11 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
   const [projectId, setProjectId] = useState(initial?.project_id||'')
   const d0 = initial?.data||{}
   const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], ansvarlig:d0.ansvarlig||'', omrade:d0.omrade||'', formal:d0.formal||'' })
-  const [risikoer, setRisikoer] = useState(d0.risikoer||[{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', restRisiko:'' }])
+  const [risikoer, setRisikoer] = useState(d0.risikoer||[{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', sannsynlighetEtter:2, konsekvensEtter:2, restRisiko:'' }])
   const [saving, setSaving] = useState(false)
   const [restInfoOpenFor, setRestInfoOpenFor] = useState(null)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
-  const addR = () => setRisikoer(r=>[...r,{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', restRisiko:'' }])
+  const addR = () => setRisikoer(r=>[...r,{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', sannsynlighetEtter:2, konsekvensEtter:2, restRisiko:'' }])
   const removeR = (id) => setRisikoer(r=>r.filter(x=>x.id!==id))
   const updateR = (id,f,v) => setRisikoer(r=>r.map(x=>x.id===id?{...x,[f]:v}:x))
 
@@ -6350,12 +6350,20 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
           </div>
           {risikoer.map((r,idx) => {
             const score = r.sannsynlighet * r.konsekvensGrad; const rc = riskColor(score)
+            // Restrisiko-skaar: S_etter × K_etter. Hvis feltene er udefinerte (eldre data), fall tilbake til opprinnelige verdier.
+            const sEtter = r.sannsynlighetEtter ?? r.sannsynlighet
+            const kEtter = r.konsekvensEtter ?? r.konsekvensGrad
+            const scoreEtter = sEtter * kEtter; const rcEtter = riskColor(scoreEtter)
+            const reduksjon = score > 0 ? Math.round(((score - scoreEtter) / score) * 100) : 0
             return (
               <div key={r.id} style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', marginBottom:'10px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', flexWrap:'wrap', gap:'8px' }}>
                   <span style={{ fontWeight:'700', fontSize:'13px', color:'#64748b' }}>Risiko {idx+1}</span>
-                  <div style={{ display:'flex', gap:'8px' }}>
-                    <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>R={score} – {rc.label}</span>
+                  <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
+                    <span style={{ background:rc.bg, color:rc.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>Før: R={score} – {rc.label}</span>
+                    <span style={{ color:'#94a3b8', fontSize:'14px' }}>→</span>
+                    <span style={{ background:rcEtter.bg, color:rcEtter.color, fontSize:'12px', fontWeight:'700', padding:'3px 10px', borderRadius:'999px' }}>Etter: R={scoreEtter} – {rcEtter.label}</span>
+                    {reduksjon > 0 && <span style={{ color:'#16a34a', fontSize:'11px', fontWeight:'700' }}>↓{reduksjon}%</span>}
                     {risikoer.length>1 && <button type="button" onClick={()=>removeR(r.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', cursor:'pointer' }}>Fjern</button>}
                   </div>
                 </div>
@@ -6364,11 +6372,18 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Årsak</label><input value={r.arsak} onChange={e=>updateR(r.id,'arsak',e.target.value)} placeholder="Hva kan forårsake det?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Konsekvens</label><input value={r.konsekvens} onChange={e=>updateR(r.id,'konsekvens',e.target.value)} placeholder="Hva kan skje?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Tiltak</label><input value={r.tiltak} onChange={e=>updateR(r.id,'tiltak',e.target.value)} placeholder="Hva gjøres?" style={hmsInp} /></div>
-                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet: <strong>{r.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={r.sannsynlighet} onChange={e=>updateR(r.id,'sannsynlighet',+e.target.value)} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
-                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Konsekvensgrad: <strong>{r.konsekvensGrad}</strong>/5</label><input type="range" min="1" max="5" value={r.konsekvensGrad} onChange={e=>updateR(r.id,'konsekvensGrad',+e.target.value)} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet <span style={{ color:'#94a3b8', fontWeight:'500' }}>(før tiltak)</span>: <strong>{r.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={r.sannsynlighet} onChange={e=>{ const v=+e.target.value; updateR(r.id,'sannsynlighet',v); if ((r.sannsynlighetEtter ?? r.sannsynlighet) > v) updateR(r.id,'sannsynlighetEtter',v) }} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
+                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Konsekvensgrad <span style={{ color:'#94a3b8', fontWeight:'500' }}>(før tiltak)</span>: <strong>{r.konsekvensGrad}</strong>/5</label><input type="range" min="1" max="5" value={r.konsekvensGrad} onChange={e=>{ const v=+e.target.value; updateR(r.id,'konsekvensGrad',v); if ((r.konsekvensEtter ?? r.konsekvensGrad) > v) updateR(r.id,'konsekvensEtter',v) }} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
+                  <div style={{ gridColumn:'1/-1', borderTop:'1px dashed #cbd5e1', paddingTop:'10px', marginTop:'2px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#059669', marginBottom:'8px', letterSpacing:'0.03em' }}>↓ ETTER TILTAK — hvor mye har tiltakene redusert risikoen?</div>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
+                      <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet etter: <strong>{r.sannsynlighetEtter ?? r.sannsynlighet}</strong>/5</label><input type="range" min="1" max={r.sannsynlighet} value={r.sannsynlighetEtter ?? r.sannsynlighet} onChange={e=>updateR(r.id,'sannsynlighetEtter',+e.target.value)} style={{ width:'100%', accentColor:'#059669' }} /></div>
+                      <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Konsekvensgrad etter: <strong>{r.konsekvensEtter ?? r.konsekvensGrad}</strong>/5</label><input type="range" min="1" max={r.konsekvensGrad} value={r.konsekvensEtter ?? r.konsekvensGrad} onChange={e=>updateR(r.id,'konsekvensEtter',+e.target.value)} style={{ width:'100%', accentColor:'#059669' }} /></div>
+                    </div>
+                  </div>
                   <div style={{ gridColumn:'1/-1' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
-                      <label style={{ fontSize:'12px', fontWeight:'600', color:'#374151' }}>Restrisiko etter tiltak</label>
+                      <label style={{ fontSize:'12px', fontWeight:'600', color:'#374151' }}>Beskrivelse av restrisiko <span style={{ color:'#94a3b8', fontWeight:'500' }}>(valgfritt)</span></label>
                       <button type="button" onClick={() => setRestInfoOpenFor(p => p === r.id ? null : r.id)}
                         title="Hva betyr restrisiko?"
                         style={{ width:'18px', height:'18px', borderRadius:'50%', border:'1px solid #cbd5e1', background: restInfoOpenFor === r.id ? '#eff6ff' : 'white', color: restInfoOpenFor === r.id ? '#2563eb' : '#64748b', fontSize:'11px', fontWeight:'700', cursor:'pointer', padding:0, display:'inline-flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>
@@ -6433,7 +6448,15 @@ function RisikoView({ rec, proj }) {
                 {r.konsekvens&&<div><strong>Konsekvens:</strong> {r.konsekvens}</div>}
                 {r.tiltak&&<div><strong>Tiltak:</strong> {r.tiltak}</div>}
               </div>
-              <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>S: {r.sannsynlighet}/5 · K: {r.konsekvensGrad}/5 {r.restRisiko&&`· Restrisiko: ${r.restRisiko}`}</div>
+              <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>
+                Før: S {r.sannsynlighet}/5 · K {r.konsekvensGrad}/5 · R={r.sannsynlighet*r.konsekvensGrad}
+                {(r.sannsynlighetEtter != null || r.konsekvensEtter != null) && (() => {
+                  const sE = r.sannsynlighetEtter ?? r.sannsynlighet
+                  const kE = r.konsekvensEtter ?? r.konsekvensGrad
+                  return <> → <span style={{ color:'#059669', fontWeight:'600' }}>Etter: S {sE}/5 · K {kE}/5 · R={sE*kE}</span></>
+                })()}
+                {r.restRisiko && <> · {r.restRisiko}</>}
+              </div>
             </div>
           )})}
         </div>
