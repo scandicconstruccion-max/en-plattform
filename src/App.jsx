@@ -22556,9 +22556,36 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
     invoice_email: initial?.invoice_email || '',
     notes: initial?.notes || '',
   })
+  // Kontaktpersoner — array lokalt i skjemaet; persisteres til customer_contacts ved lagring.
+  // For redigeringsmodus lastes eksisterende kontakter; for nye kunder starter vi med én tom rad.
+  const [contacts, setContacts] = useState(
+    Array.isArray(initial?.contacts) && initial.contacts.length > 0
+      ? initial.contacts.map(c => ({ id: c.id || null, name: c.name || '', title: c.title || '', email: c.email || '', phone: c.phone || '' }))
+      : [{ id: null, name: '', title: '', email: '', phone: '' }]
+  )
   const [saving, setSaving] = useState(false)
   const [dupWarning, setDupWarning] = useState(null)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Kontaktperson-håndtering
+  const addContact = () => setContacts(cs => [...cs, { id: null, name: '', title: '', email: '', phone: '' }])
+  const removeContact = (idx) => setContacts(cs => cs.filter((_, i) => i !== idx))
+  const updateContact = (idx, field, value) => setContacts(cs => cs.map((c, i) => i === idx ? { ...c, [field]: value } : c))
+  const requiresContact = form.type !== 'privat'
+
+  // Ved redigering: last inn eksisterende kontaktpersoner fra customer_contacts-tabellen
+  useEffect(() => {
+    if (!isEdit || !initial?.id) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase.from('customer_contacts').select('id,name,title,email,phone').eq('customer_id', initial.id).order('name')
+      if (cancelled) return
+      if (!error && Array.isArray(data) && data.length > 0) {
+        setContacts(data.map(c => ({ id: c.id, name: c.name || '', title: c.title || '', email: c.email || '', phone: c.phone || '' })))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isEdit, initial?.id])
 
   // Live duplikatsjekk — støtter ulik logikk for privat vs bedrift
   const checkDuplicate = (field, value) => {
@@ -22597,8 +22624,14 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
   const handleSave = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) return alert('Navn er påkrevd')
+    // Valider kontaktpersoner for ikke-privat kunder
+    const validContacts = contacts.filter(c => c.name.trim())
+    if (requiresContact && validContacts.length === 0) {
+      return alert('Minst én kontaktperson med navn er påkrevd for denne kundetypen')
+    }
     setSaving(true)
     try {
+      let customerId = initial?.id
       if (isEdit) {
         const { error } = await supabase.from('customers').update({ ...form, updated_at: new Date().toISOString() }).eq('id', initial.id)
         if (error) throw error
@@ -22608,9 +22641,50 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
         let customer_number = form.customer_number || nextSequenceNumber(existingKunder, 'K', 'customer_number', { withYear: false })
         const exists = existingKunder.find(k => k.customer_number === customer_number)
         if (exists) customer_number = customer_number + 'B'
-        const { error } = await supabase.from('customers').insert({ ...form, customer_number, created_by: user?.id })
+        const { data: inserted, error } = await supabase.from('customers').insert({ ...form, customer_number, created_by: user?.id }).select().single()
         if (error) throw error
+        customerId = inserted?.id
       }
+
+      // Persister kontaktpersoner. Skille mellom nye (id=null) og eksisterende (id satt).
+      // For enkelhetens skyld: i redigering oppdateres de med id, nye insertes, de som er fjernet fra UI slettes.
+      if (customerId) {
+        const contactRows = validContacts.map(c => ({
+          id: c.id || undefined,
+          customer_id: customerId,
+          name: c.name.trim(),
+          title: c.title.trim() || null,
+          email: c.email.trim() || null,
+          phone: c.phone.trim() || null,
+        }))
+        if (isEdit) {
+          // Hent eksisterende kontakter for å finne hvilke som er slettet
+          const { data: existingContacts } = await supabase.from('customer_contacts').select('id').eq('customer_id', customerId)
+          const keptIds = new Set(validContacts.filter(c => c.id).map(c => c.id))
+          const toDelete = (existingContacts || []).filter(ec => !keptIds.has(ec.id)).map(ec => ec.id)
+          if (toDelete.length > 0) {
+            await supabase.from('customer_contacts').delete().in('id', toDelete)
+          }
+          // Oppdater eksisterende + insert nye i batch
+          const toUpdate = contactRows.filter(c => c.id)
+          const toInsert = contactRows.filter(c => !c.id).map(({ id, ...rest }) => rest)
+          for (const row of toUpdate) {
+            await supabase.from('customer_contacts').update({ name: row.name, title: row.title, email: row.email, phone: row.phone }).eq('id', row.id)
+          }
+          if (toInsert.length > 0) {
+            const { error: insErr } = await supabase.from('customer_contacts').insert(toInsert)
+            if (insErr) throw insErr
+          }
+        } else {
+          // Nye kunder: alle kontakter er nye
+          const toInsert = contactRows.map(({ id, ...rest }) => rest)
+          if (toInsert.length > 0) {
+            const { error: insErr } = await supabase.from('customer_contacts').insert(toInsert)
+            if (insErr) throw insErr
+          }
+        }
+      }
+
       // Invalider cache slik at dropdown-komponenter henter oppdatert liste
       invalidateCustomerCache()
       onSaved()
@@ -22672,6 +22746,55 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
             <div>{lbl('By / Sted')}<input value={form.city} onChange={e => set('city', e.target.value)} placeholder="Oslo" style={kundeInp} /></div>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Merknad / notat')}<textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Interne merknader om kunden..." style={{ ...kundeInp, resize:'none' }} /></div>
           </div>
+
+          {/* Kontaktpersoner — kun for ikke-privat kundetyper. Minst én påkrevd. */}
+          {requiresContact && (
+            <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'16px', marginTop:'4px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+                <div>
+                  <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👤 Kontaktpersoner <span style={{ color:'#dc2626' }}>*</span></h3>
+                  <p style={{ margin:'2px 0 0', fontSize:'11px', color:'#94a3b8' }}>Minst én kontaktperson er påkrevd for denne kundetypen</p>
+                </div>
+                <button type="button" onClick={addContact}
+                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
+                  + Legg til
+                </button>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                {contacts.map((c, idx) => (
+                  <div key={idx} style={{ background:'#f8fafc', borderRadius:'10px', border:'1px solid #e2e8f0', padding:'12px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+                      <span style={{ fontSize:'12px', fontWeight:'700', color:'#64748b' }}>Kontakt {idx + 1}</span>
+                      {contacts.length > 1 && (
+                        <button type="button" onClick={() => removeContact(idx)}
+                          style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer' }}>
+                          Fjern
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
+                      <div>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Navn {idx === 0 && <span style={{ color:'#dc2626' }}>*</span>}</label>
+                        <input value={c.name} onChange={e => updateContact(idx, 'name', e.target.value)} required={idx === 0} placeholder="Fullt navn" style={{ ...kundeInp, fontSize:'13px', padding:'8px 10px' }} />
+                      </div>
+                      <div>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Stilling / Rolle</label>
+                        <input value={c.title} onChange={e => updateContact(idx, 'title', e.target.value)} placeholder="F.eks. Prosjektleder" style={{ ...kundeInp, fontSize:'13px', padding:'8px 10px' }} />
+                      </div>
+                      <div>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>E-post</label>
+                        <input type="email" value={c.email} onChange={e => updateContact(idx, 'email', e.target.value)} placeholder="navn@bedrift.no" style={{ ...kundeInp, fontSize:'13px', padding:'8px 10px' }} />
+                      </div>
+                      <div>
+                        <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Telefon</label>
+                        <input value={c.phone} onChange={e => updateContact(idx, 'phone', e.target.value)} placeholder="+47 000 00 000" style={{ ...kundeInp, fontSize:'13px', padding:'8px 10px' }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </form>
       </div>
